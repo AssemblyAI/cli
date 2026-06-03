@@ -37,10 +37,20 @@ def test_human_turn_shows_and_finalizes_text():
     assert "hello world" in buf.getvalue()
 
 
-def test_human_begin_prints_notice():
+def test_human_begin_is_silent_until_mic_opens():
+    # The session opening (Begin) no longer prints "Listening…"; that waits for
+    # the mic to actually open and start recording (renderer.listening()).
     r, buf = _human()
     r.begin(types.SimpleNamespace(id="x"))
-    assert "Ctrl-C" in buf.getvalue()
+    assert buf.getvalue() == ""
+
+
+def test_human_listening_prints_notice():
+    r, buf = _human()
+    r.listening()
+    out = buf.getvalue()
+    assert "Listening" in out
+    assert "Ctrl-C" in out
 
 
 def test_human_long_partial_clears_wrapped_rows():
@@ -138,10 +148,17 @@ def test_json_emit_swallows_non_pipe_errors():
     r.turn(_turn("hi", True))  # non-pipe write errors are non-fatal
 
 
-def test_human_begin_notice_is_muted():
+def test_human_listening_notice_is_muted():
     r, buf = _human(color_system="truecolor")
-    r.begin(types.SimpleNamespace(id="x"))
+    r.listening()
     assert "\x1b[" in buf.getvalue()  # muted styling emits ANSI
+
+
+def test_listening_is_silent_in_json_mode():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.listening()
+    assert out.getvalue() == ""  # the "Listening…" line is human-only
 
 
 def test_human_llm_line_is_branded():

@@ -203,3 +203,47 @@ def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
     result = runner.invoke(app, ["agent", str(wav)])
     assert result.exit_code == 0
     assert "headphones" not in result.output.lower()  # mic-only note; file mode is silent
+
+
+def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+
+    def fake_run_session(api_key, *, renderer, **kwargs):
+        renderer.connected()  # session.ready arrives even for a file-driven run
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    wav = tmp_path / "say.wav"
+    wav.write_bytes(b"RIFF")
+    result = runner.invoke(app, ["agent", str(wav)])
+    assert result.exit_code == 0
+    # No mic on a file-driven run -> no "start talking" prompt.
+    assert "start talking" not in result.output.lower()
+
+
+def test_agent_mic_shows_start_talking_notice(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    # Avoid opening real audio hardware; the renderer is what we're testing.
+    class FakeDuplex:
+        def __init__(self, **kwargs):
+            self.mic = iter([])
+            self.player = self
+
+        def start(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.DuplexAudio", FakeDuplex)
+
+    def fake_run_session(api_key, *, renderer, **kwargs):
+        renderer.connected()
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent"])
+    assert result.exit_code == 0
+    assert "start talking" in result.output.lower()  # live mic -> prompt the user to speak

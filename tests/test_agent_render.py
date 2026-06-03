@@ -127,6 +127,22 @@ def test_human_connected_and_stopped_announce():
     assert "Stopped." in out
 
 
+def test_human_connected_silent_without_mic_input():
+    # File-driven runs have no mic, so the "start talking" prompt is suppressed.
+    buf = io.StringIO()
+    console = theme.make_console(file=buf, force_terminal=True, width=80)
+    r = AgentRenderer(json_mode=False, mic_input=False, out=buf, console=console)
+    r.connected()
+    assert "start talking" not in buf.getvalue().lower()
+
+
+def test_json_connected_still_emits_ready_without_mic_input():
+    # The protocol event is independent of the human prompt.
+    buf = io.StringIO()
+    AgentRenderer(json_mode=True, mic_input=False, out=buf).connected()
+    assert {"type": "session.ready"} in _json_lines(buf)
+
+
 def test_human_agent_label_is_colored():
     r, buf = _human(color_system="truecolor")
     r.agent_transcript("the time is noon", interrupted=False)

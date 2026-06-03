@@ -24,7 +24,9 @@ def stream(
     ),
     sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample."),
     sample_rate: int | None = typer.Option(
-        None, "--sample-rate", help="Force a microphone capture rate in Hz (default: device native)."
+        None,
+        "--sample-rate",
+        help="Force a microphone capture rate in Hz (default: device native).",
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     prompt: str = typer.Option(
@@ -108,7 +110,11 @@ def stream(
         else:
             # Capture at the device's native rate (or --sample-rate override) and tell
             # the streaming API that rate, rather than forcing one the device may reject.
-            mic = MicrophoneSource(device=device, capture_rate=sample_rate)
+            # Announce "Listening…" only once the device is open and recording,
+            # not when the session opens — so early speech isn't lost in the gap.
+            mic = MicrophoneSource(
+                device=device, capture_rate=sample_rate, on_open=renderer.listening
+            )
             run(mic, mic.sample_rate)
 
     run_command(ctx, body, json=json_out)

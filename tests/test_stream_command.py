@@ -59,6 +59,61 @@ def test_stream_file_uses_filesource(monkeypatch, tmp_path):
     assert seen["rate"] == 16000
 
 
+def test_stream_mic_listening_notice_waits_for_mic_open(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    captured = {}
+
+    class FakeMic:
+        def __init__(self, *, device=None, capture_rate=None, on_open=None):
+            captured["on_open"] = on_open
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            captured["on_open"]()  # the SDK iterating us == the mic is now live
+            return iter([b"\x00\x00"])
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.MicrophoneSource", FakeMic)
+
+    order = []
+
+    def fake_stream_audio(api_key, source, *, sample_rate, on_begin=None, **_kwargs):
+        if on_begin:
+            on_begin(types.SimpleNamespace(id="x"))  # Begin must NOT print "Listening…"
+        order.append("begin")
+        list(source)  # consume the mic -> on_open fires -> "Listening…" prints
+        order.append("consumed")
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream"])
+    assert result.exit_code == 0
+    assert "Listening" in result.output  # shown once the mic opened
+    assert callable(captured["on_open"])  # wired to the renderer's listening notice
+
+
+def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    def fake(api_key, source, *, sample_rate, on_begin=None, **_kwargs):
+        if on_begin:
+            on_begin(types.SimpleNamespace(id="x"))
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
+    import wave
+
+    p = tmp_path / "a.wav"
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x01" * 100)
+    result = runner.invoke(app, ["stream", str(p)])
+    assert result.exit_code == 0
+    assert "Listening" not in result.output  # no mic -> no listening notice
+
+
 def test_stream_unauthenticated_exits_2():
     result = runner.invoke(app, ["stream"])
     assert result.exit_code == 2

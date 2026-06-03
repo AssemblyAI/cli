@@ -113,6 +113,32 @@ def test_plain_iterator_without_close_is_fine():
     assert list(mic) == [b"z"]
 
 
+def test_on_open_fires_once_after_device_opens():
+    events = []
+    mic = MicrophoneSource(
+        capture_rate=16000,
+        stream_factory=lambda **_k: iter([b"x", b"y"]),
+        on_open=lambda: events.append("open"),
+    )
+    assert events == []  # not signaled until iteration opens the device
+    assert list(mic) == [b"x", b"y"]
+    assert events == ["open"]  # fired exactly once, when the mic became live
+
+
+def test_on_open_not_called_when_device_fails_to_open():
+    events = []
+
+    def boom(**_k):
+        raise OSError("no input device")
+
+    mic = MicrophoneSource(
+        capture_rate=16000, stream_factory=boom, on_open=lambda: events.append("open")
+    )
+    with pytest.raises(CLIError):
+        list(mic)
+    assert events == []  # never claimed "listening" because recording never started
+
+
 def test_rate_query_resolves_capture_rate_when_not_given():
     seen = {}
 

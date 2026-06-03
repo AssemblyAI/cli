@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from rich.text import Text
 
 from assemblyai_cli.render import BaseRenderer
@@ -16,11 +18,16 @@ class AgentRenderer(BaseRenderer):
     Audio payloads are never written; only text/state events are surfaced.
     """
 
+    def __init__(self, *, mic_input: bool = True, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        # File-driven runs have no mic, so they skip the "start talking" prompt.
+        self.mic_input = mic_input
+
     # --- lifecycle ---------------------------------------------------------
     def connected(self) -> None:
         if self.json_mode:
             self._emit({"type": "session.ready"})
-        else:
+        elif self.mic_input:
             self._line(Text("Connected — start talking. (Ctrl-C to stop)", style="aai.muted"))
 
     def notice(self, text: str) -> None:

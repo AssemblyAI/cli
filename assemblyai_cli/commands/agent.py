@@ -70,7 +70,7 @@ def agent(
         else:
             system_prompt_text = system_prompt
 
-        renderer = AgentRenderer(json_mode=json_mode)
+        renderer = AgentRenderer(json_mode=json_mode, mic_input=not from_file)
         audio: Any
         player: Any
         if from_file:

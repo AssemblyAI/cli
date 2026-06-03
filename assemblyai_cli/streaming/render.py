@@ -9,9 +9,14 @@ class StreamRenderer(BaseRenderer):
     """Renders streaming events: a live-updating line for humans, NDJSON for agents."""
 
     def begin(self, event: object) -> None:
+        # The "Listening…" notice waits for the mic (see listening()); opening the
+        # session only emits the protocol event for JSON consumers.
         if self.json_mode:
             self._emit({"type": "begin", "id": getattr(event, "id", None)})
-        else:
+
+    def listening(self) -> None:
+        """Announce capture has started — called once the mic is open and recording."""
+        if not self.json_mode:
             self._line(Text("Listening… (Ctrl-C to stop)", style="aai.muted"))
 
     def turn(self, event: object) -> None:

@@ -102,9 +102,13 @@ class MicrophoneSource:
         capture_rate: int | None = None,
         stream_factory: Callable[..., Iterator[bytes]] | None = None,
         rate_query: Callable[[int | None], int] | None = None,
+        on_open: Callable[[], None] | None = None,
     ) -> None:
         self.device = device
         self.target_rate = target_rate
+        # Fired once the device is open and capturing, so callers only announce
+        # "listening" when the mic is truly recording — not when the session opens.
+        self._on_open = on_open
         self._factory = stream_factory or _default_mic_stream
         query = rate_query or _device_default_rate
         self._capture_rate = capture_rate if capture_rate is not None else query(device)
@@ -122,6 +126,8 @@ class MicrophoneSource:
                 error_type="mic_error",
                 exit_code=1,
             ) from exc
+        if self._on_open is not None:
+            self._on_open()  # the device is open and recording now
         close = getattr(stream, "close", None)
         state: Any = None
         try:
