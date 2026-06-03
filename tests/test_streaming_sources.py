@@ -130,3 +130,37 @@ def test_filesource_empty_wav_raises(tmp_path):
     with pytest.raises(CLIError) as exc:
         list(FileSource(str(p), sleep=lambda _s: None))
     assert exc.value.error_type == "empty_audio"
+
+
+def test_filesource_url_skips_local_check_and_streams_via_ffmpeg(monkeypatch):
+    monkeypatch.setattr(sources.shutil, "which", lambda _n: "/usr/bin/ffmpeg")
+    captured = {}
+
+    class FakeProc:
+        def __init__(self):
+            self.stdout = io.BytesIO(b"\x00" * 3200)
+            self.stderr = io.BytesIO(b"")
+            self.returncode = 0
+
+        def terminate(self):
+            pass
+
+        def wait(self):
+            pass
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProc()
+
+    monkeypatch.setattr(sources.subprocess, "Popen", fake_popen)
+    url = "https://example.com/clip.mp3"
+    chunks = list(FileSource(url, sleep=lambda _s: None))  # no is_file() check for URLs
+    assert chunks == [b"\x00" * 3200]
+    assert url in captured["cmd"]  # passed straight to ffmpeg's -i
+
+
+def test_filesource_url_without_ffmpeg_raises(monkeypatch):
+    monkeypatch.setattr(sources.shutil, "which", lambda _n: None)
+    with pytest.raises(CLIError) as exc:
+        FileSource("https://example.com/clip.mp3")
+    assert exc.value.error_type == "ffmpeg_missing"

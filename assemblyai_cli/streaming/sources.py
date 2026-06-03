@@ -24,19 +24,31 @@ def _is_streamable_wav(path: Path) -> bool:
         return False
 
 
-class FileSource:
-    """Yields real-time-paced 16 kHz mono PCM chunks from an audio file."""
+def _is_url(source: str) -> bool:
+    return source.startswith(("http://", "https://"))
 
-    def __init__(self, path: str, *, sleep: Callable[[float], object] = time.sleep) -> None:
-        self.path = Path(path)
+
+class FileSource:
+    """Yields real-time-paced 16 kHz mono PCM chunks from a local file or a URL."""
+
+    def __init__(self, source: str, *, sleep: Callable[[float], object] = time.sleep) -> None:
+        self.source = source
         self._sleep = sleep
         self.sample_rate = TARGET_RATE
-        if not self.path.is_file():
-            raise CLIError(f"No such file: {self.path}", error_type="file_not_found", exit_code=2)
-        self._wav = _is_streamable_wav(self.path)
+        # Local paths get a fast WAV path and an existence check; URLs always decode
+        # through ffmpeg (which reads http/https inputs natively).
+        self._path = None if _is_url(source) else Path(source)
+        if self._path is not None:
+            if not self._path.is_file():
+                raise CLIError(
+                    f"No such file: {self._path}", error_type="file_not_found", exit_code=2
+                )
+            self._wav = _is_streamable_wav(self._path)
+        else:
+            self._wav = False
         if not self._wav and shutil.which("ffmpeg") is None:
             raise CLIError(
-                "This audio format needs ffmpeg. Install ffmpeg, or pass a 16 kHz mono 16-bit WAV.",
+                "This audio source needs ffmpeg. Install ffmpeg, or pass a 16 kHz mono 16-bit WAV.",
                 error_type="ffmpeg_missing",
                 exit_code=2,
             )
@@ -49,11 +61,13 @@ class FileSource:
             yield chunk
             self._sleep(len(chunk) / (TARGET_RATE * 2))  # ~real-time pacing
         if produced == 0:
-            raise CLIError(f"No audio data in {self.path}.", error_type="empty_audio", exit_code=2)
+            raise CLIError(
+                f"No audio data in {self.source}.", error_type="empty_audio", exit_code=2
+            )
 
     def _wav_chunks(self) -> Iterator[bytes]:
         frames_per_chunk = CHUNK_BYTES // 2
-        with wave.open(str(self.path), "rb") as w:
+        with wave.open(str(self._path), "rb") as w:  # _wav implies a local path
             while True:
                 data = w.readframes(frames_per_chunk)
                 if not data:
@@ -68,7 +82,7 @@ class FileSource:
                 "-loglevel",
                 "error",
                 "-i",
-                str(self.path),
+                self.source,  # a local path or an http(s) URL; ffmpeg reads both
                 "-f",
                 "s16le",
                 "-acodec",
@@ -107,7 +121,7 @@ class FileSource:
         if proc.returncode:
             detail = proc.stderr.read().decode("utf-8", "replace").strip() if proc.stderr else ""
             raise APIError(
-                f"ffmpeg could not decode {self.path}: {detail or f'exit {proc.returncode}'}"
+                f"ffmpeg could not decode {self.source}: {detail or f'exit {proc.returncode}'}"
             )
 
 

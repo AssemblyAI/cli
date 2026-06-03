@@ -15,22 +15,26 @@ app = typer.Typer()
 @app.command()
 def stream(
     ctx: typer.Context,
-    source: str = typer.Argument(None, help="Audio file to stream. Omit to use the microphone."),
+    source: str = typer.Argument(
+        None, help="Audio file path or URL to stream. Omit to use the microphone."
+    ),
+    sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample."),
     sample_rate: int = typer.Option(
         TARGET_RATE, "--sample-rate", help="Microphone sample rate in Hz."
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
 ) -> None:
-    """Transcribe live audio from the microphone or a file in real time."""
+    """Transcribe live audio from the microphone, a file, or a URL in real time."""
 
     def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
-        if source and (sample_rate != TARGET_RATE or device is not None):
+        from_file = bool(source) or sample
+        if from_file and (sample_rate != TARGET_RATE or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
         audio: FileSource | MicrophoneSource
-        if source:
-            audio = FileSource(source)
+        if from_file:
+            audio = FileSource(client.resolve_audio_source(source, sample=sample))
             rate = audio.sample_rate
         else:
             audio = MicrophoneSource(sample_rate=sample_rate, device=device)

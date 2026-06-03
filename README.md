@@ -47,8 +47,10 @@ output is piped or run by an agent). Auth problems surface as a clean
 ## Streaming
 
 ```sh
+aai stream --sample            # stream the hosted wildfires.mp3 sample (same clip as transcribe)
 aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
 aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
+aai stream https://…/clip.mp3  # a URL works too (decoded via ffmpeg)
 aai stream                     # from the microphone; Ctrl-C to stop
 ```
 

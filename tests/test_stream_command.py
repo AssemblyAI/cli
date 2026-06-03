@@ -62,6 +62,49 @@ def test_stream_unauthenticated_exits_2():
     assert result.exit_code == 2
 
 
+def _capture_source(seen):
+    def fake(api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None):
+        seen["source"] = source
+        seen["rate"] = sample_rate
+
+    return fake
+
+
+def test_stream_sample_uses_hosted_clip(monkeypatch):
+    from assemblyai_cli import client
+
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        "assemblyai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg"
+    )
+    seen = {}
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", _capture_source(seen))
+    result = runner.invoke(app, ["stream", "--sample"])
+    assert result.exit_code == 0
+    assert type(seen["source"]).__name__ == "FileSource"
+    assert seen["source"].source == client.SAMPLE_AUDIO_URL  # same clip as `transcribe --sample`
+    assert seen["rate"] == 16000
+
+
+def test_stream_url_source_uses_filesource(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        "assemblyai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg"
+    )
+    seen = {}
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", _capture_source(seen))
+    result = runner.invoke(app, ["stream", "https://example.com/clip.mp3"])
+    assert result.exit_code == 0
+    assert type(seen["source"]).__name__ == "FileSource"
+    assert seen["source"].source == "https://example.com/clip.mp3"
+
+
+def test_stream_sample_with_sample_rate_rejected():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "--sample", "--sample-rate", "44100"])
+    assert result.exit_code == 2  # mic-only flags don't apply to a file/sample source
+
+
 def test_stream_ctrl_c_exits_cleanly(monkeypatch):
     config.set_api_key("default", "sk_live")
 

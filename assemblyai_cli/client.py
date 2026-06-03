@@ -12,9 +12,21 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
-from assemblyai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
+from assemblyai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
+
+
+def resolve_audio_source(source: str | None, *, sample: bool) -> str:
+    """The audio reference to use: the hosted --sample clip, else the given path/URL.
+
+    Shared by `transcribe` and `stream` so both accept a file or URL and `--sample`.
+    """
+    if sample:
+        return SAMPLE_AUDIO_URL
+    if not source:
+        raise UsageError("Provide an audio path/URL or use --sample.")
+    return source
 
 
 def _configure(api_key: str) -> None:

@@ -25,9 +25,7 @@ def transcribe(
     def body(state: AppState, json_mode: bool) -> None:
         if srt and vtt:
             raise UsageError("--srt and --vtt are mutually exclusive.")
-        audio = client.SAMPLE_AUDIO_URL if sample else source
-        if not audio:
-            raise UsageError("Provide an audio path/URL or use --sample.")
+        audio = client.resolve_audio_source(source, sample=sample)
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.transcribe(api_key, audio, speaker_labels=speaker_labels)
 

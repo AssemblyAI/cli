@@ -66,6 +66,15 @@ def test_list_transcripts_rejected_key_becomes_not_authenticated():
             client.list_transcripts("sk_bad")
 
 
+def test_resolve_audio_source_sample_explicit_and_missing():
+    from assemblyai_cli.errors import UsageError
+
+    assert client.resolve_audio_source(None, sample=True) == client.SAMPLE_AUDIO_URL
+    assert client.resolve_audio_source("clip.mp3", sample=False) == "clip.mp3"
+    with pytest.raises(UsageError):
+        client.resolve_audio_source(None, sample=False)
+
+
 def test_transcribe_blocks_and_returns_transcript():
     fake_transcript = MagicMock()
     fake_transcript.status = client.aai.TranscriptStatus.completed
