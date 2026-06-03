@@ -133,3 +133,24 @@ def test_every_render_feature_has_a_snippet():
     assert not missing, f"render features without a snippet: {missing}"
     unexpected_orphans = covered - rendered - ORPHANS
     assert not unexpected_orphans, f"snippets with no matching renderer: {unexpected_orphans}"
+
+
+import ast  # noqa: E402
+
+from assemblyai_cli import code_gen  # noqa: E402
+
+
+def test_transcribe_render_parses_and_uses_env_key():
+    code = code_gen.transcribe({"speaker_labels": True}, source="https://assembly.ai/wildfires.mp3")
+    ast.parse(code)  # raises SyntaxError if malformed
+    assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
+    assert "https://assembly.ai/wildfires.mp3" in code
+    assert "transcript.utterances" in code  # result handling for speaker_labels
+    assert "{{API_KEY}}" not in code  # never echo a real key
+
+
+def test_transcribe_render_no_config_is_minimal():
+    code = code_gen.transcribe({}, source="audio.mp3")
+    ast.parse(code)
+    assert "print(transcript.text)" in code
+    assert "TranscriptionConfig(" not in code  # no kwargs -> no config object
