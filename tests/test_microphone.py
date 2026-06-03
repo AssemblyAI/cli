@@ -146,9 +146,7 @@ def test_rate_query_resolves_capture_rate_when_not_given():
         seen["rate"] = sample_rate
         return iter([b"q"])
 
-    mic = MicrophoneSource(
-        device=7, stream_factory=fake_factory, rate_query=lambda _device: 32000
-    )
+    mic = MicrophoneSource(device=7, stream_factory=fake_factory, rate_query=lambda _device: 32000)
     assert mic.sample_rate == 32000
     assert list(mic) == [b"q"]
     assert seen["rate"] == 32000

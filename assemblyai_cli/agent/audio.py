@@ -141,9 +141,7 @@ class NullPlayer:
         pass
 
 
-def _default_duplex_stream(
-    *, rate: int, blocksize: int, callback: Any, device: int | None
-) -> Any:
+def _default_duplex_stream(*, rate: int, blocksize: int, callback: Any, device: int | None) -> Any:
     """Open ONE started full-duplex sounddevice stream (mic + speaker together)."""
     try:
         import sounddevice as sd
