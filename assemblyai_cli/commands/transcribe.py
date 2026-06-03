@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 
 import typer
 
-from assemblyai_cli import client, config, config_builder, llm, output, transcribe_render
+from assemblyai_cli import (
+    client,
+    config,
+    config_builder,
+    llm,
+    output,
+    transcribe_render,
+    youtube,
+)
 from assemblyai_cli.context import AppState, run_command
 
 app = typer.Typer()
@@ -158,7 +168,13 @@ def transcribe(
 
         audio = client.resolve_audio_source(source, sample=sample)
         api_key = config.resolve_api_key(profile=state.profile)
-        transcript = client.transcribe(api_key, audio, config=tc)
+        if youtube.is_youtube_url(audio):
+            # Fetch the audio first; AssemblyAI can't read a YouTube watch URL itself.
+            with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
+                local = youtube.download_audio(audio, Path(td))
+                transcript = client.transcribe(api_key, str(local), config=tc)
+        else:
+            transcript = client.transcribe(api_key, audio, config=tc)
 
         if llm_gateway_prompt:
             transformed = llm.transform_transcript(

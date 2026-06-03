@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections import Counter
 
 from rich.console import Console
+from rich.text import Text
+
+from assemblyai_cli import theme
 
 
 def _fmt_ms(ms: int) -> str:
@@ -16,7 +19,7 @@ def _enum_value(obj: object) -> str:
 
 def render_transcript_result(transcript: object, console: Console) -> None:
     """Print the transcript text, then a section per analysis feature present."""
-    console.print(getattr(transcript, "text", "") or "")
+    _render_text(transcript, console)
     _render_summary(transcript, console)
     _render_chapters(transcript, console)
     _render_highlights(transcript, console)
@@ -24,6 +27,21 @@ def render_transcript_result(transcript: object, console: Console) -> None:
     _render_entities(transcript, console)
     _render_topics(transcript, console)
     _render_content_safety(transcript, console)
+
+
+def _render_text(transcript: object, console: Console) -> None:
+    """Print per-speaker utterances when present, else the flat transcript text."""
+    utterances = getattr(transcript, "utterances", None)
+    if isinstance(utterances, list) and utterances:
+        line = Text()
+        for i, u in enumerate(utterances):
+            if i:
+                line.append("\n")
+            line.append(f"Speaker {u.speaker}: ", style=theme.speaker_style(u.speaker))
+            line.append(str(u.text))
+        console.print(line)
+        return
+    console.print(getattr(transcript, "text", "") or "")
 
 
 def _render_summary(transcript: object, console: Console) -> None:

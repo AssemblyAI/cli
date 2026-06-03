@@ -29,6 +29,7 @@ def _fake_transcript():
         "content_safety",
     ):
         setattr(t, attr, None)
+    t.utterances = None
     return t
 
 
@@ -234,6 +235,21 @@ def test_transcribe_webhook_auth_header():
     assert cfg.raw.webhook_url == "https://example.com/hook"
     assert cfg.raw.webhook_auth_header_name == "X-Token"
     assert cfg.raw.webhook_auth_header_value == "secret"
+
+
+def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path):
+    _auth()
+    fake = tmp_path / "vid.m4a"
+    fake.write_bytes(b"x")
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake
+    )
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        result = runner.invoke(app, ["transcribe", "https://youtu.be/abc", "--json"])
+    assert result.exit_code == 0
+    assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
 
 
 def test_transcribe_renders_summary_human(monkeypatch):

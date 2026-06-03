@@ -18,6 +18,20 @@ def test_renders_text_only_when_no_analysis():
     assert "Summary" not in out
 
 
+def test_renders_per_speaker_utterances():
+    transcript = SimpleNamespace(
+        text="flat",
+        utterances=[
+            SimpleNamespace(speaker="A", text="hello"),
+            SimpleNamespace(speaker="B", text="hi"),
+        ],
+    )
+    out = _render(transcript)
+    assert "Speaker A: hello" in out
+    assert "Speaker B: hi" in out
+    assert "flat" not in out
+
+
 def test_renders_summary_and_chapters():
     transcript = SimpleNamespace(
         text="t",
