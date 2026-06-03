@@ -265,6 +265,20 @@ def test_transcribe_show_code_prints_python(monkeypatch):
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
 
 
+def test_transcribe_show_code_suppressed_in_json_mode():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(
+            app, ["transcribe", "--sample", "--speaker-labels", "--show-code", "--json"]
+        )
+    assert result.exit_code == 0
+    assert "import assemblyai as aai" not in result.stdout
+    assert "# Equivalent Python:" not in result.stdout
+    assert '"id": "t_1"' in result.stdout
+
+
 def test_transcribe_renders_summary_human(monkeypatch):
     _auth()
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
