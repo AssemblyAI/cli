@@ -45,6 +45,7 @@ def test_agent_drives_renderer_json(monkeypatch):
         system_prompt,
         greeting,
         full_duplex=False,
+        exit_after_reply=False,
     ):
         renderer.connected()
         renderer.user_final("hello agent")
@@ -72,6 +73,7 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
         system_prompt,
         greeting,
         full_duplex=False,
+        exit_after_reply=False,
     ):
         seen["voice"] = voice
         seen["prompt"] = system_prompt
@@ -131,3 +133,72 @@ def test_agent_prompt_file_not_found_exits_2(monkeypatch):
     monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent", "--prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"])
     assert result.exit_code == 2
+
+
+def _capture_run_session(monkeypatch):
+    """Patch run_session to record its kwargs and return the dict it fills in."""
+    seen = {}
+
+    def fake_run_session(api_key, **kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    return seen
+
+
+def test_agent_file_source_streams_clip_and_exits_after_reply(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    wav = tmp_path / "say.wav"
+    wav.write_bytes(b"RIFF")  # FileSource is faked below; contents don't matter
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
+    seen = _capture_run_session(monkeypatch)
+
+    result = runner.invoke(app, ["agent", str(wav)])
+    assert result.exit_code == 0
+    # File input drives a deterministic, headless, self-terminating session.
+    assert seen["mic"] == f"filesrc:{wav}"
+    assert seen["exit_after_reply"] is True
+    assert seen["full_duplex"] is True
+    assert seen["greeting"] == ""
+    from assemblyai_cli.agent.audio import NullPlayer
+
+    assert isinstance(seen["player"], NullPlayer)
+
+
+def test_agent_sample_uses_hosted_clip(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured = {}
+
+    def fake_file_source(src):
+        captured["src"] = src
+        return "filesrc"
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", fake_file_source)
+    seen = _capture_run_session(monkeypatch)
+
+    result = runner.invoke(app, ["agent", "--sample"])
+    assert result.exit_code == 0
+    assert captured["src"].endswith("wildfires.mp3")
+    assert seen["exit_after_reply"] is True
+
+
+def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    wav = tmp_path / "say.wav"
+    wav.write_bytes(b"RIFF")
+    result = runner.invoke(app, ["agent", str(wav), "--device", "1"])
+    assert result.exit_code == 2  # --device is microphone-only
+
+
+def test_agent_file_source_no_half_duplex_notice(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    wav = tmp_path / "say.wav"
+    wav.write_bytes(b"RIFF")
+    result = runner.invoke(app, ["agent", str(wav)])
+    assert result.exit_code == 0
+    assert "Half-duplex" not in result.output  # half-duplex note is mic-only

@@ -24,12 +24,26 @@ _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
 class VoiceAgentSession:
     """Routes Voice Agent server events to the renderer, player, and duplex state."""
 
-    def __init__(self, *, renderer: Any, player: Any, full_duplex: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        renderer: Any,
+        player: Any,
+        full_duplex: bool = False,
+        exit_after_reply: bool = False,
+        ready_event: threading.Event | None = None,
+    ) -> None:
         self.renderer = renderer
         self.player = player
         self.full_duplex = full_duplex
+        # File-driven runs (`aai agent <file>`) stop after the agent's first reply
+        # to the spoken input, so the process exits instead of waiting forever.
+        self.exit_after_reply = exit_after_reply
+        self.ready_event = ready_event
         self.ready = False
         self.muted = False
+        self.finished = False
+        self._saw_user = False
 
     def should_send_audio(self) -> bool:
         """True when captured mic frames should be forwarded to the server."""
@@ -40,6 +54,8 @@ class VoiceAgentSession:
 
         if etype == "session.ready":
             self.ready = True
+            if self.ready_event is not None:
+                self.ready_event.set()
             self.renderer.connected()
         elif etype == "input.speech.started":
             if self.full_duplex:
@@ -49,6 +65,7 @@ class VoiceAgentSession:
         elif etype == "transcript.user.delta":
             self.renderer.user_partial(event.get("text", ""))
         elif etype == "transcript.user":
+            self._saw_user = True
             self.renderer.user_final(event.get("text", ""))
         elif etype == "reply.started":
             if not self.full_duplex:
@@ -69,6 +86,9 @@ class VoiceAgentSession:
             if interrupted:
                 self.player.flush()
             self.renderer.reply_done(interrupted=interrupted)
+            # File-driven run: the agent has answered the spoken input, so stop.
+            if self.exit_after_reply and self._saw_user and not interrupted:
+                self.finished = True
         elif etype == "session.error":
             self._raise_error(event)
         # tool.call and unknown event types: intentionally ignored.
@@ -87,6 +107,10 @@ class VoiceAgentSession:
 
 def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
     """Forward mic PCM as input.audio while the session gate allows it."""
+    # File-driven runs wait for session.ready before consuming the source, so a
+    # finite clip isn't partly drained (and dropped) before the server accepts it.
+    if session.ready_event is not None:
+        session.ready_event.wait(timeout=10)
     for chunk in mic:
         if not session.should_send_audio():
             continue  # half-duplex: drop frames while the agent is speaking
@@ -125,17 +149,28 @@ def run_session(
     system_prompt: str,
     greeting: str,
     full_duplex: bool = False,
+    exit_after_reply: bool = False,
     connect: Any = None,
 ) -> None:
     """Open the Voice Agent WebSocket and run the bidirectional loop until close.
 
     `connect` defaults to websockets' synchronous client; injectable for tests.
+    When `exit_after_reply` is set (file-driven runs), the loop stops after the
+    agent's first reply to the spoken input and the capture thread waits for
+    session.ready before streaming the source.
     """
     _connect = connect
     if _connect is None:
         from websockets.sync.client import connect as _connect
 
-    session = VoiceAgentSession(renderer=renderer, player=player, full_duplex=full_duplex)
+    ready_event = threading.Event() if exit_after_reply else None
+    session = VoiceAgentSession(
+        renderer=renderer,
+        player=player,
+        full_duplex=full_duplex,
+        exit_after_reply=exit_after_reply,
+        ready_event=ready_event,
+    )
 
     try:
         ws = _connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
@@ -176,6 +211,8 @@ def run_session(
         )
         for raw in ws:
             session.dispatch(json.loads(raw))
+            if session.finished:
+                break
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, user Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:

@@ -50,11 +50,13 @@ class FakePlayer:
         self.closed = True
 
 
-def _session(*, full_duplex=False):
+def _session(*, full_duplex=False, exit_after_reply=False, ready_event=None):
     return VoiceAgentSession(
         renderer=FakeRenderer(),
         player=FakePlayer(),
         full_duplex=full_duplex,
+        exit_after_reply=exit_after_reply,
+        ready_event=ready_event,
     )
 
 
@@ -295,3 +297,99 @@ def test_full_duplex_reply_started_announces_without_muting():
     s.dispatch({"type": "reply.started"})
     assert s.muted is False
     assert ("reply_started",) in s.renderer.calls
+
+
+def test_ready_sets_ready_event():
+    import threading
+
+    ev = threading.Event()
+    s = _session(exit_after_reply=True, ready_event=ev)
+    assert ev.is_set() is False
+    s.dispatch({"type": "session.ready"})
+    assert ev.is_set() is True  # capture thread is now free to stream the file
+
+
+def test_exit_after_reply_finishes_after_user_then_reply_done():
+    s = _session(full_duplex=True, exit_after_reply=True)
+    s.dispatch({"type": "session.ready"})
+    s.dispatch({"type": "transcript.user", "text": "hello there"})
+    assert s.finished is False  # not until the agent has actually replied
+    s.dispatch({"type": "reply.done"})
+    assert s.finished is True
+
+
+def test_exit_after_reply_ignores_greeting_reply_before_user_speech():
+    s = _session(full_duplex=True, exit_after_reply=True)
+    s.dispatch({"type": "session.ready"})
+    s.dispatch({"type": "reply.done"})  # e.g. a greeting, before any user speech
+    assert s.finished is False
+
+
+def test_exit_after_reply_ignores_interrupted_reply():
+    s = _session(full_duplex=True, exit_after_reply=True)
+    s.dispatch({"type": "transcript.user", "text": "hi"})
+    s.dispatch({"type": "reply.done", "status": "interrupted"})
+    assert s.finished is False
+
+
+def test_exit_after_reply_off_never_finishes():
+    s = _session(full_duplex=True, exit_after_reply=False)
+    s.dispatch({"type": "transcript.user", "text": "hi"})
+    s.dispatch({"type": "reply.done"})
+    assert s.finished is False  # live mic sessions run until Ctrl-C
+
+
+def test_send_audio_loop_waits_for_ready_event_before_streaming():
+    import threading
+
+    ev = threading.Event()
+    ev.set()  # already ready -> loop proceeds immediately
+    s = _session(exit_after_reply=True, ready_event=ev)
+    s.ready = True
+    ws = _RecordingWS()
+    _send_audio_loop(ws, s, [b"\x01\x02"])
+    assert len(ws.sent) == 1  # frame forwarded once the gate is open
+
+
+def test_run_session_file_driven_stops_after_reply():
+    """A file-driven session ends on its own after the agent replies (no hang)."""
+
+    class _ScriptedWS:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, msg):
+            self.sent.append(msg)
+
+        def __iter__(self):
+            return iter(
+                json.dumps(e)
+                for e in (
+                    {"type": "session.ready"},
+                    {"type": "transcript.user", "text": "what time is it"},
+                    {"type": "transcript.agent", "text": "it is noon", "interrupted": False},
+                    {"type": "reply.done"},
+                    # A trailing event the loop must never reach (it should have stopped).
+                    {"type": "transcript.user", "text": "SHOULD NOT BE SEEN"},
+                )
+            )
+
+        def close(self):
+            pass
+
+    renderer = FakeRenderer()
+    run_session(
+        "sk_live",
+        renderer=renderer,
+        player=FakePlayer(),
+        mic=[],  # capture thread waits for ready, then this empty source ends at once
+        voice="ivy",
+        system_prompt="x",
+        greeting="",
+        full_duplex=True,
+        exit_after_reply=True,
+        connect=lambda url, **kwargs: _ScriptedWS(),
+    )
+    finals = [c for c in renderer.calls if c[0] == "user_final"]
+    assert ("user_final", "what time is it") in finals
+    assert ("user_final", "SHOULD NOT BE SEEN") not in finals  # stopped after the reply

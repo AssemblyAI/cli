@@ -41,6 +41,9 @@ packages = ["assemblyai_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY + kokoro; skip otherwise)",
+]
 
 [tool.mypy]
 python_version = "3.10"

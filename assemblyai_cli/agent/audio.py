@@ -89,5 +89,29 @@ class Player:
                 self._stream.close()
 
 
+class NullPlayer:
+    """A Player look-alike that discards audio instead of opening a speaker.
+
+    Used by file-driven agent runs (`aai agent <file>`), which only need the
+    transcript events: there is no human listening, and headless/CI hosts have
+    no output device for `sounddevice` to open.
+    """
+
+    def start(self) -> None:
+        pass
+
+    def enqueue(self, pcm: bytes) -> None:
+        pass
+
+    def flush(self) -> None:
+        pass
+
+    def pending(self) -> int:
+        return 0
+
+    def close(self) -> None:
+        pass
+
+
 # Microphone capture (MicrophoneSource) lives in assemblyai_cli.microphone and is
 # shared with `aai stream`; this module owns only the speaker-side Player.

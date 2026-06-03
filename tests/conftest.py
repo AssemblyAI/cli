@@ -1,6 +1,21 @@
+import os
+
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
+
+# Captured at import, before `isolate_env` strips ASSEMBLYAI_API_KEY from the
+# environment. The e2e suite uses this real key to drive the CLI as a subprocess;
+# unit tests still run fully isolated.
+REAL_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+
+
+@pytest.fixture
+def real_api_key():
+    """The real API key from the environment, or skip if none is set."""
+    if not REAL_API_KEY:
+        pytest.skip("ASSEMBLYAI_API_KEY not set; skipping real-API e2e test.")
+    return REAL_API_KEY
 
 
 class MemoryKeyring(KeyringBackend):

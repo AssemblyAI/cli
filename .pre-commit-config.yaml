@@ -20,7 +20,14 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: python -m pytest -q
+        entry: python -m pytest -q -m "not e2e"
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+      - id: pytest-e2e
+        name: pytest-e2e (real API; skips without ASSEMBLYAI_API_KEY + kokoro)
+        entry: python -m pytest -q -m e2e
         language: system
         types: [python]
         pass_filenames: false

@@ -14,6 +14,8 @@ echo "==> mypy"
 mypy
 
 echo "==> pytest (with branch-coverage gate)"
-pytest -q --cov=assemblyai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+# Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
+# a live API key + kokoro. Run them with: pytest -m e2e
+pytest -q -m "not e2e" --cov=assemblyai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "All checks passed."
