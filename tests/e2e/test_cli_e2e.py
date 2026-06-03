@@ -149,6 +149,20 @@ def test_transcribe_prompt_transforms_via_gateway(real_api_key):
     assert data["transform"]["output"].strip(), f"gateway returned no transform: {data!r}"
 
 
+def test_e2e_transcribe_analysis(real_api_key):
+    # Drives a full analysis run through the real API using the hosted --sample
+    # clip, so summarization + auto-chapters are exercised end to end.
+    proc = _run_cli(
+        ["transcribe", "--sample", "--summarization", "--auto-chapters", "--json"],
+        real_api_key,
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
+    payload = json.loads(proc.stdout)
+    # The full transcript object is returned; at least one analysis field is present.
+    assert payload.get("summary") or payload.get("chapters"), f"no analysis fields: {payload!r}"
+
+
 def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path):
     spoken = "the quick brown fox jumps over the lazy dog"
     wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "fox.wav")

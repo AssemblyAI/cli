@@ -114,3 +114,39 @@ def test_build_streaming_params_minimal():
     )
     assert sp.sample_rate == 16000
     assert sp.max_turn_silence == 400
+
+
+@pytest.mark.parametrize(
+    "field,raw,expected,extra",
+    [
+        ("punctuate", "false", False, []),
+        ("multichannel", "true", True, []),
+        ("audio_start_from", "1500", 1500, []),
+        ("temperature", "0.2", 0.2, []),
+        # summary_type is only applied by the SDK when summarization is enabled.
+        ("summary_type", "bullets", "bullets", ["summarization=true"]),
+        ("keyterms_prompt", "a,b", ["a", "b"], []),
+    ],
+)
+def test_transcribe_field_coercion_matrix(field, raw, expected, extra):
+    tc = cb.build_transcription_config(
+        flags={}, overrides=[f"{field}={raw}", *extra], config_file=None
+    )
+    assert getattr(tc.raw, field) == expected
+
+
+@pytest.mark.parametrize("field", sorted(cb.STREAM_FIELDS))
+def test_every_stream_field_is_a_valid_param(field):
+    # Each declared field must be a real StreamingParameters attribute.
+    from assemblyai.streaming.v3 import StreamingParameters
+
+    assert field in StreamingParameters.model_fields
+
+
+@pytest.mark.parametrize("field", sorted(cb.TRANSCRIBE_FIELDS))
+def test_every_transcribe_field_is_a_valid_param(field):
+    # Each declared field must be a real TranscriptionConfig request attribute.
+    import assemblyai as aai
+
+    raw_cls = type(aai.TranscriptionConfig().raw)
+    assert field in raw_cls.model_fields
