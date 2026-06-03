@@ -9,7 +9,9 @@ from assemblyai_cli.main import app
 runner = CliRunner()
 
 
-def _drive_turns(api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None):
+def _drive_turns(
+    api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+):
     # Simulate the streaming client driving the renderer callbacks.
     if on_begin:
         on_begin(types.SimpleNamespace(id="sess"))
@@ -37,7 +39,7 @@ def test_stream_file_uses_filesource(monkeypatch, tmp_path):
     seen = {}
 
     def fake_stream_audio(
-        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None
+        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
     ):
         seen["source_type"] = type(source).__name__
         seen["rate"] = sample_rate
@@ -63,7 +65,9 @@ def test_stream_unauthenticated_exits_2():
 
 
 def _capture_source(seen):
-    def fake(api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None):
+    def fake(
+        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+    ):
         seen["source"] = source
         seen["rate"] = sample_rate
 
@@ -160,7 +164,9 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
 
     config.set_api_key("default", "sk_live")
 
-    def fake(api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None):
+    def fake(
+        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+    ):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="from file", end_of_turn=True))
 
@@ -175,3 +181,63 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
     assert result.exit_code == 0
     lines = [_json.loads(x) for x in result.output.splitlines() if x.strip()]
     assert {"type": "turn", "transcript": "from file", "end_of_turn": True} in lines
+
+
+def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake(api_key, source, *, sample_rate, on_turn=None, **kwargs):
+        if on_turn:
+            on_turn(types.SimpleNamespace(transcript="hola", end_of_turn=True))
+            on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
+            on_turn(types.SimpleNamespace(transcript="partial", end_of_turn=False))  # ignored
+
+    def fake_transform(api_key, *, prompt, model, transcript_text, max_tokens):
+        seen["prompt"] = prompt
+        seen["model"] = model
+        seen["transcript_text"] = transcript_text
+        seen["max_tokens"] = max_tokens
+        return "hello world"
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
+    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.transform_transcript", fake_transform)
+    result = runner.invoke(
+        app,
+        [
+            "stream",
+            "--prompt",
+            "translate to english",
+            "--model",
+            "gpt-4.1",
+            "--max-tokens",
+            "50",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0
+    # The full transcript (finalized turns only) is sent for one transform.
+    assert seen["transcript_text"] == "hola mundo"
+    assert seen["model"] == "gpt-4.1"
+    assert seen["max_tokens"] == 50
+    lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
+    assert {"type": "llm", "content": "hello world"} in lines
+
+
+def test_stream_without_prompt_does_not_transform(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    called = {"ran": False}
+
+    def fake(api_key, source, *, sample_rate, on_turn=None, **kwargs):
+        if on_turn:
+            on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
+
+    def fake_transform(*a, **k):
+        called["ran"] = True
+        return "x"
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
+    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.transform_transcript", fake_transform)
+    result = runner.invoke(app, ["stream", "--json"])
+    assert result.exit_code == 0
+    assert called["ran"] is False  # no --prompt -> no gateway call

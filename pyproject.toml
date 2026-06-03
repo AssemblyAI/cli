@@ -16,6 +16,7 @@ dependencies = [
     "tomli-w>=1.0",
     "websockets>=13",
     "sounddevice>=0.5",
+    "openai>=1.40",
 ]
 
 [project.optional-dependencies]

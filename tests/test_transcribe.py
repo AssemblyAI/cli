@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -108,3 +109,55 @@ def test_transcribe_srt_vtt_conflict_json_error():
     assert result.exit_code == 2
     # In --json mode the error is a JSON envelope, not Typer usage text.
     assert '"error"' in result.output
+
+
+def test_transcribe_prompt_transforms_json(monkeypatch):
+    _auth()
+    seen = {}
+
+    def fake_transform(api_key, *, prompt, model, transcript_id, max_tokens):
+        seen["prompt"] = prompt
+        seen["model"] = model
+        seen["transcript_id"] = transcript_id
+        return "a short summary"
+
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        monkeypatch.setattr(
+            "assemblyai_cli.commands.transcribe.llm.transform_transcript", fake_transform
+        )
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["text"] == "hello world"  # raw transcript still present in JSON
+    assert data["transform"]["output"] == "a short summary"
+    assert data["transform"]["prompt"] == "summarize"
+    # The transform is injected server-side via the transcript id.
+    assert seen["transcript_id"] == "t_1"
+    assert seen["model"] == "claude-sonnet-4-6"
+
+
+def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        monkeypatch.setattr(
+            "assemblyai_cli.commands.transcribe.llm.transform_transcript",
+            lambda *a, **k: "TRANSFORMED",
+        )
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize"])
+    assert result.exit_code == 0
+    assert "TRANSFORMED" in result.output
+    assert "hello world" not in result.output  # human mode shows the transform only
+
+
+def test_transcribe_prompt_with_srt_exits_2():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize", "--srt"])
+    assert result.exit_code == 2

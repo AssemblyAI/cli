@@ -30,3 +30,13 @@ class StreamRenderer(BaseRenderer):
                     "audio_duration_seconds": getattr(event, "audio_duration_seconds", None),
                 }
             )
+
+    def llm(self, content: str) -> None:
+        """Render the LLM Gateway transform of the full transcript (shown last)."""
+        if not content:
+            return
+        if self.json_mode:
+            self._emit({"type": "llm", "content": content})
+        else:
+            self._finalize_line()  # close any open partial-turn line first
+            self._write("\N{ELECTRIC LIGHT BULB} " + content + "\n")

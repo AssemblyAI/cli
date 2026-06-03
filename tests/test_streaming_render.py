@@ -96,6 +96,30 @@ def test_close_swallows_non_pipe_errors():
     r.close()  # non-pipe errors are non-fatal
 
 
+def test_llm_json_emits_event():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.llm("the summary")
+    assert json.loads(out.getvalue()) == {"type": "llm", "content": "the summary"}
+
+
+def test_llm_human_prints_content():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=False, out=out)
+    r.turn(_turn("partial", False))  # open a partial line first
+    r.llm("a tidy summary")
+    text = out.getvalue()
+    assert "a tidy summary" in text
+    assert text.endswith("\n")
+
+
+def test_llm_ignores_empty_content():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.llm("")  # nothing to show
+    assert out.getvalue() == ""
+
+
 def test_close_propagates_broken_pipe():
     import pytest
 

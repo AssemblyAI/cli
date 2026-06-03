@@ -3,7 +3,16 @@ from __future__ import annotations
 import typer
 
 from assemblyai_cli import __version__
-from assemblyai_cli.commands import agent, claude, login, samples, stream, transcribe, transcripts
+from assemblyai_cli.commands import (
+    agent,
+    claude,
+    llm,
+    login,
+    samples,
+    stream,
+    transcribe,
+    transcripts,
+)
 from assemblyai_cli.context import AppState
 
 app = typer.Typer(
@@ -29,6 +38,7 @@ def version() -> None:
 
 
 app.add_typer(agent.app)
+app.add_typer(llm.app)
 app.add_typer(login.app)
 app.add_typer(stream.app)
 app.add_typer(transcribe.app)

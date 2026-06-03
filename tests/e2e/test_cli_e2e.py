@@ -117,3 +117,54 @@ def test_agent_file_gets_reply(real_api_key, kokoro_pipeline, tmp_path):
 
     assert user_finals, f"agent never transcribed the spoken input; events={events}"
     assert agent_replies, f"agent never replied; events={events}"
+
+
+# --- LLM Gateway -----------------------------------------------------------
+
+
+def test_llm_command_answers(real_api_key):
+    proc = _run_cli(
+        ["llm", "What is 2 + 2? Reply with just the number.", "--json"], real_api_key, timeout=60
+    )
+    assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
+    data = json.loads(proc.stdout)
+    assert "4" in data["output"], f"unexpected LLM output: {data!r}"
+
+
+def test_transcribe_prompt_transforms_via_gateway(real_api_key):
+    proc = _run_cli(
+        [
+            "transcribe",
+            "--sample",
+            "--prompt",
+            "Summarize this transcript in one short sentence.",
+            "--json",
+        ],
+        real_api_key,
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
+    data = json.loads(proc.stdout)
+    assert data["text"].strip(), f"no transcript produced: {data!r}"
+    assert data["transform"]["output"].strip(), f"gateway returned no transform: {data!r}"
+
+
+def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path):
+    spoken = "the quick brown fox jumps over the lazy dog"
+    wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "fox.wav")
+
+    proc = _run_cli(
+        [
+            "stream",
+            str(wav),
+            "--prompt",
+            "Summarize the transcript in one short sentence.",
+            "--json",
+        ],
+        real_api_key,
+    )
+    assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
+    events = _ndjson(proc.stdout)
+    # The full transcript is transformed once after streaming, emitted as a final llm event.
+    llm_events = [e for e in events if e.get("type") == "llm" and e.get("content")]
+    assert llm_events, f"no transcript transform came back; events={events}"
