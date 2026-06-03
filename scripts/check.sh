@@ -4,14 +4,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "==> ruff check"
+echo "==> ruff check (src + tests)"
 ruff check .
 
-echo "==> ruff format --check"
+echo "==> ruff format --check (src + tests)"
 ruff format --check .
 
-echo "==> mypy"
-mypy
+echo "==> mypy (src + tests)"
+mypy  # files = ["assemblyai_cli", "tests"] in pyproject.toml
+
+echo "==> markdownlint (docs/ is generated, so excluded)"
+markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need

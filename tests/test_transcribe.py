@@ -18,8 +18,7 @@ def _fake_transcript():
     t.id = "t_1"
     t.text = "hello world"
     t.status = "completed"
-    t.export_subtitles_srt.return_value = "1\n00:00\nhello"
-    t.export_subtitles_vtt.return_value = "WEBVTT\nhello"
+    t.utterances = []
     return t
 
 
@@ -41,6 +40,37 @@ def test_transcribe_requires_source():
     assert result.exit_code == 2
 
 
+def test_transcribe_speaker_labels_renders_utterances(monkeypatch):
+    import types
+
+    _auth()
+    t = _fake_transcript()
+    t.utterances = [
+        types.SimpleNamespace(speaker="A", text="hi there", start=0, end=500),
+        types.SimpleNamespace(speaker="B", text="hello back", start=500, end=900),
+    ]
+    # human mode -> "Speaker A: ..." lines
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
+    assert result.exit_code == 0
+    assert "Speaker A: hi there" in result.output
+    assert "Speaker B: hello back" in result.output
+
+
+def test_transcribe_speaker_labels_json_includes_utterances():
+    import types
+
+    _auth()
+    t = _fake_transcript()
+    t.utterances = [types.SimpleNamespace(speaker="A", text="hi there", start=0, end=500)]
+    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["utterances"] == [{"speaker": "A", "text": "hi there", "start": 0, "end": 500}]
+
+
 def test_transcribe_passes_speaker_labels():
     _auth()
     with patch(
@@ -48,33 +78,6 @@ def test_transcribe_passes_speaker_labels():
     ) as tx:
         runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
     assert tx.call_args.kwargs["speaker_labels"] is True
-
-
-def test_transcribe_srt_export():
-    _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--srt"])
-    assert "00:00" in result.output
-
-
-def test_transcribe_vtt_export():
-    _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--vtt"])
-    assert "WEBVTT" in result.output
-
-
-def test_transcribe_srt_vtt_mutually_exclusive():
-    _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--srt", "--vtt"])
-    assert result.exit_code != 0
 
 
 def test_transcribe_json_output():
@@ -103,14 +106,6 @@ def test_transcribe_status_renders_enum_value():
     assert '"status": "completed"' in result.output
 
 
-def test_transcribe_srt_vtt_conflict_json_error():
-    _auth()
-    result = runner.invoke(app, ["transcribe", "audio.mp3", "--srt", "--vtt", "--json"])
-    assert result.exit_code == 2
-    # In --json mode the error is a JSON envelope, not Typer usage text.
-    assert '"error"' in result.output
-
-
 def test_transcribe_prompt_transforms_json(monkeypatch):
     _auth()
     seen = {}
@@ -127,7 +122,9 @@ def test_transcribe_prompt_transforms_json(monkeypatch):
         monkeypatch.setattr(
             "assemblyai_cli.commands.transcribe.llm.transform_transcript", fake_transform
         )
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize", "--json"])
+        result = runner.invoke(
+            app, ["transcribe", "audio.mp3", "--llm-gateway-prompt", "summarize", "--json"]
+        )
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["text"] == "hello world"  # raw transcript still present in JSON
@@ -148,16 +145,35 @@ def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
             "assemblyai_cli.commands.transcribe.llm.transform_transcript",
             lambda *a, **k: "TRANSFORMED",
         )
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize"])
+        result = runner.invoke(
+            app, ["transcribe", "audio.mp3", "--llm-gateway-prompt", "summarize"]
+        )
     assert result.exit_code == 0
     assert "TRANSFORMED" in result.output
     assert "hello world" not in result.output  # human mode shows the transform only
 
 
-def test_transcribe_prompt_with_srt_exits_2():
+def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path):
+    _auth()
+    fake = tmp_path / "vid.m4a"
+    fake.write_bytes(b"x")
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake
+    )
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        result = runner.invoke(app, ["transcribe", "https://youtu.be/abc", "--json"])
+    assert result.exit_code == 0
+    assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
+
+
+def test_transcribe_prompt_biases_speech_model():
     _auth()
     with patch(
         "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "summarize", "--srt"])
-    assert result.exit_code == 2
+    ) as tx:
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "expect medical terms"])
+    assert result.exit_code == 0
+    # --prompt is the speech-model prompt, forwarded to the transcription call.
+    assert tx.call_args.kwargs["prompt"] == "expect medical terms"

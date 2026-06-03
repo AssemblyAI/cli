@@ -33,16 +33,25 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 | Command | What it does |
 | --- | --- |
 | `aai login` / `logout` / `whoami` | Manage the stored API key. |
-| `aai transcribe <file\|url>` | Transcribe an audio file or URL (`--sample` for a demo, `--srt`/`--vtt` for subtitles). |
+| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm-gateway-prompt` to transform the result). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | Live two-way voice conversation with a voice agent. |
+| `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (optionally over a transcript with `--transcript-id`). |
 | `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
 | `aai samples create <name>` | Scaffold a runnable starter script with your key injected. |
 
 Add `--json` to any command for machine-readable output (it's also the default when
 output is piped or run by an agent). Auth problems surface as a clean
 "not authenticated" error across every command.
+
+> **Tip:** Quote URLs that contain `?` (most YouTube links do). In zsh the `?` is a
+> glob character, so an unquoted URL fails with `zsh: no matches found` before the
+> command runs:
+>
+> ```sh
+> aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
+> ```
 
 ## Streaming
 
@@ -61,13 +70,13 @@ Have a live, two-way voice conversation:
 ```sh
 aai agent                                 # talk; the agent talks back. Ctrl-C to stop.
 aai agent --voice james --greeting "Hi"
-aai agent --prompt-file persona.txt       # load the system prompt from a file
-aai agent --list-voices                   # see available voices
+aai agent --system-prompt-file persona.txt   # load the system prompt from a file
+aai agent --list-voices                       # see available voices
 ```
 
-By default the agent runs **half-duplex**: your mic mutes while the agent speaks, so it
-can't hear itself on your speakers. With headphones, add `--full-duplex` for true
-barge-in (interrupt the agent mid-sentence).
+The agent is full-duplex — your mic stays open while it speaks, so you can interrupt it
+mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself on your
+speakers.
 
 ## AI coding agents
 

@@ -206,7 +206,7 @@ def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
         app,
         [
             "stream",
-            "--prompt",
+            "--llm-gateway-prompt",
             "translate to english",
             "--model",
             "gpt-4.1",
@@ -240,4 +240,44 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
     monkeypatch.setattr("assemblyai_cli.commands.stream.llm.transform_transcript", fake_transform)
     result = runner.invoke(app, ["stream", "--json"])
     assert result.exit_code == 0
-    assert called["ran"] is False  # no --prompt -> no gateway call
+    assert called["ran"] is False  # no --llm-gateway-prompt -> no gateway call
+
+
+def test_stream_prompt_biases_speech_model(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake(api_key, source, *, sample_rate, prompt=None, **kwargs):
+        seen["prompt"] = prompt
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
+    result = runner.invoke(app, ["stream", "--prompt", "expect crypto jargon", "--json"])
+    assert result.exit_code == 0
+    # --prompt is the speech-model prompt, forwarded to the streaming session.
+    assert seen["prompt"] == "expect crypto jargon"
+
+
+def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
+    import wave
+
+    config.set_api_key("default", "sk_live")
+    fake = tmp_path / "vid.wav"
+    with wave.open(str(fake), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x01" * 100)
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.youtube.download_audio", lambda url, d: fake
+    )
+    seen = {}
+
+    def fake_stream(api_key, source, *, sample_rate, **kwargs):
+        seen["source_type"] = type(source).__name__
+        seen["src"] = getattr(source, "source", None)
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream)
+    result = runner.invoke(app, ["stream", "https://youtu.be/abc"])
+    assert result.exit_code == 0
+    assert seen["source_type"] == "FileSource"  # streamed the downloaded local file
+    assert seen["src"] == str(fake)

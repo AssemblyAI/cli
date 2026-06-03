@@ -19,7 +19,9 @@ def real_api_key():
 
 
 class MemoryKeyring(KeyringBackend):
-    priority = 1
+    # keyring's base types `priority` as a classproperty[float]; a plain value is the
+    # documented way to set it for a backend, so the assignment mismatch is expected.
+    priority = 1  # type: ignore[assignment]
 
     def __init__(self):
         self._store = {}

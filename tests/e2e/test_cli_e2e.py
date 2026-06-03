@@ -136,7 +136,7 @@ def test_transcribe_prompt_transforms_via_gateway(real_api_key):
         [
             "transcribe",
             "--sample",
-            "--prompt",
+            "--llm-gateway-prompt",
             "Summarize this transcript in one short sentence.",
             "--json",
         ],
@@ -157,7 +157,7 @@ def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path
         [
             "stream",
             str(wav),
-            "--prompt",
+            "--llm-gateway-prompt",
             "Summarize the transcript in one short sentence.",
             "--json",
         ],

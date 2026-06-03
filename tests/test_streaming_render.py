@@ -2,6 +2,9 @@ import io
 import json
 import types
 
+import pytest
+from rich.console import Console
+
 from assemblyai_cli.streaming.render import StreamRenderer
 
 
@@ -9,16 +12,57 @@ def _turn(transcript, end_of_turn):
     return types.SimpleNamespace(transcript=transcript, end_of_turn=end_of_turn)
 
 
-def test_human_turn_finalizes_on_end_of_turn():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=False, out=out)
+def _human(width=80):
+    """A human-mode renderer writing to a forced-terminal Rich console buffer."""
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=True, width=width, color_system=None)
+    return StreamRenderer(json_mode=False, out=buf, console=console), buf
+
+
+# --- human mode (Rich) -----------------------------------------------------
+def test_human_turn_shows_and_finalizes_text():
+    r, buf = _human()
     r.turn(_turn("hello", False))
     r.turn(_turn("hello world", True))
-    text = out.getvalue()
-    assert "hello world" in text
-    assert text.endswith("\n")
+    r.close()
+    assert "hello world" in buf.getvalue()
 
 
+def test_human_begin_prints_notice():
+    r, buf = _human()
+    r.begin(types.SimpleNamespace(id="x"))
+    assert "Ctrl-C" in buf.getvalue()
+
+
+def test_human_long_partial_clears_wrapped_rows():
+    # A partial wider than the terminal wraps; the next redraw must clear ALL
+    # wrapped rows (Rich emits cursor-up), not stack copies on screen.
+    r, buf = _human(width=20)
+    r.turn(_turn("x" * 100, False))
+    r.turn(_turn("y" * 100, False))
+    assert "\x1b[1A" in buf.getvalue()  # moved up over the wrapped rows to clear them
+
+
+def test_human_llm_line_rendered():
+    r, buf = _human()
+    r.turn(_turn("hola", True))
+    r.llm("the summary")
+    assert "the summary" in buf.getvalue()
+
+
+def test_human_stopped_announced():
+    r, buf = _human()
+    r.stopped()
+    assert "Stopped." in buf.getvalue()
+
+
+def test_termination_silent_in_human_mode():
+    r, buf = _human()
+    r.termination(types.SimpleNamespace(audio_duration_seconds=3.0))
+    assert buf.getvalue() == ""  # termination only surfaces in JSON
+
+
+# --- json mode (plain NDJSON, unchanged) -----------------------------------
 def test_json_mode_emits_ndjson_events():
     out = io.StringIO()
     r = StreamRenderer(json_mode=True, out=out)
@@ -29,49 +73,25 @@ def test_json_mode_emits_ndjson_events():
     assert lines[1] == {"type": "turn", "transcript": "hi", "end_of_turn": True}
 
 
-def test_human_begin_prints_notice():
-    out = io.StringIO()
-    StreamRenderer(json_mode=False, out=out).begin(types.SimpleNamespace(id="x"))
-    assert "Ctrl-C" in out.getvalue()
-
-
-def test_human_shorter_turn_leaves_no_trailing_padding():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=False, out=out)
-    r.turn(_turn("hello world", False))  # long partial
-    r.turn(_turn("hi", True))  # shorter, finalized
-    # No leftover characters from the longer partial; finalized line ends clean.
-    assert out.getvalue().endswith("hi\n")
-    assert "hello world\n" not in out.getvalue()
-
-
 def test_termination_json_emits_duration():
     out = io.StringIO()
     r = StreamRenderer(json_mode=True, out=out)
     r.termination(types.SimpleNamespace(audio_duration_seconds=12.5))
-    import json as _json
-
-    assert _json.loads(out.getvalue()) == {
-        "type": "termination",
-        "audio_duration_seconds": 12.5,
-    }
+    assert json.loads(out.getvalue()) == {"type": "termination", "audio_duration_seconds": 12.5}
 
 
-def test_close_finalizes_open_partial_line():
+def test_llm_json_emits_event():
     out = io.StringIO()
-    r = StreamRenderer(json_mode=False, out=out)
-    r.turn(_turn("partial", False))  # no end_of_turn -> line left open
-    r.close()
-    assert out.getvalue().endswith("\n")
+    r = StreamRenderer(json_mode=True, out=out)
+    r.llm("the summary")
+    assert json.loads(out.getvalue()) == {"type": "llm", "content": "the summary"}
 
 
-def test_close_is_noop_when_line_already_finalized():
+def test_llm_ignores_empty_content():
     out = io.StringIO()
-    r = StreamRenderer(json_mode=False, out=out)
-    r.turn(_turn("done", True))  # finalized with newline
-    before = out.getvalue()
-    r.close()
-    assert out.getvalue() == before  # no extra newline
+    r = StreamRenderer(json_mode=True, out=out)
+    r.llm("")
+    assert out.getvalue() == ""
 
 
 def test_close_is_noop_in_json_mode():
@@ -83,46 +103,7 @@ def test_close_is_noop_in_json_mode():
     assert out.getvalue() == before
 
 
-def test_close_swallows_non_pipe_errors():
-    class FlakyOut:
-        def write(self, _text):
-            raise OSError("transient write error")
-
-        def flush(self):
-            pass
-
-    r = StreamRenderer(json_mode=False, out=FlakyOut())
-    r._line_open = True  # force the finalize path
-    r.close()  # non-pipe errors are non-fatal
-
-
-def test_llm_json_emits_event():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=True, out=out)
-    r.llm("the summary")
-    assert json.loads(out.getvalue()) == {"type": "llm", "content": "the summary"}
-
-
-def test_llm_human_prints_content():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=False, out=out)
-    r.turn(_turn("partial", False))  # open a partial line first
-    r.llm("a tidy summary")
-    text = out.getvalue()
-    assert "a tidy summary" in text
-    assert text.endswith("\n")
-
-
-def test_llm_ignores_empty_content():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=True, out=out)
-    r.llm("")  # nothing to show
-    assert out.getvalue() == ""
-
-
-def test_close_propagates_broken_pipe():
-    import pytest
-
+def test_json_emit_propagates_broken_pipe():
     class BrokenOut:
         def write(self, _text):
             raise BrokenPipeError("downstream closed")
@@ -130,7 +111,19 @@ def test_close_propagates_broken_pipe():
         def flush(self):
             pass
 
-    r = StreamRenderer(json_mode=False, out=BrokenOut())
-    r._line_open = True  # force the finalize path
-    with pytest.raises(BrokenPipeError):  # propagates so the command stops cleanly
-        r.close()
+    r = StreamRenderer(json_mode=True, out=BrokenOut())
+    # BrokenPipe must propagate so the command can stop cleanly (`| head`).
+    with pytest.raises(BrokenPipeError):
+        r.turn(_turn("hi", True))
+
+
+def test_json_emit_swallows_non_pipe_errors():
+    class FlakyOut:
+        def write(self, _text):
+            raise OSError("transient write error")
+
+        def flush(self):
+            pass
+
+    r = StreamRenderer(json_mode=True, out=FlakyOut())
+    r.turn(_turn("hi", True))  # non-pipe write errors are non-fatal

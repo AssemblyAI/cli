@@ -14,7 +14,7 @@ app = typer.Typer()
 @app.command()
 def llm(
     ctx: typer.Context,
-    prompt: str = typer.Argument(None, help="The instruction / prompt to send."),
+    prompt: str = typer.Argument(None, help="The prompt to send to the model."),
     model: str = typer.Option(gateway.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     transcript_id: str = typer.Option(
         None, "--transcript-id", help="Inject this transcript's text into the prompt."

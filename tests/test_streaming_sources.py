@@ -96,6 +96,42 @@ def test_filesource_ffmpeg_cleanup_on_early_stop(tmp_path, monkeypatch):
     assert calls["terminated"] and calls["waited"] and calls["closed"]
 
 
+def test_filesource_ffmpeg_wait_keyboardinterrupt_is_silenced(tmp_path, monkeypatch):
+    # A stray Ctrl-C while the generator is finalized (proc.wait()) must not escape
+    # as the noisy "Exception ignored in generator"; the child is killed instead.
+    p = tmp_path / "clip.mp3"
+    p.write_bytes(b"x")
+    monkeypatch.setattr(sources.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    calls = {"killed": False}
+
+    class FakeProc:
+        def __init__(self):
+            self.stdout = self
+            self.stderr = io.BytesIO(b"")
+            self.returncode = 0
+
+        def read(self, _n):
+            return b"\x00" * 3200  # endless
+
+        def close(self):
+            pass
+
+        def terminate(self):
+            pass
+
+        def wait(self):
+            raise KeyboardInterrupt  # second Ctrl-C lands during cleanup
+
+        def kill(self):
+            calls["killed"] = True
+
+    monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FakeProc())
+    gen = iter(FileSource(str(p), sleep=lambda _s: None))
+    next(gen)  # pull one chunk
+    gen.close()  # must return cleanly despite wait() raising KeyboardInterrupt
+    assert calls["killed"] is True
+
+
 def test_filesource_ffmpeg_failure_raises(tmp_path, monkeypatch):
     p = tmp_path / "bad.mp3"
     p.write_bytes(b"x")

@@ -14,11 +14,11 @@ class AgentRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "session.ready"})
         else:
-            self._write("Connected — start talking. (Ctrl-C to stop)\n")
+            self._line("Connected — start talking. (Ctrl-C to stop)")
 
     def notice(self, text: str) -> None:
-        """Write a human-facing notice line (caller chooses when to suppress in JSON)."""
-        self._write(text)
+        """Print a human-facing notice (caller chooses when to suppress in JSON)."""
+        self._line(text.rstrip("\n"))
 
     # --- user --------------------------------------------------------------
     def user_partial(self, text: str) -> None:
@@ -42,8 +42,7 @@ class AgentRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
             return
-        self._finalize_line()  # close any open "you: …" partial first
-        self._write("agent: " + text + "\n")
+        self._line("agent: " + text)  # commits any open "you: …" partial first
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:

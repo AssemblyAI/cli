@@ -10,7 +10,7 @@ class StreamRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "begin", "id": getattr(event, "id", None)})
         else:
-            self._write("Listening… (Ctrl-C to stop)\n")
+            self._line("Listening… (Ctrl-C to stop)")
 
     def turn(self, event: object) -> None:
         text = getattr(event, "transcript", "") or ""
@@ -38,5 +38,4 @@ class StreamRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "llm", "content": content})
         else:
-            self._finalize_line()  # close any open partial-turn line first
-            self._write("\N{ELECTRIC LIGHT BULB} " + content + "\n")
+            self._line("\N{ELECTRIC LIGHT BULB} " + content)

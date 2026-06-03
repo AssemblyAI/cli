@@ -88,26 +88,25 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
             "agent",
             "--voice",
             "james",
-            "--prompt-file",
+            "--system-prompt-file",
             str(prompt_file),
-            "--prompt",
+            "--system-prompt",
             "ignored",
-            "--full-duplex",
         ],
     )
     assert result.exit_code == 0
     assert seen["voice"] == "james"
-    assert seen["prompt"] == "be a pirate"  # --prompt-file overrides --prompt
-    assert seen["full_duplex"] is True
+    assert seen["prompt"] == "be a pirate"  # --system-prompt-file overrides --system-prompt
+    assert seen["full_duplex"] is True  # always full duplex now (one stream)
 
 
-def test_agent_half_duplex_notice_in_human_mode(monkeypatch):
+def test_agent_headphones_notice_in_human_mode(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
-    assert "Half-duplex" in result.output
+    assert "headphones" in result.output.lower()  # mic stays open -> warn to use headphones
 
 
 def test_agent_ctrl_c_exits_cleanly(monkeypatch):
@@ -131,7 +130,9 @@ def test_agent_unknown_voice_exits_2(monkeypatch):
 def test_agent_prompt_file_not_found_exits_2(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
-    result = runner.invoke(app, ["agent", "--prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"])
+    result = runner.invoke(
+        app, ["agent", "--system-prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"]
+    )
     assert result.exit_code == 2
 
 
@@ -192,7 +193,7 @@ def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
     assert result.exit_code == 2  # --device is microphone-only
 
 
-def test_agent_file_source_no_half_duplex_notice(monkeypatch, tmp_path):
+def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
@@ -201,4 +202,4 @@ def test_agent_file_source_no_half_duplex_notice(monkeypatch, tmp_path):
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav)])
     assert result.exit_code == 0
-    assert "Half-duplex" not in result.output  # half-duplex note is mic-only
+    assert "headphones" not in result.output.lower()  # mic-only note; file mode is silent

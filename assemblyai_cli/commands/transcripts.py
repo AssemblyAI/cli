@@ -8,7 +8,7 @@ from assemblyai_cli import client, config, output
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import APIError
 
-app = typer.Typer()
+app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=True)
 
 
 @app.command()

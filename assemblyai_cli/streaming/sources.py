@@ -115,7 +115,14 @@ class FileSource:
                 proc.terminate()
             with contextlib.suppress(Exception):
                 stdout.close()
-            proc.wait()
+            try:
+                proc.wait()
+            except KeyboardInterrupt:
+                # The generator can be finalized late, during an interrupted
+                # shutdown; a stray Ctrl-C in wait() must not surface as the noisy
+                # "Exception ignored in generator". Kill the child and stay quiet.
+                with contextlib.suppress(Exception):
+                    proc.kill()
         # Reached only on natural EOF (not early generator close): surface a real
         # decode failure instead of silently streaming nothing.
         if proc.returncode:

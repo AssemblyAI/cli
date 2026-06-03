@@ -87,7 +87,7 @@ def test_transcribe_blocks_and_returns_transcript():
     ):
         result = client.transcribe("sk", "audio.mp3", speaker_labels=True)
 
-    cfg.assert_called_once_with(speaker_labels=True)
+    cfg.assert_called_once_with(speaker_labels=True, prompt=None)
     fake_transcriber.transcribe.assert_called_once()
     assert result is fake_transcript
 

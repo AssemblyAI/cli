@@ -4,7 +4,13 @@ import types
 import pytest
 
 from assemblyai_cli.errors import CLIError
-from assemblyai_cli.microphone import MicrophoneSource, _default_mic_stream, _SoundDeviceMic
+from assemblyai_cli.microphone import (
+    _FALLBACK_RATE,
+    MicrophoneSource,
+    _default_mic_stream,
+    _device_default_rate,
+    _SoundDeviceMic,
+)
 
 
 class _FakeRawStream:
@@ -28,7 +34,7 @@ class _FakeRawStream:
         self.closed = True
 
 
-def test_yields_chunks_from_factory_with_rate_and_device():
+def test_yields_chunks_at_capture_rate():
     seen = {}
 
     def fake_factory(*, sample_rate, device):
@@ -36,16 +42,39 @@ def test_yields_chunks_from_factory_with_rate_and_device():
         seen["device"] = device
         return iter([b"aa", b"bb"])
 
-    mic = MicrophoneSource(sample_rate=24000, device=3, stream_factory=fake_factory)
+    mic = MicrophoneSource(capture_rate=24000, device=3, stream_factory=fake_factory)
+    assert mic.sample_rate == 24000  # no target -> reports the capture rate
     assert list(mic) == [b"aa", b"bb"]
-    assert seen == {"rate": 24000, "device": 3}
+    assert seen == {"rate": 24000, "device": 3}  # opened at the capture rate
+
+
+def test_resamples_capture_rate_to_target():
+    frames48 = b"\x00\x00" * 960  # 20 ms of silence at 48 kHz
+
+    def fake_factory(*, sample_rate, device):
+        assert sample_rate == 48000  # device opened at its native rate
+        return iter([frames48])
+
+    mic = MicrophoneSource(target_rate=24000, capture_rate=48000, stream_factory=fake_factory)
+    assert mic.sample_rate == 24000  # callers see the target rate
+    out = b"".join(mic)
+    assert 0 < len(out) < len(frames48)  # downsampled 48k -> 24k
+
+
+def test_no_resample_when_target_matches_capture():
+    def fake_factory(*, sample_rate, device):
+        return iter([b"\x01\x02\x03\x04"])
+
+    mic = MicrophoneSource(target_rate=16000, capture_rate=16000, stream_factory=fake_factory)
+    assert mic.sample_rate == 16000
+    assert list(mic) == [b"\x01\x02\x03\x04"]  # untouched when rates already match
 
 
 def test_missing_dependency_raises_mic_missing():
     def boom(*, sample_rate, device):
         raise ImportError("No module named 'sounddevice'")
 
-    mic = MicrophoneSource(sample_rate=16000, stream_factory=boom)
+    mic = MicrophoneSource(capture_rate=16000, stream_factory=boom)
     with pytest.raises(CLIError) as exc:
         list(mic)
     assert exc.value.error_type == "mic_missing"
@@ -57,7 +86,7 @@ def test_device_error_raises_mic_error_exit_1():
     def boom(*, sample_rate, device):
         raise OSError("Invalid device")
 
-    mic = MicrophoneSource(sample_rate=16000, device=99, stream_factory=boom)
+    mic = MicrophoneSource(capture_rate=16000, device=99, stream_factory=boom)
     with pytest.raises(CLIError) as exc:
         list(mic)
     assert exc.value.error_type == "mic_error"
@@ -74,15 +103,47 @@ def test_closes_closeable_stream_in_finally():
         def close(self):
             closed["called"] = True
 
-    mic = MicrophoneSource(sample_rate=16000, stream_factory=lambda **_k: CloseableStream())
+    mic = MicrophoneSource(capture_rate=16000, stream_factory=lambda **_k: CloseableStream())
     assert list(mic) == [b"x"]
     assert closed["called"] is True  # close() invoked in the finally
 
 
 def test_plain_iterator_without_close_is_fine():
-    # A factory returning a bare iterator (no .close) must not error in teardown.
-    mic = MicrophoneSource(sample_rate=16000, stream_factory=lambda **_k: iter([b"z"]))
+    mic = MicrophoneSource(capture_rate=16000, stream_factory=lambda **_k: iter([b"z"]))
     assert list(mic) == [b"z"]
+
+
+def test_rate_query_resolves_capture_rate_when_not_given():
+    seen = {}
+
+    def fake_factory(*, sample_rate, device):
+        seen["rate"] = sample_rate
+        return iter([b"q"])
+
+    mic = MicrophoneSource(
+        device=7, stream_factory=fake_factory, rate_query=lambda _device: 32000
+    )
+    assert mic.sample_rate == 32000
+    assert list(mic) == [b"q"]
+    assert seen["rate"] == 32000
+
+
+def test_device_default_rate_reads_device(monkeypatch):
+    fake_sd = types.ModuleType("sounddevice")
+    fake_sd.query_devices = lambda device, kind: {"default_samplerate": 44100.0}
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    assert _device_default_rate(2) == 44100
+
+
+def test_device_default_rate_falls_back_on_query_error(monkeypatch):
+    fake_sd = types.ModuleType("sounddevice")
+
+    def boom(*a, **k):
+        raise RuntimeError("no input device")
+
+    fake_sd.query_devices = boom
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    assert _device_default_rate(None) == _FALLBACK_RATE
 
 
 def test_sounddevice_mic_yields_bytes_then_stops_and_closes():

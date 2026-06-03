@@ -60,9 +60,11 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
     return [item.model_dump(mode="json") for item in resp.transcripts]
 
 
-def transcribe(api_key: str, audio: str, *, speaker_labels: bool) -> aai.Transcript:
+def transcribe(
+    api_key: str, audio: str, *, speaker_labels: bool, prompt: str | None = None
+) -> aai.Transcript:
     _configure(api_key)
-    config = aai.TranscriptionConfig(speaker_labels=speaker_labels)
+    config = aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt)
     try:
         transcript = aai.Transcriber().transcribe(audio, config=config)
     except APIError:
@@ -100,11 +102,13 @@ def stream_audio(
     on_begin: Callable[[Any], Any] | None = None,
     on_turn: Callable[[Any], Any] | None = None,
     on_termination: Callable[[Any], Any] | None = None,
+    prompt: str | None = None,
     speech_model: SpeechModel = SpeechModel.universal_streaming_multilingual,
 ) -> None:
     """Stream `source` (an iterable of PCM bytes) through the v3 realtime API.
 
     Forwards Begin/Turn/Termination events to the callbacks; raises APIError on a stream error.
+    `prompt` biases the speech model (the realtime `prompt` parameter).
     """
     sc = StreamingClient(
         StreamingClientOptions(api_key=api_key, api_host="streaming.assemblyai.com")
@@ -121,7 +125,10 @@ def stream_audio(
     try:
         sc.connect(
             StreamingParameters(
-                sample_rate=sample_rate, format_turns=True, speech_model=speech_model
+                sample_rate=sample_rate,
+                format_turns=True,
+                speech_model=speech_model,
+                prompt=prompt,
             )
         )
     except CLIError:
