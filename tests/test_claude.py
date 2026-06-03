@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -14,22 +15,28 @@ runner = CliRunner()
 def _isolate_home(tmp_path, monkeypatch):
     """Keep skill writes/reads inside a temp HOME so tests never touch ~/.claude."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+
+
+def _skill_path() -> Path:
+    return Path.home() / ".claude" / "skills" / "assemblyai"
 
 
 class FakeRun:
     """Records subprocess calls and returns canned CompletedProcess results.
 
     `returncodes` maps a command prefix tuple (the first N argv tokens) to a
-    return code; the longest matching prefix wins, default 0. When
-    `creates_skill` is set, a successful `npx … add` materializes a SKILL.md
-    under HOME — mimicking a real install so `_install_skill`'s filesystem
-    verification passes.
+    return code; the longest matching prefix wins, default 0. To mimic the real
+    `skills` CLI, a successful `npx … add` materializes the skill under HOME
+    (so `_install_skill`'s filesystem check passes) and `npx … remove` deletes
+    it — toggle with `creates_skill` / `removes_skill`.
     """
 
-    def __init__(self, returncodes=None, *, creates_skill=True):
+    def __init__(self, returncodes=None, *, creates_skill=True, removes_skill=True):
         self.calls = []
         self.returncodes = returncodes or {}
         self.creates_skill = creates_skill
+        self.removes_skill = removes_skill
 
     def __call__(self, cmd, *args, **kwargs):
         self.calls.append(cmd)
@@ -39,10 +46,12 @@ class FakeRun:
             n = len(prefix)
             if tuple(cmd[:n]) == prefix and n > best:
                 rc, best = code, n
-        if rc == 0 and self.creates_skill and cmd[:1] == ["npx"] and "add" in cmd:
-            skill = Path.home() / ".claude" / "skills" / "assemblyai"
-            skill.mkdir(parents=True, exist_ok=True)
-            (skill / "SKILL.md").write_text("# AssemblyAI")
+        if rc == 0 and cmd[:1] == ["npx"]:
+            if "add" in cmd and self.creates_skill:
+                _skill_path().mkdir(parents=True, exist_ok=True)
+                (_skill_path() / "SKILL.md").write_text("# AssemblyAI")
+            elif "remove" in cmd and self.removes_skill:
+                shutil.rmtree(_skill_path(), ignore_errors=True)
         return subprocess.CompletedProcess(args=cmd, returncode=rc, stdout="", stderr="boom")
 
 
@@ -77,7 +86,15 @@ def test_install_happy_path_runs_both_steps(monkeypatch):
         "assemblyai-docs",
         "https://mcp.assemblyai.com/docs",
     ] in fake.calls
-    assert ["npx", "-y", "skills", "add", "AssemblyAI/assemblyai-skill"] in fake.calls
+    assert [
+        "npx",
+        "-y",
+        "skills",
+        "add",
+        "AssemblyAI/assemblyai-skill",
+        "--global",
+        "--yes",
+    ] in fake.calls
 
 
 def test_install_skill_failed_when_npx_succeeds_but_nothing_installed(monkeypatch):
@@ -290,6 +307,7 @@ def test_remove_unwinds_both(monkeypatch, tmp_path):
     statuses = {s["name"]: s["status"] for s in json.loads(result.output)["steps"]}
     assert statuses == {"mcp": "removed", "skill": "removed"}
     assert ["claude", "mcp", "remove", "assemblyai-docs"] in fake.calls
+    assert ["npx", "-y", "skills", "remove", "assemblyai", "--global"] in fake.calls
     assert not skill.exists()
 
 
@@ -308,20 +326,15 @@ def test_remove_when_absent_is_not_an_error(monkeypatch, tmp_path):
 
 def test_remove_skill_failure_reports_failed(monkeypatch, tmp_path):
     _all_tools_present(monkeypatch)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    skill = tmp_path / ".claude" / "skills" / "assemblyai"
+    skill = _skill_path()
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("# AssemblyAI")
-    # MCP absent so only the skill step can fail.
+    # MCP absent (so only the skill step can fail) and `npx skills remove` runs but
+    # leaves the skill in place -> install/remove must report it as failed, not removed.
     monkeypatch.setattr(
         "assemblyai_cli.commands.claude.subprocess.run",
-        FakeRun({("claude", "mcp", "get"): 1}),
+        FakeRun({("claude", "mcp", "get"): 1}, removes_skill=False),
     )
-
-    def boom(_path):
-        raise PermissionError("locked")
-
-    monkeypatch.setattr("assemblyai_cli.commands.claude.shutil.rmtree", boom)
 
     result = runner.invoke(app, ["claude", "remove"])
     assert result.exit_code == 1

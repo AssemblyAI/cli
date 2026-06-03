@@ -87,17 +87,22 @@ def _install_mcp(scope: str, force: bool) -> Step:
     return {"name": "mcp", "status": "installed", "detail": f"{MCP_NAME} @ {scope} scope"}
 
 
+_SKILL_ADD = ["npx", "-y", "skills", "add", SKILL_REPO, "--global", "--yes"]
+_SKILL_REMOVE = ["npx", "-y", "skills", "remove", "assemblyai", "--global"]
+_SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
+
+
 def _install_skill() -> Step:
     if shutil.which("npx") is None:
         return {
             "name": "skill",
             "status": "skipped",
-            "detail": (
-                f"Node.js/npx not found. Install Node.js, then run: npx skills add {SKILL_REPO}"
-            ),
+            "detail": f"Node.js/npx not found. Install Node.js, then run: {_SKILL_ADD_HINT}",
         }
-    # -y: skip npx's interactive "Ok to proceed?" prompt; longer timeout covers the download.
-    proc = _run(["npx", "-y", "skills", "add", SKILL_REPO], timeout=300)
+    # --global: install at user scope (not project scope, which `skills` auto-selects
+    # when run inside a project) so the skill lands in ~/.claude/skills where `status`
+    # looks. npx -y skips its install prompt; the longer timeout covers the download.
+    proc = _run(_SKILL_ADD, timeout=300)
     if proc.returncode != 0:
         return {"name": "skill", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
     # Trust the filesystem, not the exit code: confirm the skill actually landed
@@ -107,8 +112,8 @@ def _install_skill() -> Step:
             "name": "skill",
             "status": "failed",
             "detail": (
-                f"'npx skills add {SKILL_REPO}' reported success but no skill was found at "
-                f"{_skill_dir()}. Install it manually: npx skills add {SKILL_REPO}"
+                f"'{' '.join(_SKILL_ADD[3:])}' reported success but no skill was found at "
+                f"{_skill_dir()}. Install it manually: {_SKILL_ADD_HINT}"
             ),
         }
     return {"name": "skill", "status": "installed", "detail": str(_skill_dir())}
@@ -160,14 +165,21 @@ def _remove_mcp(scope: str | None) -> Step:
 
 
 def _remove_skill() -> Step:
-    target = _skill_dir()
-    if not target.exists():
-        return {"name": "skill", "status": "not_installed", "detail": str(target)}
-    try:
-        shutil.rmtree(target)
-    except OSError as err:
-        return {"name": "skill", "status": "failed", "detail": str(err)}
-    return {"name": "skill", "status": "removed", "detail": str(target)}
+    if not _skill_installed():
+        return {"name": "skill", "status": "not_installed", "detail": str(_skill_dir())}
+    if shutil.which("npx") is None:
+        return {
+            "name": "skill",
+            "status": "skipped",
+            "detail": "Node.js/npx not found. Remove manually: npx skills remove assemblyai --global",
+        }
+    # `skills` symlinks the skill into ~/.claude/skills from its own store, so let it
+    # do the removal (a plain rmtree would choke on the symlink and orphan the store).
+    proc = _run(_SKILL_REMOVE, timeout=120)
+    if proc.returncode != 0 or _skill_installed():
+        detail = (proc.stderr or proc.stdout).strip() or "skill still present after removal"
+        return {"name": "skill", "status": "failed", "detail": detail}
+    return {"name": "skill", "status": "removed", "detail": str(_skill_dir())}
 
 
 def _render_steps(data: dict[str, list[Step]]) -> str:
