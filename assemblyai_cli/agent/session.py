@@ -97,6 +97,24 @@ def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
             return
 
 
+def _is_auth_rejection(exc: BaseException) -> bool:
+    """True when a connect/session failure means the credentials were rejected.
+
+    Detected structurally where possible — the Voice Agent closes with WebSocket
+    code 1008 on a bad key, and a pre-upgrade HTTP 401/403 carries a status code —
+    then falls back to the shared text heuristic.
+    """
+    code = getattr(exc, "code", None)
+    if code is None:
+        code = getattr(getattr(exc, "rcvd", None), "code", None)
+    if code == 1008:
+        return True
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) in (401, 403):
+        return True
+    return is_auth_failure(exc)
+
+
 def run_session(
     api_key: str,
     *,
@@ -122,16 +140,28 @@ def run_session(
     try:
         ws = _connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
-        if is_auth_failure(exc):
+        if _is_auth_rejection(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not connect to the voice agent: {exc}") from exc
+
+    # The mic opens lazily on first iteration, inside the capture thread; a failure
+    # there (no device, PyAudio missing) must reach the user instead of vanishing
+    # with the daemon thread. Capture it and close the socket to end the receive loop.
+    capture_error: list[CLIError] = []
+
+    def _capture() -> None:
+        try:
+            _send_audio_loop(ws, session, mic)
+        except CLIError as exc:
+            capture_error.append(exc)
+            with contextlib.suppress(Exception):
+                ws.close()
 
     player_started = False
     try:
         player.start()  # opens the speaker stream; CLIError here if PyAudio can't load
         player_started = True
-        capture = threading.Thread(target=_send_audio_loop, args=(ws, session, mic), daemon=True)
-        capture.start()
+        threading.Thread(target=_capture, daemon=True).start()
         ws.send(
             json.dumps(
                 {
@@ -146,11 +176,12 @@ def run_session(
         )
         for raw in ws:
             session.dispatch(json.loads(raw))
-    except (CLIError, KeyboardInterrupt):
-        raise  # auth/protocol errors and user Ctrl-C handled upstream
+    except (CLIError, KeyboardInterrupt, BrokenPipeError):
+        raise  # clean CLI errors, user Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:
-        if is_auth_failure(exc):
-            # The Voice Agent server closes with 1008 (policy violation) on a bad key.
+        if capture_error:
+            raise capture_error[0] from exc  # a mic-open failure is the real cause
+        if _is_auth_rejection(exc):
             raise auth_failure() from exc
         raise APIError(f"Voice agent session failed: {exc}") from exc
     finally:
@@ -158,3 +189,7 @@ def run_session(
             ws.close()
         if player_started:
             player.close()
+    # The receive loop can also end cleanly when the capture thread closes the
+    # socket after a mic failure; surface that error rather than exiting 0.
+    if capture_error:
+        raise capture_error[0]

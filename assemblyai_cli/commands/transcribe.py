@@ -42,7 +42,7 @@ def transcribe(
         output.emit(
             {
                 "id": transcript.id,
-                "status": getattr(transcript.status, "value", transcript.status),
+                "status": client.status_str(transcript),
                 "text": transcript.text,
             },
             lambda d: escape(str(d["text"])),

@@ -7,12 +7,9 @@ from collections.abc import Callable
 from typing import Any
 
 from assemblyai_cli.errors import CLIError
+from assemblyai_cli.microphone import pyaudio_missing_error
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
-
-_MIC_MISSING_MSG = (
-    "Audio support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio"
-)
 
 
 def _default_output_stream(rate: int) -> Any:
@@ -20,7 +17,7 @@ def _default_output_stream(rate: int) -> Any:
     try:
         import pyaudio
     except ImportError as exc:
-        raise CLIError(_MIC_MISSING_MSG, error_type="mic_missing", exit_code=2) from exc
+        raise pyaudio_missing_error() from exc
     try:
         pa = pyaudio.PyAudio()
         stream = pa.open(format=pyaudio.paInt16, channels=1, rate=rate, output=True)

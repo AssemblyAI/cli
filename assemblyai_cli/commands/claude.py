@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TypedDict
 
 import typer
 from rich.markup import escape
@@ -20,6 +22,14 @@ MCP_NAME = "assemblyai-docs"
 MCP_URL = "https://mcp.assemblyai.com/docs"
 SKILL_REPO = "AssemblyAI/assemblyai-skill"
 _VALID_SCOPES = ("user", "project", "local")
+
+
+class Step(TypedDict):
+    """One line of setup output: a named step, its status, and a human detail."""
+
+    name: str
+    status: str
+    detail: str
 
 
 def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess:
@@ -47,7 +57,7 @@ def _mcp_present() -> bool:
     return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
 
 
-def _install_mcp(scope: str, force: bool) -> dict:
+def _install_mcp(scope: str, force: bool) -> Step:
     if shutil.which("claude") is None:
         return {
             "name": "mcp",
@@ -77,7 +87,7 @@ def _install_mcp(scope: str, force: bool) -> dict:
     return {"name": "mcp", "status": "installed", "detail": f"{MCP_NAME} @ {scope} scope"}
 
 
-def _install_skill() -> dict:
+def _install_skill() -> Step:
     if shutil.which("npx") is None:
         return {
             "name": "skill",
@@ -90,14 +100,33 @@ def _install_skill() -> dict:
     proc = _run(["npx", "-y", "skills", "add", SKILL_REPO], timeout=300)
     if proc.returncode != 0:
         return {"name": "skill", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
-    return {"name": "skill", "status": "installed", "detail": SKILL_REPO}
+    # Trust the filesystem, not the exit code: confirm the skill actually landed
+    # where `status` looks, so the two commands can never disagree.
+    if not _skill_installed():
+        return {
+            "name": "skill",
+            "status": "failed",
+            "detail": (
+                f"'npx skills add {SKILL_REPO}' reported success but no skill was found at "
+                f"{_skill_dir()}. Install it manually: npx skills add {SKILL_REPO}"
+            ),
+        }
+    return {"name": "skill", "status": "installed", "detail": str(_skill_dir())}
 
 
 def _skill_dir() -> Path:
-    return Path.home() / ".claude" / "skills" / "assemblyai"
+    # Honor CLAUDE_CONFIG_DIR so install/status/remove agree with Claude Code's
+    # actual config root rather than assuming ~/.claude.
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    root = Path(config_dir) if config_dir else Path.home() / ".claude"
+    return root / "skills" / "assemblyai"
 
 
-def _mcp_status() -> dict:
+def _skill_installed() -> bool:
+    return (_skill_dir() / "SKILL.md").exists()
+
+
+def _mcp_status() -> Step:
     if shutil.which("claude") is None:
         return {"name": "mcp", "status": "unknown", "detail": "Claude Code not found"}
     present = _mcp_present()
@@ -108,16 +137,15 @@ def _mcp_status() -> dict:
     }
 
 
-def _skill_status() -> dict:
-    present = (_skill_dir() / "SKILL.md").exists()
+def _skill_status() -> Step:
     return {
         "name": "skill",
-        "status": "installed" if present else "not_installed",
+        "status": "installed" if _skill_installed() else "not_installed",
         "detail": str(_skill_dir()),
     }
 
 
-def _remove_mcp(scope: str | None) -> dict:
+def _remove_mcp(scope: str | None) -> Step:
     if shutil.which("claude") is None:
         return {"name": "mcp", "status": "skipped", "detail": "Claude Code not found"}
     if not _mcp_present():
@@ -131,7 +159,7 @@ def _remove_mcp(scope: str | None) -> dict:
     return {"name": "mcp", "status": "removed", "detail": MCP_NAME}
 
 
-def _remove_skill() -> dict:
+def _remove_skill() -> Step:
     target = _skill_dir()
     if not target.exists():
         return {"name": "skill", "status": "not_installed", "detail": str(target)}
@@ -142,9 +170,8 @@ def _remove_skill() -> dict:
     return {"name": "skill", "status": "removed", "detail": str(target)}
 
 
-def _render_steps(data: object) -> str:
-    steps = data["steps"]  # type: ignore[index]
-    lines = [f"  {s['name']}: {s['status']} — {escape(str(s['detail']))}" for s in steps]
+def _render_steps(data: dict[str, list[Step]]) -> str:
+    lines = [f"  {s['name']}: {s['status']} — {escape(s['detail'])}" for s in data["steps"]]
     return "AssemblyAI coding-agent setup:\n" + "\n".join(lines)
 
 

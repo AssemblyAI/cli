@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import typer
@@ -74,7 +75,11 @@ def agent(
             )
         except KeyboardInterrupt:
             renderer.stopped()
+        except BrokenPipeError as exc:
+            # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
+            raise typer.Exit(code=0) from exc
         finally:
-            renderer.close()
+            with contextlib.suppress(BrokenPipeError):
+                renderer.close()
 
     run_command(ctx, body, json=json_out)

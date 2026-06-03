@@ -28,8 +28,7 @@ def validate_key(api_key: str) -> bool:
         aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=1))
         return True
     except aai.types.AssemblyAIError as exc:
-        msg = str(exc).lower()
-        if "auth" in msg or "token" in msg:
+        if is_auth_failure(exc):
             return False
         raise APIError(f"Could not validate key: {exc}") from exc
     except Exception as exc:
@@ -63,6 +62,12 @@ def transcribe(api_key: str, audio: str, *, speaker_labels: bool) -> aai.Transcr
     if transcript.status == aai.TranscriptStatus.error:
         raise APIError(transcript.error or "Transcription failed.", transcript_id=transcript.id)
     return transcript
+
+
+def status_str(transcript: aai.Transcript) -> str:
+    """The transcript's status as a plain string (SDK enum `.value` or raw value)."""
+    status = transcript.status
+    return str(getattr(status, "value", status))
 
 
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:

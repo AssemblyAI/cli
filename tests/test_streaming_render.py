@@ -83,7 +83,22 @@ def test_close_is_noop_in_json_mode():
     assert out.getvalue() == before
 
 
-def test_close_swallows_broken_pipe():
+def test_close_swallows_non_pipe_errors():
+    class FlakyOut:
+        def write(self, _text):
+            raise OSError("transient write error")
+
+        def flush(self):
+            pass
+
+    r = StreamRenderer(json_mode=False, out=FlakyOut())
+    r._line_open = True  # force the finalize path
+    r.close()  # non-pipe errors are non-fatal
+
+
+def test_close_propagates_broken_pipe():
+    import pytest
+
     class BrokenOut:
         def write(self, _text):
             raise BrokenPipeError("downstream closed")
@@ -93,4 +108,5 @@ def test_close_swallows_broken_pipe():
 
     r = StreamRenderer(json_mode=False, out=BrokenOut())
     r._line_open = True  # force the finalize path
-    r.close()  # must not raise
+    with pytest.raises(BrokenPipeError):  # propagates so the command stops cleanly
+        r.close()

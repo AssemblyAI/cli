@@ -100,7 +100,21 @@ def test_json_user_partial_emits_delta():
     assert _json_lines(buf) == [{"type": "transcript.user.delta", "text": "typing…"}]
 
 
-def test_write_swallows_broken_pipe():
+def test_write_swallows_non_pipe_errors():
+    class FlakyOut:
+        def write(self, _text):
+            raise OSError("transient write error")
+
+        def flush(self):
+            pass
+
+    # Non-pipe write errors are non-fatal and must not raise.
+    AgentRenderer(json_mode=False, out=FlakyOut()).notice("anything")
+
+
+def test_write_propagates_broken_pipe():
+    import pytest
+
     class BrokenOut:
         def write(self, _text):
             raise BrokenPipeError("downstream closed")
@@ -108,5 +122,6 @@ def test_write_swallows_broken_pipe():
         def flush(self):
             pass
 
-    # Must not raise even though the underlying stream is broken.
-    AgentRenderer(json_mode=False, out=BrokenOut()).notice("anything")
+    # BrokenPipeError must propagate so the command can stop cleanly (`| head`).
+    with pytest.raises(BrokenPipeError):
+        AgentRenderer(json_mode=False, out=BrokenOut()).notice("x")

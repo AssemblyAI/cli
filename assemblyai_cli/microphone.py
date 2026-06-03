@@ -5,9 +5,14 @@ from typing import Any, cast
 
 from assemblyai_cli.errors import CLIError
 
-_MIC_MISSING_MSG = (
-    "Microphone support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio"
-)
+
+def pyaudio_missing_error() -> CLIError:
+    """The shared 'PyAudio can't be imported' error for mic and speaker paths."""
+    return CLIError(
+        "Audio support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio",
+        error_type="mic_missing",
+        exit_code=2,
+    )
 
 
 def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
@@ -39,7 +44,7 @@ class MicrophoneSource:
         try:
             stream: Any = self._factory(sample_rate=self.sample_rate, device=self.device)
         except ImportError as exc:
-            raise CLIError(_MIC_MISSING_MSG, error_type="mic_missing", exit_code=2) from exc
+            raise pyaudio_missing_error() from exc
         except Exception as exc:
             raise CLIError(
                 f"Could not open the microphone (device {self.device}): {exc}",

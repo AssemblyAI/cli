@@ -40,10 +40,11 @@ class UsageError(CLIError):
         super().__init__(message, error_type="usage_error", exit_code=2)
 
 
-# Substrings that mark a failure as "the credentials were rejected" rather than a
-# generic network/protocol error. Matched case-insensitively against str(exc).
-# Includes WebSocket close 1008 (policy violation), which is how the Voice Agent
-# server signals a bad API key.
+# Word-level phrases that mark a failure as "the credentials were rejected" rather
+# than a generic network/protocol error. Matched case-insensitively against str(exc).
+# Deliberately NOT bare numbers like "401"/"403"/"1008": those match unrelated text
+# (transcript ids, byte counts, ports). HTTP status codes and the Voice Agent's 1008
+# close are detected structurally at the call site instead (see agent/session.py).
 _AUTH_FAILURE_HINTS = (
     "unauthorized",
     "forbidden",
@@ -51,10 +52,6 @@ _AUTH_FAILURE_HINTS = (
     "api token",
     "invalid api key",
     "invalid key",
-    "401",
-    "403",
-    "1008",
-    "policy violation",
 )
 
 REJECTED_KEY_MESSAGE = (

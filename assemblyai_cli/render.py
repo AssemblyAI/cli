@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import sys
 from typing import TextIO
@@ -25,9 +24,14 @@ class BaseRenderer:
         self._write(json.dumps(obj) + "\n")
 
     def _write(self, text: str) -> None:
-        with contextlib.suppress(Exception):  # downstream pipe may be closed
+        try:
             self.out.write(text)
             self.out.flush()
+        except BrokenPipeError:
+            # Consumer (e.g. `| head`) went away — let the command stop cleanly.
+            raise
+        except Exception:  # noqa: BLE001, S110 - other downstream write errors are non-fatal
+            pass
 
     def _update_line(self, text: str) -> None:
         """Redraw the current line in place (no trailing newline)."""

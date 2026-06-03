@@ -86,18 +86,23 @@ class FileSource:
         stdout = proc.stdout
         if stdout is None:  # pragma: no cover - defensive; PIPE always yields a stream
             raise APIError("ffmpeg did not expose an output stream.")
+        completed = False
         try:
             while True:
                 data = stdout.read(CHUNK_BYTES)
                 if not data:
                     break
                 yield data
+            completed = True  # natural EOF: let ffmpeg exit on its own
         finally:
-            proc.terminate()
+            # SIGTERM only on early stop (generator close) or error — terminating a
+            # process that already finished would surface as a spurious exit -15.
+            if not completed:
+                proc.terminate()
             with contextlib.suppress(Exception):
                 stdout.close()
             proc.wait()
-        # Reached only on natural EOF (not early generator close): surface a
+        # Reached only on natural EOF (not early generator close): surface a real
         # decode failure instead of silently streaming nothing.
         if proc.returncode:
             detail = proc.stderr.read().decode("utf-8", "replace").strip() if proc.stderr else ""

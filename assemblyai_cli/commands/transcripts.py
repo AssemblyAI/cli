@@ -22,7 +22,7 @@ def get(
     def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.get_transcript(api_key, transcript_id)
-        if getattr(transcript.status, "value", transcript.status) == "error":
+        if client.status_str(transcript) == "error":
             raise APIError(
                 getattr(transcript, "error", None) or "Transcript failed.",
                 transcript_id=transcript_id,
@@ -30,7 +30,7 @@ def get(
         output.emit(
             {
                 "id": transcript.id,
-                "status": getattr(transcript.status, "value", transcript.status),
+                "status": client.status_str(transcript),
                 "text": transcript.text,
             },
             lambda d: escape(str(d["text"])),

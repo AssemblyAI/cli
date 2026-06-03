@@ -1,6 +1,8 @@
 import json
 import subprocess
+from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from assemblyai_cli.main import app
@@ -8,16 +10,26 @@ from assemblyai_cli.main import app
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_home(tmp_path, monkeypatch):
+    """Keep skill writes/reads inside a temp HOME so tests never touch ~/.claude."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+
 class FakeRun:
     """Records subprocess calls and returns canned CompletedProcess results.
 
     `returncodes` maps a command prefix tuple (the first N argv tokens) to a
-    return code; the longest matching prefix wins, default 0.
+    return code; the longest matching prefix wins, default 0. When
+    `creates_skill` is set, a successful `npx … add` materializes a SKILL.md
+    under HOME — mimicking a real install so `_install_skill`'s filesystem
+    verification passes.
     """
 
-    def __init__(self, returncodes=None):
+    def __init__(self, returncodes=None, *, creates_skill=True):
         self.calls = []
         self.returncodes = returncodes or {}
+        self.creates_skill = creates_skill
 
     def __call__(self, cmd, *args, **kwargs):
         self.calls.append(cmd)
@@ -27,6 +39,10 @@ class FakeRun:
             n = len(prefix)
             if tuple(cmd[:n]) == prefix and n > best:
                 rc, best = code, n
+        if rc == 0 and self.creates_skill and cmd[:1] == ["npx"] and "add" in cmd:
+            skill = Path.home() / ".claude" / "skills" / "assemblyai"
+            skill.mkdir(parents=True, exist_ok=True)
+            (skill / "SKILL.md").write_text("# AssemblyAI")
         return subprocess.CompletedProcess(args=cmd, returncode=rc, stdout="", stderr="boom")
 
 
@@ -62,6 +78,24 @@ def test_install_happy_path_runs_both_steps(monkeypatch):
         "https://mcp.assemblyai.com/docs",
     ] in fake.calls
     assert ["npx", "-y", "skills", "add", "AssemblyAI/assemblyai-skill"] in fake.calls
+
+
+def test_install_skill_failed_when_npx_succeeds_but_nothing_installed(monkeypatch):
+    # Regression: `install` must verify the skill landed, not trust npx's exit
+    # code — otherwise install says "installed" while status says "not_installed".
+    _all_tools_present(monkeypatch)
+    fake = FakeRun({("claude", "mcp", "get"): 1}, creates_skill=False)
+    monkeypatch.setattr("assemblyai_cli.commands.claude.subprocess.run", fake)
+
+    result = runner.invoke(app, ["claude", "install"])
+    assert result.exit_code == 1  # skill step failed
+    statuses = {s["name"]: s["status"] for s in json.loads(result.output)["steps"]}
+    assert statuses["skill"] == "failed"
+
+    # And status agrees: still not installed.
+    status_result = runner.invoke(app, ["claude", "status"])
+    skill = {s["name"]: s["status"] for s in json.loads(status_result.output)["steps"]}["skill"]
+    assert skill == "not_installed"
 
 
 def test_install_detaches_stdin_and_sets_timeout(monkeypatch):

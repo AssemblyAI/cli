@@ -184,12 +184,17 @@ def test_send_audio_loop_stops_on_send_error():
     _send_audio_loop(ws, s, [b"\x01\x02", b"\x03\x04"])
 
 
-_POLICY_VIOLATION = "received 1008 (policy violation); then sent 1008 (policy violation)"
+class _CloseError(Exception):
+    """Mimics websockets.ConnectionClosed carrying a structured close code."""
+
+    def __init__(self, code):
+        super().__init__(f"received {code} (policy violation)")
+        self.code = code
 
 
 def test_run_session_connect_auth_failure_raises_not_authenticated():
     def bad_connect(url, **kwargs):
-        raise RuntimeError(_POLICY_VIOLATION)
+        raise _CloseError(1008)  # Voice Agent rejects a bad key with close 1008
 
     with pytest.raises(NotAuthenticated):
         run_session(
@@ -210,7 +215,7 @@ def test_run_session_mid_stream_1008_raises_not_authenticated():
             pass
 
         def __iter__(self):
-            raise RuntimeError(_POLICY_VIOLATION)
+            raise _CloseError(1008)
 
         def close(self):
             pass
@@ -228,6 +233,43 @@ def test_run_session_mid_stream_1008_raises_not_authenticated():
             connect=lambda url, **kwargs: FakeWS(),
         )
     assert player.closed is True  # speaker stream still torn down
+
+
+def test_run_session_surfaces_mic_open_failure_from_capture_thread():
+    import threading as _threading
+
+    from assemblyai_cli.errors import CLIError
+
+    class _BoomMic:
+        def __iter__(self):
+            raise CLIError("no microphone", error_type="mic_error", exit_code=1)
+
+    class _BlockingWS:
+        def __init__(self):
+            self._closed = _threading.Event()
+
+        def send(self, _msg):
+            pass
+
+        def __iter__(self):
+            self._closed.wait(timeout=2)  # unblocked when the capture thread closes us
+            return iter(())
+
+        def close(self):
+            self._closed.set()
+
+    with pytest.raises(CLIError) as exc:
+        run_session(
+            "sk_live",
+            renderer=FakeRenderer(),
+            player=FakePlayer(),
+            mic=_BoomMic(),
+            voice="ivy",
+            system_prompt="x",
+            greeting="hi",
+            connect=lambda url, **kwargs: _BlockingWS(),
+        )
+    assert exc.value.exit_code == 1  # the real mic failure reaches the user, not a hang
 
 
 def test_run_session_non_auth_failure_stays_api_error():

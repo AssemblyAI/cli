@@ -23,12 +23,20 @@ def test_to_dict_omits_none_transcript_id():
 
 
 def test_is_auth_failure_matches_credential_signals():
-    assert is_auth_failure(RuntimeError("received 1008 (policy violation)"))
     assert is_auth_failure(Exception("HTTP 401 Unauthorized"))
+    assert is_auth_failure(Exception("Forbidden"))
     assert is_auth_failure(Exception("Authentication error, API token missing/invalid"))
+    assert is_auth_failure(Exception("Invalid API key"))
 
 
 def test_is_auth_failure_ignores_generic_errors():
     assert not is_auth_failure(RuntimeError("network unreachable"))
     assert not is_auth_failure(Exception("server exploded"))
     assert not is_auth_failure(ConnectionError("handshake refused"))
+
+
+def test_is_auth_failure_ignores_bare_numeric_substrings():
+    # Numbers like 401/403/1008 embedded in unrelated text must NOT be treated as auth.
+    assert not is_auth_failure(Exception("decode failed at frame 1008"))
+    assert not is_auth_failure(Exception("transcript abc401 not found"))
+    assert not is_auth_failure(Exception("retry after 403 seconds"))
