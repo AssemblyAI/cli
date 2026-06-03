@@ -398,3 +398,18 @@ def test_stream_maps_webhook_auth_header(monkeypatch):
     params = captured["params"]
     assert params.webhook_auth_header_name == "Authorization"
     assert params.webhook_auth_header_value == "Bearer xyz"
+
+
+def test_stream_format_turns_tristate(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+
+    runner.invoke(app, ["stream", "--sample"])
+    assert captured["params"].format_turns is True  # unset defaults to True
+
+    runner.invoke(app, ["stream", "--sample", "--no-format-turns"])
+    assert captured["params"].format_turns is False
