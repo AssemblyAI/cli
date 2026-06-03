@@ -18,8 +18,22 @@ def _fake_transcript():
     t.id = "t_1"
     t.text = "hello world"
     t.status = "completed"
-    t.utterances = []
+    t.json_response = {"id": "t_1", "text": "hello world", "status": "completed"}
+    for attr in (
+        "summary",
+        "chapters",
+        "auto_highlights",
+        "sentiment_analysis",
+        "entities",
+        "iab_categories",
+        "content_safety",
+    ):
+        setattr(t, attr, None)
     return t
+
+
+def _enum_or_str(value):
+    return getattr(value, "value", value)
 
 
 def test_transcribe_sample_prints_text():
@@ -38,37 +52,6 @@ def test_transcribe_requires_source():
     _auth()
     result = runner.invoke(app, ["transcribe"])
     assert result.exit_code == 2
-
-
-def test_transcribe_speaker_labels_renders_utterances(monkeypatch):
-    import types
-
-    _auth()
-    t = _fake_transcript()
-    t.utterances = [
-        types.SimpleNamespace(speaker="A", text="hi there", start=0, end=500),
-        types.SimpleNamespace(speaker="B", text="hello back", start=500, end=900),
-    ]
-    # human mode -> "Speaker A: ..." lines
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
-    assert result.exit_code == 0
-    assert "Speaker A: hi there" in result.output
-    assert "Speaker B: hello back" in result.output
-
-
-def test_transcribe_speaker_labels_json_includes_utterances():
-    import types
-
-    _auth()
-    t = _fake_transcript()
-    t.utterances = [types.SimpleNamespace(speaker="A", text="hi there", start=0, end=500)]
-    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels", "--json"])
-    assert result.exit_code == 0
-    data = json.loads(result.output)
-    assert data["utterances"] == [{"speaker": "A", "text": "hi there", "start": 0, "end": 500}]
 
 
 def test_transcribe_passes_speaker_labels():
@@ -100,6 +83,7 @@ def test_transcribe_status_renders_enum_value():
     _auth()
     t = _fake_transcript()
     t.status = aai.TranscriptStatus.completed
+    t.json_response = None
     with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--json"])
     assert result.exit_code == 0
@@ -153,21 +137,6 @@ def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
     assert "hello world" not in result.output  # human mode shows the transform only
 
 
-def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path):
-    _auth()
-    fake = tmp_path / "vid.m4a"
-    fake.write_bytes(b"x")
-    monkeypatch.setattr(
-        "assemblyai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake
-    )
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ) as tx:
-        result = runner.invoke(app, ["transcribe", "https://youtu.be/abc", "--json"])
-    assert result.exit_code == 0
-    assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
-
-
 def test_transcribe_prompt_biases_speech_model():
     _auth()
     with patch(
@@ -179,31 +148,102 @@ def test_transcribe_prompt_biases_speech_model():
     assert tx.call_args.kwargs["config"].prompt == "expect medical terms"
 
 
-def test_render_transcript_colors_speaker_labels():
-    import io
+def test_transcribe_maps_analysis_flags():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        runner.invoke(
+            app,
+            [
+                "transcribe",
+                "audio.mp3",
+                "--summarization",
+                "--summary-type",
+                "bullets",
+                "--sentiment-analysis",
+                "--topic-detection",
+            ],
+        )
+    cfg = tx.call_args.kwargs["config"]
+    assert cfg.raw.summarization is True
+    assert cfg.raw.summary_type == "bullets"
+    assert cfg.raw.sentiment_analysis is True
+    assert cfg.raw.iab_categories is True
 
-    from assemblyai_cli import theme
-    from assemblyai_cli.commands.transcribe import _render_transcript
 
-    data = {
-        "text": "ignored when utterances present",
-        "utterances": [
-            {"speaker": "A", "text": "hello", "start": 0, "end": 1},
-            {"speaker": "B", "text": "hi there", "start": 1, "end": 2},
-        ],
-    }
-    rendered = _render_transcript(data)
-    buf = io.StringIO()
-    console = theme.make_console(file=buf, force_terminal=True, color_system="truecolor")
-    console.print(rendered)
-    out = buf.getvalue()
-    assert "Speaker A:" in out
-    assert "hello" in out
-    assert "Speaker B:" in out
-    assert "\x1b[" in out  # speaker labels are styled
+def test_transcribe_redact_pii_policy_csv():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        runner.invoke(
+            app,
+            [
+                "transcribe",
+                "audio.mp3",
+                "--redact-pii",
+                "--redact-pii-policy",
+                "person_name,phone_number",
+            ],
+        )
+    cfg = tx.call_args.kwargs["config"]
+    assert cfg.raw.redact_pii is True
+    assert [_enum_or_str(p) for p in cfg.raw.redact_pii_policies] == [
+        "person_name",
+        "phone_number",
+    ]
 
 
-def test_render_transcript_plain_text_unchanged():
-    from assemblyai_cli.commands.transcribe import _render_transcript
+def test_transcribe_config_escape_hatch():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        runner.invoke(app, ["transcribe", "audio.mp3", "--config", "speech_threshold=0.5"])
+    assert tx.call_args.kwargs["config"].raw.speech_threshold == 0.5
 
-    assert _render_transcript({"text": "just the words"}) == "just the words"
+
+def test_transcribe_unknown_config_field_exits_2():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--config", "bogus=1"])
+    assert result.exit_code == 2
+    assert "bogus" in result.output
+
+
+def test_transcribe_webhook_auth_header():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        runner.invoke(
+            app,
+            [
+                "transcribe",
+                "audio.mp3",
+                "--webhook-url",
+                "https://example.com/hook",
+                "--webhook-auth-header",
+                "X-Token:secret",
+            ],
+        )
+    cfg = tx.call_args.kwargs["config"]
+    assert cfg.raw.webhook_url == "https://example.com/hook"
+    assert cfg.raw.webhook_auth_header_name == "X-Token"
+    assert cfg.raw.webhook_auth_header_value == "secret"
+
+
+def test_transcribe_renders_summary_human(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    t = _fake_transcript()
+    t.summary = "three bullet summary"
+    t.chapters = []
+    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--summarization"])
+    assert result.exit_code == 0
+    assert "Summary:" in result.output
+    assert "three bullet summary" in result.output

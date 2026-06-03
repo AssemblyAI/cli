@@ -94,6 +94,18 @@ def test_translation_request_shape():
     assert "es" in json.dumps(su, default=lambda o: getattr(o, "__dict__", str(o)))
 
 
+def test_build_transcription_config_with_translate_payload():
+    # The SDK must accept the translation payload for speech_understanding without raising.
+    tc = cb.build_transcription_config(
+        flags={"speech_understanding": cb.translation_request(["es", "fr"])},
+        overrides=[],
+        config_file=None,
+    )
+    assert "es" in json.dumps(
+        tc.raw.speech_understanding, default=lambda o: getattr(o, "__dict__", str(o))
+    )
+
+
 def test_build_streaming_params_minimal():
     sp = cb.build_streaming_params(
         flags={"sample_rate": 16000, "speech_model": "universal_streaming_multilingual"},

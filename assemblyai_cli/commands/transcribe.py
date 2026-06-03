@@ -1,85 +1,164 @@
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
+import json
 
-import assemblyai as aai
 import typer
-from rich.markup import escape
-from rich.text import Text
 
-from assemblyai_cli import client, config, llm, output, theme, youtube
+from assemblyai_cli import client, config, config_builder, llm, output, transcribe_render
 from assemblyai_cli.context import AppState, run_command
 
 app = typer.Typer()
 
 
-def _utterances(transcript: object) -> list[dict[str, object]]:
-    """Speaker-labeled utterances ({speaker, text, start, end}), empty if none."""
-    items = getattr(transcript, "utterances", None) or []
-    return [{"speaker": u.speaker, "text": u.text, "start": u.start, "end": u.end} for u in items]
-
-
-def _render_transcript(data: dict[str, object]) -> str | Text:
-    """Human view: speaker-labeled lines when diarized, otherwise the plain text."""
-    utterances = data.get("utterances")
-    if isinstance(utterances, list) and utterances:
-        line = Text()
-        for i, u in enumerate(utterances):
-            if i:
-                line.append("\n")
-            line.append(f"Speaker {u['speaker']}: ", style=theme.speaker_style(u["speaker"]))
-            line.append(str(u["text"]))
-        return line
-    return escape(str(data["text"]))
-
-
 @app.command()
 def transcribe(
     ctx: typer.Context,
-    source: str = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
+    source: str = typer.Argument(None, help="Audio file path or public URL."),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
+    # model & language
+    speech_model: str = typer.Option(None, "--speech-model", help="best, nano, slam-1, universal."),
+    language_code: str = typer.Option(
+        None, "--language-code", help="Force a language (e.g. en_us)."
+    ),
+    language_detection: bool = typer.Option(
+        None, "--language-detection", help="Auto-detect the spoken language."
+    ),
+    keyterms_prompt: list[str] = typer.Option(
+        None, "--keyterms-prompt", help="Boost a key term (repeatable)."
+    ),
+    temperature: float = typer.Option(None, "--temperature", help="Speech model temperature."),
+    prompt: str = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
+    # formatting
+    punctuate: bool = typer.Option(None, "--punctuate/--no-punctuate", help="Add punctuation."),
+    format_text: bool = typer.Option(None, "--format-text/--no-format-text", help="Format text."),
+    disfluencies: bool = typer.Option(None, "--disfluencies", help="Keep filler words."),
+    # speakers & channels
     speaker_labels: bool = typer.Option(False, "--speaker-labels", help="Enable diarization."),
-    prompt: str = typer.Option(
-        None, "--prompt", help="Bias the speech model with this prompt (u3-pro)."
+    speakers_expected: int = typer.Option(None, "--speakers-expected", help="Hint speaker count."),
+    multichannel: bool = typer.Option(None, "--multichannel", help="Transcribe each channel."),
+    # guardrails
+    redact_pii: bool = typer.Option(None, "--redact-pii", help="Redact PII from the transcript."),
+    redact_pii_policy: str = typer.Option(
+        None, "--redact-pii-policy", help="Comma-separated PII policies (e.g. person_name,...)."
     ),
+    redact_pii_sub: str = typer.Option(
+        None, "--redact-pii-sub", help="Substitution: hash or entity_name."
+    ),
+    redact_pii_audio: bool = typer.Option(None, "--redact-pii-audio", help="Also redact audio."),
+    filter_profanity: bool = typer.Option(None, "--filter-profanity", help="Mask profanity."),
+    content_safety: bool = typer.Option(None, "--content-safety", help="Detect sensitive content."),
+    content_safety_confidence: int = typer.Option(
+        None, "--content-safety-confidence", help="Confidence threshold 25-100."
+    ),
+    speech_threshold: float = typer.Option(
+        None, "--speech-threshold", help="Minimum speech proportion 0-1."
+    ),
+    # analysis
+    summarization: bool = typer.Option(None, "--summarization", help="Summarize the transcript."),
+    summary_model: str = typer.Option(
+        None, "--summary-model", help="informative/conversational/catchy."
+    ),
+    summary_type: str = typer.Option(
+        None, "--summary-type", help="bullets/gist/headline/paragraph."
+    ),
+    auto_chapters: bool = typer.Option(None, "--auto-chapters", help="Generate chapters."),
+    sentiment_analysis: bool = typer.Option(
+        None, "--sentiment-analysis", help="Analyze sentiment."
+    ),
+    entity_detection: bool = typer.Option(None, "--entity-detection", help="Detect entities."),
+    auto_highlights: bool = typer.Option(None, "--auto-highlights", help="Detect key phrases."),
+    topic_detection: bool = typer.Option(None, "--topic-detection", help="Detect IAB topics."),
+    # customization
+    word_boost: list[str] = typer.Option(None, "--word-boost", help="Boost a word (repeatable)."),
+    custom_spelling_file: str = typer.Option(
+        None, "--custom-spelling-file", help="JSON map of custom spellings."
+    ),
+    audio_start: int = typer.Option(None, "--audio-start", help="Start offset in ms."),
+    audio_end: int = typer.Option(None, "--audio-end", help="End offset in ms."),
+    # webhooks
+    webhook_url: str = typer.Option(None, "--webhook-url", help="Webhook URL for completion."),
+    webhook_auth_header: str = typer.Option(
+        None, "--webhook-auth-header", help="Webhook auth header as NAME:VALUE."
+    ),
+    # speech understanding
+    translate_to: list[str] = typer.Option(
+        None, "--translate-to", help="Translate transcript to a language (repeatable)."
+    ),
+    # escape hatch
+    config_kv: list[str] = typer.Option(
+        None, "--config", help="Set any TranscriptionConfig field as KEY=VALUE (repeatable)."
+    ),
+    config_file: str = typer.Option(None, "--config-file", help="JSON file of config fields."),
+    # llm gateway transform (existing)
     llm_gateway_prompt: str = typer.Option(
-        None,
-        "--llm-gateway-prompt",
-        help="Transform the finished transcript through LLM Gateway with this instruction.",
+        None, "--llm-gateway-prompt", help="Transform the finished transcript through LLM Gateway."
     ),
-    model: str = typer.Option(
-        llm.DEFAULT_MODEL, "--model", help="LLM Gateway model for --llm-gateway-prompt."
-    ),
-    max_tokens: int = typer.Option(
-        llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens for the LLM Gateway transform."
-    ),
+    model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
+    max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Transcribe an audio file, URL, or YouTube URL and print the result.
+    """Transcribe an audio file or URL with the full TranscriptionConfig surface.
 
-    --prompt biases the speech model. --llm-gateway-prompt transforms the
-    finished transcript through LLM Gateway (e.g. "summarize in three bullets").
+    Curated flags cover common features; --config KEY=VALUE and --config-file reach
+    every other field. Analysis results (summary, chapters, sentiment, ...) render
+    automatically in human mode.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
+        flags: dict[str, object] = {
+            "speech_model": speech_model,
+            "language_code": language_code,
+            "language_detection": language_detection,
+            "keyterms_prompt": list(keyterms_prompt) if keyterms_prompt else None,
+            "temperature": temperature,
+            "prompt": prompt,
+            "punctuate": punctuate,
+            "format_text": format_text,
+            "disfluencies": disfluencies,
+            "speaker_labels": speaker_labels or None,
+            "speakers_expected": speakers_expected,
+            "multichannel": multichannel,
+            "redact_pii": redact_pii,
+            "redact_pii_policies": config_builder.split_csv(redact_pii_policy),
+            "redact_pii_sub": redact_pii_sub,
+            "redact_pii_audio": redact_pii_audio,
+            "filter_profanity": filter_profanity,
+            "content_safety": content_safety,
+            "content_safety_confidence": content_safety_confidence,
+            "speech_threshold": speech_threshold,
+            "summarization": summarization,
+            "summary_model": summary_model,
+            "summary_type": summary_type,
+            "auto_chapters": auto_chapters,
+            "sentiment_analysis": sentiment_analysis,
+            "entity_detection": entity_detection,
+            "auto_highlights": auto_highlights,
+            "iab_categories": topic_detection,
+            "word_boost": list(word_boost) if word_boost else None,
+            "custom_spelling": (
+                config_builder.load_custom_spelling(custom_spelling_file)
+                if custom_spelling_file
+                else None
+            ),
+            "audio_start_from": audio_start,
+            "audio_end_at": audio_end,
+            "webhook_url": webhook_url,
+            "speech_understanding": (
+                config_builder.translation_request(list(translate_to)) if translate_to else None
+            ),
+        }
+        header = config_builder.parse_auth_header(webhook_auth_header)
+        if header is not None:
+            flags["webhook_auth_header_name"] = header[0]
+            flags["webhook_auth_header_value"] = header[1]
+
+        tc = config_builder.build_transcription_config(
+            flags=flags, overrides=list(config_kv or []), config_file=config_file
+        )
+
         audio = client.resolve_audio_source(source, sample=sample)
         api_key = config.resolve_api_key(profile=state.profile)
-        if youtube.is_youtube_url(audio):
-            # Fetch the audio first; AssemblyAI can't read a YouTube watch URL itself.
-            with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-                local = youtube.download_audio(audio, Path(td))
-                transcript = client.transcribe(
-                    api_key,
-                    str(local),
-                    config=aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt),
-                )
-        else:
-            transcript = client.transcribe(
-                api_key,
-                audio,
-                config=aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt),
-            )
+        transcript = client.transcribe(api_key, audio, config=tc)
 
         if llm_gateway_prompt:
             transformed = llm.transform_transcript(
@@ -89,7 +168,6 @@ def transcribe(
                 transcript_id=transcript.id,
                 max_tokens=max_tokens,
             )
-            # Human mode shows just the transform; JSON keeps the raw transcript too.
             output.emit(
                 {
                     "id": transcript.id,
@@ -101,22 +179,19 @@ def transcribe(
                         "output": transformed,
                     },
                 },
-                lambda d: escape(str(d["transform"]["output"])),
+                lambda d: str(d["transform"]["output"]),
                 json_mode=json_mode,
             )
             return
 
-        data: dict[str, object] = {
-            "id": transcript.id,
-            "status": client.status_str(transcript),
-            "text": transcript.text,
-        }
-        # Surface diarization: --speaker-labels asks for it, so render the per-speaker
-        # utterances instead of silently dropping them into the flat .text.
-        if speaker_labels:
-            utterances = _utterances(transcript)
-            if utterances:
-                data["utterances"] = utterances
-        output.emit(data, _render_transcript, json_mode=json_mode)
+        if json_mode:
+            payload = getattr(transcript, "json_response", None) or {
+                "id": transcript.id,
+                "status": client.status_str(transcript),
+                "text": transcript.text,
+            }
+            print(json.dumps(payload, default=str))
+        else:
+            transcribe_render.render_transcript_result(transcript, output.console)
 
     run_command(ctx, body, json=json_out)
