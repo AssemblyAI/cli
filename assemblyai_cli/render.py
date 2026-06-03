@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
+from assemblyai_cli import theme
+
 
 class BaseRenderer:
     """Shared plumbing for the streaming and voice-agent renderers.
@@ -44,7 +46,7 @@ class BaseRenderer:
     # --- human output (Rich) ----------------------------------------------
     def _console_obj(self) -> Console:
         if self._console is None:
-            self._console = Console(file=self.out)
+            self._console = theme.make_console(file=self.out)
         return self._console
 
     def _live_obj(self) -> Live:
@@ -67,28 +69,32 @@ class BaseRenderer:
             self._live.stop()
             self._live = None
 
-    def _update_line(self, text: str) -> None:
-        """Redraw the in-progress line in place (Rich clears any prior wrap)."""
-        self._live_obj().update(Text(text), refresh=True)
+    @staticmethod
+    def _as_text(text: str | Text) -> Text:
+        return text if isinstance(text, Text) else Text(text)
 
-    def _finalize_line(self, text: str | None = None) -> None:
+    def _update_line(self, text: str | Text) -> None:
+        """Redraw the in-progress line in place (Rich clears any prior wrap)."""
+        self._live_obj().update(self._as_text(text), refresh=True)
+
+    def _finalize_line(self, text: str | Text | None = None) -> None:
         """Commit the in-progress line (optionally replacing its text) as permanent."""
         if self._live is not None:
             if text is not None:
-                self._live.update(Text(text), refresh=True)
+                self._live.update(self._as_text(text), refresh=True)
             self._commit_live()
         elif text is not None:
-            self._console_obj().print(Text(text))
+            self._console_obj().print(self._as_text(text))
 
-    def _line(self, text: str) -> None:
+    def _line(self, text: str | Text) -> None:
         """Print a standalone permanent line, committing any open partial first."""
         self._commit_live()
-        self._console_obj().print(Text(text))
+        self._console_obj().print(self._as_text(text))
 
     # --- shared lifecycle --------------------------------------------------
     def stopped(self) -> None:
         if not self.json_mode:
-            self._line("Stopped.")
+            self._line(Text("Stopped.", style="aai.muted"))
 
     def close(self) -> None:
         """Commit any in-progress line so later output starts clean."""

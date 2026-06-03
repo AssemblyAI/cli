@@ -3,8 +3,8 @@ import json
 import types
 
 import pytest
-from rich.console import Console
 
+from assemblyai_cli import theme
 from assemblyai_cli.streaming.render import StreamRenderer
 
 
@@ -12,11 +12,20 @@ def _turn(transcript, end_of_turn):
     return types.SimpleNamespace(transcript=transcript, end_of_turn=end_of_turn)
 
 
-def _human(width=80):
-    """A human-mode renderer writing to a forced-terminal Rich console buffer."""
+def _human(width=80, color_system=None):
+    """A human-mode renderer writing to a forced-terminal themed console buffer."""
     buf = io.StringIO()
-    console = Console(file=buf, force_terminal=True, width=width, color_system=None)
+    console = theme.make_console(
+        file=buf, force_terminal=True, width=width, color_system=color_system
+    )
     return StreamRenderer(json_mode=False, out=buf, console=console), buf
+
+
+def test_default_console_is_themed():
+    buf = io.StringIO()
+    r = StreamRenderer(json_mode=False, out=buf)
+    # _console_obj builds via theme.make_console, so aai.* names resolve.
+    r._console_obj().get_style("aai.brand")
 
 
 # --- human mode (Rich) -----------------------------------------------------
