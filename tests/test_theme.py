@@ -43,3 +43,20 @@ def test_speaker_style_deterministic_and_in_palette():
     assert theme.speaker_style("A") in theme.SPEAKER_STYLES
     assert theme.speaker_style("A") == theme.speaker_style("A")
     assert theme.speaker_style("A") != theme.speaker_style("B")
+
+
+def test_output_console_is_themed_and_error_is_styled(monkeypatch):
+    from assemblyai_cli import output, theme
+    from assemblyai_cli.errors import CLIError
+
+    buf = io.StringIO()
+    monkeypatch.setattr(
+        output,
+        "console",
+        theme.make_console(file=buf, force_terminal=True, color_system="truecolor"),
+    )
+    output.emit_error(CLIError("boom"), json_mode=False)
+    out = buf.getvalue()
+    assert "Error:" in out
+    assert "boom" in out
+    assert "\x1b[" in out  # themed error emits ANSI on a forced-color console

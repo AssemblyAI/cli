@@ -6,15 +6,16 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar
 
-from rich.console import Console
 from rich.markup import escape
+
+from assemblyai_cli import theme
 
 if TYPE_CHECKING:
     from assemblyai_cli.errors import CLIError
 
 T = TypeVar("T")
 
-console = Console()
+console = theme.make_console()
 
 _AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
 
@@ -45,4 +46,4 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(err.to_dict(), default=str))
     else:
-        console.print(f"[red]Error:[/red] {escape(err.message)}")
+        console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")
