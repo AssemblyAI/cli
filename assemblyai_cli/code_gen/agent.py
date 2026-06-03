@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-_TEMPLATE = """import base64
+_TEMPLATE = """# Live two-way voice conversation with an AssemblyAI voice agent.
+# Requires audio support:  pip install sounddevice websockets
+# Tip: use headphones — the mic stays open while the agent speaks.
+import base64
 import json
 import os
 import threading
@@ -26,9 +29,10 @@ ready = threading.Event()
 def send_mic(ws):
     while True:
         try:
-            data, _ = mic.read(1024)
+            data, _overflowed = mic.read(1024)
+            chunk = bytes(data)
             if ready.is_set():
-                ws.send(json.dumps({{"type": "input.audio", "audio": base64.b64encode(bytes(data)).decode()}}))  # noqa: E501
+                ws.send(json.dumps({{"type": "input.audio", "audio": base64.b64encode(chunk).decode()}}))
         except Exception:
             return
 

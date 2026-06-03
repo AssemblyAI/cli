@@ -196,5 +196,10 @@ def test_agent_render_parses_and_injects_session_fields():
 
 
 def test_agent_render_escapes_quotes_in_prompt():
-    code = code_gen.agent(voice="ivy", system_prompt='Say "hi"', greeting="Hello")
-    ast.parse(code)  # must stay valid Python despite the embedded quotes
+    import json as _json
+
+    tricky = 'Say "hi"\nand stop'
+    code = code_gen.agent(voice="ivy", system_prompt=tricky, greeting="Hello")
+    ast.parse(code)  # valid Python despite embedded quotes/newlines
+    # The prompt is injected via json.dumps, so its escaped form appears verbatim.
+    assert _json.dumps(tricky) in code
