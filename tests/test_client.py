@@ -108,6 +108,46 @@ def test_get_transcript_calls_sdk():
     assert result is fake
 
 
+def test_get_transcript_generic_error_becomes_apierror():
+    with patch.object(client.aai.Transcript, "get_by_id", side_effect=RuntimeError("boom")):
+        with pytest.raises(APIError):
+            client.get_transcript("sk", "t_x")
+
+
+def test_get_transcript_auth_error_becomes_not_authenticated():
+    from assemblyai_cli.errors import NotAuthenticated
+
+    with patch.object(
+        client.aai.Transcript, "get_by_id", side_effect=RuntimeError("HTTP 401 Unauthorized")
+    ):
+        with pytest.raises(NotAuthenticated):
+            client.get_transcript("sk_bad", "t_x")
+
+
+def test_transcribe_network_error_becomes_apierror():
+    fake_transcriber = MagicMock()
+    fake_transcriber.transcribe.side_effect = RuntimeError("connection reset")
+    with (
+        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
+        patch.object(client.aai, "TranscriptionConfig"),
+    ):
+        with pytest.raises(APIError):
+            client.transcribe("sk", "audio.mp3", speaker_labels=False)
+
+
+def test_transcribe_auth_error_becomes_not_authenticated():
+    from assemblyai_cli.errors import NotAuthenticated
+
+    fake_transcriber = MagicMock()
+    fake_transcriber.transcribe.side_effect = RuntimeError("Invalid API key")
+    with (
+        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
+        patch.object(client.aai, "TranscriptionConfig"),
+    ):
+        with pytest.raises(NotAuthenticated):
+            client.transcribe("sk_bad", "audio.mp3", speaker_labels=False)
+
+
 class _FakeStreamingClient:
     last = None
 
@@ -190,6 +230,32 @@ def test_stream_audio_connect_error_becomes_apierror(monkeypatch):
     monkeypatch.setattr(client, "StreamingClient", ConnectFails)
     with pytest.raises(APIError):
         client.stream_audio("sk", [b"\x00"], sample_rate=16000)
+
+
+def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
+    from assemblyai_cli.errors import NotAuthenticated
+
+    class ConnectUnauthorized(_FakeStreamingClient):
+        def connect(self, params):
+            raise RuntimeError("401 Unauthorized: bad token")
+
+    monkeypatch.setattr(client, "StreamingClient", ConnectUnauthorized)
+    with pytest.raises(NotAuthenticated):
+        client.stream_audio("sk_bad", [b"\x00"], sample_rate=16000)
+
+
+def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
+    from assemblyai_cli.errors import NotAuthenticated
+
+    class AuthErrClient(_FakeStreamingClient):
+        def stream(self, source):
+            from assemblyai.streaming.v3 import StreamingEvents
+
+            self.handlers[StreamingEvents.Error](self, "Unauthorized: invalid api key")
+
+    monkeypatch.setattr(client, "StreamingClient", AuthErrClient)
+    with pytest.raises(NotAuthenticated):
+        client.stream_audio("sk_bad", [b"\x00"], sample_rate=16000)
 
 
 def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):

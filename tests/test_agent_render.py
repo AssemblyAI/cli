@@ -81,3 +81,32 @@ def test_notice_writes_to_buffer_in_human_mode():
     r = AgentRenderer(json_mode=False, out=buf)
     r.notice("hi")
     assert buf.getvalue() == "hi"
+
+
+def test_human_connected_and_stopped_announce():
+    buf = io.StringIO()
+    r = AgentRenderer(json_mode=False, out=buf)
+    r.connected()
+    r.stopped()
+    out = buf.getvalue()
+    assert "start talking" in out.lower()
+    assert "Stopped." in out
+
+
+def test_json_user_partial_emits_delta():
+    buf = io.StringIO()
+    r = AgentRenderer(json_mode=True, out=buf)
+    r.user_partial("typing…")
+    assert _json_lines(buf) == [{"type": "transcript.user.delta", "text": "typing…"}]
+
+
+def test_write_swallows_broken_pipe():
+    class BrokenOut:
+        def write(self, _text):
+            raise BrokenPipeError("downstream closed")
+
+        def flush(self):
+            pass
+
+    # Must not raise even though the underlying stream is broken.
+    AgentRenderer(json_mode=False, out=BrokenOut()).notice("anything")

@@ -99,6 +99,15 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
     assert seen["full_duplex"] is True
 
 
+def test_agent_half_duplex_notice_in_human_mode(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = runner.invoke(app, ["agent"])
+    assert result.exit_code == 0
+    assert "Half-duplex" in result.output
+
+
 def test_agent_ctrl_c_exits_cleanly(monkeypatch):
     config.set_api_key("default", "sk_live")
 

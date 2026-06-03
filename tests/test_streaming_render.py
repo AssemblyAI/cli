@@ -81,3 +81,16 @@ def test_close_is_noop_in_json_mode():
     before = out.getvalue()
     r.close()
     assert out.getvalue() == before
+
+
+def test_close_swallows_broken_pipe():
+    class BrokenOut:
+        def write(self, _text):
+            raise BrokenPipeError("downstream closed")
+
+        def flush(self):
+            pass
+
+    r = StreamRenderer(json_mode=False, out=BrokenOut())
+    r._line_open = True  # force the finalize path
+    r.close()  # must not raise

@@ -34,6 +34,16 @@ def test_list_unauthenticated_exits_2():
     assert result.exit_code == 2
 
 
+def test_list_human_mode_renders_table(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    rows = [{"id": "t1", "status": "completed", "created": "2026-01-01"}]
+    with patch("assemblyai_cli.commands.transcripts.client.list_transcripts", return_value=rows):
+        result = runner.invoke(app, ["list"])
+    assert result.exit_code == 0
+    assert "t1" in result.output  # rendered through the Rich table path
+
+
 def test_get_errored_transcript_exits_nonzero():
     config.set_api_key("default", "sk_live")
     from unittest.mock import MagicMock

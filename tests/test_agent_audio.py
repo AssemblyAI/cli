@@ -75,6 +75,21 @@ def test_player_worker_survives_write_error():
     assert p._thread is not None and not p._thread.is_alive()
 
 
+def test_miccapture_closes_closeable_stream():
+    closed = {"called": False}
+
+    class CloseableStream:
+        def __iter__(self):
+            return iter([b"x"])
+
+        def close(self):
+            closed["called"] = True
+
+    mic = MicCapture(stream_factory=lambda *, sample_rate, device: CloseableStream())
+    assert list(mic) == [b"x"]
+    assert closed["called"] is True  # stream.close() invoked in the finally
+
+
 def test_miccapture_device_error_raises_cli_error_exit_1():
     def boom(*, sample_rate, device):
         raise RuntimeError("bad device")

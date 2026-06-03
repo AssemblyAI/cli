@@ -1,6 +1,9 @@
+import base64
+import json
+
 import pytest
 
-from assemblyai_cli.agent.session import VoiceAgentSession, run_session
+from assemblyai_cli.agent.session import VoiceAgentSession, _send_audio_loop, run_session
 from assemblyai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
@@ -132,6 +135,53 @@ def test_reply_audio_without_data_is_ignored():
     s.dispatch({"type": "reply.audio"})  # no data key
     s.dispatch({"type": "reply.audio", "data": ""})  # empty data
     assert s.player.enqueued == []
+
+
+def test_should_send_audio_only_when_ready_and_unmuted():
+    s = _session()
+    assert s.should_send_audio() is False  # not ready yet
+    s.ready = True
+    assert s.should_send_audio() is True
+    s.muted = True
+    assert s.should_send_audio() is False  # gated while the agent speaks
+
+
+class _RecordingWS:
+    def __init__(self, fail_on_send=False):
+        self.sent = []
+        self.fail_on_send = fail_on_send
+
+    def send(self, msg):
+        if self.fail_on_send:
+            raise RuntimeError("socket closed")
+        self.sent.append(msg)
+
+
+def test_send_audio_loop_forwards_frames_when_gate_open():
+    s = _session()
+    s.ready = True  # gate open, not muted
+    ws = _RecordingWS()
+    _send_audio_loop(ws, s, [b"\x01\x02", b"\x03\x04"])
+    payloads = [json.loads(m) for m in ws.sent]
+    assert [p["type"] for p in payloads] == ["input.audio", "input.audio"]
+    assert base64.b64decode(payloads[0]["audio"]) == b"\x01\x02"
+
+
+def test_send_audio_loop_drops_frames_while_muted():
+    s = _session()
+    s.ready = True
+    s.muted = True  # gate closed -> frames dropped, nothing sent
+    ws = _RecordingWS()
+    _send_audio_loop(ws, s, [b"\x01\x02"])
+    assert ws.sent == []
+
+
+def test_send_audio_loop_stops_on_send_error():
+    s = _session()
+    s.ready = True
+    ws = _RecordingWS(fail_on_send=True)
+    # Must return (not raise) when the socket is gone mid-send.
+    _send_audio_loop(ws, s, [b"\x01\x02", b"\x03\x04"])
 
 
 _POLICY_VIOLATION = "received 1008 (policy violation); then sent 1008 (policy violation)"

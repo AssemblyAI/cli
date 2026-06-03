@@ -73,6 +73,19 @@ def test_stream_ctrl_c_exits_cleanly(monkeypatch):
     assert result.exit_code == 0
 
 
+def test_stream_ctrl_c_human_mode_prints_stopped(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    def raise_kbd(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", raise_kbd)
+    result = runner.invoke(app, ["stream"])
+    assert result.exit_code == 0
+    assert "Stopped." in result.output
+
+
 def test_stream_file_with_sample_rate_flag_rejected(tmp_path):
     config.set_api_key("default", "sk_live")
     import wave

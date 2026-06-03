@@ -22,6 +22,27 @@ def test_login_rejects_invalid_key():
     assert config.get_api_key("default") is None
 
 
+def test_login_interactive_prompts_when_no_flag(monkeypatch):
+    monkeypatch.setattr("assemblyai_cli.commands.login.webbrowser.open", lambda url: True)
+    monkeypatch.setattr("assemblyai_cli.commands.login.typer.prompt", lambda *a, **k: "sk_prompted")
+    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    assert config.get_api_key("default") == "sk_prompted"
+
+
+def test_login_interactive_survives_browser_failure(monkeypatch):
+    def boom(_url):
+        raise RuntimeError("no display")
+
+    monkeypatch.setattr("assemblyai_cli.commands.login.webbrowser.open", boom)
+    monkeypatch.setattr("assemblyai_cli.commands.login.typer.prompt", lambda *a, **k: "sk_typed")
+    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    assert config.get_api_key("default") == "sk_typed"
+
+
 def test_login_stores_under_named_profile():
     with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["--profile", "staging", "login", "--api-key", "sk_s"])
