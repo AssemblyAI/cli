@@ -33,7 +33,7 @@ def login(
                 webbrowser.open(DASHBOARD_KEYS_URL)
             except Exception:  # noqa: BLE001 - opening a browser is best-effort
                 output.console.print(
-                    "[dim]Could not open a browser; open the URL above manually.[/dim]"
+                    "[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]"
                 )
             key = typer.prompt("Paste your API key", hide_input=True)
         if not client.validate_key(key):
@@ -41,7 +41,7 @@ def login(
         config.set_api_key(profile, key)
         output.emit(
             {"authenticated": True, "profile": profile},
-            lambda _d: f"[green]Authenticated[/green] on profile '{escape(profile)}'.",
+            lambda _d: f"[aai.success]Authenticated[/aai.success] on profile '{escape(profile)}'.",
             json_mode=json_mode,
         )
 

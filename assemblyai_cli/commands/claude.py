@@ -9,7 +9,7 @@ from typing import TypedDict
 import typer
 from rich.markup import escape
 
-from assemblyai_cli import output
+from assemblyai_cli import output, theme
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 
@@ -183,8 +183,14 @@ def _remove_skill() -> Step:
 
 
 def _render_steps(data: dict[str, list[Step]]) -> str:
-    lines = [f"  {s['name']}: {s['status']} — {escape(s['detail'])}" for s in data["steps"]]
-    return "AssemblyAI coding-agent setup:\n" + "\n".join(lines)
+    lines = []
+    for s in data["steps"]:
+        style = theme.status_style(s["status"])
+        lines.append(
+            f"  {escape(s['name'])}: "
+            f"[{style}]{escape(s['status'])}[/{style}] — {escape(s['detail'])}"
+        )
+    return "[aai.heading]AssemblyAI coding-agent setup:[/aai.heading]\n" + "\n".join(lines)
 
 
 @app.command()

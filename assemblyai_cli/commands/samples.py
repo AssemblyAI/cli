@@ -82,7 +82,7 @@ def create(
             {"created": str(target)},
             lambda d: (
                 f"Created {escape(d['created'])}\n"
-                f"[yellow]Note:[/yellow] this file contains your API key — do not commit it.\n"
+                f"[aai.warn]Note:[/aai.warn] this file contains your API key — do not commit it.\n"
                 f"Run it with: python {escape(d['created'])}"
             ),
             json_mode=json_mode,
