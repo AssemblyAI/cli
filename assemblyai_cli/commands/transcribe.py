@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import assemblyai as aai
 import typer
 from rich.markup import escape
 from rich.text import Text
@@ -69,11 +70,15 @@ def transcribe(
             with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
                 local = youtube.download_audio(audio, Path(td))
                 transcript = client.transcribe(
-                    api_key, str(local), speaker_labels=speaker_labels, prompt=prompt
+                    api_key,
+                    str(local),
+                    config=aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt),
                 )
         else:
             transcript = client.transcribe(
-                api_key, audio, speaker_labels=speaker_labels, prompt=prompt
+                api_key,
+                audio,
+                config=aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt),
             )
 
         if llm_gateway_prompt:

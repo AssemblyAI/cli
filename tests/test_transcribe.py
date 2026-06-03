@@ -77,7 +77,7 @@ def test_transcribe_passes_speaker_labels():
         "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
-    assert tx.call_args.kwargs["speaker_labels"] is True
+    assert tx.call_args.kwargs["config"].speaker_labels is True
 
 
 def test_transcribe_json_output():
@@ -176,7 +176,7 @@ def test_transcribe_prompt_biases_speech_model():
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "expect medical terms"])
     assert result.exit_code == 0
     # --prompt is the speech-model prompt, forwarded to the transcription call.
-    assert tx.call_args.kwargs["prompt"] == "expect medical terms"
+    assert tx.call_args.kwargs["config"].prompt == "expect medical terms"
 
 
 def test_render_transcript_colors_speaker_labels():

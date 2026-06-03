@@ -10,7 +10,7 @@ runner = CliRunner()
 
 
 def _drive_turns(
-    api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+    api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
 ):
     # Simulate the streaming client driving the renderer callbacks.
     if on_begin:
@@ -39,10 +39,10 @@ def test_stream_file_uses_filesource(monkeypatch, tmp_path):
     seen = {}
 
     def fake_stream_audio(
-        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
     ):
         seen["source_type"] = type(source).__name__
-        seen["rate"] = sample_rate
+        seen["rate"] = params.sample_rate
 
     monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream_audio)
     import wave
@@ -78,7 +78,7 @@ def test_stream_mic_listening_notice_waits_for_mic_open(monkeypatch):
 
     order = []
 
-    def fake_stream_audio(api_key, source, *, sample_rate, on_begin=None, **_kwargs):
+    def fake_stream_audio(api_key, source, *, params, on_begin=None, **_kwargs):
         if on_begin:
             on_begin(types.SimpleNamespace(id="x"))  # Begin must NOT print "Listening…"
         order.append("begin")
@@ -96,7 +96,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
 
-    def fake(api_key, source, *, sample_rate, on_begin=None, **_kwargs):
+    def fake(api_key, source, *, params, on_begin=None, **_kwargs):
         if on_begin:
             on_begin(types.SimpleNamespace(id="x"))
 
@@ -121,10 +121,10 @@ def test_stream_unauthenticated_exits_2():
 
 def _capture_source(seen):
     def fake(
-        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
     ):
         seen["source"] = source
-        seen["rate"] = sample_rate
+        seen["rate"] = params.sample_rate
 
     return fake
 
@@ -220,7 +220,7 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
 
     def fake(
-        api_key, source, *, sample_rate, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
     ):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="from file", end_of_turn=True))
@@ -242,7 +242,7 @@ def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake(api_key, source, *, sample_rate, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_turn=None, **kwargs):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hola", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
@@ -283,7 +283,7 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
     config.set_api_key("default", "sk_live")
     called = {"ran": False}
 
-    def fake(api_key, source, *, sample_rate, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_turn=None, **kwargs):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
@@ -302,8 +302,8 @@ def test_stream_prompt_biases_speech_model(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake(api_key, source, *, sample_rate, prompt=None, **kwargs):
-        seen["prompt"] = prompt
+    def fake(api_key, source, *, params, **kwargs):
+        seen["prompt"] = params.prompt
 
     monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
     result = runner.invoke(app, ["stream", "--prompt", "expect crypto jargon", "--json"])
@@ -327,7 +327,7 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
     )
     seen = {}
 
-    def fake_stream(api_key, source, *, sample_rate, **kwargs):
+    def fake_stream(api_key, source, *, params, **kwargs):
         seen["source_type"] = type(source).__name__
         seen["src"] = getattr(source, "source", None)
 

@@ -8,6 +8,16 @@ from assemblyai_cli import client
 from assemblyai_cli.errors import APIError
 
 
+def _stream_params(sample_rate: int = 16000):
+    from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
+
+    return StreamingParameters(
+        sample_rate=sample_rate,
+        format_turns=True,
+        speech_model=SpeechModel.universal_streaming_multilingual,
+    )
+
+
 def test_validate_key_true_on_success():
     with patch.object(client.aai, "Transcriber") as T:
         T.return_value.list_transcripts.return_value = MagicMock()
@@ -81,14 +91,11 @@ def test_transcribe_blocks_and_returns_transcript():
     fake_transcriber = MagicMock()
     fake_transcriber.transcribe.return_value = fake_transcript
 
-    with (
-        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
-        patch.object(client.aai, "TranscriptionConfig") as cfg,
-    ):
-        result = client.transcribe("sk", "audio.mp3", speaker_labels=True)
+    cfg = aai.TranscriptionConfig(speaker_labels=True)
+    with patch.object(client.aai, "Transcriber", return_value=fake_transcriber):
+        result = client.transcribe("sk", "audio.mp3", config=cfg)
 
-    cfg.assert_called_once_with(speaker_labels=True, prompt=None)
-    fake_transcriber.transcribe.assert_called_once()
+    fake_transcriber.transcribe.assert_called_once_with("audio.mp3", config=cfg)
     assert result is fake_transcript
 
 
@@ -100,12 +107,9 @@ def test_transcribe_raises_on_error_status():
     fake_transcriber = MagicMock()
     fake_transcriber.transcribe.return_value = fake_transcript
 
-    with (
-        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
-        patch.object(client.aai, "TranscriptionConfig"),
-    ):
+    with patch.object(client.aai, "Transcriber", return_value=fake_transcriber):
         with pytest.raises(APIError) as exc:
-            client.transcribe("sk", "audio.mp3", speaker_labels=False)
+            client.transcribe("sk", "audio.mp3", config=aai.TranscriptionConfig())
     assert exc.value.transcript_id == "t_err"
 
 
@@ -136,12 +140,9 @@ def test_get_transcript_auth_error_becomes_not_authenticated():
 def test_transcribe_network_error_becomes_apierror():
     fake_transcriber = MagicMock()
     fake_transcriber.transcribe.side_effect = RuntimeError("connection reset")
-    with (
-        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
-        patch.object(client.aai, "TranscriptionConfig"),
-    ):
+    with patch.object(client.aai, "Transcriber", return_value=fake_transcriber):
         with pytest.raises(APIError):
-            client.transcribe("sk", "audio.mp3", speaker_labels=False)
+            client.transcribe("sk", "audio.mp3", config=aai.TranscriptionConfig())
 
 
 def test_transcribe_auth_error_becomes_not_authenticated():
@@ -149,12 +150,9 @@ def test_transcribe_auth_error_becomes_not_authenticated():
 
     fake_transcriber = MagicMock()
     fake_transcriber.transcribe.side_effect = RuntimeError("Invalid API key")
-    with (
-        patch.object(client.aai, "Transcriber", return_value=fake_transcriber),
-        patch.object(client.aai, "TranscriptionConfig"),
-    ):
+    with patch.object(client.aai, "Transcriber", return_value=fake_transcriber):
         with pytest.raises(NotAuthenticated):
-            client.transcribe("sk_bad", "audio.mp3", speaker_labels=False)
+            client.transcribe("sk_bad", "audio.mp3", config=aai.TranscriptionConfig())
 
 
 class _FakeStreamingClient:
@@ -189,7 +187,7 @@ def test_stream_audio_wires_handlers_and_streams(monkeypatch):
     monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
     turns = []
     client.stream_audio(
-        "sk", [b"\x00"], sample_rate=16000, on_turn=lambda e: turns.append(e.transcript)
+        "sk", [b"\x00"], params=_stream_params(), on_turn=lambda e: turns.append(e.transcript)
     )
     assert turns == ["hi"]
     assert _FakeStreamingClient.last.connected
@@ -208,7 +206,7 @@ def test_stream_audio_raises_on_error_event(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", ErrClient)
     with pytest.raises(APIError):
-        client.stream_audio("sk", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk", [b"\x00"], params=_stream_params())
 
 
 def test_stream_audio_forwards_termination(monkeypatch):
@@ -225,7 +223,7 @@ def test_stream_audio_forwards_termination(monkeypatch):
     client.stream_audio(
         "sk",
         [b"\x00"],
-        sample_rate=16000,
+        params=_stream_params(),
         on_termination=lambda e: seen.append(e.audio_duration_seconds),
     )
     assert seen == [3.0]
@@ -238,7 +236,7 @@ def test_stream_audio_connect_error_becomes_apierror(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", ConnectFails)
     with pytest.raises(APIError):
-        client.stream_audio("sk", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk", [b"\x00"], params=_stream_params())
 
 
 def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
@@ -250,7 +248,7 @@ def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", ConnectUnauthorized)
     with pytest.raises(NotAuthenticated):
-        client.stream_audio("sk_bad", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk_bad", [b"\x00"], params=_stream_params())
 
 
 def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
@@ -264,7 +262,7 @@ def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", AuthErrClient)
     with pytest.raises(NotAuthenticated):
-        client.stream_audio("sk_bad", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk_bad", [b"\x00"], params=_stream_params())
 
 
 def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):
@@ -274,7 +272,7 @@ def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", StreamFails)
     with pytest.raises(APIError):
-        client.stream_audio("sk", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk", [b"\x00"], params=_stream_params())
     assert StreamFails.last.disconnected  # still disconnected in finally
 
 
@@ -287,8 +285,61 @@ def test_stream_audio_passes_through_clierror(monkeypatch):
 
     monkeypatch.setattr(client, "StreamingClient", StreamRaisesCLIError)
     with pytest.raises(CLIError) as exc:
-        client.stream_audio("sk", [b"\x00"], sample_rate=16000)
+        client.stream_audio("sk", [b"\x00"], params=_stream_params())
     assert exc.value.exit_code == 2  # not rewrapped into APIError
+
+
+def test_transcribe_passes_prebuilt_config(monkeypatch):
+    import assemblyai as aai
+
+    from assemblyai_cli import client
+
+    captured = {}
+
+    class FakeTranscriber:
+        def transcribe(self, audio, config=None):
+            captured["audio"] = audio
+            captured["config"] = config
+            t = MagicMock()
+            t.status = aai.TranscriptStatus.completed
+            return t
+
+    monkeypatch.setattr(aai, "Transcriber", lambda: FakeTranscriber())
+    cfg = aai.TranscriptionConfig(speaker_labels=True)
+    client.transcribe("sk", "audio.mp3", config=cfg)
+    assert captured["audio"] == "audio.mp3"
+    assert captured["config"] is cfg
+
+
+def test_stream_audio_accepts_params(monkeypatch):
+    from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
+
+    from assemblyai_cli import client
+
+    captured = {}
+
+    class FakeSC:
+        def __init__(self, *a, **k):
+            pass
+
+        def on(self, *a, **k):
+            pass
+
+        def connect(self, params):
+            captured["params"] = params
+
+        def stream(self, source):
+            pass
+
+        def disconnect(self, terminate=True):
+            pass
+
+    monkeypatch.setattr("assemblyai_cli.client.StreamingClient", FakeSC)
+    params = StreamingParameters(
+        sample_rate=16000, speech_model=SpeechModel.universal_streaming_multilingual
+    )
+    client.stream_audio("sk", iter([b""]), params=params)
+    assert captured["params"] is params
 
 
 def test_stream_audio_flushes_termination_on_disconnect(monkeypatch):
@@ -311,7 +362,7 @@ def test_stream_audio_flushes_termination_on_disconnect(monkeypatch):
     client.stream_audio(
         "sk",
         [b"\x00"],
-        sample_rate=16000,
+        params=_stream_params(),
         on_termination=lambda e: seen.append(e.audio_duration_seconds),
     )
     assert seen == [5.0]

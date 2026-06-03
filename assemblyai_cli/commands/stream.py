@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import typer
+from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
 
 from assemblyai_cli import client, config, llm, youtube
 from assemblyai_cli.context import AppState, run_command
@@ -73,11 +74,15 @@ def stream(
                 client.stream_audio(
                     api_key,
                     audio,
-                    sample_rate=rate,
+                    params=StreamingParameters(
+                        sample_rate=rate,
+                        format_turns=True,
+                        speech_model=SpeechModel.universal_streaming_multilingual,
+                        prompt=prompt,
+                    ),
                     on_begin=renderer.begin,
                     on_turn=on_turn,
                     on_termination=renderer.termination,
-                    prompt=prompt,
                 )
             except KeyboardInterrupt:
                 # Ctrl-C is a normal "user stopped" signal -> exit 0 (still transform below).

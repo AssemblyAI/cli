@@ -5,7 +5,6 @@ from typing import Any
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
-    SpeechModel,
     StreamingClient,
     StreamingClientOptions,
     StreamingEvents,
@@ -60,11 +59,8 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
     return [item.model_dump(mode="json") for item in resp.transcripts]
 
 
-def transcribe(
-    api_key: str, audio: str, *, speaker_labels: bool, prompt: str | None = None
-) -> aai.Transcript:
+def transcribe(api_key: str, audio: str, *, config: aai.TranscriptionConfig) -> aai.Transcript:
     _configure(api_key)
-    config = aai.TranscriptionConfig(speaker_labels=speaker_labels, prompt=prompt)
     try:
         transcript = aai.Transcriber().transcribe(audio, config=config)
     except APIError:
@@ -98,17 +94,15 @@ def stream_audio(
     api_key: str,
     source: Iterable[bytes],
     *,
-    sample_rate: int,
+    params: StreamingParameters,
     on_begin: Callable[[Any], Any] | None = None,
     on_turn: Callable[[Any], Any] | None = None,
     on_termination: Callable[[Any], Any] | None = None,
-    prompt: str | None = None,
-    speech_model: SpeechModel = SpeechModel.u3_rt_pro,
 ) -> None:
     """Stream `source` (an iterable of PCM bytes) through the v3 realtime API.
 
     Forwards Begin/Turn/Termination events to the callbacks; raises APIError on a stream error.
-    `prompt` biases the speech model (the realtime `prompt` parameter).
+    `params` is a fully-built StreamingParameters (sample_rate/speech_model/etc).
     """
     sc = StreamingClient(
         StreamingClientOptions(api_key=api_key, api_host="streaming.assemblyai.com")
@@ -123,14 +117,7 @@ def stream_audio(
     sc.on(StreamingEvents.Error, lambda _client, error: errors.append(error))
 
     try:
-        sc.connect(
-            StreamingParameters(
-                sample_rate=sample_rate,
-                format_turns=True,
-                speech_model=speech_model,
-                prompt=prompt,
-            )
-        )
+        sc.connect(params)
     except CLIError:
         raise
     except Exception as exc:
