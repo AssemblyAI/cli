@@ -154,3 +154,17 @@ def test_transcribe_render_no_config_is_minimal():
     ast.parse(code)
     assert "print(transcript.text)" in code
     assert "TranscriptionConfig(" not in code  # no kwargs -> no config object
+
+
+def test_stream_render_parses_and_is_runnable_shape():
+    from assemblyai.streaming.v3 import SpeechModel
+
+    code = code_gen.stream(
+        {"sample_rate": 16000, "format_turns": True, "speech_model": SpeechModel.u3_rt_pro}
+    )
+    ast.parse(code)
+    assert "StreamingClient(" in code
+    assert "StreamingParameters(" in code
+    assert "SpeechModel.u3_rt_pro" in code
+    assert "MicrophoneStream" in code
+    assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
