@@ -168,3 +168,18 @@ def test_stream_render_parses_and_is_runnable_shape():
     assert "SpeechModel.u3_rt_pro" in code
     assert "MicrophoneStream" in code
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
+
+
+def test_stream_render_mic_rate_matches_params():
+    code = code_gen.stream({"sample_rate": 8000})
+    ast.parse(code)
+    assert "StreamingParameters(\n        sample_rate=8000," in code
+    assert "MicrophoneStream(sample_rate=8000)" in code
+
+
+def test_stream_render_empty_is_clean_and_has_no_speechmodel_import():
+    code = code_gen.stream({})
+    ast.parse(code)
+    assert "StreamingParameters()" in code
+    assert "    SpeechModel," not in code  # not imported when unused (keeps script lint-clean)
+    assert "MicrophoneStream(sample_rate=16000)" in code  # default rate
