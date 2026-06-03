@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
+from assemblyai_cli import theme
 from assemblyai_cli import transcribe_render as tr
 
 
@@ -10,6 +11,29 @@ def _render(transcript) -> str:
     with console.capture() as cap:
         tr.render_transcript_result(transcript, console)
     return cap.get()
+
+
+def _render_styled(transcript) -> str:
+    # Themed console (as the CLI uses) + force_terminal so Rich emits ANSI to assert on.
+    console = theme.make_console(force_terminal=True, color_system="truecolor")
+    with console.capture() as cap:
+        tr.render_transcript_result(transcript, console)
+    return cap.get()
+
+
+def test_per_speaker_lines_are_styled():
+    transcript = SimpleNamespace(
+        text="flat",
+        utterances=[SimpleNamespace(speaker="A", text="hello")],
+    )
+    out = _render_styled(transcript)
+    assert "\x1b[" in out  # speaker label is color-styled, not plain text
+
+
+def test_flat_text_with_brackets_is_not_parsed_as_markup():
+    # Transcript content containing [tags] must render literally, not as Rich markup.
+    out = _render(SimpleNamespace(text="say [bold]hi[/bold] now"))
+    assert "[bold]hi[/bold]" in out
 
 
 def test_renders_text_only_when_no_analysis():

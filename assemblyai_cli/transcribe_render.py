@@ -41,7 +41,8 @@ def _render_text(transcript: object, console: Console) -> None:
             line.append(str(u.text))
         console.print(line)
         return
-    console.print(getattr(transcript, "text", "") or "")
+    # Wrap in Text so transcript content with [brackets] is not parsed as Rich markup.
+    console.print(Text(getattr(transcript, "text", "") or ""))
 
 
 def _render_summary(transcript: object, console: Console) -> None:

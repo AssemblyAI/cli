@@ -23,7 +23,7 @@ app = typer.Typer()
 @app.command()
 def transcribe(
     ctx: typer.Context,
-    source: str = typer.Argument(None, help="Audio file path or public URL."),
+    source: str = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # model & language
     speech_model: str = typer.Option(None, "--speech-model", help="best, nano, slam-1, universal."),
@@ -107,11 +107,11 @@ def transcribe(
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Transcribe an audio file or URL with the full TranscriptionConfig surface.
+    """Transcribe an audio file, URL, or YouTube URL with the full TranscriptionConfig surface.
 
-    Curated flags cover common features; --config KEY=VALUE and --config-file reach
-    every other field. Analysis results (summary, chapters, sentiment, ...) render
-    automatically in human mode.
+    A YouTube URL is downloaded first, then transcribed. Curated flags cover common
+    features; --config KEY=VALUE and --config-file reach every other field. Analysis
+    results (summary, chapters, sentiment, ...) render automatically in human mode.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
