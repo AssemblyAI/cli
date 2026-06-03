@@ -247,3 +247,24 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
     assert "start talking" in result.output.lower()  # live mic -> prompt the user to speak
+
+
+def test_agent_show_code_prints_python(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = runner.invoke(app, ["agent", "--sample", "--voice", "ivy", "--show-code"])
+    assert result.exit_code == 0
+    assert "agents.assemblyai.com" in result.output
+    assert '"voice": "ivy"' in result.output
+
+
+def test_agent_show_code_suppressed_in_json_mode(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = runner.invoke(app, ["agent", "--sample", "--voice", "ivy", "--show-code", "--json"])
+    assert result.exit_code == 0
+    assert "agents.assemblyai.com" not in result.output
+    assert "# Equivalent Python" not in result.output

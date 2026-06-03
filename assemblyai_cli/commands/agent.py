@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from assemblyai_cli import client, config
+from assemblyai_cli import client, code_gen, config, output
 from assemblyai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from assemblyai_cli.agent.render import AgentRenderer
 from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
@@ -40,6 +40,9 @@ def agent(
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    show_code: bool = typer.Option(
+        False, "--show-code", help="Also print the equivalent Python SDK code."
+    ),
 ) -> None:
     """Have a live two-way voice conversation with an AssemblyAI voice agent.
 
@@ -110,5 +113,16 @@ def agent(
         finally:
             with contextlib.suppress(BrokenPipeError):
                 renderer.close()
+
+        if show_code and not json_mode:
+            # Bonus artifact; never crash the session. Show the greeting the user chose
+            # (not the file-suppressed "" passed to run_session) and always the mic idiom.
+            try:
+                rendered = code_gen.agent(voice, system_prompt_text, greeting)
+            except Exception as exc:  # noqa: BLE001
+                output.console.print(f"[dim]# could not render sample code: {exc}[/dim]")
+            else:
+                output.console.print("\n[dim]# Equivalent Python (microphone agent):[/dim]")
+                output.console.print(rendered)
 
     run_command(ctx, body, json=json_out)
