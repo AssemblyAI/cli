@@ -3,8 +3,9 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 
-from assemblyai_cli import client, config, output
+from assemblyai_cli import client, config, output, theme
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import APIError
 
@@ -53,11 +54,12 @@ def list_(
         rows = client.list_transcripts(api_key, limit=limit)
 
         def render(data: list[dict[str, object]]) -> Table:
-            table = Table("id", "status", "created")
+            table = Table("id", "status", "created", header_style="aai.heading")
             for row in data:
+                status = str(row["status"])
                 table.add_row(
                     escape(str(row["id"])),
-                    escape(str(row["status"])),
+                    Text(status, style=theme.status_style(status)),
                     escape(str(row.get("created", ""))),
                 )
             return table

@@ -55,3 +55,21 @@ def test_get_errored_transcript_exits_nonzero():
     with patch("assemblyai_cli.commands.transcripts.client.get_transcript", return_value=fake):
         result = runner.invoke(app, ["transcripts", "get", "t_err"])
     assert result.exit_code == 1
+
+
+def test_list_table_colors_status(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    # Force a real color terminal so styling produces ANSI we can assert on.
+    monkeypatch.setattr(
+        "assemblyai_cli.output.console",
+        __import__("assemblyai_cli.theme", fromlist=["make_console"]).make_console(
+            force_terminal=True, color_system="truecolor"
+        ),
+    )
+    rows = [{"id": "t1", "status": "completed", "created": "2026-01-01"}]
+    with patch("assemblyai_cli.commands.transcripts.client.list_transcripts", return_value=rows):
+        result = runner.invoke(app, ["transcripts", "list"], color=True)
+    assert result.exit_code == 0
+    assert "completed" in result.output
+    assert "\x1b[" in result.output  # status cell is colored
