@@ -332,3 +332,11 @@ def test_claude_help_lists_all_subcommands():
     assert "install" in result.output
     assert "status" in result.output
     assert "remove" in result.output
+
+
+def test_claude_no_subcommand_lists_commands():
+    # Bare `aai claude` should show its commands instead of "Missing command".
+    result = runner.invoke(app, ["claude"])
+    assert "install" in result.output
+    assert "status" in result.output
+    assert "remove" in result.output

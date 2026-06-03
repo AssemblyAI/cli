@@ -7,6 +7,8 @@ build/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+htmlcov/
 
 # Editor/agent and local planning artifacts
 .claude/

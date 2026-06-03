@@ -8,10 +8,13 @@ import typer
 from rich.markup import escape
 
 from assemblyai_cli import output
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 
-app = typer.Typer(help="Wire up Claude Code for AssemblyAI (docs MCP + skill).")
+app = typer.Typer(
+    help="Wire up Claude Code for AssemblyAI (docs MCP + skill).",
+    no_args_is_help=True,
+)
 
 MCP_NAME = "assemblyai-docs"
 MCP_URL = "https://mcp.assemblyai.com/docs"
@@ -161,7 +164,7 @@ def install(
 ) -> None:
     """Install the AssemblyAI docs MCP server and skill into Claude Code."""
 
-    def body(_state, json_mode: bool) -> None:
+    def body(_state: AppState, json_mode: bool) -> None:
         if scope not in _VALID_SCOPES:
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
@@ -181,7 +184,7 @@ def status(
 ) -> None:
     """Show whether the AssemblyAI MCP server and skill are wired into Claude Code."""
 
-    def body(_state, json_mode: bool) -> None:
+    def body(_state: AppState, json_mode: bool) -> None:
         steps = [_mcp_status(), _skill_status()]
         output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
 
@@ -203,7 +206,7 @@ def remove(
 ) -> None:
     """Remove the AssemblyAI MCP server and skill from Claude Code."""
 
-    def body(_state, json_mode: bool) -> None:
+    def body(_state: AppState, json_mode: bool) -> None:
         if scope is not None and scope not in _VALID_SCOPES:
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."

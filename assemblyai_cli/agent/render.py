@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
+from typing import TextIO
 
 
 class AgentRenderer:
@@ -10,7 +12,7 @@ class AgentRenderer:
     Audio payloads are never written; only text/state events are surfaced.
     """
 
-    def __init__(self, *, json_mode: bool, out=None) -> None:
+    def __init__(self, *, json_mode: bool, out: TextIO | None = None) -> None:
         self.json_mode = json_mode
         self.out = out if out is not None else sys.stdout
         self._partial_open = False
@@ -73,12 +75,10 @@ class AgentRenderer:
             self._partial_open = False
             self._write("\n")
 
-    def _emit(self, obj) -> None:
+    def _emit(self, obj: object) -> None:
         self._write(json.dumps(obj) + "\n")
 
     def _write(self, text: str) -> None:
-        try:
+        with contextlib.suppress(Exception):  # downstream pipe may be closed
             self.out.write(text)
             self.out.flush()
-        except Exception:  # noqa: BLE001 - downstream pipe may be closed
-            pass

@@ -5,8 +5,9 @@ import shutil
 import subprocess
 import time
 import wave
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 from assemblyai_cli.errors import APIError, CLIError
 
@@ -27,7 +28,7 @@ def _is_streamable_wav(path: Path) -> bool:
 class FileSource:
     """Yields real-time-paced 16 kHz mono PCM chunks from an audio file."""
 
-    def __init__(self, path: str, *, sleep=time.sleep) -> None:
+    def __init__(self, path: str, *, sleep: Callable[[float], object] = time.sleep) -> None:
         self.path = Path(path)
         self._sleep = sleep
         self.sample_rate = TARGET_RATE
@@ -82,17 +83,20 @@ class FileSource:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        assert proc.stdout is not None  # stdout=PIPE guarantees a pipe
+        # stdout=PIPE guarantees a pipe; bind a local so the type checker narrows it.
+        stdout = proc.stdout
+        if stdout is None:  # pragma: no cover - defensive; PIPE always yields a stream
+            raise APIError("ffmpeg did not expose an output stream.")
         try:
             while True:
-                data = proc.stdout.read(CHUNK_BYTES)
+                data = stdout.read(CHUNK_BYTES)
                 if not data:
                     break
                 yield data
         finally:
             proc.terminate()
             with contextlib.suppress(Exception):
-                proc.stdout.close()
+                stdout.close()
             proc.wait()
         # Reached only on natural EOF (not early generator close): surface a
         # decode failure instead of silently streaming nothing.
@@ -103,7 +107,7 @@ class FileSource:
             )
 
 
-def _load_microphone_stream():
+def _load_microphone_stream() -> Any:
     """Import the SDK's PyAudio-backed mic stream (isolated for testing/patching)."""
     from assemblyai.extras import MicrophoneStream
 
@@ -111,7 +115,7 @@ def _load_microphone_stream():
 
 
 class MicSource:
-    """Yields PCM chunks from the default microphone (requires the [mic] extra)."""
+    """Yields PCM chunks from the default microphone."""
 
     def __init__(self, *, sample_rate: int, device: int | None = None) -> None:
         self.sample_rate = sample_rate
@@ -123,11 +127,11 @@ class MicSource:
             stream = microphone_stream_cls(sample_rate=self.sample_rate, device_index=self.device)
         except ImportError as exc:
             raise CLIError(
-                "Microphone support isn't installed. Run: pip install 'assemblyai-cli[mic]'",
+                "Microphone support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio",
                 error_type="mic_missing",
                 exit_code=2,
             ) from exc
-        except Exception as exc:  # noqa: BLE001 - surface device errors cleanly
+        except Exception as exc:
             raise CLIError(
                 f"Could not open the microphone (device {self.device}): {exc}",
                 error_type="mic_error",

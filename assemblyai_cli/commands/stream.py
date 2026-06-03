@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from assemblyai_cli import client, config
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 from assemblyai_cli.streaming.render import StreamRenderer
 from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource, MicSource
@@ -23,7 +23,7 @@ def stream(
 ) -> None:
     """Transcribe live audio from the microphone or a file in real time."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
         if source and (sample_rate != TARGET_RATE or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")

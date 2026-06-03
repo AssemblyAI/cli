@@ -60,7 +60,7 @@ def test_miccapture_missing_dependency_raises_cli_error():
     with pytest.raises(CLIError) as excinfo:
         list(mic)
     assert excinfo.value.exit_code == 2
-    assert "assemblyai-cli[mic]" in excinfo.value.message
+    assert "pyaudio" in excinfo.value.message.lower()
 
 
 def test_player_worker_survives_write_error():

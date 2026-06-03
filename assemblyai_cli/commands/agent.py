@@ -9,7 +9,7 @@ from assemblyai_cli.agent.audio import SAMPLE_RATE, MicCapture, Player
 from assemblyai_cli.agent.render import AgentRenderer
 from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
 from assemblyai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import CLIError, UsageError
 
 app = typer.Typer()
@@ -37,7 +37,7 @@ def agent(
         typer.echo(format_voice_list())
         raise typer.Exit(code=0)
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
         if voice not in VOICES:
             raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")

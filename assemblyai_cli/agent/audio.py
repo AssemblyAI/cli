@@ -4,17 +4,19 @@ import contextlib
 import queue
 import threading
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, cast
 
 from assemblyai_cli.errors import CLIError
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 
-_MIC_MISSING_MSG = "Audio support isn't installed. Run: pip install 'assemblyai-cli[mic]'"
+_MIC_MISSING_MSG = (
+    "Audio support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio"
+)
 
 
-def _default_output_stream(rate: int):
-    """Open a PyAudio PCM16 mono output stream (lazy import; needs the [mic] extra)."""
+def _default_output_stream(rate: int) -> Any:
+    """Open a PyAudio PCM16 mono output stream (imported lazily to keep startup fast)."""
     try:
         import pyaudio
     except ImportError as exc:
@@ -22,7 +24,7 @@ def _default_output_stream(rate: int):
     try:
         pa = pyaudio.PyAudio()
         stream = pa.open(format=pyaudio.paInt16, channels=1, rate=rate, output=True)
-    except Exception as exc:  # noqa: BLE001 - surface device errors cleanly
+    except Exception as exc:
         raise CLIError(
             f"Could not open the audio output device: {exc}",
             error_type="audio_output_error",
@@ -99,11 +101,11 @@ def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[byt
     """SDK PyAudio-backed mic stream (lazy import so the base install stays light)."""
     from assemblyai.extras import MicrophoneStream
 
-    return MicrophoneStream(sample_rate=sample_rate, device_index=device)
+    return cast(Iterator[bytes], MicrophoneStream(sample_rate=sample_rate, device_index=device))
 
 
 class MicCapture:
-    """Iterates PCM16 chunks from the microphone (requires the [mic] extra)."""
+    """Iterates PCM16 chunks from the microphone."""
 
     def __init__(
         self,
@@ -121,7 +123,7 @@ class MicCapture:
             stream = self._factory(sample_rate=self._rate, device=self._device)
         except ImportError as exc:
             raise CLIError(_MIC_MISSING_MSG, error_type="mic_missing", exit_code=2) from exc
-        except Exception as exc:  # noqa: BLE001 - surface device errors cleanly
+        except Exception as exc:
             raise CLIError(
                 f"Could not open the microphone (device {self._device}): {exc}",
                 error_type="mic_error",

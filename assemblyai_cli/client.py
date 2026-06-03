@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
+from typing import Any
+
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
     SpeechModel,
@@ -29,7 +32,7 @@ def validate_key(api_key: str) -> bool:
         if "auth" in msg or "token" in msg:
             return False
         raise APIError(f"Could not validate key: {exc}") from exc
-    except Exception as exc:  # noqa: BLE001 - surface network/SDK failures cleanly
+    except Exception as exc:
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
 
 
@@ -41,7 +44,7 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not list transcripts: {exc}") from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
     return [item.model_dump(mode="json") for item in resp.transcripts]
 
@@ -53,7 +56,7 @@ def transcribe(api_key: str, audio: str, *, speaker_labels: bool) -> aai.Transcr
         transcript = aai.Transcriber().transcribe(audio, config=config)
     except APIError:
         raise
-    except Exception as exc:  # noqa: BLE001 - surface SDK/network failures cleanly
+    except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Transcription request failed: {exc}") from exc
@@ -66,7 +69,7 @@ def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
     _configure(api_key)
     try:
         return aai.Transcript.get_by_id(transcript_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not fetch transcript {transcript_id}: {exc}") from exc
@@ -74,12 +77,12 @@ def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
 
 def stream_audio(
     api_key: str,
-    source,
+    source: Iterable[bytes],
     *,
     sample_rate: int,
-    on_begin=None,
-    on_turn=None,
-    on_termination=None,
+    on_begin: Callable[[Any], Any] | None = None,
+    on_turn: Callable[[Any], Any] | None = None,
+    on_termination: Callable[[Any], Any] | None = None,
     speech_model: SpeechModel = SpeechModel.universal_streaming_multilingual,
 ) -> None:
     """Stream `source` (an iterable of PCM bytes) through the v3 realtime API.
@@ -106,7 +109,7 @@ def stream_audio(
         )
     except CLIError:
         raise
-    except Exception as exc:  # noqa: BLE001 - surface connect/auth/network failures cleanly
+    except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not start streaming session: {exc}") from exc
@@ -115,7 +118,7 @@ def stream_audio(
         sc.stream(source)
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, user Ctrl-C, and closed-pipe are handled upstream
-    except Exception as exc:  # noqa: BLE001 - surface mid-stream SDK/network failures cleanly
+    except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Streaming failed: {exc}") from exc

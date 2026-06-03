@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import threading
+from typing import Any
 
 from assemblyai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
@@ -22,7 +24,7 @@ _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
 class VoiceAgentSession:
     """Routes Voice Agent server events to the renderer, player, and duplex state."""
 
-    def __init__(self, *, renderer, player, full_duplex: bool = False) -> None:
+    def __init__(self, *, renderer: Any, player: Any, full_duplex: bool = False) -> None:
         self.renderer = renderer
         self.player = player
         self.full_duplex = full_duplex
@@ -83,7 +85,7 @@ class VoiceAgentSession:
         raise APIError(f"Voice agent error ({code}): {message}")
 
 
-def _send_audio_loop(ws, session: VoiceAgentSession, mic) -> None:
+def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
     """Forward mic PCM as input.audio while the session gate allows it."""
     for chunk in mic:
         if not session.should_send_audio():
@@ -98,14 +100,14 @@ def _send_audio_loop(ws, session: VoiceAgentSession, mic) -> None:
 def run_session(
     api_key: str,
     *,
-    renderer,
-    player,
-    mic,
+    renderer: Any,
+    player: Any,
+    mic: Any,
     voice: str,
     system_prompt: str,
     greeting: str,
     full_duplex: bool = False,
-    connect=None,
+    connect: Any = None,
 ) -> None:
     """Open the Voice Agent WebSocket and run the bidirectional loop until close.
 
@@ -113,20 +115,20 @@ def run_session(
     """
     _connect = connect
     if _connect is None:
-        from websockets.sync.client import connect as _connect  # noqa: PLC0415
+        from websockets.sync.client import connect as _connect
 
     session = VoiceAgentSession(renderer=renderer, player=player, full_duplex=full_duplex)
 
     try:
         ws = _connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
-    except Exception as exc:  # noqa: BLE001 - connect/auth/network failures
+    except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not connect to the voice agent: {exc}") from exc
 
     player_started = False
     try:
-        player.start()  # opens the speaker stream; CLIError here if [mic] is missing
+        player.start()  # opens the speaker stream; CLIError here if PyAudio can't load
         player_started = True
         capture = threading.Thread(target=_send_audio_loop, args=(ws, session, mic), daemon=True)
         capture.start()
@@ -146,15 +148,13 @@ def run_session(
             session.dispatch(json.loads(raw))
     except (CLIError, KeyboardInterrupt):
         raise  # auth/protocol errors and user Ctrl-C handled upstream
-    except Exception as exc:  # noqa: BLE001 - mid-stream socket/JSON failures
+    except Exception as exc:
         if is_auth_failure(exc):
             # The Voice Agent server closes with 1008 (policy violation) on a bad key.
             raise auth_failure() from exc
         raise APIError(f"Voice agent session failed: {exc}") from exc
     finally:
-        try:
+        with contextlib.suppress(Exception):
             ws.close()
-        except Exception:  # noqa: BLE001
-            pass
         if player_started:
             player.close()

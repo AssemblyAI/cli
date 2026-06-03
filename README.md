@@ -16,11 +16,10 @@ The installer uses [`pipx`](https://pipx.pypa.io) when available (falling back t
 pipx install "git+https://github.com/AssemblyAI/cli.git"   # or: pip install --user ...
 ```
 
-Microphone input (for `stream` and `agent`) needs the optional `[mic]` extra:
-
-```sh
-pipx install "assemblyai-cli[mic] @ git+https://github.com/AssemblyAI/cli.git"
-```
+Microphone and speaker support (for `stream` and `agent`) is **included by default** —
+no extra install step. PyAudio ships prebuilt wheels for macOS, Windows, and Linux; on
+Linux without a wheel you may need the PortAudio headers first (`sudo apt-get install
+portaudio19-dev`).
 
 ## Quick start
 
@@ -50,12 +49,12 @@ output is piped or run by an agent). Auth problems surface as a clean
 ```sh
 aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
 aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
-aai stream                     # from the microphone (needs the [mic] extra); Ctrl-C to stop
+aai stream                     # from the microphone; Ctrl-C to stop
 ```
 
 ## Voice agent
 
-Have a live, two-way voice conversation (requires the `[mic]` extra):
+Have a live, two-way voice conversation:
 
 ```sh
 aai agent                                 # talk; the agent talks back. Ctrl-C to stop.

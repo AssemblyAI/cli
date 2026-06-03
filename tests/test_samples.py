@@ -19,6 +19,26 @@ def test_samples_list_shows_templates():
     assert result.exit_code == 0
     assert "transcribe" in result.output
     assert "stream" in result.output
+    assert "agent" in result.output
+
+
+def test_samples_create_agent_writes_script_with_key(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config.set_api_key("default", "sk_injected")
+    result = runner.invoke(app, ["samples", "create", "agent"])
+    assert result.exit_code == 0
+    script = Path(tmp_path, "agent", "agent.py")
+    assert script.exists()
+    body = script.read_text()
+    assert "sk_injected" in body
+    assert "{{API_KEY}}" not in body
+    assert "session.update" in body  # the voice-agent handshake
+
+
+def test_samples_no_subcommand_lists_commands():
+    # Bare `aai samples` should show its commands instead of erroring out.
+    result = runner.invoke(app, ["samples"])
+    assert "list" in result.output and "create" in result.output
 
 
 def test_samples_create_stream_writes_script_with_key(tmp_path, monkeypatch):

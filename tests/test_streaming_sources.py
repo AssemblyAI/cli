@@ -140,7 +140,7 @@ def test_micsource_missing_dependency_raises(monkeypatch):
     with pytest.raises(CLIError) as exc:
         list(sources.MicSource(sample_rate=16000))
     assert exc.value.error_type == "mic_missing"
-    assert "assemblyai-cli[mic]" in exc.value.message
+    assert "pyaudio" in exc.value.message.lower()
 
 
 def test_micsource_yields_from_microphone_stream(monkeypatch):

@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 
 from assemblyai_cli import client, config, output
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 
 app = typer.Typer()
@@ -22,7 +22,7 @@ def transcribe(
 ) -> None:
     """Transcribe an audio file or URL and print the result."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         if srt and vtt:
             raise UsageError("--srt and --vtt are mutually exclusive.")
         audio = client.SAMPLE_AUDIO_URL if sample else source

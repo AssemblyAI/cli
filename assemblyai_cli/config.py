@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import keyring
 import keyring.errors  # keyring.errors is not re-exported by keyring/__init__
@@ -38,12 +40,13 @@ def _config_file() -> Path:
     return config_dir() / "config.toml"
 
 
-def _load() -> dict:
+def _load() -> dict[str, Any]:
     path = _config_file()
     if not path.exists():
         return {}
     with path.open("rb") as fh:
-        return tomllib.load(fh)
+        data: dict[str, Any] = tomllib.load(fh)
+        return data
 
 
 def _dump(data: dict) -> None:
@@ -54,7 +57,7 @@ def _dump(data: dict) -> None:
 
 
 def get_active_profile() -> str:
-    return _load().get("active_profile", DEFAULT_PROFILE)
+    return str(_load().get("active_profile", DEFAULT_PROFILE))
 
 
 def set_active_profile(name: str) -> None:
@@ -79,10 +82,8 @@ def get_api_key(profile: str) -> str | None:
 
 
 def clear_api_key(profile: str) -> None:
-    try:
+    with contextlib.suppress(keyring.errors.PasswordDeleteError):
         keyring.delete_password(KEYRING_SERVICE, profile)
-    except keyring.errors.PasswordDeleteError:
-        pass
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:

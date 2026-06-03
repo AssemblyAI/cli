@@ -8,15 +8,19 @@ import typer
 from rich.markup import escape
 
 from assemblyai_cli import config, output
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import CLIError
 
-app = typer.Typer(help="Scaffold runnable AssemblyAI starter scripts.")
+app = typer.Typer(
+    help="Scaffold runnable AssemblyAI starter scripts.",
+    no_args_is_help=True,
+)
 
 # template name -> (template resource filename, output filename)
 TEMPLATES = {
     "transcribe": ("transcribe.py.tmpl", "transcribe.py"),
     "stream": ("stream.py.tmpl", "stream.py"),
+    "agent": ("agent.py.tmpl", "agent.py"),
 }
 
 
@@ -27,7 +31,7 @@ def list_(
 ) -> None:
     """List available sample templates."""
 
-    def body(_state, json_mode: bool) -> None:
+    def body(_state: AppState, json_mode: bool) -> None:
         names = sorted(TEMPLATES)
         output.emit(
             names,
@@ -47,7 +51,7 @@ def create(
 ) -> None:
     """Scaffold a runnable starter script with your API key injected."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         if name not in TEMPLATES:
             raise CLIError(
                 f"Unknown sample '{name}'. Try: {', '.join(sorted(TEMPLATES))}.",
@@ -61,7 +65,7 @@ def create(
 
         target_dir = Path.cwd() / name
         target_dir.mkdir(parents=True, exist_ok=True)
-        os.chmod(target_dir, 0o700)
+        target_dir.chmod(0o700)
         target = target_dir / out_file
         if target.exists() and not force:
             raise CLIError(
@@ -72,7 +76,7 @@ def create(
         fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             fh.write(rendered)
-        os.chmod(target, 0o600)
+        target.chmod(0o600)
 
         output.emit(
             {"created": str(target)},

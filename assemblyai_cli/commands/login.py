@@ -6,7 +6,7 @@ import typer
 from rich.markup import escape
 
 from assemblyai_cli import client, config, output
-from assemblyai_cli.context import resolve_profile, run_command
+from assemblyai_cli.context import AppState, resolve_profile, run_command
 from assemblyai_cli.errors import APIError, NotAuthenticated
 
 app = typer.Typer()
@@ -22,7 +22,7 @@ def login(
 ) -> None:
     """Authenticate by storing an API key (browser-assisted on a terminal)."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         key = api_key
         if not key:
@@ -31,7 +31,7 @@ def login(
             )
             try:
                 webbrowser.open(DASHBOARD_KEYS_URL)
-            except Exception:
+            except Exception:  # noqa: BLE001 - opening a browser is best-effort
                 output.console.print(
                     "[dim]Could not open a browser; open the URL above manually.[/dim]"
                 )
@@ -55,7 +55,7 @@ def logout(
 ) -> None:
     """Clear stored credentials for the active profile."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         config.clear_api_key(profile)
         output.emit(
@@ -74,7 +74,7 @@ def whoami(
 ) -> None:
     """Show the active profile and whether its key is usable."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         key = config.get_api_key(profile)
         if not key:

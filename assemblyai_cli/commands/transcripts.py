@@ -5,7 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from assemblyai_cli import client, config, output
-from assemblyai_cli.context import run_command
+from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import APIError
 
 app = typer.Typer()
@@ -19,7 +19,7 @@ def get(
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.get_transcript(api_key, transcript_id)
         if getattr(transcript.status, "value", transcript.status) == "error":
@@ -48,15 +48,17 @@ def list_(
 ) -> None:
     """List recent transcripts."""
 
-    def body(state, json_mode: bool) -> None:
+    def body(state: AppState, json_mode: bool) -> None:
         api_key = config.resolve_api_key(profile=state.profile)
         rows = client.list_transcripts(api_key, limit=limit)
 
-        def render(data):
+        def render(data: list[dict[str, object]]) -> Table:
             table = Table("id", "status", "created")
             for row in data:
                 table.add_row(
-                    escape(row["id"]), escape(row["status"]), escape(str(row.get("created", "")))
+                    escape(str(row["id"])),
+                    escape(str(row["status"])),
+                    escape(str(row.get("created", ""))),
                 )
             return table
 
