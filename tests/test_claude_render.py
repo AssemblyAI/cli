@@ -12,10 +12,16 @@ def test_render_steps_colors_status():
         ]
     }
     rendered = _render_steps(data)
+    # The markup string carries the semantic style tags per status...
+    assert "[aai.success]installed[/aai.success]" in rendered
+    assert "[aai.error]failed[/aai.error]" in rendered
+    assert "[aai.heading]" in rendered
+    # ...and renders to real ANSI through the themed console.
     buf = io.StringIO()
     console = theme.make_console(file=buf, force_terminal=True, color_system="truecolor")
     console.print(rendered)
     out = buf.getvalue()
     assert "installed" in out
     assert "failed" in out
-    assert "\x1b[" in out  # statuses are colored
+    assert "\x1b[32m" in out  # aai.success (green) → "installed"
+    assert "\x1b[1;31m" in out  # aai.error (bold red) → "failed"
