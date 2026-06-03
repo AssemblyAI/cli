@@ -336,3 +336,65 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert seen["source_type"] == "FileSource"  # streamed the downloaded local file
     assert seen["src"] == str(fake)
+
+
+def test_stream_maps_turn_detection_flags(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured = {}
+
+    def fake_stream_audio(api_key, source, *, params, **kw):
+        captured["params"] = params
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+
+    runner.invoke(
+        app,
+        [
+            "stream",
+            "--sample",
+            "--max-turn-silence",
+            "400",
+            "--filter-profanity",
+            "--speaker-labels",
+        ],
+    )
+    params = captured["params"]
+    assert params.max_turn_silence == 400
+    assert params.filter_profanity is True
+    assert params.speaker_labels is True
+
+
+def test_stream_config_escape_hatch(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+
+    runner.invoke(app, ["stream", "--sample", "--config", "vad_threshold=0.7"])
+    assert captured["params"].vad_threshold == 0.7
+
+
+def test_stream_maps_webhook_auth_header(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+
+    runner.invoke(
+        app,
+        [
+            "stream",
+            "--sample",
+            "--webhook-url",
+            "https://example.com/hook",
+            "--webhook-auth-header",
+            "Authorization:Bearer xyz",
+        ],
+    )
+    params = captured["params"]
+    assert params.webhook_auth_header_name == "Authorization"
+    assert params.webhook_auth_header_value == "Bearer xyz"
