@@ -21,4 +21,11 @@ echo "==> pytest (with branch-coverage gate)"
 # a live API key + kokoro. Run them with: pytest -m e2e
 pytest -q -m "not e2e" --cov=assemblyai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
+echo "==> build + twine check (PyPI publish readiness)"
+# Build sdist + wheel into ./dist, then validate the metadata and README render
+# the way PyPI requires. --strict fails on any warning (e.g. a missing readme).
+rm -rf dist
+uv build
+uvx twine check --strict dist/*
+
 echo "All checks passed."
