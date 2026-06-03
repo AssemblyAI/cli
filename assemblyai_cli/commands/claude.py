@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+from pathlib import Path
+
+import typer
+from rich.markup import escape
+
+from assemblyai_cli import output
+from assemblyai_cli.context import run_command
+from assemblyai_cli.errors import UsageError
+
+app = typer.Typer(help="Wire up Claude Code for AssemblyAI (docs MCP + skill).")
+
+MCP_NAME = "assemblyai-docs"
+MCP_URL = "https://mcp.assemblyai.com/docs"
+SKILL_REPO = "AssemblyAI/assemblyai-skill"
+_VALID_SCOPES = ("user", "project", "local")
+
+
+def _run(cmd: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _mcp_present() -> bool:
+    return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
+
+
+def _install_mcp(scope: str, force: bool) -> dict:
+    if shutil.which("claude") is None:
+        return {
+            "name": "mcp",
+            "status": "skipped",
+            "detail": (
+                "Claude Code not found. Install it (https://claude.com/claude-code), "
+                f"then run: claude mcp add --transport http --scope {scope} "
+                f"{MCP_NAME} {MCP_URL}"
+            ),
+        }
+    if _mcp_present():
+        if not force:
+            return {"name": "mcp", "status": "already", "detail": f"{MCP_NAME} already registered"}
+        removed = _run(["claude", "mcp", "remove", MCP_NAME])
+        if removed.returncode != 0:
+            return {
+                "name": "mcp",
+                "status": "failed",
+                "detail": f"could not remove existing {MCP_NAME}: "
+                + (removed.stderr or removed.stdout).strip(),
+            }
+    proc = _run(
+        ["claude", "mcp", "add", "--transport", "http", "--scope", scope, MCP_NAME, MCP_URL]
+    )
+    if proc.returncode != 0:
+        return {"name": "mcp", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+    return {"name": "mcp", "status": "installed", "detail": f"{MCP_NAME} @ {scope} scope"}
+
+
+def _install_skill() -> dict:
+    if shutil.which("npx") is None:
+        return {
+            "name": "skill",
+            "status": "skipped",
+            "detail": (
+                f"Node.js/npx not found. Install Node.js, then run: npx skills add {SKILL_REPO}"
+            ),
+        }
+    proc = _run(["npx", "skills", "add", SKILL_REPO])
+    if proc.returncode != 0:
+        return {"name": "skill", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+    return {"name": "skill", "status": "installed", "detail": SKILL_REPO}
+
+
+def _skill_dir() -> Path:
+    return Path.home() / ".claude" / "skills" / "assemblyai"
+
+
+def _mcp_status() -> dict:
+    if shutil.which("claude") is None:
+        return {"name": "mcp", "status": "unknown", "detail": "Claude Code not found"}
+    present = _mcp_present()
+    return {
+        "name": "mcp",
+        "status": "installed" if present else "not_installed",
+        "detail": MCP_NAME,
+    }
+
+
+def _skill_status() -> dict:
+    present = (_skill_dir() / "SKILL.md").exists()
+    return {
+        "name": "skill",
+        "status": "installed" if present else "not_installed",
+        "detail": str(_skill_dir()),
+    }
+
+
+def _remove_mcp(scope: str | None) -> dict:
+    if shutil.which("claude") is None:
+        return {"name": "mcp", "status": "skipped", "detail": "Claude Code not found"}
+    if not _mcp_present():
+        return {"name": "mcp", "status": "not_installed", "detail": MCP_NAME}
+    cmd = ["claude", "mcp", "remove", MCP_NAME]
+    if scope is not None:
+        cmd += ["--scope", scope]
+    proc = _run(cmd)
+    if proc.returncode != 0:
+        return {"name": "mcp", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+    return {"name": "mcp", "status": "removed", "detail": MCP_NAME}
+
+
+def _remove_skill() -> dict:
+    target = _skill_dir()
+    if not target.exists():
+        return {"name": "skill", "status": "not_installed", "detail": str(target)}
+    try:
+        shutil.rmtree(target)
+    except OSError as err:
+        return {"name": "skill", "status": "failed", "detail": str(err)}
+    return {"name": "skill", "status": "removed", "detail": str(target)}
+
+
+def _render_steps(data: object) -> str:
+    steps = data["steps"]  # type: ignore[index]
+    lines = [f"  {s['name']}: {s['status']} — {escape(str(s['detail']))}" for s in steps]
+    return "AssemblyAI coding-agent setup:\n" + "\n".join(lines)
+
+
+@app.command()
+def install(
+    ctx: typer.Context,
+    scope: str = typer.Option(
+        "user",
+        "--scope",
+        help=(
+            "Config scope to register the MCP under: user, project, or local. "
+            "Presence is detected across all scopes."
+        ),
+    ),
+    force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
+    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+) -> None:
+    """Install the AssemblyAI docs MCP server and skill into Claude Code."""
+
+    def body(_state, json_mode: bool) -> None:
+        if scope not in _VALID_SCOPES:
+            raise UsageError(
+                f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
+            )
+        steps = [_install_mcp(scope, force), _install_skill()]
+        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+        if any(s["status"] == "failed" for s in steps):
+            raise typer.Exit(code=1)
+
+    run_command(ctx, body, json=json_out)
+
+
+@app.command()
+def status(
+    ctx: typer.Context,
+    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+) -> None:
+    """Show whether the AssemblyAI MCP server and skill are wired into Claude Code."""
+
+    def body(_state, json_mode: bool) -> None:
+        steps = [_mcp_status(), _skill_status()]
+        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+
+    run_command(ctx, body, json=json_out)
+
+
+@app.command()
+def remove(
+    ctx: typer.Context,
+    scope: str | None = typer.Option(
+        None,
+        "--scope",
+        help=(
+            "Only remove the MCP from this scope (user, project, or local). "
+            "Default: remove from whichever scope it exists in."
+        ),
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+) -> None:
+    """Remove the AssemblyAI MCP server and skill from Claude Code."""
+
+    def body(_state, json_mode: bool) -> None:
+        if scope is not None and scope not in _VALID_SCOPES:
+            raise UsageError(
+                f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
+            )
+        steps = [_remove_mcp(scope), _remove_skill()]
+        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+        if any(s["status"] == "failed" for s in steps):
+            raise typer.Exit(code=1)
+
+    run_command(ctx, body, json=json_out)

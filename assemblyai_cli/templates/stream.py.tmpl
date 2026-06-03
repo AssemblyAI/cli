@@ -1,0 +1,38 @@
+# Real-time microphone transcription.
+# Requires microphone support:  pip install "assemblyai[extras]"
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    SpeechModel,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingEvents,
+    StreamingParameters,
+    TurnEvent,
+)
+
+aai.settings.api_key = "{{API_KEY}}"
+
+
+def on_turn(client: StreamingClient, event: TurnEvent) -> None:
+    print(event.transcript, end="\r", flush=True)
+    if event.end_of_turn:
+        print()
+
+
+client = StreamingClient(
+    StreamingClientOptions(api_key="{{API_KEY}}", api_host="streaming.assemblyai.com")
+)
+client.on(StreamingEvents.Turn, on_turn)
+client.connect(
+    StreamingParameters(
+        sample_rate=16000,
+        format_turns=True,
+        speech_model=SpeechModel.universal_streaming_multilingual,
+    )
+)
+
+print("Listening… press Ctrl-C to stop.")
+try:
+    client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
+finally:
+    client.disconnect(terminate=True)

@@ -1,0 +1,124 @@
+import json
+
+from typer.testing import CliRunner
+
+from assemblyai_cli import config
+from assemblyai_cli.main import app
+
+runner = CliRunner()
+
+
+def test_agent_help_lists_command():
+    result = runner.invoke(app, ["agent", "--help"])
+    assert result.exit_code == 0
+    assert "voice" in result.output.lower()
+
+
+def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
+    called = {"ran": False}
+
+    def fake_run_session(*a, **k):
+        called["ran"] = True
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent", "--list-voices"])
+    assert result.exit_code == 0
+    assert "ivy" in result.output
+    assert called["ran"] is False
+
+
+def test_agent_unauthenticated_exits_2():
+    result = runner.invoke(app, ["agent"])
+    assert result.exit_code == 2
+
+
+def test_agent_drives_renderer_json(monkeypatch):
+    config.set_api_key("default", "sk_live")
+
+    def fake_run_session(
+        api_key,
+        *,
+        renderer,
+        player,
+        mic,
+        voice,
+        system_prompt,
+        greeting,
+        full_duplex=False,
+    ):
+        renderer.connected()
+        renderer.user_final("hello agent")
+        renderer.agent_transcript("hello human", interrupted=False)
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent", "--json"])
+    assert result.exit_code == 0
+    lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
+    assert {"type": "transcript.user", "text": "hello agent"} in lines
+    assert {"type": "transcript.agent", "text": "hello human", "interrupted": False} in lines
+
+
+def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake_run_session(
+        api_key,
+        *,
+        renderer,
+        player,
+        mic,
+        voice,
+        system_prompt,
+        greeting,
+        full_duplex=False,
+    ):
+        seen["voice"] = voice
+        seen["prompt"] = system_prompt
+        seen["full_duplex"] = full_duplex
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    prompt_file = tmp_path / "p.txt"
+    prompt_file.write_text("be a pirate")
+    result = runner.invoke(
+        app,
+        [
+            "agent",
+            "--voice",
+            "james",
+            "--prompt-file",
+            str(prompt_file),
+            "--prompt",
+            "ignored",
+            "--full-duplex",
+        ],
+    )
+    assert result.exit_code == 0
+    assert seen["voice"] == "james"
+    assert seen["prompt"] == "be a pirate"  # --prompt-file overrides --prompt
+    assert seen["full_duplex"] is True
+
+
+def test_agent_ctrl_c_exits_cleanly(monkeypatch):
+    config.set_api_key("default", "sk_live")
+
+    def raise_kbd(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", raise_kbd)
+    result = runner.invoke(app, ["agent"])
+    assert result.exit_code == 0
+
+
+def test_agent_unknown_voice_exits_2(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = runner.invoke(app, ["agent", "--voice", "not-a-voice"])
+    assert result.exit_code == 2
+
+
+def test_agent_prompt_file_not_found_exits_2(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = runner.invoke(app, ["agent", "--prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"])
+    assert result.exit_code == 2
