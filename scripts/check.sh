@@ -13,7 +13,7 @@ ruff format --check .
 echo "==> mypy"
 mypy
 
-echo "==> pytest (with coverage gate)"
-pytest -q --cov=assemblyai_cli --cov-report=term-missing --cov-fail-under=90
+echo "==> pytest (with branch-coverage gate)"
+pytest -q --cov=assemblyai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "All checks passed."
