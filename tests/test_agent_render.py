@@ -2,8 +2,8 @@ import io
 import json
 
 import pytest
-from rich.console import Console
 
+from assemblyai_cli import theme
 from assemblyai_cli.agent.render import AgentRenderer
 
 
@@ -11,10 +11,12 @@ def _json_lines(buf: io.StringIO):
     return [json.loads(x) for x in buf.getvalue().splitlines() if x.strip()]
 
 
-def _human(width=80):
-    """A human-mode renderer writing to a forced-terminal Rich console buffer."""
+def _human(width=80, color_system=None):
+    """A human-mode renderer writing to a forced-terminal themed console buffer."""
     buf = io.StringIO()
-    console = Console(file=buf, force_terminal=True, width=width, color_system=None)
+    console = theme.make_console(
+        file=buf, force_terminal=True, width=width, color_system=color_system
+    )
     return AgentRenderer(json_mode=False, out=buf, console=console), buf
 
 
@@ -123,3 +125,22 @@ def test_human_connected_and_stopped_announce():
     out = buf.getvalue()
     assert "start talking" in out.lower()
     assert "Stopped." in out
+
+
+def test_human_agent_label_is_colored():
+    r, buf = _human(color_system="truecolor")
+    r.agent_transcript("the time is noon", interrupted=False)
+    out = buf.getvalue()
+    assert "agent: " in out
+    assert "the time is noon" in out
+    assert "\x1b[" in out  # label styling emits ANSI
+
+
+def test_human_you_label_is_colored():
+    r, buf = _human(color_system="truecolor")
+    r.user_final("what is the time")
+    r.close()
+    out = buf.getvalue()
+    assert "you: " in out
+    assert "what is the time" in out
+    assert "\x1b[" in out
