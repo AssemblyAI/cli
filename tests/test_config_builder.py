@@ -150,3 +150,46 @@ def test_every_transcribe_field_is_a_valid_param(field):
 
     raw_cls = type(aai.TranscriptionConfig().raw)
     assert field in raw_cls.model_fields
+
+
+def test_merge_transcribe_config_returns_kwargs_dict():
+    from assemblyai_cli import config_builder
+
+    merged = config_builder.merge_transcribe_config(
+        flags={"speaker_labels": True, "language_code": None},
+        overrides=["sentiment_analysis=true"],
+        config_file=None,
+    )
+    assert merged == {"speaker_labels": True, "sentiment_analysis": True}
+
+
+def test_construct_transcribe_config_from_merged():
+    import assemblyai as aai
+    from assemblyai_cli import config_builder
+
+    tc = config_builder.construct_transcription_config({"speaker_labels": True})
+    assert isinstance(tc, aai.TranscriptionConfig)
+    assert tc.raw.model_dump(exclude_none=True) == {"speaker_labels": True}
+
+
+def test_merge_streaming_params_coerces_speech_model_enum():
+    from assemblyai.streaming.v3 import SpeechModel
+    from assemblyai_cli import config_builder
+
+    merged = config_builder.merge_streaming_params(
+        flags={"speech_model": "universal-streaming-multilingual", "sample_rate": 16000},
+        overrides=[],
+        config_file=None,
+    )
+    assert merged["speech_model"] is SpeechModel.universal_streaming_multilingual
+    assert merged["sample_rate"] == 16000
+
+
+def test_build_transcription_config_still_works():
+    import assemblyai as aai
+    from assemblyai_cli import config_builder
+
+    tc = config_builder.build_transcription_config(
+        flags={"speaker_labels": True}, overrides=[], config_file=None
+    )
+    assert isinstance(tc, aai.TranscriptionConfig)

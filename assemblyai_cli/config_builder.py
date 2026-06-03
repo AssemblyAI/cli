@@ -179,22 +179,35 @@ def _merge(
     return data
 
 
-def build_transcription_config(
+def merge_transcribe_config(
     *, flags: dict[str, object], overrides: list[str], config_file: str | None
-) -> aai.TranscriptionConfig:
-    merged = _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
+) -> dict[str, object]:
+    """Merge config-file + --config overrides + curated flags into a kwargs dict."""
+    return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
+
+
+def construct_transcription_config(merged: dict[str, object]) -> aai.TranscriptionConfig:
+    """Build a TranscriptionConfig from a merged kwargs dict, surfacing errors as usage."""
     try:
         return aai.TranscriptionConfig(**merged)
     except UsageError:
         raise
-    # surface SDK validation as a usage error
-    except Exception as exc:
+    except Exception as exc:  # surface SDK validation as a usage error
         raise UsageError(f"Invalid transcription config: {exc}") from exc
 
 
-def build_streaming_params(
+def build_transcription_config(
     *, flags: dict[str, object], overrides: list[str], config_file: str | None
-) -> StreamingParameters:
+) -> aai.TranscriptionConfig:
+    return construct_transcription_config(
+        merge_transcribe_config(flags=flags, overrides=overrides, config_file=config_file)
+    )
+
+
+def merge_streaming_params(
+    *, flags: dict[str, object], overrides: list[str], config_file: str | None
+) -> dict[str, object]:
+    """Merge streaming config into a kwargs dict, coercing speech_model to a SpeechModel."""
     merged = _merge(STREAM_FIELDS, flags, overrides, config_file)
     raw_model = merged.get("speech_model")
     if isinstance(raw_model, str):
@@ -205,12 +218,25 @@ def build_streaming_params(
                 merged["speech_model"] = SpeechModel(raw_model)
             except ValueError as exc:
                 raise UsageError(f"Invalid streaming config: {exc}") from exc
+    return merged
+
+
+def construct_streaming_params(merged: dict[str, object]) -> StreamingParameters:
+    """Build StreamingParameters from a merged kwargs dict, surfacing errors as usage."""
     try:
         return StreamingParameters(**merged)
     except UsageError:
         raise
     except Exception as exc:
         raise UsageError(f"Invalid streaming config: {exc}") from exc
+
+
+def build_streaming_params(
+    *, flags: dict[str, object], overrides: list[str], config_file: str | None
+) -> StreamingParameters:
+    return construct_streaming_params(
+        merge_streaming_params(flags=flags, overrides=overrides, config_file=config_file)
+    )
 
 
 def split_csv(value: str | None) -> list[str] | None:
