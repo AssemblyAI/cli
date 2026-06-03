@@ -413,3 +413,42 @@ def test_stream_format_turns_tristate(monkeypatch):
 
     runner.invoke(app, ["stream", "--sample", "--no-format-turns"])
     assert captured["params"].format_turns is False
+
+
+def _wav_path(tmp_path):
+    # A real 16 kHz mono WAV reaches run() via FileSource without needing ffmpeg.
+    import wave
+
+    p = tmp_path / "a.wav"
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x01" * 100)
+    return str(p)
+
+
+def test_stream_show_code_prints_python(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    # CliRunner is non-interactive, so output defaults to JSON; force human mode.
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda api_key, source, *, params, **kw: None,
+    )
+    result = runner.invoke(app, ["stream", _wav_path(tmp_path), "--show-code"])
+    assert result.exit_code == 0
+    assert "StreamingClient(" in result.output
+    assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+
+
+def test_stream_show_code_suppressed_in_json_mode(monkeypatch, tmp_path):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda api_key, source, *, params, **kw: None,
+    )
+    result = runner.invoke(app, ["stream", _wav_path(tmp_path), "--show-code", "--json"])
+    assert result.exit_code == 0
+    assert "StreamingClient(" not in result.output
+    assert "# Equivalent Python" not in result.output

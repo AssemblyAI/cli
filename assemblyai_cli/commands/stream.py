@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import SpeechModel
 
-from assemblyai_cli import client, config, config_builder, llm, youtube
+from assemblyai_cli import client, code_gen, config, config_builder, llm, output, youtube
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 from assemblyai_cli.microphone import MicrophoneSource
@@ -92,6 +92,9 @@ def stream(
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    show_code: bool = typer.Option(
+        False, "--show-code", help="Also print the equivalent Python SDK code."
+    ),
 ) -> None:
     """Transcribe live audio in real time with the full StreamingParameters surface.
 
@@ -147,9 +150,10 @@ def stream(
                 flags["webhook_auth_header_name"] = header[0]
                 flags["webhook_auth_header_value"] = header[1]
 
-            params = config_builder.build_streaming_params(
+            merged = config_builder.merge_streaming_params(
                 flags=flags, overrides=list(config_kv or []), config_file=config_file
             )
+            params = config_builder.construct_streaming_params(merged)
 
             try:
                 client.stream_audio(
@@ -179,6 +183,15 @@ def stream(
                     max_tokens=max_tokens,
                 )
                 renderer.llm(transformed)
+
+            if show_code and not json_mode:
+                try:
+                    rendered = code_gen.stream(merged)
+                except Exception as exc:  # noqa: BLE001
+                    output.console.print(f"[dim]# could not render sample code: {exc}[/dim]")
+                else:
+                    output.console.print("\n[dim]# Equivalent Python (microphone streaming):[/dim]")
+                    output.console.print(rendered)
 
         if source and youtube.is_youtube_url(source):
             # Fetch the audio first, then stream the local file in real time.
