@@ -94,3 +94,34 @@ def test_serializer_round_trips_full_stream_domain(merged):
     lines = serialize.config_kwarg_lines(merged, indent=0)
     src = "dict(\n" + "\n".join(lines) + "\n)"
     assert eval(src, {"SpeechModel": SpeechModel}) == merged  # noqa: S307
+
+
+from assemblyai_cli.code_gen import snippets  # noqa: E402
+
+
+def test_result_handling_includes_only_enabled_features():
+    out = snippets.result_handling({"speaker_labels": True, "sentiment_analysis": True})
+    assert "transcript.utterances" in out  # speaker_labels
+    assert "transcript.sentiment_analysis" in out
+    assert "transcript.summary" not in out  # summarization not enabled
+
+
+def test_result_handling_default_prints_text():
+    out = snippets.result_handling({})
+    assert out.strip() == "print(transcript.text)"
+
+
+def test_every_render_feature_has_a_snippet():
+    # Coverage guard: every analysis section the CLI renders must have a code snippet
+    # (or be explicitly excluded). Catches "added a feature, forgot the snippet".
+    import inspect
+
+    from assemblyai_cli import transcribe_render
+
+    rendered = {
+        name[len("_render_") :]
+        for name, _ in inspect.getmembers(transcribe_render, inspect.isfunction)
+        if name.startswith("_render_") and name != "_render_text"
+    }
+    covered = set(snippets.SNIPPET_FEATURES)
+    assert rendered <= covered, f"render features without a snippet: {rendered - covered}"
