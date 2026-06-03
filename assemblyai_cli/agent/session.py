@@ -145,7 +145,7 @@ def run_session(
         raise APIError(f"Could not connect to the voice agent: {exc}") from exc
 
     # The mic opens lazily on first iteration, inside the capture thread; a failure
-    # there (no device, PyAudio missing) must reach the user instead of vanishing
+    # there (no device, sounddevice missing) must reach the user instead of vanishing
     # with the daemon thread. Capture it and close the socket to end the receive loop.
     capture_error: list[CLIError] = []
 
@@ -159,7 +159,7 @@ def run_session(
 
     player_started = False
     try:
-        player.start()  # opens the speaker stream; CLIError here if PyAudio can't load
+        player.start()  # opens the speaker stream; CLIError here if sounddevice can't load
         player_started = True
         threading.Thread(target=_capture, daemon=True).start()
         ws.send(

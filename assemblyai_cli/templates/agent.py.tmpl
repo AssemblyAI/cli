@@ -1,5 +1,5 @@
 # Live two-way voice conversation with an AssemblyAI voice agent.
-# Requires audio support:  pip install "assemblyai[extras]" pyaudio
+# Requires audio support:  pip install sounddevice websockets
 #
 # Tip: use headphones. This sample keeps the mic open while the agent speaks,
 # so without them the agent may hear (and respond to) its own voice.
@@ -7,16 +7,17 @@ import base64
 import json
 import threading
 
-import pyaudio
+import sounddevice as sd
 from websockets.sync.client import connect
 
 API_KEY = "{{API_KEY}}"
 WS_URL = "wss://agents.assemblyai.com/v1/ws"
 RATE = 24000  # Voice Agent native PCM16 mono sample rate
 
-pa = pyaudio.PyAudio()
-speaker = pa.open(format=pyaudio.paInt16, channels=1, rate=RATE, output=True)
-mic = pa.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=1024)
+speaker = sd.RawOutputStream(samplerate=RATE, channels=1, dtype="int16")
+speaker.start()
+mic = sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=1024)
+mic.start()
 
 ready = threading.Event()
 
@@ -25,7 +26,8 @@ def send_mic(ws):
     """Forward microphone audio to the agent once the session is ready."""
     while True:
         try:
-            chunk = mic.read(1024, exception_on_overflow=False)
+            data, _overflowed = mic.read(1024)
+            chunk = bytes(data)
             if ready.is_set():
                 ws.send(json.dumps({"type": "input.audio", "audio": base64.b64encode(chunk).decode()}))
         except Exception:
@@ -58,6 +60,7 @@ with connect(WS_URL, additional_headers={"Authorization": f"Bearer {API_KEY}"}) 
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
+        speaker.stop()
         speaker.close()
+        mic.stop()
         mic.close()
-        pa.terminate()

@@ -1,25 +1,55 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import Any, cast
+from typing import Any
 
 from assemblyai_cli.errors import CLIError
 
 
-def pyaudio_missing_error() -> CLIError:
-    """The shared 'PyAudio can't be imported' error for mic and speaker paths."""
+def audio_missing_error() -> CLIError:
+    """The shared 'sounddevice can't be imported' error for mic and speaker paths."""
     return CLIError(
-        "Audio support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio",
+        "Audio support (sounddevice) is unavailable. Try: pip install --force-reinstall sounddevice",
         error_type="mic_missing",
         exit_code=2,
     )
 
 
-def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
-    """The SDK's PyAudio-backed mic stream (imported lazily to keep startup fast)."""
-    from assemblyai.extras import MicrophoneStream
+class _SoundDeviceMic:
+    """Iterator of PCM16 byte chunks from a sounddevice raw input stream.
 
-    return cast(Iterator[bytes], MicrophoneStream(sample_rate=sample_rate, device_index=device))
+    Yields ~100 ms blocks; closeable so MicrophoneSource can tear it down.
+    """
+
+    def __init__(self, stream: Any, blocksize: int) -> None:
+        self._stream = stream
+        self._blocksize = blocksize
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __next__(self) -> bytes:
+        data, _overflowed = self._stream.read(self._blocksize)
+        return bytes(data)
+
+    def close(self) -> None:
+        self._stream.stop()
+        self._stream.close()
+
+
+def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
+    """A sounddevice-backed PCM16 mic stream (imported lazily to keep startup fast)."""
+    try:
+        import sounddevice as sd
+    except ImportError as exc:
+        raise audio_missing_error() from exc
+
+    blocksize = max(1, sample_rate // 10)  # ~100 ms per read
+    stream = sd.RawInputStream(
+        samplerate=sample_rate, device=device, channels=1, dtype="int16", blocksize=blocksize
+    )
+    stream.start()
+    return _SoundDeviceMic(stream, blocksize)
 
 
 class MicrophoneSource:
@@ -44,7 +74,7 @@ class MicrophoneSource:
         try:
             stream: Any = self._factory(sample_rate=self.sample_rate, device=self.device)
         except ImportError as exc:
-            raise pyaudio_missing_error() from exc
+            raise audio_missing_error() from exc
         except Exception as exc:
             raise CLIError(
                 f"Could not open the microphone (device {self.device}): {exc}",

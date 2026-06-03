@@ -7,27 +7,26 @@ from collections.abc import Callable
 from typing import Any
 
 from assemblyai_cli.errors import CLIError
-from assemblyai_cli.microphone import pyaudio_missing_error
+from assemblyai_cli.microphone import audio_missing_error
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 
 
 def _default_output_stream(rate: int) -> Any:
-    """Open a PyAudio PCM16 mono output stream (imported lazily to keep startup fast)."""
+    """Open a sounddevice PCM16 mono output stream (imported lazily to keep startup fast)."""
     try:
-        import pyaudio
+        import sounddevice as sd
     except ImportError as exc:
-        raise pyaudio_missing_error() from exc
+        raise audio_missing_error() from exc
     try:
-        pa = pyaudio.PyAudio()
-        stream = pa.open(format=pyaudio.paInt16, channels=1, rate=rate, output=True)
+        stream = sd.RawOutputStream(samplerate=rate, channels=1, dtype="int16")
+        stream.start()
     except Exception as exc:
         raise CLIError(
             f"Could not open the audio output device: {exc}",
             error_type="audio_output_error",
             exit_code=1,
         ) from exc
-    stream._pa = pa  # retain so PyAudio isn't GC'd before the stream; terminated in Player.close()
     return stream
 
 
@@ -43,7 +42,7 @@ class Player:
         self._rate = sample_rate
         self._factory = stream_factory or _default_output_stream
         self._queue: queue.Queue[bytes | None] = queue.Queue()
-        # PyAudio stream (or a test double); typed Any since pyaudio ships no stubs.
+        # sounddevice stream (or a test double); typed Any since sounddevice ships no stubs.
         self._stream: Any = None
         self._thread: threading.Thread | None = None
 
@@ -82,16 +81,12 @@ class Player:
         # thread returns promptly, avoiding a teardown race with the join below.
         if self._stream is not None:
             with contextlib.suppress(Exception):
-                self._stream.stop_stream()
+                self._stream.stop()
         if self._thread is not None:
             self._thread.join(timeout=2)
         if self._stream is not None:
-            pa = getattr(self._stream, "_pa", None)
             with contextlib.suppress(Exception):
                 self._stream.close()
-            if pa is not None:
-                with contextlib.suppress(Exception):
-                    pa.terminate()
 
 
 # Microphone capture (MicrophoneSource) lives in assemblyai_cli.microphone and is

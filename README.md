@@ -17,9 +17,9 @@ pipx install "git+https://github.com/AssemblyAI/cli.git"   # or: pip install --u
 ```
 
 Microphone and speaker support (for `stream` and `agent`) is **included by default** —
-no extra install step. PyAudio ships prebuilt wheels for macOS, Windows, and Linux; on
-Linux without a wheel you may need the PortAudio headers first (`sudo apt-get install
-portaudio19-dev`).
+no extra install step. Audio runs on [`sounddevice`](https://python-sounddevice.readthedocs.io),
+whose macOS and Windows wheels bundle PortAudio, so there's nothing else to install. On Linux,
+install the PortAudio runtime once (`sudo apt-get install libportaudio2`).
 
 ## Quick start
 

@@ -33,6 +33,8 @@ def test_samples_create_agent_writes_script_with_key(tmp_path, monkeypatch):
     assert "sk_injected" in body
     assert "{{API_KEY}}" not in body
     assert "session.update" in body  # the voice-agent handshake
+    assert "sounddevice" in body  # audio backend (PortAudio bundled in the wheel)
+    assert "pyaudio" not in body
 
 
 def test_samples_no_subcommand_lists_commands():

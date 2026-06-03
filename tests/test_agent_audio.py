@@ -1,4 +1,10 @@
-from assemblyai_cli.agent.audio import Player
+import sys
+import types
+
+import pytest
+
+from assemblyai_cli.agent.audio import Player, _default_output_stream
+from assemblyai_cli.errors import CLIError
 
 
 class FakeStream:
@@ -10,7 +16,7 @@ class FakeStream:
     def write(self, data):
         self.writes.append(data)
 
-    def stop_stream(self):
+    def stop(self):
         self.stopped = True
 
     def close(self):
@@ -50,3 +56,44 @@ def test_player_worker_survives_write_error():
     p.enqueue(b"\x01\x02")
     p.close()  # must return (join has a timeout); thread must not be alive
     assert p._thread is not None and not p._thread.is_alive()
+
+
+def test_default_output_stream_opens_started_sounddevice_stream(monkeypatch):
+    created = {}
+
+    class FakeOut:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    fake_sd = types.ModuleType("sounddevice")
+    fake_sd.RawOutputStream = lambda **kw: FakeOut(**kw)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    stream = _default_output_stream(24000)
+    assert stream.started
+    assert created["samplerate"] == 24000
+    assert created["channels"] == 1
+
+
+def test_default_output_stream_missing_sounddevice_raises_mic_missing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import -> ImportError
+    with pytest.raises(CLIError) as exc:
+        _default_output_stream(24000)
+    assert exc.value.error_type == "mic_missing"
+
+
+def test_default_output_stream_open_failure_raises_audio_output_error(monkeypatch):
+    def boom(**kw):
+        raise OSError("no output device")
+
+    fake_sd = types.ModuleType("sounddevice")
+    fake_sd.RawOutputStream = boom
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    with pytest.raises(CLIError) as exc:
+        _default_output_stream(24000)
+    assert exc.value.error_type == "audio_output_error"
+    assert exc.value.exit_code == 1
