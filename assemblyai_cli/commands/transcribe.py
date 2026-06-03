@@ -5,8 +5,9 @@ from pathlib import Path
 
 import typer
 from rich.markup import escape
+from rich.text import Text
 
-from assemblyai_cli import client, config, llm, output, youtube
+from assemblyai_cli import client, config, llm, output, theme, youtube
 from assemblyai_cli.context import AppState, run_command
 
 app = typer.Typer()
@@ -15,17 +16,20 @@ app = typer.Typer()
 def _utterances(transcript: object) -> list[dict[str, object]]:
     """Speaker-labeled utterances ({speaker, text, start, end}), empty if none."""
     items = getattr(transcript, "utterances", None) or []
-    return [
-        {"speaker": u.speaker, "text": u.text, "start": u.start, "end": u.end} for u in items
-    ]
+    return [{"speaker": u.speaker, "text": u.text, "start": u.start, "end": u.end} for u in items]
 
 
-def _render_transcript(data: dict[str, object]) -> str:
+def _render_transcript(data: dict[str, object]) -> str | Text:
     """Human view: speaker-labeled lines when diarized, otherwise the plain text."""
     utterances = data.get("utterances")
-    if utterances:
-        lines = [f"Speaker {u['speaker']}: {u['text']}" for u in utterances]  # type: ignore[union-attr]
-        return escape("\n".join(lines))
+    if isinstance(utterances, list) and utterances:
+        line = Text()
+        for i, u in enumerate(utterances):
+            if i:
+                line.append("\n")
+            line.append(f"Speaker {u['speaker']}: ", style=theme.speaker_style(u["speaker"]))
+            line.append(str(u["text"]))
+        return line
     return escape(str(data["text"]))
 
 

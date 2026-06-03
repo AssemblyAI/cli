@@ -177,3 +177,33 @@ def test_transcribe_prompt_biases_speech_model():
     assert result.exit_code == 0
     # --prompt is the speech-model prompt, forwarded to the transcription call.
     assert tx.call_args.kwargs["prompt"] == "expect medical terms"
+
+
+def test_render_transcript_colors_speaker_labels():
+    import io
+
+    from assemblyai_cli import theme
+    from assemblyai_cli.commands.transcribe import _render_transcript
+
+    data = {
+        "text": "ignored when utterances present",
+        "utterances": [
+            {"speaker": "A", "text": "hello", "start": 0, "end": 1},
+            {"speaker": "B", "text": "hi there", "start": 1, "end": 2},
+        ],
+    }
+    rendered = _render_transcript(data)
+    buf = io.StringIO()
+    console = theme.make_console(file=buf, force_terminal=True, color_system="truecolor")
+    console.print(rendered)
+    out = buf.getvalue()
+    assert "Speaker A:" in out
+    assert "hello" in out
+    assert "Speaker B:" in out
+    assert "\x1b[" in out  # speaker labels are styled
+
+
+def test_render_transcript_plain_text_unchanged():
+    from assemblyai_cli.commands.transcribe import _render_transcript
+
+    assert _render_transcript({"text": "just the words"}) == "just the words"
