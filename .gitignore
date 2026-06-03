@@ -16,3 +16,6 @@ docs/
 
 # Local scratch scripts (often contain live keys)
 transcribe/
+
+# Wrong tool for this project (hatchling + uv); never commit a poetry lock
+poetry.lock
