@@ -268,3 +268,31 @@ def test_agent_show_code_suppressed_in_json_mode(monkeypatch):
     assert result.exit_code == 0
     assert "agents.assemblyai.com" not in result.output
     assert "# Equivalent Python" not in result.output
+
+
+def test_agent_show_code_prints_after_ctrl_c(monkeypatch):
+    # Ctrl-C is the normal way to end a mic session; --show-code must still print after it.
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    class FakeDuplex:
+        def __init__(self, **kwargs):
+            self.mic = iter([])
+            self.player = self
+
+        def start(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.DuplexAudio", FakeDuplex)
+
+    def _interrupt(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", _interrupt)
+    result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code"])
+    assert result.exit_code == 0
+    assert "agents.assemblyai.com" in result.output
+    assert '"voice": "ivy"' in result.output

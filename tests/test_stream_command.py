@@ -452,3 +452,26 @@ def test_stream_show_code_suppressed_in_json_mode(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert "StreamingClient(" not in result.output
     assert "# Equivalent Python" not in result.output
+
+
+def test_stream_show_code_prints_after_ctrl_c(monkeypatch):
+    # Ctrl-C ends a mic stream normally; --show-code must still print afterward.
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+
+    class FakeMic:
+        def __init__(self, *, device=None, capture_rate=None, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"\x00\x00"])
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.MicrophoneSource", FakeMic)
+
+    def _interrupt(api_key, source, *, params, **kw):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", _interrupt)
+    result = runner.invoke(app, ["stream", "--show-code"])
+    assert result.exit_code == 0
+    assert "StreamingClient(" in result.output
