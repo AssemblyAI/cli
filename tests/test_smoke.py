@@ -28,3 +28,26 @@ def test_stream_registered_top_level():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "stream" in result.output
+
+
+def test_help_lists_commands_in_workflow_order():
+    import click
+    from typer.main import get_command
+
+    cmd = get_command(app)
+    assert isinstance(cmd, click.Group)
+    names = cmd.list_commands(click.Context(cmd))  # the order shown under --help
+    # Core transcription first, then voice/LLM, account, tooling, version last.
+    assert names == [
+        "transcribe",
+        "stream",
+        "transcripts",
+        "agent",
+        "llm",
+        "login",
+        "logout",
+        "whoami",
+        "samples",
+        "claude",
+        "version",
+    ]
