@@ -41,7 +41,7 @@ def login(
         config.set_api_key(profile, key)
         output.emit(
             {"authenticated": True, "profile": profile},
-            lambda d: f"[green]Authenticated[/green] on profile '{escape(d['profile'])}'.",
+            lambda _d: f"[green]Authenticated[/green] on profile '{escape(profile)}'.",
             json_mode=json_mode,
         )
 
@@ -60,7 +60,7 @@ def logout(
         config.clear_api_key(profile)
         output.emit(
             {"logged_out": True, "profile": profile},
-            lambda d: f"Logged out of profile '{escape(d['profile'])}'.",
+            lambda _d: f"Logged out of profile '{escape(profile)}'.",
             json_mode=json_mode,
         )
 
@@ -83,7 +83,7 @@ def whoami(
         reachable = client.validate_key(key)
         output.emit(
             {"profile": profile, "api_key": masked, "reachable": reachable},
-            lambda d: f"profile={escape(d['profile'])} key={escape(d['api_key'])} reachable={d['reachable']}",
+            lambda _d: f"profile={escape(profile)} key={escape(masked)} reachable={reachable}",
             json_mode=json_mode,
         )
 

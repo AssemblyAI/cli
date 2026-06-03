@@ -4,13 +4,15 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
+
+from rich.console import Console
+from rich.markup import escape
 
 if TYPE_CHECKING:
     from assemblyai_cli.errors import CLIError
 
-from rich.console import Console
-from rich.markup import escape
+T = TypeVar("T")
 
 console = Console()
 
@@ -32,7 +34,7 @@ def resolve_json(*, explicit: bool) -> bool:
     return explicit or _is_agentic()
 
 
-def emit(data: object, human_renderer: Callable[[object], object], *, json_mode: bool) -> None:
+def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(data, default=str))
     else:

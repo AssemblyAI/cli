@@ -38,3 +38,36 @@ class APIError(CLIError):
 class UsageError(CLIError):
     def __init__(self, message: str) -> None:
         super().__init__(message, error_type="usage_error", exit_code=2)
+
+
+# Substrings that mark a failure as "the credentials were rejected" rather than a
+# generic network/protocol error. Matched case-insensitively against str(exc).
+# Includes WebSocket close 1008 (policy violation), which is how the Voice Agent
+# server signals a bad API key.
+_AUTH_FAILURE_HINTS = (
+    "unauthorized",
+    "forbidden",
+    "authentication",
+    "api token",
+    "invalid api key",
+    "invalid key",
+    "401",
+    "403",
+    "1008",
+    "policy violation",
+)
+
+REJECTED_KEY_MESSAGE = (
+    "Your API key was rejected. Run 'aai login' with a valid key (or set ASSEMBLYAI_API_KEY)."
+)
+
+
+def is_auth_failure(exc: object) -> bool:
+    """Heuristic: does this exception/error indicate rejected/invalid credentials?"""
+    text = str(exc).lower()
+    return any(hint in text for hint in _AUTH_FAILURE_HINTS)
+
+
+def auth_failure() -> NotAuthenticated:
+    """A NotAuthenticated for the 'key present but rejected by the server' case."""
+    return NotAuthenticated(REJECTED_KEY_MESSAGE)

@@ -6,6 +6,11 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+
+# Editor/agent and local planning artifacts
+.claude/
+docs/
 
 # Local scratch scripts (often contain live keys)
 transcribe/

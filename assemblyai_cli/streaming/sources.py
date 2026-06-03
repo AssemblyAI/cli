@@ -82,6 +82,7 @@ class FileSource:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        assert proc.stdout is not None  # stdout=PIPE guarantees a pipe
         try:
             while True:
                 data = proc.stdout.read(CHUNK_BYTES)

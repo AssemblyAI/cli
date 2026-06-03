@@ -61,7 +61,26 @@ def test_install_happy_path_runs_both_steps(monkeypatch):
         "assemblyai-docs",
         "https://mcp.assemblyai.com/docs",
     ] in fake.calls
-    assert ["npx", "skills", "add", "AssemblyAI/assemblyai-skill"] in fake.calls
+    assert ["npx", "-y", "skills", "add", "AssemblyAI/assemblyai-skill"] in fake.calls
+
+
+def test_install_detaches_stdin_and_sets_timeout(monkeypatch):
+    """Regression: subprocess children must not inherit stdin, or an interactive
+    prompt (npx, claude) hangs the CLI forever. Each call must pass a timeout too."""
+    _all_tools_present(monkeypatch)
+    seen = []
+
+    def record(cmd, *args, **kwargs):
+        seen.append(kwargs)
+        return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="")
+
+    monkeypatch.setattr("assemblyai_cli.commands.claude.subprocess.run", record)
+    result = runner.invoke(app, ["claude", "install"])
+    assert result.exit_code in (0, 1)
+    assert seen, "expected subprocess.run to be called"
+    for kwargs in seen:
+        assert kwargs.get("stdin") is subprocess.DEVNULL
+        assert kwargs.get("timeout")
 
 
 def test_install_scope_passthrough(monkeypatch):

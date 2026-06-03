@@ -55,6 +55,17 @@ def test_list_transcripts_auth_error_becomes_apierror():
             client.list_transcripts("sk")
 
 
+def test_list_transcripts_rejected_key_becomes_not_authenticated():
+    from assemblyai_cli.errors import NotAuthenticated
+
+    with patch.object(client.aai, "Transcriber") as T:
+        T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(
+            "Authentication error, API token missing/invalid"
+        )
+        with pytest.raises(NotAuthenticated):
+            client.list_transcripts("sk_bad")
+
+
 def test_transcribe_blocks_and_returns_transcript():
     fake_transcript = MagicMock()
     fake_transcript.status = client.aai.TranscriptStatus.completed

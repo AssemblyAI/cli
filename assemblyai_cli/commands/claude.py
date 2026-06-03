@@ -19,8 +19,25 @@ SKILL_REPO = "AssemblyAI/assemblyai-skill"
 _VALID_SCOPES = ("user", "project", "local")
 
 
-def _run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True)
+def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess:
+    # stdin=DEVNULL so a child that would otherwise prompt (npx's "Ok to proceed?",
+    # a `claude` confirmation) gets EOF and fails fast instead of hanging forever on
+    # input the user can't see (its stdout is captured). timeout is a final backstop.
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=124,
+            stdout="",
+            stderr=f"timed out after {timeout:.0f}s: {' '.join(cmd)}",
+        )
 
 
 def _mcp_present() -> bool:
@@ -66,7 +83,8 @@ def _install_skill() -> dict:
                 f"Node.js/npx not found. Install Node.js, then run: npx skills add {SKILL_REPO}"
             ),
         }
-    proc = _run(["npx", "skills", "add", SKILL_REPO])
+    # -y: skip npx's interactive "Ok to proceed?" prompt; longer timeout covers the download.
+    proc = _run(["npx", "-y", "skills", "add", SKILL_REPO], timeout=300)
     if proc.returncode != 0:
         return {"name": "skill", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
     return {"name": "skill", "status": "installed", "detail": SKILL_REPO}

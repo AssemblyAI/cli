@@ -9,7 +9,7 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
-from assemblyai_cli.errors import APIError, CLIError
+from assemblyai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
 
@@ -38,6 +38,8 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
     try:
         resp = aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=limit))
     except aai.types.AssemblyAIError as exc:
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Could not list transcripts: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
@@ -52,6 +54,8 @@ def transcribe(api_key: str, audio: str, *, speaker_labels: bool) -> aai.Transcr
     except APIError:
         raise
     except Exception as exc:  # noqa: BLE001 - surface SDK/network failures cleanly
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Transcription request failed: {exc}") from exc
     if transcript.status == aai.TranscriptStatus.error:
         raise APIError(transcript.error or "Transcription failed.", transcript_id=transcript.id)
@@ -63,6 +67,8 @@ def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
     try:
         return aai.Transcript.get_by_id(transcript_id)
     except Exception as exc:  # noqa: BLE001
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Could not fetch transcript {transcript_id}: {exc}") from exc
 
 
@@ -101,6 +107,8 @@ def stream_audio(
     except CLIError:
         raise
     except Exception as exc:  # noqa: BLE001 - surface connect/auth/network failures cleanly
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Could not start streaming session: {exc}") from exc
 
     try:
@@ -108,9 +116,13 @@ def stream_audio(
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, user Ctrl-C, and closed-pipe are handled upstream
     except Exception as exc:  # noqa: BLE001 - surface mid-stream SDK/network failures cleanly
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Streaming failed: {exc}") from exc
     finally:
         sc.disconnect(terminate=True)
 
     if errors:
+        if is_auth_failure(errors[0]):
+            raise auth_failure()
         raise APIError(f"Streaming error: {errors[0]}")

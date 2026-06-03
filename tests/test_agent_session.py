@@ -1,7 +1,7 @@
 import pytest
 
-from assemblyai_cli.agent.session import VoiceAgentSession
-from assemblyai_cli.errors import APIError, CLIError
+from assemblyai_cli.agent.session import VoiceAgentSession, run_session
+from assemblyai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
 class FakeRenderer:
@@ -31,12 +31,20 @@ class FakePlayer:
     def __init__(self):
         self.enqueued = []
         self.flushed = 0
+        self.started = False
+        self.closed = False
 
     def enqueue(self, pcm):
         self.enqueued.append(pcm)
 
     def flush(self):
         self.flushed += 1
+
+    def start(self):
+        self.started = True
+
+    def close(self):
+        self.closed = True
 
 
 def _session(*, full_duplex=False):
@@ -124,6 +132,69 @@ def test_reply_audio_without_data_is_ignored():
     s.dispatch({"type": "reply.audio"})  # no data key
     s.dispatch({"type": "reply.audio", "data": ""})  # empty data
     assert s.player.enqueued == []
+
+
+_POLICY_VIOLATION = "received 1008 (policy violation); then sent 1008 (policy violation)"
+
+
+def test_run_session_connect_auth_failure_raises_not_authenticated():
+    def bad_connect(url, **kwargs):
+        raise RuntimeError(_POLICY_VIOLATION)
+
+    with pytest.raises(NotAuthenticated):
+        run_session(
+            "sk_bad",
+            renderer=FakeRenderer(),
+            player=FakePlayer(),
+            mic=[],
+            voice="ivy",
+            system_prompt="x",
+            greeting="hi",
+            connect=bad_connect,
+        )
+
+
+def test_run_session_mid_stream_1008_raises_not_authenticated():
+    class FakeWS:
+        def send(self, _msg):
+            pass
+
+        def __iter__(self):
+            raise RuntimeError(_POLICY_VIOLATION)
+
+        def close(self):
+            pass
+
+    player = FakePlayer()
+    with pytest.raises(NotAuthenticated):
+        run_session(
+            "sk_bad",
+            renderer=FakeRenderer(),
+            player=player,
+            mic=[],
+            voice="ivy",
+            system_prompt="x",
+            greeting="hi",
+            connect=lambda url, **kwargs: FakeWS(),
+        )
+    assert player.closed is True  # speaker stream still torn down
+
+
+def test_run_session_non_auth_failure_stays_api_error():
+    def boom(url, **kwargs):
+        raise RuntimeError("network unreachable")
+
+    with pytest.raises(APIError):
+        run_session(
+            "sk",
+            renderer=FakeRenderer(),
+            player=FakePlayer(),
+            mic=[],
+            voice="ivy",
+            system_prompt="x",
+            greeting="hi",
+            connect=boom,
+        )
 
 
 def test_full_duplex_reply_started_announces_without_muting():

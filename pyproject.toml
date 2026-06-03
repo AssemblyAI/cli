@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.11", "pre-commit>=4.0"]
+dev = ["pytest>=8.0", "ruff>=0.11", "mypy>=1.10", "pre-commit>=4.0"]
 mic = ["pyaudio>=0.2.11"]
 
 [project.scripts]
@@ -33,6 +33,12 @@ packages = ["assemblyai_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["assemblyai_cli"]
+# Third-party deps (assemblyai, pyaudio) ship no type stubs.
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100

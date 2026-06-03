@@ -4,7 +4,7 @@ import base64
 import json
 import threading
 
-from assemblyai_cli.errors import APIError, CLIError
+from assemblyai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
 WS_URL = "wss://agents.assemblyai.com/v1/ws"
 
@@ -120,6 +120,8 @@ def run_session(
     try:
         ws = _connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:  # noqa: BLE001 - connect/auth/network failures
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
         raise APIError(f"Could not connect to the voice agent: {exc}") from exc
 
     player_started = False
@@ -145,6 +147,9 @@ def run_session(
     except (CLIError, KeyboardInterrupt):
         raise  # auth/protocol errors and user Ctrl-C handled upstream
     except Exception as exc:  # noqa: BLE001 - mid-stream socket/JSON failures
+        if is_auth_failure(exc):
+            # The Voice Agent server closes with 1008 (policy violation) on a bad key.
+            raise auth_failure() from exc
         raise APIError(f"Voice agent session failed: {exc}") from exc
     finally:
         try:

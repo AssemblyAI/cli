@@ -27,6 +27,7 @@ def stream(
         api_key = config.resolve_api_key(profile=state.profile)
         if source and (sample_rate != TARGET_RATE or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
+        audio: FileSource | MicSource
         if source:
             audio = FileSource(source)
             rate = audio.sample_rate

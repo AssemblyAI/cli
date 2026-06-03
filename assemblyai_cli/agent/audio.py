@@ -4,6 +4,7 @@ import contextlib
 import queue
 import threading
 from collections.abc import Callable, Iterator
+from typing import Any
 
 from assemblyai_cli.errors import CLIError
 
@@ -43,7 +44,8 @@ class Player:
         self._rate = sample_rate
         self._factory = stream_factory or _default_output_stream
         self._queue: queue.Queue[bytes | None] = queue.Queue()
-        self._stream = None
+        # PyAudio stream (or a test double); typed Any since pyaudio ships no stubs.
+        self._stream: Any = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
