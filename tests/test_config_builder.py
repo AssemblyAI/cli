@@ -67,3 +67,38 @@ def test_load_config_file_rejects_non_object(tmp_path):
     bad.write_text("[1, 2, 3]")
     with pytest.raises(UsageError):
         cb.load_config_file(bad, cb.TRANSCRIBE_FIELDS)
+
+
+def test_split_csv():
+    assert cb.split_csv("a, b ,c") == ["a", "b", "c"]
+    assert cb.split_csv(None) is None
+    assert cb.split_csv("") is None
+
+
+def test_parse_auth_header():
+    assert cb.parse_auth_header("Authorization:Bearer x") == ("Authorization", "Bearer x")
+    assert cb.parse_auth_header(None) is None
+    with pytest.raises(UsageError):
+        cb.parse_auth_header("no-colon")
+
+
+def test_load_custom_spelling(tmp_path):
+    p = tmp_path / "spell.json"
+    p.write_text('{"AssemblyAI": ["assembly ai", "assemblyai"]}')
+    assert cb.load_custom_spelling(str(p)) == {"AssemblyAI": ["assembly ai", "assemblyai"]}
+
+
+def test_translation_request_shape():
+    su = cb.translation_request(["es", "fr"])
+    # target languages must be reachable from the payload regardless of dict/obj form.
+    assert "es" in json.dumps(su, default=lambda o: getattr(o, "__dict__", str(o)))
+
+
+def test_build_streaming_params_minimal():
+    sp = cb.build_streaming_params(
+        flags={"sample_rate": 16000, "speech_model": "universal_streaming_multilingual"},
+        overrides=["max_turn_silence=400"],
+        config_file=None,
+    )
+    assert sp.sample_rate == 16000
+    assert sp.max_turn_silence == 400

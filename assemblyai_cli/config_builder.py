@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import assemblyai as aai
-from assemblyai.streaming.v3 import StreamingParameters
+from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
 
 from assemblyai_cli.errors import UsageError
 
@@ -196,9 +196,54 @@ def build_streaming_params(
     *, flags: dict[str, object], overrides: list[str], config_file: str | None
 ) -> StreamingParameters:
     merged = _merge(STREAM_FIELDS, flags, overrides, config_file)
+    raw_model = merged.get("speech_model")
+    if isinstance(raw_model, str):
+        try:
+            merged["speech_model"] = SpeechModel[raw_model]
+        except KeyError:
+            try:
+                merged["speech_model"] = SpeechModel(raw_model)
+            except ValueError as exc:
+                raise UsageError(f"Invalid streaming config: {exc}") from exc
     try:
         return StreamingParameters(**merged)
     except UsageError:
         raise
     except Exception as exc:
         raise UsageError(f"Invalid streaming config: {exc}") from exc
+
+
+def split_csv(value: str | None) -> list[str] | None:
+    """Split a comma-separated flag value into a list, or None if empty."""
+    if not value:
+        return None
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    return parts or None
+
+
+def parse_auth_header(value: str | None) -> tuple[str, str] | None:
+    """Parse a `NAME:VALUE` webhook auth header flag."""
+    if value is None:
+        return None
+    if ":" not in value:
+        raise UsageError("--webhook-auth-header expects NAME:VALUE.")
+    name, header_value = value.split(":", 1)
+    return name.strip(), header_value.strip()
+
+
+def load_custom_spelling(path: str) -> dict[str, object]:
+    """Load a custom-spelling JSON map (e.g. {"AssemblyAI": ["assembly ai"]})."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except FileNotFoundError as exc:
+        raise UsageError(f"Custom spelling file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise UsageError(f"Custom spelling file is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise UsageError("Custom spelling file must contain a JSON object.")
+    return data
+
+
+def translation_request(languages: list[str]) -> dict[str, object]:
+    """Build a Speech-Understanding translation payload for `speech_understanding`."""
+    return {"request": {"translation": {"target_languages": list(languages)}}}
