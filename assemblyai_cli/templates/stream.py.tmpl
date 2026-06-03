@@ -28,6 +28,9 @@ client.connect(
         sample_rate=16000,
         format_turns=True,
         speech_model=SpeechModel.u3_rt_pro,
+        # Extra features (all optional):
+        # max_turn_silence=400,   # tune end-of-turn detection (ms)
+        # filter_profanity=True,
     )
 )
 

@@ -53,6 +53,44 @@ output is piped or run by an agent). Auth problems surface as a clean
 > aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 > ```
 
+## Transcribe options
+
+`aai transcribe` exposes the full `TranscriptionConfig` surface as curated flags,
+grouped by purpose:
+
+- **Model & language:** `--speech-model`, `--language-code`, `--language-detection`,
+  `--keyterms-prompt`, `--prompt`, `--temperature`.
+- **Formatting:** `--punctuate` / `--no-punctuate`, `--format-text` /
+  `--no-format-text`, `--disfluencies`.
+- **Speakers & channels:** `--speaker-labels`, `--speakers-expected`,
+  `--multichannel`.
+- **Guardrails:** `--redact-pii`, `--redact-pii-policy`, `--redact-pii-sub`,
+  `--redact-pii-audio`, `--filter-profanity`, `--content-safety`,
+  `--content-safety-confidence`, `--speech-threshold`.
+- **Analysis:** `--summarization` (`--summary-type`, `--summary-model`),
+  `--auto-chapters`, `--sentiment-analysis`, `--entity-detection`,
+  `--auto-highlights`, `--topic-detection`. Analysis results render automatically
+  in human mode (summary, chapters, sentiment, entities, topics, content safety,
+  highlights).
+- **Customization:** `--word-boost`, `--custom-spelling-file`, `--audio-start`,
+  `--audio-end`, `--translate-to`.
+- **Webhooks:** `--webhook-url`, `--webhook-auth-header` (`NAME:VALUE`).
+
+Anything without a curated flag is reachable through the escape hatch:
+`--config KEY=VALUE` (repeatable) and `--config-file FILE` (a JSON object) accept
+any SDK field by its exact name. Precedence is config file < `--config` < explicit
+flags.
+
+```sh
+aai transcribe call.mp3 \
+  --speaker-labels --speakers-expected 2 \
+  --redact-pii --redact-pii-policy person_name,phone_number \
+  --summarization --summary-type bullets \
+  --sentiment-analysis --auto-chapters \
+  --config speech_threshold=0.5 \
+  --config-file extra.json
+```
+
 ## Streaming
 
 ```sh
@@ -61,6 +99,29 @@ aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
 aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
 aai stream https://…/clip.mp3  # a URL works too (decoded via ffmpeg)
 aai stream                     # from the microphone; Ctrl-C to stop
+```
+
+`aai stream` exposes the full `StreamingParameters` surface as curated flags:
+
+- **Model & input:** `--speech-model`, `--encoding`, `--language-detection`,
+  `--domain`.
+- **Turn detection:** `--end-of-turn-confidence-threshold`, `--min-turn-silence`,
+  `--max-turn-silence`, `--vad-threshold`, `--format-turns` / `--no-format-turns`,
+  `--include-partial-turns`.
+- **Features:** `--keyterms-prompt`, `--filter-profanity`, `--speaker-labels`,
+  `--max-speakers`, `--voice-focus`, `--voice-focus-threshold`, `--redact-pii`,
+  `--redact-pii-policy`, `--redact-pii-sub`, `--inactivity-timeout`,
+  `--webhook-url`, `--webhook-auth-header`.
+
+The same escape hatch applies — `--config KEY=VALUE` (repeatable) and
+`--config-file FILE` (JSON object) reach any other `StreamingParameters` field,
+with precedence config file < `--config` < explicit flags:
+
+```sh
+aai stream --sample \
+  --max-turn-silence 400 --format-turns \
+  --keyterms-prompt "AssemblyAI" \
+  --config vad_threshold=0.7
 ```
 
 ## Voice agent
