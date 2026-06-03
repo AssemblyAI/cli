@@ -136,3 +136,18 @@ def test_json_emit_swallows_non_pipe_errors():
 
     r = StreamRenderer(json_mode=True, out=FlakyOut())
     r.turn(_turn("hi", True))  # non-pipe write errors are non-fatal
+
+
+def test_human_begin_notice_is_muted():
+    r, buf = _human(color_system="truecolor")
+    r.begin(types.SimpleNamespace(id="x"))
+    assert "\x1b[" in buf.getvalue()  # muted styling emits ANSI
+
+
+def test_human_llm_line_is_branded():
+    r, buf = _human(color_system="truecolor")
+    r.turn(_turn("hola", True))
+    r.llm("the summary")
+    out = buf.getvalue()
+    assert "the summary" in out
+    assert "\x1b[" in out  # brand styling emits ANSI

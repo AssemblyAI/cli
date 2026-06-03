@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rich.text import Text
+
 from assemblyai_cli.render import BaseRenderer
 
 
@@ -10,7 +12,7 @@ class StreamRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "begin", "id": getattr(event, "id", None)})
         else:
-            self._line("Listening… (Ctrl-C to stop)")
+            self._line(Text("Listening… (Ctrl-C to stop)", style="aai.muted"))
 
     def turn(self, event: object) -> None:
         text = getattr(event, "transcript", "") or ""
@@ -38,4 +40,4 @@ class StreamRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "llm", "content": content})
         else:
-            self._line("\N{ELECTRIC LIGHT BULB} " + content)
+            self._line(Text("\N{ELECTRIC LIGHT BULB} " + content, style="aai.brand"))
