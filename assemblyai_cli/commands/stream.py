@@ -28,7 +28,7 @@ def stream(
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     prompt: str = typer.Option(
-        None, "--prompt", help="Bias the speech model with this prompt (u3-pro)."
+        None, "--prompt", help="Bias the speech model with this prompt (u3-rt-pro)."
     ),
     llm_gateway_prompt: str = typer.Option(
         None,

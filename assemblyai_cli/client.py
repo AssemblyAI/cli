@@ -103,7 +103,7 @@ def stream_audio(
     on_turn: Callable[[Any], Any] | None = None,
     on_termination: Callable[[Any], Any] | None = None,
     prompt: str | None = None,
-    speech_model: SpeechModel = SpeechModel.universal_streaming_multilingual,
+    speech_model: SpeechModel = SpeechModel.u3_rt_pro,
 ) -> None:
     """Stream `source` (an iterable of PCM bytes) through the v3 realtime API.
 
