@@ -185,6 +185,8 @@ def stream(
                 renderer.llm(transformed)
 
             if show_code and not json_mode:
+                # Bonus artifact; never crash the stream. Always the microphone idiom
+                # (the canonical SDK starting point) even when a file was streamed.
                 try:
                     rendered = code_gen.stream(merged)
                 except Exception as exc:  # noqa: BLE001
