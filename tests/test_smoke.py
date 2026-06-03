@@ -47,6 +47,7 @@ def test_help_lists_commands_in_workflow_order():
         "login",
         "logout",
         "whoami",
+        "doctor",
         "samples",
         "claude",
         "version",

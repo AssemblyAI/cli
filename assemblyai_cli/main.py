@@ -8,6 +8,7 @@ from assemblyai_cli import __version__
 from assemblyai_cli.commands import (
     agent,
     claude,
+    doctor,
     llm,
     login,
     samples,
@@ -29,6 +30,7 @@ _COMMAND_ORDER = (
     "login",
     "logout",
     "whoami",
+    "doctor",
     "samples",
     "claude",
     "version",
@@ -75,6 +77,7 @@ app.add_typer(transcripts.app, name="transcripts")
 app.add_typer(agent.app)
 app.add_typer(llm.app)
 app.add_typer(login.app)  # login, logout, whoami
+app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples")
 app.add_typer(claude.app, name="claude")
 
