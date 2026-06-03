@@ -183,3 +183,18 @@ def test_stream_render_empty_is_clean_and_has_no_speechmodel_import():
     assert "StreamingParameters()" in code
     assert "    SpeechModel," not in code  # not imported when unused (keeps script lint-clean)
     assert "MicrophoneStream(sample_rate=16000)" in code  # default rate
+
+
+def test_agent_render_parses_and_injects_session_fields():
+    code = code_gen.agent(voice="ivy", system_prompt="Be terse.", greeting="Hi there")
+    ast.parse(code)
+    assert '"voice": "ivy"' in code
+    assert "Be terse." in code
+    assert "Hi there" in code
+    assert "agents.assemblyai.com" in code
+    assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
+
+
+def test_agent_render_escapes_quotes_in_prompt():
+    code = code_gen.agent(voice="ivy", system_prompt='Say "hi"', greeting="Hello")
+    ast.parse(code)  # must stay valid Python despite the embedded quotes
