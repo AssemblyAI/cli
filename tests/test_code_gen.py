@@ -112,8 +112,11 @@ def test_result_handling_default_prints_text():
 
 
 def test_every_render_feature_has_a_snippet():
-    # Coverage guard: every analysis section the CLI renders must have a code snippet
-    # (or be explicitly excluded). Catches "added a feature, forgot the snippet".
+    # Maintainability tripwire. CONTRACT: each analysis feature rendered by a
+    # `_render_<name>` function in transcribe_render.py must have a snippet whose
+    # name == <name>. `_render_text` is excluded (it renders the flat transcript and,
+    # inline, the speaker_labels utterances). `speaker_labels` therefore has a snippet
+    # but no `_render_speaker_labels` function, so it is an allowed orphan.
     import inspect
 
     from assemblyai_cli import transcribe_render
@@ -124,4 +127,9 @@ def test_every_render_feature_has_a_snippet():
         if name.startswith("_render_") and name != "_render_text"
     }
     covered = set(snippets.SNIPPET_FEATURES)
-    assert rendered <= covered, f"render features without a snippet: {rendered - covered}"
+    ORPHANS = {"speaker_labels"}  # rendered inside _render_text, not its own function
+
+    missing = rendered - covered
+    assert not missing, f"render features without a snippet: {missing}"
+    unexpected_orphans = covered - rendered - ORPHANS
+    assert not unexpected_orphans, f"snippets with no matching renderer: {unexpected_orphans}"

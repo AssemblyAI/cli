@@ -45,14 +45,14 @@ _SNIPPETS: list[_Entry] = [
     (
         "topics",
         _has("iab_categories"),
-        "summary = getattr(transcript.iab_categories, 'summary', None) or {}\n"
-        "for label, relevance in summary.items():\n    print(label, relevance)",
+        "topic_summary = getattr(transcript.iab_categories, 'summary', None) or {}\n"
+        "for label, relevance in topic_summary.items():\n    print(label, relevance)",
     ),
     (
         "content_safety",
         _has("content_safety"),
-        "summary = getattr(transcript.content_safety, 'summary', None) or {}\n"
-        "for label, confidence in summary.items():\n    print(label, confidence)",
+        "safety_summary = getattr(transcript.content_safety, 'summary', None) or {}\n"
+        "for label, confidence in safety_summary.items():\n    print(label, confidence)",
     ),
 ]
 
