@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-import contextlib
-import json
-import sys
-from typing import TextIO
+from assemblyai_cli.render import BaseRenderer
 
 
-class AgentRenderer:
+class AgentRenderer(BaseRenderer):
     """Renders Voice Agent events: human transcript lines, or NDJSON for agents.
 
     Audio payloads are never written; only text/state events are surfaced.
     """
-
-    def __init__(self, *, json_mode: bool, out: TextIO | None = None) -> None:
-        self.json_mode = json_mode
-        self.out = out if out is not None else sys.stdout
-        self._partial_open = False
 
     # --- lifecycle ---------------------------------------------------------
     def connected(self) -> None:
@@ -24,12 +16,8 @@ class AgentRenderer:
         else:
             self._write("Connected — start talking. (Ctrl-C to stop)\n")
 
-    def stopped(self) -> None:
-        if not self.json_mode:
-            self._write("Stopped.\n")
-
     def notice(self, text: str) -> None:
-        """Write a human-facing notice line (no-op semantics in JSON mode are the caller's choice)."""
+        """Write a human-facing notice line (caller chooses when to suppress in JSON)."""
         self._write(text)
 
     # --- user --------------------------------------------------------------
@@ -37,15 +25,13 @@ class AgentRenderer:
         if self.json_mode:
             self._emit({"type": "transcript.user.delta", "text": text})
             return
-        self._write("\r\x1b[Kyou: " + text)
-        self._partial_open = True
+        self._update_line("you: " + text)
 
     def user_final(self, text: str) -> None:
         if self.json_mode:
             self._emit({"type": "transcript.user", "text": text})
             return
-        self._write("\r\x1b[Kyou: " + text + "\n")
-        self._partial_open = False
+        self._finalize_line("you: " + text)
 
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:
@@ -56,29 +42,9 @@ class AgentRenderer:
         if self.json_mode:
             self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
             return
-        self._finish_partial()
+        self._finalize_line()  # close any open "you: …" partial first
         self._write("agent: " + text + "\n")
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:
             self._emit({"type": "reply.done", "interrupted": interrupted})
-
-    # --- teardown ----------------------------------------------------------
-    def close(self) -> None:
-        if self.json_mode:
-            return
-        self._finish_partial()
-
-    # --- internals ---------------------------------------------------------
-    def _finish_partial(self) -> None:
-        if self._partial_open:
-            self._partial_open = False
-            self._write("\n")
-
-    def _emit(self, obj: object) -> None:
-        self._write(json.dumps(obj) + "\n")
-
-    def _write(self, text: str) -> None:
-        with contextlib.suppress(Exception):  # downstream pipe may be closed
-            self.out.write(text)
-            self.out.flush()

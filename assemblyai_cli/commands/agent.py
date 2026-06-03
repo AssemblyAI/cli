@@ -5,12 +5,13 @@ from pathlib import Path
 import typer
 
 from assemblyai_cli import config
-from assemblyai_cli.agent.audio import SAMPLE_RATE, MicCapture, Player
+from assemblyai_cli.agent.audio import SAMPLE_RATE, Player
 from assemblyai_cli.agent.render import AgentRenderer
 from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
 from assemblyai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import CLIError, UsageError
+from assemblyai_cli.microphone import MicrophoneSource
 
 app = typer.Typer()
 
@@ -54,7 +55,7 @@ def agent(
 
         renderer = AgentRenderer(json_mode=json_mode)
         player = Player(sample_rate=SAMPLE_RATE)
-        mic = MicCapture(sample_rate=SAMPLE_RATE, device=device)
+        mic = MicrophoneSource(sample_rate=SAMPLE_RATE, device=device)
         if not json_mode and not full_duplex:
             renderer.notice(
                 "Half-duplex: mic mutes while the agent talks. "

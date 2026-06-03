@@ -7,7 +7,6 @@ import time
 import wave
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
 
 from assemblyai_cli.errors import APIError, CLIError
 
@@ -107,37 +106,5 @@ class FileSource:
             )
 
 
-def _load_microphone_stream() -> Any:
-    """Import the SDK's PyAudio-backed mic stream (isolated for testing/patching)."""
-    from assemblyai.extras import MicrophoneStream
-
-    return MicrophoneStream
-
-
-class MicSource:
-    """Yields PCM chunks from the default microphone."""
-
-    def __init__(self, *, sample_rate: int, device: int | None = None) -> None:
-        self.sample_rate = sample_rate
-        self.device = device
-
-    def __iter__(self) -> Iterator[bytes]:
-        try:
-            microphone_stream_cls = _load_microphone_stream()
-            stream = microphone_stream_cls(sample_rate=self.sample_rate, device_index=self.device)
-        except ImportError as exc:
-            raise CLIError(
-                "Microphone support (PyAudio) is unavailable. Try: pip install --force-reinstall pyaudio",
-                error_type="mic_missing",
-                exit_code=2,
-            ) from exc
-        except Exception as exc:
-            raise CLIError(
-                f"Could not open the microphone (device {self.device}): {exc}",
-                error_type="mic_error",
-                exit_code=1,
-            ) from exc
-        try:
-            yield from stream
-        finally:
-            stream.close()
+# MicrophoneSource (mic capture) lives in assemblyai_cli.microphone and is shared
+# with the voice agent; FileSource above is the only streaming-specific source.

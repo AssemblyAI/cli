@@ -5,8 +5,9 @@ import typer
 from assemblyai_cli import client, config
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
+from assemblyai_cli.microphone import MicrophoneSource
 from assemblyai_cli.streaming.render import StreamRenderer
-from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource, MicSource
+from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource
 
 app = typer.Typer()
 
@@ -27,12 +28,12 @@ def stream(
         api_key = config.resolve_api_key(profile=state.profile)
         if source and (sample_rate != TARGET_RATE or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
-        audio: FileSource | MicSource
+        audio: FileSource | MicrophoneSource
         if source:
             audio = FileSource(source)
             rate = audio.sample_rate
         else:
-            audio = MicSource(sample_rate=sample_rate, device=device)
+            audio = MicrophoneSource(sample_rate=sample_rate, device=device)
             rate = sample_rate
         renderer = StreamRenderer(json_mode=json_mode)
         try:
@@ -47,9 +48,7 @@ def stream(
         except KeyboardInterrupt:
             # Ctrl-C is a normal "user stopped" signal -> exit 0.
             renderer.close()
-            if not json_mode:
-                renderer.out.write("Stopped.\n")
-                renderer.out.flush()
+            renderer.stopped()
         except BrokenPipeError:
             # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
             raise typer.Exit(code=0) from None

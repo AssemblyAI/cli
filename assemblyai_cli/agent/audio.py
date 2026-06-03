@@ -3,8 +3,8 @@ from __future__ import annotations
 import contextlib
 import queue
 import threading
-from collections.abc import Callable, Iterator
-from typing import Any, cast
+from collections.abc import Callable
+from typing import Any
 
 from assemblyai_cli.errors import CLIError
 
@@ -97,41 +97,5 @@ class Player:
                     pa.terminate()
 
 
-def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
-    """SDK PyAudio-backed mic stream (lazy import so the base install stays light)."""
-    from assemblyai.extras import MicrophoneStream
-
-    return cast(Iterator[bytes], MicrophoneStream(sample_rate=sample_rate, device_index=device))
-
-
-class MicCapture:
-    """Iterates PCM16 chunks from the microphone."""
-
-    def __init__(
-        self,
-        *,
-        sample_rate: int = SAMPLE_RATE,
-        device: int | None = None,
-        stream_factory: Callable[..., Iterator[bytes]] | None = None,
-    ) -> None:
-        self._rate = sample_rate
-        self._device = device
-        self._factory = stream_factory or _default_mic_stream
-
-    def __iter__(self) -> Iterator[bytes]:
-        try:
-            stream = self._factory(sample_rate=self._rate, device=self._device)
-        except ImportError as exc:
-            raise CLIError(_MIC_MISSING_MSG, error_type="mic_missing", exit_code=2) from exc
-        except Exception as exc:
-            raise CLIError(
-                f"Could not open the microphone (device {self._device}): {exc}",
-                error_type="mic_error",
-                exit_code=1,
-            ) from exc
-        close = getattr(stream, "close", None)
-        try:
-            yield from stream
-        finally:
-            if callable(close):
-                close()
+# Microphone capture (MicrophoneSource) lives in assemblyai_cli.microphone and is
+# shared with `aai stream`; this module owns only the speaker-side Player.
