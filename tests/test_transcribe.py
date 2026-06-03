@@ -252,6 +252,19 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path
     assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
 
 
+def test_transcribe_show_code_prints_python(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "--sample", "--speaker-labels", "--show-code"])
+    assert result.exit_code == 0
+    assert "import assemblyai as aai" in result.output
+    assert "TranscriptionConfig(" in result.output
+    assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+
+
 def test_transcribe_renders_summary_human(monkeypatch):
     _auth()
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
