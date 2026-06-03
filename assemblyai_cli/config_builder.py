@@ -187,7 +187,8 @@ def build_transcription_config(
         return aai.TranscriptionConfig(**merged)
     except UsageError:
         raise
-    except Exception as exc:  # noqa: BLE001 - surface SDK validation as a usage error
+    # surface SDK validation as a usage error
+    except Exception as exc:
         raise UsageError(f"Invalid transcription config: {exc}") from exc
 
 
@@ -199,5 +200,5 @@ def build_streaming_params(
         return StreamingParameters(**merged)
     except UsageError:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise UsageError(f"Invalid streaming config: {exc}") from exc

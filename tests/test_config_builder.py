@@ -56,7 +56,9 @@ def test_build_transcription_config_layer_precedence(tmp_path):
 
 
 def test_build_transcription_config_ignores_unset_flags():
-    tc = cb.build_transcription_config(flags={"speaker_labels": None}, overrides=[], config_file=None)
+    tc = cb.build_transcription_config(
+        flags={"speaker_labels": None}, overrides=[], config_file=None
+    )
     assert tc.speaker_labels is None  # None means "not set", does not override
 
 
