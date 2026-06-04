@@ -10,9 +10,7 @@ from rich.markup import escape
 from aai_cli import output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
-from aai_cli.init import keys, runner, steps, templates
-from aai_cli.init.scaffold import scaffold as _scaffold_fn
-from aai_cli.init.scaffold import target_conflict as _target_conflict
+from aai_cli.init import keys, runner, scaffold, steps, templates
 
 # Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
@@ -82,7 +80,7 @@ def init(
             )
 
         target = _resolve_dir(directory, chosen, here=here)
-        if _target_conflict(target) and not force:
+        if scaffold.target_conflict(target) and not force:
             raise CLIError(
                 f"{target} already exists and is not empty. "
                 f"Use --force to overwrite or pick another directory.",
@@ -91,7 +89,7 @@ def init(
             )
 
         api_key = keys.resolve_optional_api_key(profile=state.profile)
-        _scaffold_fn(chosen, target, api_key=api_key)
+        scaffold.scaffold(chosen, target, api_key=api_key)
 
         report: list[steps.Step] = [
             {"name": "scaffold", "status": "created", "detail": str(target)}
