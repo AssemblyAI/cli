@@ -8,7 +8,6 @@ import json
 _TEMPLATE = """# Live two-way voice conversation with an AssemblyAI voice agent.
 # Requires audio support:  pip install sounddevice websockets
 # Tip: use headphones — the mic stays open while the agent speaks.
-import audioop
 import base64
 import json
 import os
@@ -22,25 +21,17 @@ API_KEY = os.environ["ASSEMBLYAI_API_KEY"]
 WS_URL = "wss://agents.assemblyai.com/v1/ws"
 RATE = 24000  # Voice Agent native PCM16 mono sample rate
 
-# ONE full-duplex stream (mic + speaker together). Opening two separate streams on a
-# single device fails on macOS CoreAudio, which silently kills capture. Audio is
-# captured at the device's native rate and resampled to/from the agent's 24 kHz.
-device_rate = int(sd.query_devices(None, "output")["default_samplerate"])
-blocksize = max(1, device_rate // 10)  # ~100 ms
-
+# ONE full-duplex stream (mic + speaker together) at the agent's native 24 kHz. Opening
+# two separate input/output streams on one device fails on macOS CoreAudio, which
+# silently kills capture; a single sd.RawStream callback handles both directions.
 mic_queue: queue.Queue = queue.Queue()
 play_buffer = bytearray()
 buffer_lock = threading.Lock()
 ready = threading.Event()
-_capture_state = None  # audioop.ratecv state: device_rate -> 24 kHz
-_play_state = None  # audioop.ratecv state: 24 kHz -> device_rate
 
 
 def on_audio(indata, outdata, _frames, _time, _status):
-    global _capture_state
-    # Capture: resample the mic input to 24 kHz and queue it for the agent.
-    chunk, _capture_state = audioop.ratecv(bytes(indata), 2, 1, device_rate, RATE, _capture_state)
-    mic_queue.put_nowait(chunk)
+    mic_queue.put_nowait(bytes(indata))  # capture -> queue for the agent
     # Playback: drain the agent's audio into the output, zero-filling any shortfall.
     needed = len(outdata)
     with buffer_lock:
@@ -59,7 +50,7 @@ def send_mic(ws):
 
 
 stream = sd.RawStream(
-    samplerate=device_rate, channels=1, dtype="int16", blocksize=blocksize, callback=on_audio
+    samplerate=RATE, channels=1, dtype="int16", blocksize=RATE // 10, callback=on_audio
 )
 stream.start()
 
@@ -81,10 +72,8 @@ with connect(WS_URL, additional_headers={{"Authorization": f"Bearer {{API_KEY}}"
             if etype == "session.ready":
                 ready.set()
             elif etype == "reply.audio" and event.get("data"):
-                pcm = base64.b64decode(event["data"])
-                pcm, _play_state = audioop.ratecv(pcm, 2, 1, RATE, device_rate, _play_state)
                 with buffer_lock:
-                    play_buffer += pcm
+                    play_buffer += base64.b64decode(event["data"])
             elif etype == "transcript.user":
                 print("you:  ", event.get("text", ""))
             elif etype == "transcript.agent":

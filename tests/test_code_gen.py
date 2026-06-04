@@ -343,10 +343,12 @@ def test_transcribe_show_code_without_gateway_has_no_openai_import():
 
 
 def test_agent_show_code_uses_single_full_duplex_stream():
-    # The CLI uses ONE sd.RawStream (mic+speaker); two separate streams fail on macOS.
+    # ONE sd.RawStream (mic+speaker); two separate streams fail on macOS CoreAudio.
     code = code_gen.agent(voice="ivy", system_prompt="p", greeting="g")
     ast.parse(code)
     assert "sd.RawStream(" in code
+    assert "samplerate=RATE" in code  # opens at the agent's native 24 kHz, no resampling
     assert "RawInputStream" not in code
     assert "RawOutputStream" not in code
-    assert "audioop.ratecv" in code  # device-rate <-> 24 kHz resampling
+    # No audioop: it's deprecated and removed in Python 3.13, so the script stays portable.
+    assert "audioop" not in code
