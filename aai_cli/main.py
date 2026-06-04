@@ -23,7 +23,7 @@ from aai_cli.commands import (
     transcribe,
     transcripts,
 )
-from aai_cli.context import AppState, resolve_environment
+from aai_cli.context import AppState, env_override_warning, resolve_environment
 from aai_cli.errors import CLIError
 
 # The order commands appear under `aai --help`: core transcription first, then
@@ -72,9 +72,7 @@ app = typer.Typer(
 def main(
     ctx: typer.Context,
     profile: str = typer.Option(None, "--profile", "-p", help="Named credential profile."),
-    env: str = typer.Option(
-        None, "--env", help="Backend environment (production, sandbox000)."
-    ),
+    env: str = typer.Option(None, "--env", help="Backend environment (production, sandbox000)."),
     sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
 ) -> None:
     if sandbox and env is None:
@@ -86,6 +84,9 @@ def main(
     except CLIError as err:
         typer.echo(err.message, err=True)
         raise typer.Exit(code=err.exit_code) from None
+    warning = env_override_warning(state)
+    if warning:
+        typer.echo(warning, err=True)
 
 
 # Commands are registered in the order they should appear in `aai --help`:

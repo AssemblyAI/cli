@@ -1,7 +1,8 @@
 import typer
 from typer.testing import CliRunner
 
-from aai_cli.context import AppState, run_command
+from aai_cli import config
+from aai_cli.context import AppState, env_override_warning, run_command
 from aai_cli.errors import NotAuthenticated
 
 runner = CliRunner()
@@ -38,3 +39,22 @@ def test_run_command_runs_body_on_success():
     result = runner.invoke(_make_app(body), ["go"])
     assert result.exit_code == 0
     assert seen.get("ran") is True
+
+
+def test_env_override_warning_when_flag_contradicts_profile():
+    config.set_profile_env("default", "sandbox000")
+    assert env_override_warning(AppState(env="production")) is not None
+
+
+def test_env_override_warning_none_when_flag_matches_profile():
+    config.set_profile_env("default", "sandbox000")
+    assert env_override_warning(AppState(env="sandbox000")) is None
+
+
+def test_env_override_warning_none_without_explicit_flag():
+    config.set_profile_env("default", "sandbox000")
+    assert env_override_warning(AppState(env=None)) is None
+
+
+def test_env_override_warning_none_when_profile_has_no_env():
+    assert env_override_warning(AppState(env="production")) is None

@@ -45,7 +45,16 @@ def _load() -> dict[str, Any]:
     if not path.exists():
         return {}
     with path.open("rb") as fh:
-        data: dict[str, Any] = tomllib.load(fh)
+        try:
+            data: dict[str, Any] = tomllib.load(fh)
+        except tomllib.TOMLDecodeError as exc:
+            from aai_cli.errors import CLIError
+
+            raise CLIError(
+                f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
+                error_type="invalid_config",
+                exit_code=2,
+            ) from exc
         return data
 
 

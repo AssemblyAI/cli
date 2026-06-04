@@ -27,6 +27,24 @@ def resolve_environment(state: AppState) -> Environment:
     return environments.resolve(state.env, profile_env)
 
 
+def env_override_warning(state: AppState) -> str | None:
+    """A warning when an explicit --env contradicts the profile's stored env.
+
+    The stored key was minted against the profile's environment, so forcing a
+    different --env points the client at hosts that key won't authenticate to.
+    """
+    if state.env is None:
+        return None
+    profile = resolve_profile(state)
+    profile_env = config.get_profile_env(profile)
+    if profile_env is None or profile_env == state.env:
+        return None
+    return (
+        f"Using --env {state.env}, but profile '{profile}' was set up for "
+        f"{profile_env}; its stored key may be rejected by {state.env}."
+    )
+
+
 def run_command(
     ctx: typer.Context, fn: Callable[[AppState, bool], None], *, json: bool = False
 ) -> None:

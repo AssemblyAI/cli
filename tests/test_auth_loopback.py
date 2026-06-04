@@ -1,8 +1,12 @@
+import socket
 import threading
 import time
 import urllib.request
 
+import pytest
+
 from aai_cli.auth import endpoints, loopback
+from aai_cli.errors import APIError
 
 
 def _hit(path: str) -> None:
@@ -37,3 +41,18 @@ def test_capture_times_out_without_callback():
     result = loopback.capture_callback(timeout=0.3)
     assert result.error == "timeout"
     assert result.token is None
+
+
+def test_capture_raises_clean_error_when_port_unavailable(monkeypatch):
+    # Occupy a port, then point the callback server at it: binding must fail with a
+    # clean APIError, not a raw OSError traceback escaping run_login_flow.
+    busy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    busy.bind((endpoints.LOOPBACK_HOST, 0))
+    busy.listen(1)
+    port = busy.getsockname()[1]
+    monkeypatch.setattr(endpoints, "LOOPBACK_PORT", port)
+    try:
+        with pytest.raises(APIError):
+            loopback.capture_callback(timeout=1.0)
+    finally:
+        busy.close()

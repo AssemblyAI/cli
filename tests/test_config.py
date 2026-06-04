@@ -70,6 +70,14 @@ def test_empty_api_key_flag_rejected():
         config.resolve_api_key(api_key_flag="")
 
 
+def test_malformed_config_raises_clean_error(tmp_config):
+    from aai_cli.errors import CLIError
+
+    (tmp_config / "config.toml").write_text("this is not = = valid toml ===\n")
+    with pytest.raises(CLIError):
+        config.get_active_profile()
+
+
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
     # active profile name is validated; this checks tomli_w writes valid TOML for normal data
     config.set_api_key("default", "sk_x")

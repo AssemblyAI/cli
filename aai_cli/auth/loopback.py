@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from aai_cli.auth import endpoints
+from aai_cli.errors import APIError
 
 _SUCCESS_HTML = (
     b"<html><body style='font-family:sans-serif'>"
@@ -48,7 +49,14 @@ def capture_callback(timeout: float = 120.0) -> CallbackResult:
         def log_message(self, *args: object) -> None:  # silence stderr logging
             pass
 
-    server = HTTPServer((endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT), Handler)
+    try:
+        server = HTTPServer((endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT), Handler)
+    except OSError as exc:
+        raise APIError(
+            f"Could not start the login callback server on "
+            f"{endpoints.LOOPBACK_HOST}:{endpoints.LOOPBACK_PORT} ({exc}). "
+            "Close whatever is using that port and run 'aai login' again."
+        ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
