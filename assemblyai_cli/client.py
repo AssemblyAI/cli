@@ -121,7 +121,7 @@ def select_transcript_field(transcript: Any, field: str) -> str:
     if field == "srt":
         # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
         try:
-            return transcript.export_subtitles_srt()
+            return str(transcript.export_subtitles_srt())
         except Exception as exc:
             if is_auth_failure(exc):
                 raise auth_failure() from exc

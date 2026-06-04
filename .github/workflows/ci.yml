@@ -25,8 +25,11 @@ jobs:
       - name: System audio deps (PortAudio for sounddevice)
         run: sudo apt-get update && sudo apt-get install -y libportaudio2
 
+      # check.sh runs every tool through `uv run` / `uv build` for a locked,
+      # reproducible env, so uv must be on PATH (installed from PyPI to match the
+      # repo's pip-based, no-new-action posture).
       - name: Install
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev]" uv
 
       - name: Lint, typecheck, test
         run: ./scripts/check.sh

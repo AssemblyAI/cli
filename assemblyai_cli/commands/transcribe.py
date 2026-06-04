@@ -240,7 +240,9 @@ def transcribe(
             for i, prompt_text in enumerate(llm_gateway_prompt):
                 # First prompt runs over the transcript (by id); each later one over
                 # the prior response.
-                target = {"transcript_id": transcript.id} if i == 0 else {"transcript_text": previous}
+                target = (
+                    {"transcript_id": transcript.id} if i == 0 else {"transcript_text": previous}
+                )
                 out = llm.transform_transcript(
                     api_key, prompt=prompt_text, model=model, max_tokens=max_tokens, **target
                 )

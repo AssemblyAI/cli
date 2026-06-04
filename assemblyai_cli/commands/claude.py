@@ -103,7 +103,11 @@ def _install_skill(force: bool) -> Step:
     # didn't ask to --force, report `already` instead of silently re-downloading
     # it and always claiming `installed`.
     if _skill_installed() and not force:
-        return {"name": "skill", "status": "already", "detail": f"assemblyai skill at {_skill_dir()}"}
+        return {
+            "name": "skill",
+            "status": "already",
+            "detail": f"assemblyai skill at {_skill_dir()}",
+        }
     # --global: install at user scope (not project scope, which `skills` auto-selects
     # when run inside a project) so the skill lands in ~/.claude/skills where `status`
     # looks. npx -y skips its install prompt; the longer timeout covers the download.
