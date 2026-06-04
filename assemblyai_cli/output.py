@@ -50,3 +50,16 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
         print(json.dumps(err.to_dict(), default=str), file=sys.stderr)
     else:
         error_console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")
+
+
+def print_code(code: str, *, language: str = "python") -> None:
+    """Print generated source: syntax-highlighted for an interactive human, raw text
+    otherwise. Piping/redirecting (or an agent) yields plain text with no ANSI, so
+    `aai … --show-code > script.py` stays byte-clean and runnable.
+    """
+    if _is_agentic():
+        print(code)
+        return
+    from rich.syntax import Syntax  # lazily import Pygments-backed highlighter
+
+    console.print(Syntax(code, language, theme="ansi_dark", background_color="default"))

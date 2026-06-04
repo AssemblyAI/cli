@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import SpeechModel
 
-from assemblyai_cli import client, code_gen, config, config_builder, llm, youtube
+from assemblyai_cli import client, code_gen, config, config_builder, llm, output, youtube
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 from assemblyai_cli.microphone import MicrophoneSource
@@ -155,7 +155,7 @@ def stream(
                 overrides=list(config_kv or []),
                 config_file=config_file,
             )
-            print(code_gen.stream(merged))
+            output.print_code(code_gen.stream(merged))
             return
 
         api_key = config.resolve_api_key(profile=state.profile)

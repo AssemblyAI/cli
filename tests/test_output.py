@@ -59,3 +59,24 @@ def test_emit_error_json_goes_to_stderr(capsys):
     captured = capsys.readouterr()
     assert json.loads(captured.err) == {"error": {"message": "boom"}}
     assert captured.out == ""
+
+
+def test_print_code_plain_when_piped(monkeypatch, capsys):
+    monkeypatch.setattr(output, "_is_agentic", lambda: True)
+    output.print_code("import os\nprint(os.getcwd())\n")
+    out = capsys.readouterr().out
+    assert "import os" in out
+    assert "\x1b[" not in out  # no ANSI for pipes/redirects -> runnable when saved
+
+
+def test_print_code_highlights_for_interactive_human(monkeypatch, capsys):
+    from assemblyai_cli import theme
+
+    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    monkeypatch.setattr(
+        output, "console", theme.make_console(force_terminal=True, color_system="truecolor")
+    )
+    output.print_code("import os\n")
+    out = capsys.readouterr().out
+    assert "import" in out
+    assert "\x1b[" in out  # syntax-highlighted -> ANSI present

@@ -230,7 +230,7 @@ def transcribe(
                 if llm_gateway_prompt
                 else None
             )
-            print(code_gen.transcribe(merged, audio, llm_gateway=gateway))
+            output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
             return
 
         tc = config_builder.construct_transcription_config(merged)

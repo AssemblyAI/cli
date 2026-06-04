@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from assemblyai_cli import client, code_gen, config
+from assemblyai_cli import client, code_gen, config, output
 from assemblyai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from assemblyai_cli.agent.render import AgentRenderer
 from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
@@ -82,7 +82,7 @@ def agent(
         if show_code:
             # Print-only: emit the equivalent agent script from the flags and exit
             # without authenticating or opening audio. Raw stdout for `> script.py`.
-            print(code_gen.agent(voice, system_prompt_text, greeting))
+            output.print_code(code_gen.agent(voice, system_prompt_text, greeting))
             return
 
         api_key = config.resolve_api_key(profile=state.profile)
