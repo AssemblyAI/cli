@@ -26,8 +26,7 @@ _SKIP_NAMES = {"__pycache__"}
 def _template_root(template: str) -> Traversable:
     if not templates.is_template(template):
         raise CLIError(
-            f"Unknown template {template!r}. Choose one of: "
-            f"{', '.join(templates.TEMPLATE_ORDER)}.",
+            f"Unknown template {template!r}. Choose one of: {', '.join(templates.TEMPLATE_ORDER)}.",
             error_type="unknown_template",
             exit_code=1,
         )

@@ -38,11 +38,21 @@ def test_env_setup_commands_venv():
 def test_serve_command_uv_and_venv():
     target = Path("/proj")
     assert runner.serve_command(target, port=3000, use_uv=True) == [
-        "uv", "run", "uvicorn", "api.index:app", "--port", "3000",
+        "uv",
+        "run",
+        "uvicorn",
+        "api.index:app",
+        "--port",
+        "3000",
     ]
     py = str(runner.venv_python(target))
     assert runner.serve_command(target, port=3000, use_uv=False) == [
-        py, "-m", "uvicorn", "api.index:app", "--port", "3000",
+        py,
+        "-m",
+        "uvicorn",
+        "api.index:app",
+        "--port",
+        "3000",
     ]
 
 

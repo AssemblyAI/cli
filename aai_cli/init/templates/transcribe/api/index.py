@@ -7,6 +7,7 @@ Two short endpoints so each request stays fast (serverless-friendly):
 The browser (index.html) submits a file, then polls status until done.
 Your API key stays on the server — the browser never sees it.
 """
+
 from __future__ import annotations
 
 import os

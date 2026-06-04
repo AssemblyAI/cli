@@ -41,8 +41,15 @@ def _load_app(monkeypatch):
 
 
 def test_required_files_exist():
-    for rel in ("api/index.py", "index.html", "vercel.json",
-                "requirements.txt", "README.md", "gitignore", "env.example"):
+    for rel in (
+        "api/index.py",
+        "index.html",
+        "vercel.json",
+        "requirements.txt",
+        "README.md",
+        "gitignore",
+        "env.example",
+    ):
         assert (TEMPLATE_DIR / rel).exists(), rel
 
 
