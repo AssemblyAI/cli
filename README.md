@@ -195,6 +195,7 @@ single field so you rarely need `jq`.
 aai transcribe call.mp3 -o text        # just the transcript text
 aai transcribe call.mp3 -o id          # just the transcript id
 aai transcribe call.mp3 -o utterances  # speaker-labeled lines
+aai transcribe video.mp4 -o srt        # SubRip (.srt) captions
 aai transcribe call.mp3 -o json | jq .  # full JSON when you do want jq
 ```
 
@@ -288,6 +289,16 @@ aai transcribe call.mp3 --speaker-labels -o utterances | awk -F: '{print $1}' | 
 
 ```sh
 aai transcribe call.mp3 --redact-pii --redact-pii-policy person_name,phone_number,email_address -o text | pbcopy
+```
+
+**Burn captions onto a video** — `-o srt` writes a SubRip file; ffmpeg's `subtitles`
+filter reads it from disk (it needs a seekable file, so the `.srt` is a real
+intermediate, not a pipe). Works on a local file or a YouTube URL:
+
+```sh
+aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID" -o srt > captions.srt
+yt-dlp -f 'bv*+ba/b' -o video.mp4 "https://www.youtube.com/watch?v=VIDEO_ID"
+ffmpeg -i video.mp4 -vf "subtitles=captions.srt" -c:a copy out.mp4
 ```
 
 **DIY voice assistant** — speak a question, hear the answer (use headphones):

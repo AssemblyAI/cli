@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Iterator
 from typing import Any
 
 from assemblyai_cli.errors import CLIError
+
+with warnings.catch_warnings():
+    # audioop is deprecated stdlib on 3.11/3.12 (warning suppressed here) and is
+    # provided by the `audioop-lts` package on 3.13+, where it left the stdlib.
+    # Imported once at module load so the per-chunk resample path stays hot.
+    warnings.simplefilter("ignore", DeprecationWarning)
+    import audioop
 
 # Used when the device's native rate can't be determined (e.g. headless CI).
 _FALLBACK_RATE = 48000
@@ -18,33 +26,31 @@ def audio_missing_error() -> CLIError:
     )
 
 
-def _device_default_rate(device: int | None = None) -> int:
-    """The input device's native sample rate.
+def _default_rate(kind: str, device: int | None = None) -> int:
+    """A device's native sample rate for `kind` ("input" or "output").
 
-    Opening the mic at its own rate avoids CoreAudio 'paramErr' (-50) failures
-    that happen when a device is forced to an unsupported rate. Falls back to a
-    safe default if the device can't be queried (no input device, headless CI).
+    Opening a device at its own rate avoids CoreAudio 'paramErr' (-50) failures
+    that happen when it's forced to an unsupported rate. Falls back to a safe
+    default if the device can't be queried (no device, headless CI).
     """
     try:
         import sounddevice as sd
     except ImportError as exc:
         raise audio_missing_error() from exc
     try:
-        rate = int(sd.query_devices(device, "input")["default_samplerate"])
+        rate = int(sd.query_devices(device, kind)["default_samplerate"])
     except Exception:  # noqa: BLE001 - any query failure -> safe fallback, never crash here
         return _FALLBACK_RATE
     return rate if rate > 0 else _FALLBACK_RATE
 
 
+def _device_default_rate(device: int | None = None) -> int:
+    """The input device's native sample rate (see `_default_rate`)."""
+    return _default_rate("input", device)
+
+
 def _resample(chunk: bytes, state: Any, *, src_rate: int, dst_rate: int) -> tuple[bytes, Any]:
     """Resample one PCM16 mono fragment from `src_rate` to `dst_rate`."""
-    import warnings
-
-    with warnings.catch_warnings():
-        # audioop is deprecated stdlib on 3.11/3.12 (warning suppressed here) and is
-        # provided by the `audioop-lts` package on 3.13+, where it left the stdlib.
-        warnings.simplefilter("ignore", DeprecationWarning)
-        import audioop
     return audioop.ratecv(chunk, 2, 1, src_rate, dst_rate, state)
 
 

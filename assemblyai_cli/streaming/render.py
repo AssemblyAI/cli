@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import sys
-from typing import TextIO
-
-from rich.console import Console
 from rich.text import Text
 
 from assemblyai_cli.render import BaseRenderer
@@ -17,24 +13,9 @@ class StreamRenderer(BaseRenderer):
       notices ("Listening…") go to stderr. Lets `aai stream -o text | aai llm "…"`
       pipe clean transcript text downstream.
     - human (default): a live-updating line through Rich.
+
+    Construction and the json/text/human plumbing live in BaseRenderer.
     """
-
-    def __init__(
-        self,
-        *,
-        json_mode: bool,
-        text_mode: bool = False,
-        out: TextIO | None = None,
-        console: Console | None = None,
-        err: TextIO | None = None,
-    ) -> None:
-        super().__init__(json_mode=json_mode, out=out, console=console)
-        self.text_mode = text_mode
-        self._err = err if err is not None else sys.stderr
-
-    def _status(self, message: str) -> None:
-        """Write a status notice to stderr so it never pollutes piped stdout."""
-        print(message, file=self._err, flush=True)
 
     def begin(self, event: object) -> None:
         # The "Listening…" notice waits for the mic (see listening()); opening the

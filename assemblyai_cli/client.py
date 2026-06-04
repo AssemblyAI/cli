@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import sys
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -15,6 +12,7 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
+from assemblyai_cli import stdio
 from assemblyai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
@@ -91,8 +89,22 @@ def status_str(transcript: aai.Transcript) -> str:
     return str(getattr(status, "value", status))
 
 
+def transcript_summary(transcript: Any) -> dict[str, object]:
+    """The compact ``{id, status, text}`` dict the commands emit for a transcript."""
+    return {
+        "id": transcript.id,
+        "status": status_str(transcript),
+        "text": transcript.text,
+    }
+
+
+def transcript_json_payload(transcript: Any) -> dict[str, object]:
+    """The transcript's full ``json_response`` if present, else the compact summary."""
+    return getattr(transcript, "json_response", None) or transcript_summary(transcript)
+
+
 # Fields `transcribe` and `transcripts get` expose via `-o/--output` (raw, pipe-friendly).
-TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "json")
+TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "srt", "json")
 
 
 def select_transcript_field(transcript: Any, field: str) -> str:
@@ -106,13 +118,16 @@ def select_transcript_field(transcript: Any, field: str) -> str:
         if utterances:
             return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
         return str(getattr(transcript, "text", "") or "")
+    if field == "srt":
+        # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
+        try:
+            return transcript.export_subtitles_srt()
+        except Exception as exc:
+            if is_auth_failure(exc):
+                raise auth_failure() from exc
+            raise APIError(f"Could not export SRT subtitles: {exc}") from exc
     if field == "json":
-        payload = getattr(transcript, "json_response", None) or {
-            "id": transcript.id,
-            "status": status_str(transcript),
-            "text": transcript.text,
-        }
-        return json.dumps(payload, default=str)
+        return json.dumps(transcript_json_payload(transcript), default=str)
     return str(getattr(transcript, "text", "") or "")  # "text" (and the validated default)
 
 
@@ -154,8 +169,7 @@ def stream_audio(
             try:
                 cb(event)
             except BrokenPipeError:
-                with contextlib.suppress(Exception):
-                    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+                stdio.silence_stdout()
 
         return handler
 

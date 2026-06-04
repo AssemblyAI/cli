@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from assemblyai_cli.errors import CLIError
-from assemblyai_cli.microphone import _FALLBACK_RATE, _resample, audio_missing_error
+from assemblyai_cli.microphone import _default_rate, _resample, audio_missing_error
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 
@@ -19,15 +19,7 @@ def _output_default_rate(device: int | None = None) -> int:
     'paramErr' (-50) from forcing an unsupported one; agent audio (24 kHz) is
     resampled to it. Falls back to a safe default when the device can't be queried.
     """
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise audio_missing_error() from exc
-    try:
-        rate = int(sd.query_devices(device, "output")["default_samplerate"])
-    except Exception:  # noqa: BLE001 - any query failure -> safe fallback, never crash here
-        return _FALLBACK_RATE
-    return rate if rate > 0 else _FALLBACK_RATE
+    return _default_rate("output", device)
 
 
 def _default_output_stream(rate: int) -> Any:

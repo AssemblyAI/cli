@@ -20,7 +20,7 @@ def get(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, or json.",
+        help="Print one field of the result: text, id, status, utterances, srt, or json.",
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
@@ -40,11 +40,7 @@ def get(
             print(client.select_transcript_field(transcript, output_field))
             return
         output.emit(
-            {
-                "id": transcript.id,
-                "status": client.status_str(transcript),
-                "text": transcript.text,
-            },
+            client.transcript_summary(transcript),
             lambda d: escape(str(d["text"])),
             json_mode=json_mode,
         )

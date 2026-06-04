@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import contextlib
-import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -13,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from assemblyai_cli import __version__
+from assemblyai_cli import __version__, stdio
 from assemblyai_cli.commands import (
     agent,
     claude,
@@ -97,12 +95,6 @@ def version() -> None:
     typer.echo(__version__)
 
 
-def _silence_stdout() -> None:
-    """Point stdout at /dev/null so the interpreter-shutdown flush can't re-raise."""
-    with contextlib.suppress(OSError):
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-
-
 def run() -> None:
     """Console-script entry point: run the app, exiting cleanly on a closed pipe.
 
@@ -115,5 +107,5 @@ def run() -> None:
     try:
         app(prog_name="aai")
     except BrokenPipeError:
-        _silence_stdout()
+        stdio.silence_stdout()
         sys.exit(0)

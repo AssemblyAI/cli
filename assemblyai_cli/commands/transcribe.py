@@ -123,7 +123,7 @@ def transcribe(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, or json.",
+        help="Print one field of the result: text, id, status, utterances, srt, or json.",
     ),
     show_code: bool = typer.Option(
         False,
@@ -238,29 +238,17 @@ def transcribe(
             steps: list[dict[str, str]] = []
             previous: str | None = None
             for i, prompt_text in enumerate(llm_gateway_prompt):
-                if i == 0:
-                    out = llm.transform_transcript(
-                        api_key,
-                        prompt=prompt_text,
-                        model=model,
-                        transcript_id=transcript.id,
-                        max_tokens=max_tokens,
-                    )
-                else:
-                    out = llm.transform_transcript(
-                        api_key,
-                        prompt=prompt_text,
-                        model=model,
-                        transcript_text=previous,
-                        max_tokens=max_tokens,
-                    )
+                # First prompt runs over the transcript (by id); each later one over
+                # the prior response.
+                target = {"transcript_id": transcript.id} if i == 0 else {"transcript_text": previous}
+                out = llm.transform_transcript(
+                    api_key, prompt=prompt_text, model=model, max_tokens=max_tokens, **target
+                )
                 steps.append({"prompt": prompt_text, "output": out})
                 previous = out
             output.emit(
                 {
-                    "id": transcript.id,
-                    "status": client.status_str(transcript),
-                    "text": transcript.text,
+                    **client.transcript_summary(transcript),
                     "transform": {"model": model, "steps": steps},
                 },
                 _render_transform_steps,
@@ -269,12 +257,7 @@ def transcribe(
             return
 
         if json_mode:
-            payload = getattr(transcript, "json_response", None) or {
-                "id": transcript.id,
-                "status": client.status_str(transcript),
-                "text": transcript.text,
-            }
-            output.emit(payload, lambda d: d, json_mode=True)
+            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
         else:
             transcribe_render.render_transcript_result(transcript, output.console)
 

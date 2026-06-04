@@ -21,12 +21,26 @@ class BaseRenderer:
     """
 
     def __init__(
-        self, *, json_mode: bool, out: TextIO | None = None, console: Console | None = None
+        self,
+        *,
+        json_mode: bool,
+        out: TextIO | None = None,
+        console: Console | None = None,
+        text_mode: bool = False,
+        err: TextIO | None = None,
     ) -> None:
         self.json_mode = json_mode
         self.out = out if out is not None else sys.stdout
+        # text mode emits plain transcript lines to stdout and status notices to
+        # stderr, so piping never mixes the two; err defaults to real stderr.
+        self.text_mode = text_mode
+        self._err = err if err is not None else sys.stderr
         self._console = console
         self._live: Live | None = None
+
+    def _status(self, message: str) -> None:
+        """Write a status notice to stderr so it never pollutes piped stdout."""
+        print(message, file=self._err, flush=True)
 
     # --- JSON output (plain text; preserves BrokenPipe for `| head`) -------
     def _emit(self, obj: object) -> None:

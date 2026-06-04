@@ -98,6 +98,17 @@ def test_transcribe_output_id_field():
     assert result.output.strip() == "t_1"
 
 
+def test_transcribe_output_srt_field():
+    _auth()
+    t = _fake_transcript()
+    t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
+    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "srt"])
+    assert result.exit_code == 0
+    assert "00:00:00,000 --> 00:00:02,000" in result.output  # SRT body, pipe-friendly
+    t.export_subtitles_srt.assert_called_once()
+
+
 def test_transcribe_output_invalid_exits_2():
     _auth()
     with patch(

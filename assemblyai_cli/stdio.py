@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+import contextlib
+import os
 import sys
 from collections.abc import Iterator
+
+
+def silence_stdout() -> None:
+    """Point stdout at /dev/null so a closed downstream pipe can't re-raise.
+
+    Once a consumer (e.g. ``| head``) closes the pipe, a later write — or Python's
+    flush at interpreter shutdown — raises BrokenPipeError with an ugly "Exception
+    ignored" traceback. Redirecting the fd makes those writes no-ops. Shared by the
+    one-shot entry point and the streaming reader thread.
+    """
+    with contextlib.suppress(OSError):
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
 
 
 def stdin_is_piped() -> bool:

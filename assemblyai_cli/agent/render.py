@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import sys
-from typing import Any, TextIO
+from typing import Any
 
 from rich.text import Text
 
@@ -23,23 +22,11 @@ class AgentRenderer(BaseRenderer):
     Audio payloads are never written; only text/state events are surfaced.
     """
 
-    def __init__(
-        self,
-        *,
-        mic_input: bool = True,
-        text_mode: bool = False,
-        err: TextIO | None = None,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, *, mic_input: bool = True, **kwargs: Any) -> None:
+        # text_mode/err/json_mode/out/console are handled by BaseRenderer.
         super().__init__(**kwargs)
         # File-driven runs have no mic, so they skip the "start talking" prompt.
         self.mic_input = mic_input
-        self.text_mode = text_mode
-        self._err = err if err is not None else sys.stderr
-
-    def _status(self, message: str) -> None:
-        """Write a status notice to stderr so it never pollutes piped stdout."""
-        print(message, file=self._err, flush=True)
 
     # --- lifecycle ---------------------------------------------------------
     def connected(self) -> None:

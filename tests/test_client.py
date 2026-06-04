@@ -126,6 +126,31 @@ def test_transcribe_raises_on_error_status():
     assert exc.value.transcript_id == "t_err"
 
 
+def test_select_transcript_field_srt_uses_sdk():
+    t = MagicMock()
+    t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
+    assert client.select_transcript_field(t, "srt") == (
+        "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
+    )
+    t.export_subtitles_srt.assert_called_once_with()
+
+
+def test_select_transcript_field_srt_network_error_becomes_apierror():
+    t = MagicMock()
+    t.export_subtitles_srt.side_effect = RuntimeError("connection reset")
+    with pytest.raises(APIError):
+        client.select_transcript_field(t, "srt")
+
+
+def test_select_transcript_field_srt_auth_error_becomes_not_authenticated():
+    from assemblyai_cli.errors import NotAuthenticated
+
+    t = MagicMock()
+    t.export_subtitles_srt.side_effect = RuntimeError("HTTP 401 Unauthorized")
+    with pytest.raises(NotAuthenticated):
+        client.select_transcript_field(t, "srt")
+
+
 def test_get_transcript_calls_sdk():
     fake = MagicMock()
     with patch.object(client.aai.Transcript, "get_by_id", return_value=fake) as g:
@@ -293,7 +318,8 @@ def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
     # A closed downstream pipe makes a turn write raise BrokenPipeError on the SDK's
     # reader thread; the guard must swallow it instead of dumping a thread traceback.
     monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
-    monkeypatch.setattr(client.os, "dup2", lambda *a, **k: None)  # never touch real stdout
+    # never touch the real stdout fd during the test
+    monkeypatch.setattr("assemblyai_cli.stdio.silence_stdout", lambda: None)
 
     def on_turn(_event):
         raise BrokenPipeError

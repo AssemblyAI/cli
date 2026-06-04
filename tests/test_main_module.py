@@ -14,7 +14,7 @@ def test_run_exits_clean_on_broken_pipe(monkeypatch):
 
     monkeypatch.setattr(main_mod, "app", boom)
     # Don't dup2 the real stdout fd during the test; just verify the exit contract.
-    monkeypatch.setattr(main_mod, "_silence_stdout", lambda: None)
+    monkeypatch.setattr("assemblyai_cli.stdio.silence_stdout", lambda: None)
     with pytest.raises(SystemExit) as exc:
         main_mod.run()
     assert exc.value.code == 0
