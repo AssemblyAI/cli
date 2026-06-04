@@ -10,6 +10,8 @@ import time
 import webbrowser
 from pathlib import Path
 
+from aai_cli.errors import CLIError
+
 
 def has_uv() -> bool:
     return shutil.which("uv") is not None
@@ -52,7 +54,12 @@ def find_free_port(preferred: int, *, tries: int = 20) -> int:
     for candidate in range(preferred, preferred + tries):
         if not _port_open(candidate):
             return candidate
-    return preferred
+    raise CLIError(
+        f"No free port found in {preferred}-{preferred + tries - 1}. "
+        "Pass --port to choose another.",
+        error_type="port_unavailable",
+        exit_code=1,
+    )
 
 
 def wait_for_port(port: int, *, timeout: float = 30.0) -> bool:

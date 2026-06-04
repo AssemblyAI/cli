@@ -27,7 +27,16 @@ def _pick_template() -> str:
             error_type="usage_error",
             exit_code=1,
         )
-    import questionary
+    try:
+        import questionary
+    except ImportError as exc:  # a broken/stale install missing the declared dep
+        raise CLIError(
+            "The interactive picker needs 'questionary'. Reinstall the CLI "
+            "(e.g. `uv tool install --reinstall aai-cli`), or pass a template "
+            f"directly: {', '.join(templates.TEMPLATE_ORDER)}.",
+            error_type="missing_dependency",
+            exit_code=1,
+        ) from exc
 
     choice = questionary.select(
         "Pick a template",
@@ -79,6 +88,12 @@ def init(
                 exit_code=1,
             )
 
+        if here and directory:
+            raise CLIError(
+                "Pass either a DIRECTORY or --here, not both.",
+                error_type="usage_error",
+                exit_code=1,
+            )
         target = _resolve_dir(directory, chosen, here=here)
         if scaffold.target_conflict(target) and not force:
             raise CLIError(
@@ -138,8 +153,10 @@ def init(
                 output.console.print(
                     f"[aai.heading]Starting[/aai.heading] {escape(url)}  (Ctrl-C to stop)"
                 )
-            runner.launch_and_open(
+            code = runner.launch_and_open(
                 target, port=chosen_port, use_uv=runner.has_uv(), open_browser=not no_open
             )
+            if code:
+                raise typer.Exit(code=code)
 
     run_command(ctx, body, json=json_out)

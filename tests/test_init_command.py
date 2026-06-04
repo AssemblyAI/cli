@@ -65,3 +65,39 @@ def test_init_default_dir_is_template_app(tmp_path, monkeypatch):
 def test_init_appears_in_help():
     result = runner.invoke(app, ["--help"])
     assert "init" in result.output
+
+
+def test_init_here_scaffolds_into_cwd(tmp_path, monkeypatch):
+    work = tmp_path / "work"  # a fresh empty dir (tmp_path itself holds the test config/)
+    work.mkdir()
+    monkeypatch.chdir(work)
+    result = runner.invoke(app, ["init", "transcribe", "--here", "--no-install"])
+    assert result.exit_code == 0, result.output
+    assert (work / "api" / "index.py").exists()  # scaffolded into cwd, no subdir
+
+
+def test_init_here_with_directory_errors(tmp_path, monkeypatch):
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    result = runner.invoke(app, ["init", "transcribe", "mydir", "--here", "--no-install"])
+    assert result.exit_code != 0  # ambiguous: directory AND --here both given
+
+
+def test_init_json_output_is_machine_readable(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", "transcribe", "myapp", "--no-install", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert any(step["name"] == "scaffold" and step["status"] == "created" for step in payload)
+
+
+def test_init_unshipped_template_errors_cleanly(tmp_path, monkeypatch):
+    # `stream` is in the design but its template doesn't ship yet, so it must not be
+    # registered — and picking it must give a clean error, not a FileNotFoundError.
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", "stream", "s", "--no-install"])
+    assert result.exit_code == 1
+    assert "stream" in result.output

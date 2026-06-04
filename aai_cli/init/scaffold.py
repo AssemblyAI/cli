@@ -32,7 +32,17 @@ def _template_root(template: str) -> Traversable:
         )
     # Navigate from the `aai_cli.init` package (templates/ has no __init__.py, so it
     # is not itself an importable package).
-    return resources.files("aai_cli.init") / "templates" / template
+    root = resources.files("aai_cli.init") / "templates" / template
+    # Defense in depth: the registry should only list shipped templates, but if it ever
+    # drifts ahead of the on-disk directories, fail cleanly instead of with a traceback.
+    if not root.is_dir():
+        raise CLIError(
+            f"Template {template!r} is registered but its files are missing. "
+            "This is a packaging bug — please report it.",
+            error_type="template_missing",
+            exit_code=1,
+        )
+    return root
 
 
 def target_conflict(target: Path) -> bool:
