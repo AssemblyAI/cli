@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editor/agent and local planning artifacts
+.claude/
+docs/
+
+# Local scratch scripts (often contain live keys)
+transcribe/
+
+# Wrong tool for this project (hatchling + uv); never commit a poetry lock
+poetry.lock

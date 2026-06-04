@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least privilege: CI only needs to read the repo. Actions are pinned to commit
+# SHAs (a moved tag can't silently change what runs); Dependabot keeps them current.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint + typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # PortAudio backs sounddevice; ffmpeg decodes non-WAV/URL audio (the `--sample`
+      # stream tests build a FileSource for the hosted sample, which needs ffmpeg).
+      - name: System deps (PortAudio + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+
+      # check.sh lints Markdown via the markdownlint CLI (a Node tool); pin to the
+      # version used locally. The runner ships Node, so a global npm install suffices.
+      - name: markdownlint CLI
+        run: npm install -g markdownlint-cli@0.45.0
+
+      # check.sh runs every tool through `uv run` / `uv build` for a locked,
+      # reproducible env, so uv must be on PATH (installed from PyPI to match the
+      # repo's pip-based, no-new-action posture).
+      - name: Install
+        run: python -m pip install -e ".[dev]" uv
+
+      - name: Lint, typecheck, test
+        run: ./scripts/check.sh
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # PortAudio backs sounddevice; ffmpeg decodes the `--sample` stream source.
+      - name: System deps (PortAudio + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+
+      # The local pytest hook runs `python -m pytest`, so the package must be importable.
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+
+  build:
+    name: build + twine check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install build twine
+          python -m build
+
+      - name: Validate metadata
+        run: twine check dist/*
+
+  audit:
+    name: pip-audit (dependency CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Audit runtime dependencies for known CVEs
+        run: |
+          python -m pip install -e . pip-audit
+          # Append `--ignore-vuln <ID>` to accept an unfixable transitive advisory.
+          python -m pip_audit

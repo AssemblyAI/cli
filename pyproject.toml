@@ -1,0 +1,99 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "assemblyai-cli"
+version = "0.1.0"
+description = "Command-line interface for AssemblyAI"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "AssemblyAI", email = "support@assemblyai.com" }]
+requires-python = ">=3.10"
+keywords = ["assemblyai", "transcription", "speech-to-text", "cli", "audio", "streaming"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "typer>=0.13",  # >=0.13 vendors its own click (typer._click); we no longer import click
+    "assemblyai>=0.34",
+    "rich>=13.0",
+    "keyring>=24.0",
+    "platformdirs>=4.0",
+    "tomli-w>=1.0",
+    "websockets>=13",
+    "sounddevice>=0.5",
+    "openai>=1.40",
+    "yt-dlp>=2024.0",
+    # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
+    "audioop-lts>=0.2; python_version >= '3.13'",
+]
+
+[project.urls]
+Homepage = "https://github.com/AssemblyAI/cli"
+Repository = "https://github.com/AssemblyAI/cli"
+Issues = "https://github.com/AssemblyAI/cli/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.0",
+    "ruff>=0.11",
+    "mypy>=1.10",
+    "pre-commit>=4.0",
+]
+
+[project.scripts]
+aai = "assemblyai_cli.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["assemblyai_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY + kokoro; skip otherwise)",
+]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["assemblyai_cli", "tests"]
+# Third-party deps (assemblyai, sounddevice) ship no type stubs.
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# Tests are type-checked too, but pytest functions don't need return annotations.
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF"]
+# E501: line length is owned by the formatter.
+# B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
+# S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
+ignore = ["E501", "B008", "S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
+"tests/**" = ["S101", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]

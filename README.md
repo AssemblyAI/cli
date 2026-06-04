@@ -1,2 +1,343 @@
-# cli
-AssemblyAI CLI
+# AssemblyAI CLI (`aai`)
+
+A command-line interface for [AssemblyAI](https://www.assemblyai.com): transcribe
+files, stream live audio, and have two-way voice conversations — all from your terminal.
+
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+```
+
+The installer uses [`pipx`](https://pipx.pypa.io) when available (falling back to
+`pip --user`) and requires Python 3.10+. Prefer to do it yourself:
+
+```sh
+pipx install "git+https://github.com/AssemblyAI/cli.git"   # or: pip install --user ...
+```
+
+Microphone and speaker support (for `stream` and `agent`) is **included by default** —
+no extra install step. Audio runs on [`sounddevice`](https://python-sounddevice.readthedocs.io),
+whose macOS and Windows wheels bundle PortAudio, so there's nothing else to install. On Linux,
+install the PortAudio runtime once (`sudo apt-get install libportaudio2`).
+
+## Quick start
+
+```sh
+aai login                 # store your API key (browser-assisted)
+aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
+```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `aai login` / `logout` / `whoami` | Manage the stored API key. |
+| `aai doctor` | Check your environment is ready (API key, network, ffmpeg, microphone, agent tooling). |
+| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm-gateway-prompt` to transform the result, `--show-code` to print the equivalent Python). |
+| `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
+| `aai stream [file]` | Real-time transcription from a file or the microphone. |
+| `aai agent` | Live two-way voice conversation with a voice agent. |
+| `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
+| `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
+| `aai samples create <name>` | Scaffold a runnable starter script (reads your key from `ASSEMBLYAI_API_KEY`). |
+
+Add `--json` to any command for machine-readable output (it's also the default when
+output is piped or run by an agent). Errors always go to **stderr**, so stdout stays
+clean for pipelines. Auth problems surface as a clean "not authenticated" error
+across every command.
+
+> **Tip:** Quote URLs that contain `?` (most YouTube links do). In zsh the `?` is a
+> glob character, so an unquoted URL fails with `zsh: no matches found` before the
+> command runs:
+>
+> ```sh
+> aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
+> ```
+
+## Transcribe options
+
+`aai transcribe` exposes the full `TranscriptionConfig` surface as curated flags,
+grouped by purpose:
+
+- **Model & language:** `--speech-model`, `--language-code`, `--language-detection`,
+  `--keyterms-prompt`, `--prompt`, `--temperature`.
+- **Formatting:** `--punctuate` / `--no-punctuate`, `--format-text` /
+  `--no-format-text`, `--disfluencies`.
+- **Speakers & channels:** `--speaker-labels`, `--speakers-expected`,
+  `--multichannel`.
+- **Guardrails:** `--redact-pii`, `--redact-pii-policy`, `--redact-pii-sub`,
+  `--redact-pii-audio`, `--filter-profanity`, `--content-safety`,
+  `--content-safety-confidence`, `--speech-threshold`.
+- **Analysis:** `--summarization` (`--summary-type`, `--summary-model`),
+  `--auto-chapters`, `--sentiment-analysis`, `--entity-detection`,
+  `--auto-highlights`, `--topic-detection`. Analysis results render automatically
+  in human mode (summary, chapters, sentiment, entities, topics, content safety,
+  highlights).
+- **Customization:** `--word-boost`, `--custom-spelling-file`, `--audio-start`,
+  `--audio-end`, `--translate-to`.
+- **Webhooks:** `--webhook-url`, `--webhook-auth-header` (`NAME:VALUE`).
+
+Anything without a curated flag is reachable through the escape hatch:
+`--config KEY=VALUE` (repeatable) and `--config-file FILE` (a JSON object) accept
+any SDK field by its exact name. Precedence is config file < `--config` < explicit
+flags.
+
+```sh
+aai transcribe call.mp3 \
+  --speaker-labels --speakers-expected 2 \
+  --redact-pii --redact-pii-policy person_name,phone_number \
+  --summarization --summary-type bullets \
+  --sentiment-analysis --auto-chapters \
+  --config speech_threshold=0.5 \
+  --config-file extra.json
+```
+
+## Streaming
+
+```sh
+aai stream --sample            # stream the hosted wildfires.mp3 sample (same clip as transcribe)
+aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
+aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
+aai stream https://…/clip.mp3  # a URL works too (decoded via ffmpeg)
+aai stream                     # from the microphone; Ctrl-C to stop
+```
+
+`aai stream` exposes the full `StreamingParameters` surface as curated flags:
+
+- **Model & input:** `--speech-model`, `--encoding`, `--language-detection`,
+  `--domain`.
+- **Turn detection:** `--end-of-turn-confidence-threshold`, `--min-turn-silence`,
+  `--max-turn-silence`, `--vad-threshold`, `--format-turns` / `--no-format-turns`,
+  `--include-partial-turns`.
+- **Features:** `--keyterms-prompt`, `--filter-profanity`, `--speaker-labels`,
+  `--max-speakers`, `--voice-focus`, `--voice-focus-threshold`, `--redact-pii`,
+  `--redact-pii-policy`, `--redact-pii-sub`, `--inactivity-timeout`,
+  `--webhook-url`, `--webhook-auth-header`.
+
+The same escape hatch applies — `--config KEY=VALUE` (repeatable) and
+`--config-file FILE` (JSON object) reach any other `StreamingParameters` field,
+with precedence config file < `--config` < explicit flags:
+
+```sh
+aai stream --sample \
+  --max-turn-silence 400 --format-turns \
+  --keyterms-prompt "AssemblyAI" \
+  --config vad_threshold=0.7
+```
+
+## Live transcript → live LLM
+
+`aai stream -o text` writes one finalized turn per line and flushes immediately, so it
+can drive `aai llm` turn by turn. Add `--follow` (`-f`) to `aai llm` to keep re-running
+your prompt over the *growing* transcript, refreshing the answer in place on every turn:
+
+```sh
+aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items as I talk"
+```
+
+On a terminal you watch one evolving summary; piped onward it emits one JSON object per
+refresh (`{"turns": N, "output": "…"}`). Each finalized turn triggers a fresh call over
+the full transcript, so the answer is always current. Ctrl-C to stop. Without `--follow`,
+`aai llm` stays one-shot — it reads stdin to EOF and answers once (`cat notes | aai llm
+"summarize"`).
+
+## Voice agent
+
+Have a live, two-way voice conversation:
+
+```sh
+aai agent                                 # talk; the agent talks back. Ctrl-C to stop.
+aai agent --voice james --greeting "Hi"
+aai agent --system-prompt-file persona.txt   # load the system prompt from a file
+aai agent --list-voices                       # see available voices
+```
+
+The agent is full-duplex — your mic stays open while it speaks, so you can interrupt it
+mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself on your
+speakers.
+
+## Show the code
+
+Add `--show-code` to `transcribe`, `stream`, or `agent` to print the equivalent Python
+SDK code **instead of running** the command — a ready-to-edit starting point for your
+own app. It builds the script from exactly the flags you passed, needs no API key
+(the generated code reads `ASSEMBLYAI_API_KEY` from the environment), and writes plain
+Python to stdout, so you can redirect it straight into a file:
+
+```sh
+aai transcribe --sample --speaker-labels --show-code        # print the equivalent script
+aai transcribe call.mp3 --sentiment-analysis --show-code > my_transcribe.py
+aai stream --show-code                                      # the microphone-streaming idiom
+aai agent --voice ivy --show-code                           # the full-duplex agent loop
+```
+
+The generated transcribe code includes result handling for the analysis features you
+enabled. With `--llm-gateway-prompt` (repeatable — each prompt runs on the previous
+response), it emits the chained LLM Gateway calls too:
+
+```sh
+aai transcribe call.mp3 \
+  --llm-gateway-prompt "summarize" \
+  --llm-gateway-prompt "translate the summary to Spanish" \
+  --show-code > summarize_then_translate.py
+```
+
+## Pipelines
+
+`aai` is built to compose with the rest of your shell. Output is machine-clean
+(errors go to stderr), commands read `-` from stdin, and `-o`/`--output` prints a
+single field so you rarely need `jq`.
+
+**Pick one field with `-o`:**
+
+```sh
+aai transcribe call.mp3 -o text        # just the transcript text
+aai transcribe call.mp3 -o id          # just the transcript id
+aai transcribe call.mp3 -o utterances  # speaker-labeled lines
+aai transcribe video.mp4 -o srt        # SubRip (.srt) captions
+aai transcribe call.mp3 -o json | jq .  # full JSON when you do want jq
+```
+
+**Read audio from stdin (`-`):**
+
+```sh
+ffmpeg -i talk.mp4 -f wav - | aai transcribe -        # transcribe any video
+curl -sL https://example.com/ep.mp3 | aai transcribe -  # no temp file
+ffmpeg -i in.mp4 -f s16le -ac 1 -ar 16000 - | aai stream -   # live, from a pipe
+```
+
+**Feed transcripts into the LLM Gateway** (`aai llm` reads piped stdin):
+
+```sh
+aai transcribe call.mp3 -o text | aai llm "summarize, then list action items"
+cat notes.txt | aai llm "turn these into a changelog"
+```
+
+**Stream, then summarize.** Piped `stream`/`agent` emit clean transcript lines with
+`-o text`. A Ctrl-C in a pipe hits both sides, so to stop the producer *and* let the
+consumer finish, signal only the producer — or end the stream on its own:
+
+```sh
+# end after 30s by signaling just the producer (macOS: brew install coreutils, use gtimeout)
+timeout -s INT 30s aai stream -o text | aai llm "summarize"
+
+# or end on a natural pause (server-side inactivity timeout, in seconds)
+aai stream -o text --inactivity-timeout 5 | aai llm "summarize the call"
+
+# capture then process (most robust)
+aai stream -o text > call.txt        # Ctrl-C to stop
+aai llm "summarize" < call.txt
+```
+
+## Recipes
+
+A cookbook of `aai` composed with common Unix tools. macOS shown; on Linux swap
+`pbcopy`/`pbpaste` → `xclip -sel clip`/`xclip -o` and `say` → `spd-say`.
+
+**Live meeting scribe** — `-o text` streams one finalized turn per line; `aai llm -f`
+re-summarizes the growing transcript in place on every turn (Ctrl-C to stop):
+
+```sh
+aai stream -o text | aai llm -f --model claude-haiku-4-5-20251001 "summarize todos as I talk"
+```
+
+**Chain `aai llm` into other tools** with `-o text` — it prints just the answer, so it
+pipes onward cleanly (no `jq` needed):
+
+```sh
+aai transcribe call.mp3 -o text | aai llm -o text "list action items" | pbcopy
+```
+
+**`aai llm` is a general text filter** — it reads stdin, audio optional:
+
+```sh
+git log --oneline -30 | aai llm "write release notes grouped by feature/fix"
+cat error.log         | aai llm "what's the root cause and the one-line fix?"
+```
+
+**Translate a sample, then port the generated code** — `--show-code` prints the Python
+for the pipeline you described, and `aai llm` rewrites it in another language:
+
+```sh
+aai transcribe --sample --llm-gateway-prompt "translate to french" --show-code | aai llm "rewrite in rust"
+```
+
+**Mine the analysis JSON with `jq`** — enable a feature, then slice `-o json`:
+
+```sh
+aai transcribe call.mp3 --sentiment-analysis -o json | jq -r '.sentiment_analysis_results[] | "\(.sentiment)\t\(.text)"'
+aai transcribe call.mp3 --entity-detection  -o json | jq -r '.entities[] | "\(.entity_type): \(.text)"' | sort -u
+```
+
+**Pick a past transcript with `fzf`, then summarize it:**
+
+```sh
+aai transcripts list --json \
+  | jq -r '.[] | "\(.id)\t\(.status)\t\(.created)"' \
+  | fzf | cut -f1 \
+  | xargs -I{} aai llm "summarize the key decisions" --transcript-id {}
+```
+
+**Who talked the most** (speaker-labeled utterances + `awk`):
+
+```sh
+aai transcribe call.mp3 --speaker-labels -o utterances | awk -F: '{print $1}' | sort | uniq -c | sort -rn
+```
+
+**Redact PII before it leaves your machine:**
+
+```sh
+aai transcribe call.mp3 --redact-pii --redact-pii-policy person_name,phone_number,email_address -o text | pbcopy
+```
+
+**Caption a YouTube video (sing-along subtitles)** — download the video, transcribe it
+to SubRip with `-o srt`, then burn the captions in with ffmpeg. These steps pass *files*
+to each other (not stdin/stdout), and ffmpeg's `subtitles` filter needs a seekable file,
+so chain them with `&&` rather than `|` — each step runs only if the previous succeeds:
+
+```sh
+URL="https://www.youtube.com/watch?v=6YzGOq42zLk&list=RD6YzGOq42zLk&start_radio=1"
+
+yt-dlp --no-playlist -f 'bv*+ba/b' --merge-output-format mp4 -o video.mp4 "$URL" && aai transcribe video.mp4 -o srt > captions.srt && ffmpeg -i video.mp4 -vf "subtitles=captions.srt" -c:a copy out.mp4
+```
+
+`--no-playlist` matters for music links: the `&list=RD…` suffix is an autoplay radio, so
+without it yt-dlp downloads an endless mix instead of the one video. This burns in
+**static per-line captions** — for true word-by-word karaoke highlighting you'd render an
+ASS subtitle file from the transcript's word timings (`-o json` → `words[]`) instead.
+
+**DIY voice assistant** — speak a question, hear the answer (use headphones):
+
+```sh
+aai stream -o text | while IFS= read -r line; do
+  echo "$line" | aai llm -o text "answer in one short sentence" | say
+done
+```
+
+## AI coding agents
+
+Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so
+your agent writes current, correct integration code:
+
+```sh
+aai claude install        # installs the docs MCP server + skill (user scope)
+aai claude status         # show what's wired up
+aai claude remove         # unwind both
+```
+
+`install` shells out to `claude mcp add` and `npx skills add`. Pass `--scope project` to
+scope the MCP server to the current project. A missing `claude` or `npx` is reported and
+skipped (with the manual command to run), not treated as an error.
+
+## Development
+
+This project uses [uv](https://docs.astral.sh/uv/). Run tools through `uv run` so they
+use the locked environment (`pyproject.toml` + `uv.lock`):
+
+```sh
+uv sync --extra dev        # create/refresh the project venv with dev dependencies
+uv run aai --help          # run the CLI from the locked environment
+uv run pytest              # run the test suite (uv run mypy / ruff likewise)
+./scripts/check.sh         # ruff + mypy + pytest (the same checks CI runs on every PR)
+```
