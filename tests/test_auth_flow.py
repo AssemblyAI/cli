@@ -98,5 +98,5 @@ def test_run_login_flow_zero_orgs_raises(monkeypatch):
         "discover",
         lambda token: {"organizations": [], "email": "a@b.com", "intermediate_session_token": "ist"},
     )
-    with pytest.raises(APIError, match="no AssemblyAI organization"):
+    with pytest.raises(APIError, match="no AssemblyAI account"):
         flow.run_login_flow()

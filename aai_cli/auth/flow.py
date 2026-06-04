@@ -52,7 +52,8 @@ def run_login_flow() -> str:
     organizations = disc.get("organizations") or []
     if not organizations:
         raise APIError(
-            "Signed in, but found no AssemblyAI organization for this account."
+            "Signed in, but this identity has no AssemblyAI account yet. "
+            f"Create one at {endpoints.SIGNUP_URL}, then run 'aai login' again."
         )
     organization_id = organizations[0]["organization_id"]
 

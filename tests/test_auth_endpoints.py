@@ -10,6 +10,7 @@ def test_defaults_point_at_sandbox():
     assert endpoints.STYTCH_OAUTH_PROVIDER == "google"
     assert endpoints.CLI_TOKEN_NAME == "AssemblyAI CLI"
     assert endpoints.STYTCH_PUBLIC_TOKEN.startswith("public-token-")
+    assert endpoints.SIGNUP_URL.startswith("https://")
 
 
 def test_env_override_changes_redirect_uri(monkeypatch):

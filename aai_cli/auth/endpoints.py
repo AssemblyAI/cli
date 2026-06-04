@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import os
 
-# Stytch B2B project (sandbox defaults; override via env for prod).
+# Stytch B2B project (sandbox/test defaults; override via env for prod).
+# Use Stytch's API domain, NOT the vanity CNAME (…customers.stytch.dev): the OAuth
+# callback runs on test.stytch.com, so the CSRF state cookie set by the discovery
+# /start must be on the same domain. Starting on the CNAME sets the cookie there,
+# the callback can't read it, and Stytch returns `oauth_invalid_state`.
+# (Prod equivalent: https://api.stytch.com)
 STYTCH_PROJECT_DOMAIN = os.environ.get(
     "AAI_AUTH_STYTCH_DOMAIN",
-    "https://psychedelic-journey-5884.customers.stytch.dev",
+    "https://test.stytch.com",
 )
 STYTCH_PUBLIC_TOKEN = os.environ.get(
     "AAI_AUTH_PUBLIC_TOKEN",
-    "public-token-test-79ad7d8d-09df-495e-8eb8-72d18efdafa4",
+    "public-token-test-a161155e-7e9b-4dd1-9d43-493c899b4117",
 )
 STYTCH_OAUTH_PROVIDER = os.environ.get("AAI_AUTH_PROVIDER", "google")
 
@@ -24,6 +29,13 @@ AMS_BASE_URL = os.environ.get(
 )
 
 CLI_TOKEN_NAME = "AssemblyAI CLI"  # noqa: S105 - display name, not a credential
+
+# Where to send a first-time user who has no AssemblyAI account yet (sandbox
+# default; override via env for prod, e.g. https://www.assemblyai.com/dashboard).
+SIGNUP_URL = os.environ.get(
+    "AAI_AUTH_SIGNUP_URL",
+    "https://dashboard-assemblyai.vercel.app/dashboard/login",
+)
 
 
 def redirect_uri() -> str:
