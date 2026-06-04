@@ -40,6 +40,12 @@ def agent(
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    output_field: str = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Output mode: 'text' (you:/agent: lines as plain stdout, pipe-friendly) or 'json'.",
+    ),
     show_code: bool = typer.Option(
         False,
         "--show-code",
@@ -57,6 +63,8 @@ def agent(
         raise typer.Exit(code=0)
 
     def body(state: AppState, json_mode: bool) -> None:
+        if output_field is not None and output_field not in ("text", "json"):
+            raise UsageError(f"Unknown --output {output_field!r}. Choose one of: text, json.")
         if voice not in VOICES:
             raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")
         if system_prompt_file is not None:
@@ -82,7 +90,12 @@ def agent(
         if from_file and device is not None:
             raise UsageError("--device applies only to microphone input.")
 
-        renderer = AgentRenderer(json_mode=json_mode, mic_input=not from_file)
+        text_mode = output_field == "text"
+        renderer = AgentRenderer(
+            json_mode=(output_field == "json") or (json_mode and not text_mode),
+            text_mode=text_mode,
+            mic_input=not from_file,
+        )
         audio: Any
         player: Any
         if from_file:
@@ -97,11 +110,11 @@ def agent(
             duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
             audio = duplex.mic
             player = duplex.player
-            if not json_mode:
-                renderer.notice(
-                    "Use headphones — the mic stays open while the agent speaks, "
-                    "so speakers would let it hear itself.\n"
-                )
+            # notice() self-suppresses in JSON mode and routes to stderr in text mode.
+            renderer.notice(
+                "Use headphones — the mic stays open while the agent speaks, "
+                "so speakers would let it hear itself.\n"
+            )
         try:
             run_session(
                 api_key,

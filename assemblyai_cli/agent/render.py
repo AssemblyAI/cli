@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+import sys
+from typing import Any, TextIO
 
 from rich.text import Text
 
@@ -13,39 +14,67 @@ def _labeled(label: str, body: str, *, style: str = "aai.label") -> Text:
 
 
 class AgentRenderer(BaseRenderer):
-    """Renders Voice Agent events: human transcript lines, or NDJSON for agents.
+    """Renders Voice Agent events in one of three modes.
+
+    - JSON: NDJSON events to stdout. - text: plain ``you:``/``agent:`` transcript
+    lines to stdout with status on stderr (so ``aai agent -o text | aai llm "…"``
+    pipes the conversation). - human (default): live Rich transcript.
 
     Audio payloads are never written; only text/state events are surfaced.
     """
 
-    def __init__(self, *, mic_input: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        mic_input: bool = True,
+        text_mode: bool = False,
+        err: TextIO | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         # File-driven runs have no mic, so they skip the "start talking" prompt.
         self.mic_input = mic_input
+        self.text_mode = text_mode
+        self._err = err if err is not None else sys.stderr
+
+    def _status(self, message: str) -> None:
+        """Write a status notice to stderr so it never pollutes piped stdout."""
+        print(message, file=self._err, flush=True)
 
     # --- lifecycle ---------------------------------------------------------
     def connected(self) -> None:
         if self.json_mode:
             self._emit({"type": "session.ready"})
-        elif self.mic_input:
+        elif not self.mic_input:
+            return
+        elif self.text_mode:
+            self._status("Connected — start talking. (Ctrl-C to stop)")
+        else:
             self._line(Text("Connected — start talking. (Ctrl-C to stop)", style="aai.muted"))
 
     def notice(self, text: str) -> None:
-        """Print a human-facing notice (caller chooses when to suppress in JSON)."""
-        self._line(text.rstrip("\n"))
+        """Print a human-facing notice (suppressed in JSON; to stderr in text mode)."""
+        if self.json_mode:
+            return
+        if self.text_mode:
+            self._status(text.rstrip("\n"))
+        else:
+            self._line(text.rstrip("\n"))
 
     # --- user --------------------------------------------------------------
     def user_partial(self, text: str) -> None:
         if self.json_mode:
             self._emit({"type": "transcript.user.delta", "text": text})
-            return
-        self._update_line(_labeled("you: ", text, style="aai.you"))
+        elif not self.text_mode:  # partials are noise for piped text
+            self._update_line(_labeled("you: ", text, style="aai.you"))
 
     def user_final(self, text: str) -> None:
         if self.json_mode:
             self._emit({"type": "transcript.user", "text": text})
-            return
-        self._finalize_line(_labeled("you: ", text, style="aai.you"))
+        elif self.text_mode:
+            self._write(f"you: {text}\n")
+        else:
+            self._finalize_line(_labeled("you: ", text, style="aai.you"))
 
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:
@@ -55,10 +84,11 @@ class AgentRenderer(BaseRenderer):
     def agent_transcript(self, text: str, *, interrupted: bool) -> None:
         if self.json_mode:
             self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
-            return
-        self._line(
-            _labeled("agent: ", text, style="aai.agent")
-        )  # commits any open "you: …" partial first
+        elif self.text_mode:
+            self._write(f"agent: {text}\n")
+        else:
+            # commits any open "you: …" partial first
+            self._line(_labeled("agent: ", text, style="aai.agent"))
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:

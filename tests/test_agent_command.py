@@ -274,3 +274,20 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code", "--json"])
     assert result.exit_code == 0
     assert "agents.assemblyai.com" in result.output
+
+
+def test_agent_output_text_emits_plain_transcript(monkeypatch):
+    # `-o text` -> plain you:/agent: lines on stdout (pipe into aai llm).
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+
+    def fake_run_session(api_key, *, renderer, **kwargs):
+        renderer.user_final("hello there")
+        renderer.agent_transcript("hi, how can I help?", interrupted=False)
+
+    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent", "--sample", "-o", "text"])
+    assert result.exit_code == 0
+    assert "you: hello there" in result.output
+    assert "agent: hi, how can I help?" in result.output
+    assert '"type"' not in result.output  # not NDJSON
