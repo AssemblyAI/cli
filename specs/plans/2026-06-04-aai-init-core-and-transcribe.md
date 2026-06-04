@@ -737,11 +737,16 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'aai_cli.init.scaffold'
 from __future__ import annotations
 
 from importlib import resources
-from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from aai_cli.errors import CLIError
 from aai_cli.init import templates
+
+if TYPE_CHECKING:
+    # Annotations only (PEP 563 strings), so no runtime import — `Traversable`'s
+    # module location differs across 3.10/3.11 but that never matters at runtime.
+    from importlib.resources.abc import Traversable
 
 PLACEHOLDER_KEY = "your_assemblyai_api_key_here"
 
@@ -761,7 +766,9 @@ def _template_root(template: str) -> Traversable:
             error_type="unknown_template",
             exit_code=1,
         )
-    return resources.files("aai_cli.init.templates") / template
+    # Navigate from the `aai_cli.init` package (templates/ has no __init__.py, so it
+    # is not itself an importable package).
+    return resources.files("aai_cli.init") / "templates" / template
 
 
 def target_conflict(target: Path) -> bool:
@@ -793,13 +800,11 @@ def scaffold(template: str, target: Path, *, api_key: str | None) -> Path:
     return target
 ```
 
-> Note on `from importlib.resources.abc import Traversable`: on Python 3.10 use `from importlib.abc import Traversable` instead. If supporting both, import defensively:
-> ```python
-> try:
->     from importlib.resources.abc import Traversable
-> except ImportError:  # Python 3.10
->     from importlib.abc import Traversable
-> ```
+> The `Traversable` import is under `TYPE_CHECKING` and used only in annotations
+> (which `from __future__ import annotations` keeps as strings), so it never runs at
+> runtime — that sidesteps its differing module location on 3.10 vs 3.11+. Verified:
+> `resources.files("aai_cli.init") / "templates" / <id>` works at runtime (3.11) and
+> `mypy --python-version 3.10` is clean.
 
 - [ ] **Step 4: Run test to verify it passes**
 
