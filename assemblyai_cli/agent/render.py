@@ -56,7 +56,9 @@ class AgentRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
             return
-        self._line(_labeled("agent: ", text, style="aai.agent"))  # commits any open "you: …" partial first
+        self._line(
+            _labeled("agent: ", text, style="aai.agent")
+        )  # commits any open "you: …" partial first
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:

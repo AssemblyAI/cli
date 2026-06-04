@@ -124,8 +124,12 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
     _auth()
     calls = []
 
-    def fake_transform(api_key, *, prompt, model, max_tokens, transcript_id=None, transcript_text=None):
-        calls.append({"prompt": prompt, "transcript_id": transcript_id, "transcript_text": transcript_text})
+    def fake_transform(
+        api_key, *, prompt, model, max_tokens, transcript_id=None, transcript_text=None
+    ):
+        calls.append(
+            {"prompt": prompt, "transcript_id": transcript_id, "transcript_text": transcript_text}
+        )
         return f"out({prompt})"
 
     with patch(
@@ -137,9 +141,13 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
         result = runner.invoke(
             app,
             [
-                "transcribe", "audio.mp3", "--json",
-                "--llm-gateway-prompt", "summarize",
-                "--llm-gateway-prompt", "translate",
+                "transcribe",
+                "audio.mp3",
+                "--json",
+                "--llm-gateway-prompt",
+                "summarize",
+                "--llm-gateway-prompt",
+                "translate",
             ],
         )
     assert result.exit_code == 0
