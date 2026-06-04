@@ -165,6 +165,7 @@ def test_merge_transcribe_config_returns_kwargs_dict():
 
 def test_construct_transcribe_config_from_merged():
     import assemblyai as aai
+
     from assemblyai_cli import config_builder
 
     tc = config_builder.construct_transcription_config({"speaker_labels": True})
@@ -174,6 +175,7 @@ def test_construct_transcribe_config_from_merged():
 
 def test_merge_streaming_params_coerces_speech_model_enum():
     from assemblyai.streaming.v3 import SpeechModel
+
     from assemblyai_cli import config_builder
 
     merged = config_builder.merge_streaming_params(
@@ -187,6 +189,7 @@ def test_merge_streaming_params_coerces_speech_model_enum():
 
 def test_build_transcription_config_still_works():
     import assemblyai as aai
+
     from assemblyai_cli import config_builder
 
     tc = config_builder.build_transcription_config(
