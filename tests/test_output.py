@@ -46,5 +46,16 @@ def test_emit_error_escapes_markup(capsys):
 
     err = types.SimpleNamespace(message="bad [tag] here", to_dict=lambda: {"error": {}})
     output.emit_error(err, json_mode=False)
-    out = capsys.readouterr().out
-    assert "[tag]" in out  # not stripped as markup
+    captured = capsys.readouterr()
+    assert "[tag]" in captured.err  # error goes to stderr, not stripped as markup
+    assert captured.out == ""  # stdout stays clean for pipelines
+
+
+def test_emit_error_json_goes_to_stderr(capsys):
+    import types
+
+    err = types.SimpleNamespace(message="boom", to_dict=lambda: {"error": {"message": "boom"}})
+    output.emit_error(err, json_mode=True)
+    captured = capsys.readouterr()
+    assert json.loads(captured.err) == {"error": {"message": "boom"}}
+    assert captured.out == ""

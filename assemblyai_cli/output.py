@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 console = theme.make_console()
+# Errors go to stderr so they never pollute piped stdout (e.g. `aai transcribe x -o text > out`).
+error_console = theme.make_console(stderr=True)
 
 _AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
 
@@ -43,7 +45,8 @@ def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> 
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:
+    # Always to stderr, so stdout stays clean for `aai … | next-tool` pipelines.
     if json_mode:
-        print(json.dumps(err.to_dict(), default=str))
+        print(json.dumps(err.to_dict(), default=str), file=sys.stderr)
     else:
-        console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")
+        error_console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")

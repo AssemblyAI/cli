@@ -52,7 +52,7 @@ def test_output_console_is_themed_and_error_is_styled(monkeypatch):
     buf = io.StringIO()
     monkeypatch.setattr(
         output,
-        "console",
+        "error_console",  # errors render on the stderr console
         theme.make_console(file=buf, force_terminal=True, color_system="truecolor"),
     )
     output.emit_error(CLIError("boom"), json_mode=False)
