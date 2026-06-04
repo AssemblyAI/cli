@@ -1,7 +1,30 @@
 # AssemblyAI CLI (`aai`)
 
-A command-line interface for [AssemblyAI](https://www.assemblyai.com): transcribe
-files, stream live audio, and have two-way voice conversations — all from your terminal.
+All of [AssemblyAI](https://www.assemblyai.com), from your terminal. Transcribe a
+file, stream live audio, or have a two-way voice conversation with an agent — no app,
+no notebook, just your shell.
+
+A few things that make it fun to poke at:
+
+- **Chain LLM prompts** right on a transcript — each prompt runs on the previous result:
+
+  ```sh
+  aai transcribe --sample \
+    --llm-gateway-prompt "summarize this transcript" \
+    --llm-gateway-prompt "rewrite that summary in French"
+  ```
+
+- `--show-code` prints the equivalent Python SDK script for any command — and since
+  everything pipes, you can hand that straight to the LLM:
+
+  ```sh
+  aai agent --show-code | aai llm "rewrite in rust"
+  ```
+
+- Pipe-friendly: `aai stream -o text | aai llm -f "summarize action items as I talk"`
+  gives you a live, self-updating summary as you speak.
+- Transcribe straight from a YouTube URL, with speaker labels, PII redaction,
+  summaries, sentiment, and more.
 
 ## Install
 
