@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -46,6 +47,13 @@ def validate_key(api_key: str) -> bool:
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
 
 
+def _item_to_dict(item: Any) -> dict[str, Any]:
+    """JSON-safe dict for an SDK model across pydantic v2 (model_dump) and v1 (.json)."""
+    if hasattr(item, "model_dump"):
+        return dict(item.model_dump(mode="json"))
+    return dict(json.loads(item.json()))  # pydantic v1 (assemblyai transcription models)
+
+
 def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]]:
     _configure(api_key)
     try:
@@ -56,7 +64,7 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
         raise APIError(f"Could not list transcripts: {exc}") from exc
     except Exception as exc:
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
-    return [item.model_dump(mode="json") for item in resp.transcripts]
+    return [_item_to_dict(item) for item in resp.transcripts]
 
 
 def transcribe(api_key: str, audio: str, *, config: aai.TranscriptionConfig) -> aai.Transcript:

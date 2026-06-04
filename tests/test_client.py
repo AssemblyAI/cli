@@ -58,6 +58,19 @@ def test_list_transcripts_returns_dict_rows():
     item.model_dump.assert_called_once_with(mode="json")
 
 
+def test_list_transcripts_supports_pydantic_v1_items():
+    # assemblyai's transcription models are pydantic v1: no model_dump, but .json().
+    import types
+
+    item = types.SimpleNamespace(json=lambda: '{"id": "t2", "status": "queued"}')
+    resp = MagicMock()
+    resp.transcripts = [item]
+    with patch.object(client.aai, "Transcriber") as T:
+        T.return_value.list_transcripts.return_value = resp
+        rows = client.list_transcripts("sk", limit=5)
+    assert rows == [{"id": "t2", "status": "queued"}]
+
+
 def test_list_transcripts_auth_error_becomes_apierror():
     with patch.object(client.aai, "Transcriber") as T:
         T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError("nope")
