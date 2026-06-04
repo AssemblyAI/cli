@@ -7,9 +7,9 @@ from rich.text import Text
 from assemblyai_cli.render import BaseRenderer
 
 
-def _labeled(label: str, body: str) -> Text:
-    """A line whose `label` prefix is brand-accented and whose body is default."""
-    return Text.assemble((label, "aai.label"), body)
+def _labeled(label: str, body: str, *, style: str = "aai.label") -> Text:
+    """A line whose `label` prefix is accented in `style` and whose body is default."""
+    return Text.assemble((label, style), body)
 
 
 class AgentRenderer(BaseRenderer):
@@ -39,13 +39,13 @@ class AgentRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "transcript.user.delta", "text": text})
             return
-        self._update_line(_labeled("you: ", text))
+        self._update_line(_labeled("you: ", text, style="aai.you"))
 
     def user_final(self, text: str) -> None:
         if self.json_mode:
             self._emit({"type": "transcript.user", "text": text})
             return
-        self._finalize_line(_labeled("you: ", text))
+        self._finalize_line(_labeled("you: ", text, style="aai.you"))
 
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:
@@ -56,7 +56,7 @@ class AgentRenderer(BaseRenderer):
         if self.json_mode:
             self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
             return
-        self._line(_labeled("agent: ", text))  # commits any open "you: …" partial first
+        self._line(_labeled("agent: ", text, style="aai.agent"))  # commits any open "you: …" partial first
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from assemblyai_cli import llm
 from assemblyai_cli.code_gen import serialize, snippets
 
@@ -60,23 +62,39 @@ def render(
 
 
 def _llm_gateway_block(llm_gateway: dict[str, object]) -> list[str]:
-    """Emit an OpenAI-compatible LLM Gateway transform over the finished transcript.
+    """Emit a chained OpenAI-compatible LLM Gateway transform over the transcript.
 
-    The gateway injects the transcript server-side via the ``transcript_id`` extra-body
-    field wherever the ``{{ transcript }}`` tag appears in the prompt.
+    The generated script loops over the prompts: the first runs over the transcript
+    (injected server-side via ``transcript_id`` wherever the ``{{ transcript }}`` tag
+    appears), and each subsequent prompt runs over the previous response.
     """
-    content = f"{llm_gateway['prompt']}\n\n{llm.TRANSCRIPT_TAG}"
+    prompts = cast("list[str]", llm_gateway["prompts"])
+    prompt_lines = "\n".join(f"    {p!r}," for p in prompts)
     return [
         "# Transform the transcript through AssemblyAI's LLM Gateway (OpenAI-compatible).",
+        "# Each prompt runs on the previous response; the first runs on the transcript.",
         "gateway = OpenAI(",
         '    api_key=os.environ["ASSEMBLYAI_API_KEY"],',
         f"    base_url={llm.GATEWAY_BASE_URL!r},",
         ")",
-        "response = gateway.chat.completions.create(",
-        f"    model={llm_gateway['model']!r},",
-        f'    messages=[{{"role": "user", "content": {content!r}}}],',
-        f"    max_tokens={llm_gateway['max_tokens']},",
-        '    extra_body={"transcript_id": transcript.id},',
-        ")",
-        "print(response.choices[0].message.content)",
+        "prompts = [",
+        prompt_lines,
+        "]",
+        "result = None",
+        "for i, prompt in enumerate(prompts):",
+        "    if i == 0:",
+        f'        content = prompt + "\\n\\n{llm.TRANSCRIPT_TAG}"',
+        '        extra = {"transcript_id": transcript.id}',
+        "    else:",
+        '        content = prompt + "\\n\\n" + result',
+        "        extra = None",
+        "    response = gateway.chat.completions.create(",
+        f"        model={llm_gateway['model']!r},",
+        '        messages=[{"role": "user", "content": content}],',
+        f"        max_tokens={llm_gateway['max_tokens']},",
+        "        extra_body=extra,",
+        "    )",
+        "    result = response.choices[0].message.content",
+        '    print(f"Step {i + 1}: {prompt}")',
+        "    print(result)",
     ]

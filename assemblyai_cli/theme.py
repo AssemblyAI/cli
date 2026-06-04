@@ -22,6 +22,10 @@ THEME = Theme(
         "aai.brand": f"bold {BRAND}",
         "aai.heading": f"bold {BRAND}",
         "aai.label": BRAND,
+        # Conversation labels: the human keeps the brand accent, the agent gets a
+        # distinct hue so "you:" and "agent:" are easy to tell apart at a glance.
+        "aai.you": BRAND,
+        "aai.agent": "cyan",
         "aai.success": "green",
         "aai.error": "bold red",
         "aai.warn": "yellow",

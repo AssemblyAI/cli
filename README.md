@@ -34,7 +34,7 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 | --- | --- |
 | `aai login` / `logout` / `whoami` | Manage the stored API key. |
 | `aai doctor` | Check your environment is ready (API key, network, ffmpeg, microphone, agent tooling). |
-| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm-gateway-prompt` to transform the result). |
+| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm-gateway-prompt` to transform the result, `--show-code` to print the equivalent Python). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | Live two-way voice conversation with a voice agent. |

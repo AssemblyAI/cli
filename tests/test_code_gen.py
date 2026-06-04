@@ -301,7 +301,7 @@ def test_transcribe_show_code_includes_llm_gateway_transform():
         {"speaker_labels": True},
         "audio.mp3",
         llm_gateway={
-            "prompt": "translate to spanish",
+            "prompts": ["translate to spanish"],
             "model": "claude-sonnet-4-6",
             "max_tokens": 1000,
         },
@@ -314,6 +314,26 @@ def test_transcribe_show_code_includes_llm_gateway_transform():
     assert '"transcript_id": transcript.id' in code
     # The LLM-gateway transform replaces the analysis result-handling (as the CLI does).
     assert "transcript.utterances" not in code
+
+
+def test_transcribe_show_code_chains_multiple_llm_gateway_prompts():
+    code = code_gen.transcribe(
+        {},
+        "audio.mp3",
+        llm_gateway={
+            "prompts": ["summarize", "translate the summary to Spanish"],
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 500,
+        },
+    )
+    ast.parse(code)
+    # Both prompts appear, in order, and the script loops to chain them.
+    assert "'summarize'," in code
+    assert "'translate the summary to Spanish'," in code
+    assert "for i, prompt in enumerate(prompts):" in code
+    # First step uses the transcript; later steps chain on the previous result.
+    assert '"transcript_id": transcript.id' in code
+    assert 'content = prompt + "\\n\\n" + result' in code
 
 
 def test_transcribe_show_code_without_gateway_has_no_openai_import():

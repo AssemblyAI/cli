@@ -21,6 +21,14 @@ from assemblyai_cli.context import AppState, run_command
 app = typer.Typer()
 
 
+def _render_transform_steps(d: dict) -> str:
+    """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
+    steps = d["transform"]["steps"]
+    if len(steps) == 1:
+        return str(steps[0]["output"])
+    return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
+
+
 @app.command()
 def transcribe(
     ctx: typer.Context,
@@ -101,8 +109,11 @@ def transcribe(
     ),
     config_file: str = typer.Option(None, "--config-file", help="JSON file of config fields."),
     # llm gateway transform (existing)
-    llm_gateway_prompt: str = typer.Option(
-        None, "--llm-gateway-prompt", help="Transform the finished transcript through LLM Gateway."
+    llm_gateway_prompt: list[str] = typer.Option(
+        None,
+        "--llm-gateway-prompt",
+        help="Transform the finished transcript through LLM Gateway. Repeatable: each "
+        "prompt runs on the previous one's response (a chain), the first on the transcript.",
     ),
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
@@ -178,7 +189,7 @@ def transcribe(
             # yields a runnable file.
             audio = client.resolve_audio_source(source, sample=sample)
             gateway = (
-                {"prompt": llm_gateway_prompt, "model": model, "max_tokens": max_tokens}
+                {"prompts": list(llm_gateway_prompt), "model": model, "max_tokens": max_tokens}
                 if llm_gateway_prompt
                 else None
             )
@@ -198,25 +209,37 @@ def transcribe(
             transcript = client.transcribe(api_key, audio, config=tc)
 
         if llm_gateway_prompt:
-            transformed = llm.transform_transcript(
-                api_key,
-                prompt=llm_gateway_prompt,
-                model=model,
-                transcript_id=transcript.id,
-                max_tokens=max_tokens,
-            )
+            # Chain the prompts: the first runs over the transcript (injected server-side
+            # via transcript_id); each subsequent prompt runs over the prior response.
+            steps: list[dict[str, str]] = []
+            previous: str | None = None
+            for i, prompt_text in enumerate(llm_gateway_prompt):
+                if i == 0:
+                    out = llm.transform_transcript(
+                        api_key,
+                        prompt=prompt_text,
+                        model=model,
+                        transcript_id=transcript.id,
+                        max_tokens=max_tokens,
+                    )
+                else:
+                    out = llm.transform_transcript(
+                        api_key,
+                        prompt=prompt_text,
+                        model=model,
+                        transcript_text=previous,
+                        max_tokens=max_tokens,
+                    )
+                steps.append({"prompt": prompt_text, "output": out})
+                previous = out
             output.emit(
                 {
                     "id": transcript.id,
                     "status": client.status_str(transcript),
                     "text": transcript.text,
-                    "transform": {
-                        "model": model,
-                        "prompt": llm_gateway_prompt,
-                        "output": transformed,
-                    },
+                    "transform": {"model": model, "steps": steps},
                 },
-                lambda d: str(d["transform"]["output"]),
+                _render_transform_steps,
                 json_mode=json_mode,
             )
             return
