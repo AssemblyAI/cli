@@ -1,7 +1,8 @@
-# Transcribe & explore — AssemblyAI starter
+# Transcribe a pre-recorded file — AssemblyAI starter
 
-Upload an audio/video file and see the transcript with speaker labels, chapters,
-sentiment, entities, and highlights. Built with FastAPI + a single HTML page.
+Transcribe an audio/video URL (defaults to a public sample) or upload a file, and
+see the transcript with speaker labels, chapters, sentiment, entities, and
+highlights. Built with FastAPI + a single HTML page.
 
 ## Run locally
 

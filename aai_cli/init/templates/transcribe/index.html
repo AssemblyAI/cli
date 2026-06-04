@@ -3,47 +3,103 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Transcribe &amp; explore · AssemblyAI</title>
+  <title>Transcribe a pre-recorded file · AssemblyAI</title>
   <style>
-    body { font: 15px/1.6 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; }
-    h1 { font-size: 20px; }
-    #drop { border: 2px dashed #bbb; border-radius: 10px; padding: 28px; text-align: center; cursor: pointer; }
-    #drop.busy { opacity: .6; pointer-events: none; }
-    .chips span { display: inline-block; background: #eef; border-radius: 99px; padding: 3px 10px; margin: 2px; font-size: 12px; }
-    .turn { margin: 6px 0; }
-    .spk { font-weight: 600; }
-    pre { white-space: pre-wrap; }
+    :root { --accent: #4338ca; --line: #e5e7eb; --muted: #6b7280; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body {
+      font: 15px/1.6 -apple-system, system-ui, sans-serif; color: #111827;
+      background: var(--bg); margin: 0; padding: 48px 16px;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+    .row { display: flex; gap: 8px; }
+    input[type=url] {
+      flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--line);
+      border-radius: 9px; font-size: 14px;
+    }
+    input[type=url]:focus { outline: none; border-color: var(--accent); }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 9px;
+      padding: 0 18px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    .or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 16px 0; }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .upload {
+      display: block; text-align: center; padding: 16px; border: 1.5px dashed var(--line);
+      border-radius: 10px; color: var(--muted); cursor: pointer; font-size: 14px;
+    }
+    .upload:hover { border-color: var(--accent); color: var(--accent); }
+    #status { min-height: 22px; color: var(--muted); margin: 18px 0 0; font-size: 14px; }
+    .chips { margin: 4px 0 14px; }
+    .chips span {
+      display: inline-block; background: #eef2ff; color: var(--accent); border-radius: 999px;
+      padding: 3px 11px; margin: 2px 4px 2px 0; font-size: 12px; font-weight: 600;
+    }
+    .turn { padding: 7px 0; border-top: 1px solid var(--line); }
+    .spk { font-weight: 600; color: var(--accent); }
+    pre { white-space: pre-wrap; margin: 0; font: inherit; }
   </style>
 </head>
 <body>
-  <h1>🎧 Transcribe &amp; explore</h1>
-  <p>Pick an audio or video file. The server transcribes it with AssemblyAI and returns speakers, chapters, sentiment, entities, and highlights.</p>
+  <main>
+    <h1>🎧 Transcribe a pre-recorded file</h1>
+    <p class="sub">Transcribe an audio or video URL (or upload a file) and explore speakers, chapters, sentiment, entities, and highlights.</p>
 
-  <label id="drop">
-    <input id="file" type="file" accept="audio/*,video/*" hidden />
-    <span id="droplabel">Click to choose a file</span>
-  </label>
+    <div class="card">
+      <div class="row">
+        <input id="url" type="url" value="https://assembly.ai/wildfires.mp3"
+               placeholder="https://example.com/audio.mp3" />
+        <button id="go">Transcribe</button>
+      </div>
+      <div class="or">or</div>
+      <label class="upload">
+        <input id="file" type="file" accept="audio/*,video/*" hidden />
+        Upload an audio or video file
+      </label>
+    </div>
 
-  <p id="status"></p>
-  <div id="result"></div>
+    <p id="status"></p>
+    <div id="result"></div>
+  </main>
 
   <script>
+    const urlInput = document.getElementById("url");
+    const goBtn = document.getElementById("go");
     const fileInput = document.getElementById("file");
-    const drop = document.getElementById("drop");
     const statusEl = document.getElementById("status");
     const result = document.getElementById("result");
 
-    drop.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => fileInput.files[0] && upload(fileInput.files[0]));
+    goBtn.addEventListener("click", () => transcribeUrl(urlInput.value.trim()));
+    urlInput.addEventListener("keydown", (e) => e.key === "Enter" && goBtn.click());
+    fileInput.addEventListener("change", () => fileInput.files[0] && transcribeFile(fileInput.files[0]));
 
-    async function upload(file) {
-      drop.classList.add("busy");
-      result.innerHTML = "";
-      statusEl.textContent = "Uploading…";
+    async function transcribeUrl(url) {
+      if (!url) return;
+      await start(() =>
+        fetch("/api/transcribe-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+      );
+    }
+
+    async function transcribeFile(file) {
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch("/api/transcribe", { method: "POST", body });
-      if (!res.ok) { statusEl.textContent = "Error: " + (await res.text()); drop.classList.remove("busy"); return; }
+      await start(() => fetch("/api/transcribe", { method: "POST", body }));
+    }
+
+    async function start(submit) {
+      busy(true);
+      result.innerHTML = "";
+      statusEl.textContent = "Uploading…";
+      const res = await submit();
+      if (!res.ok) return fail(await res.text());
       const { id } = await res.json();
       poll(id);
     }
@@ -51,29 +107,31 @@
     async function poll(id) {
       statusEl.textContent = "Transcribing…";
       const res = await fetch("/api/status/" + id);
-      if (!res.ok) { statusEl.textContent = "Error: " + (await res.text()); drop.classList.remove("busy"); return; }
+      if (!res.ok) return fail(await res.text());
       const data = await res.json();
-      if (data.status !== "completed") { setTimeout(() => poll(id), 2000); return; }
+      if (data.status !== "completed") return void setTimeout(() => poll(id), 2000);
       statusEl.textContent = "Done.";
-      drop.classList.remove("busy");
+      busy(false);
       render(data.transcript);
     }
 
     function render(t) {
       const chips = [];
-      if (t.chapters) chips.push("Chapters");
-      if (t.sentiment_analysis_results) chips.push("Sentiment");
-      if (t.entities) chips.push("Entities");
-      if (t.auto_highlights_result) chips.push("Highlights");
-      const utterances = (t.utterances || []).map(
-        (u) => `<div class="turn"><span class="spk">Speaker ${u.speaker}:</span> ${escapeHtml(u.text)}</div>`
-      ).join("");
+      if (t.chapters) chips.push(`${t.chapters.length} chapters`);
+      if (t.sentiment_analysis_results) chips.push("sentiment");
+      if (t.entities) chips.push(`${t.entities.length} entities`);
+      if (t.auto_highlights_result) chips.push("highlights");
+      const turns = (t.utterances || [])
+        .map((u) => `<div class="turn"><span class="spk">Speaker ${u.speaker}:</span> ${esc(u.text)}</div>`)
+        .join("");
       result.innerHTML =
         `<div class="chips">${chips.map((c) => `<span>${c}</span>`).join("")}</div>` +
-        (utterances || `<pre>${escapeHtml(t.text || "")}</pre>`);
+        (turns || `<pre>${esc(t.text || "")}</pre>`);
     }
 
-    function escapeHtml(s) {
+    function busy(on) { goBtn.disabled = on; }
+    function fail(msg) { busy(false); statusEl.textContent = "Error: " + msg; }
+    function esc(s) {
       return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
     }
   </script>

@@ -1,10 +1,11 @@
-"""Transcribe & explore — AssemblyAI starter (FastAPI).
+"""Transcribe a pre-recorded file — AssemblyAI starter (FastAPI).
 
-Two short endpoints so each request stays fast (serverless-friendly):
-  POST /api/transcribe  -> submit the upload, return {"id": ...}
-  GET  /api/status/{id} -> poll; returns the full transcript JSON when complete
+Each call stays short, so it's serverless-friendly:
+  POST /api/transcribe       -> submit an uploaded file, return {"id": ...}
+  POST /api/transcribe-url   -> submit a public URL (defaults to the sample), {"id": ...}
+  GET  /api/status/{id}      -> poll; returns the full transcript JSON when complete
 
-The browser (index.html) submits a file, then polls status until done.
+The browser (index.html) submits a URL or file, then polls status until done.
 Your API key stays on the server — the browser never sees it.
 """
 
@@ -19,11 +20,14 @@ import assemblyai as aai
 from assemblyai.api import get_transcript  # single non-blocking GET (see status())
 from assemblyai.client import Client
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import Body, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY", "")
+
+# A public sample so you can try it instantly without uploading anything.
+SAMPLE_URL = "https://assembly.ai/wildfires.mp3"
 
 # Audio-intelligence features to showcase. Tweak these — that's the point of a starter.
 CONFIG = aai.TranscriptionConfig(
@@ -43,13 +47,24 @@ def index() -> FileResponse:
     return FileResponse(ROOT / "index.html")
 
 
+def _submit(audio: str) -> dict[str, str]:
+    """Submit an audio reference (local file path or public URL); return its id."""
+    transcript = aai.Transcriber().submit(audio, config=CONFIG)
+    return {"id": transcript.id}
+
+
 @app.post("/api/transcribe")
 async def transcribe(file: UploadFile) -> dict[str, str]:
     suffix = Path(file.filename or "audio").suffix
     tmp = Path(tempfile.gettempdir()) / f"aai-{uuid.uuid4().hex}{suffix}"
     tmp.write_bytes(await file.read())
-    transcript = aai.Transcriber().submit(str(tmp), config=CONFIG)
-    return {"id": transcript.id}
+    return _submit(str(tmp))
+
+
+@app.post("/api/transcribe-url")
+def transcribe_url(url: str = Body(default=SAMPLE_URL, embed=True)) -> dict[str, str]:
+    # AssemblyAI transcribes a public URL directly — no upload step needed.
+    return _submit(url.strip() or SAMPLE_URL)
 
 
 @app.get("/api/status/{transcript_id}")

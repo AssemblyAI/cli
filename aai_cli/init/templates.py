@@ -8,7 +8,7 @@ from __future__ import annotations
 # their template directories land in follow-on PRs. A test enforces registry ==
 # shipped directories.
 TEMPLATES: dict[str, str] = {
-    "transcribe": "Transcribe & explore a file",
+    "transcribe": "Transcribe a pre-recorded file",
 }
 
 # Display order for the picker and `--help`.

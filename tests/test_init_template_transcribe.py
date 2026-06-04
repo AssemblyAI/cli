@@ -75,6 +75,25 @@ def test_submit_returns_transcript_id(monkeypatch):
     fake.Transcriber.return_value.submit.assert_called_once()
 
 
+def test_transcribe_url_submits_given_url(monkeypatch):
+    app, fake, _api = _load_app(monkeypatch)
+    client = TestClient(app)
+    resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "t-123"}
+    submitted = fake.Transcriber.return_value.submit.call_args[0][0]
+    assert submitted == "https://example.com/a.mp3"  # URL passed straight through, no upload
+
+
+def test_transcribe_url_defaults_to_sample(monkeypatch):
+    app, fake, _api = _load_app(monkeypatch)
+    client = TestClient(app)
+    resp = client.post("/api/transcribe-url", json={})  # no url -> the bundled sample
+    assert resp.status_code == 200
+    submitted = fake.Transcriber.return_value.submit.call_args[0][0]
+    assert "wildfires" in submitted
+
+
 def test_status_returns_completed_transcript(monkeypatch):
     app, _aai, _api = _load_app(monkeypatch)
     client = TestClient(app)
