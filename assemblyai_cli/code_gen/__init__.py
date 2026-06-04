@@ -10,9 +10,14 @@ def agent(voice: str, system_prompt: str, greeting: str) -> str:
     return _agent.render(voice, system_prompt, greeting)
 
 
-def transcribe(merged: dict[str, object], source: str) -> str:
+def transcribe(
+    merged: dict[str, object],
+    source: str,
+    *,
+    llm_gateway: dict[str, object] | None = None,
+) -> str:
     """Generate runnable Python that reproduces this transcribe invocation."""
-    return _transcribe.render(merged, source)
+    return _transcribe.render(merged, source, llm_gateway=llm_gateway)
 
 
 def stream(merged: dict[str, object]) -> str:

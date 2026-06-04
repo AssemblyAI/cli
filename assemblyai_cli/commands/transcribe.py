@@ -177,7 +177,12 @@ def transcribe(
             # transcribing or authenticating. Raw stdout so `--show-code > script.py`
             # yields a runnable file.
             audio = client.resolve_audio_source(source, sample=sample)
-            print(code_gen.transcribe(merged, audio))
+            gateway = (
+                {"prompt": llm_gateway_prompt, "model": model, "max_tokens": max_tokens}
+                if llm_gateway_prompt
+                else None
+            )
+            print(code_gen.transcribe(merged, audio, llm_gateway=gateway))
             return
 
         tc = config_builder.construct_transcription_config(merged)

@@ -294,3 +294,39 @@ def test_every_snippet_execs_against_a_realistic_transcript():
 def test_fuzz_result_handling_always_execs(merged):
     body = snippets.result_handling(merged)
     exec(compile(body, "<snippets>", "exec"), {"transcript": _Stub(), "getattr": getattr})  # noqa: S102
+
+
+def test_transcribe_show_code_includes_llm_gateway_transform():
+    code = code_gen.transcribe(
+        {"speaker_labels": True},
+        "audio.mp3",
+        llm_gateway={
+            "prompt": "translate to spanish",
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1000,
+        },
+    )
+    ast.parse(code)
+    assert "from openai import OpenAI" in code
+    assert "llm-gateway.assemblyai.com" in code
+    assert "translate to spanish" in code
+    assert "{{ transcript }}" in code  # gateway injects the transcript at this tag
+    assert '"transcript_id": transcript.id' in code
+    # The LLM-gateway transform replaces the analysis result-handling (as the CLI does).
+    assert "transcript.utterances" not in code
+
+
+def test_transcribe_show_code_without_gateway_has_no_openai_import():
+    code = code_gen.transcribe({"speaker_labels": True}, "audio.mp3")
+    assert "from openai import OpenAI" not in code
+    assert "transcript.utterances" in code  # normal result handling instead
+
+
+def test_agent_show_code_uses_single_full_duplex_stream():
+    # The CLI uses ONE sd.RawStream (mic+speaker); two separate streams fail on macOS.
+    code = code_gen.agent(voice="ivy", system_prompt="p", greeting="g")
+    ast.parse(code)
+    assert "sd.RawStream(" in code
+    assert "RawInputStream" not in code
+    assert "RawOutputStream" not in code
+    assert "audioop.ratecv" in code  # device-rate <-> 24 kHz resampling

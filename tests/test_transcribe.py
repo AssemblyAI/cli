@@ -281,6 +281,24 @@ def test_transcribe_show_code_ignores_json_flag(monkeypatch):
     assert "import assemblyai as aai" in result.output
 
 
+def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
+    # --llm-gateway-prompt must be reflected in the generated code, still without
+    # transcribing or calling the gateway.
+    def _boom(*a, **k):
+        raise AssertionError("must not call the API")
+
+    monkeypatch.setattr("assemblyai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("assemblyai_cli.commands.transcribe.llm.transform_transcript", _boom)
+    result = runner.invoke(
+        app,
+        ["transcribe", "--sample", "--llm-gateway-prompt", "translate to spanish", "--show-code"],
+    )
+    assert result.exit_code == 0
+    assert "llm-gateway.assemblyai.com" in result.output
+    assert "translate to spanish" in result.output
+    assert '"transcript_id": transcript.id' in result.output
+
+
 def test_transcribe_renders_summary_human(monkeypatch):
     _auth()
     monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
