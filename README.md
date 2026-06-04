@@ -43,8 +43,9 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 | `aai samples create <name>` | Scaffold a runnable starter script with your key injected. |
 
 Add `--json` to any command for machine-readable output (it's also the default when
-output is piped or run by an agent). Auth problems surface as a clean
-"not authenticated" error across every command.
+output is piped or run by an agent). Errors always go to **stderr**, so stdout stays
+clean for pipelines. Auth problems surface as a clean "not authenticated" error
+across every command.
 
 > **Tip:** Quote URLs that contain `?` (most YouTube links do). In zsh the `?` is a
 > glob character, so an unquoted URL fails with `zsh: no matches found` before the
@@ -164,6 +165,52 @@ aai transcribe call.mp3 \
   --llm-gateway-prompt "summarize" \
   --llm-gateway-prompt "translate the summary to Spanish" \
   --show-code > summarize_then_translate.py
+```
+
+## Pipelines
+
+`aai` is built to compose with the rest of your shell. Output is machine-clean
+(errors go to stderr), commands read `-` from stdin, and `-o`/`--output` prints a
+single field so you rarely need `jq`.
+
+**Pick one field with `-o`:**
+
+```sh
+aai transcribe call.mp3 -o text        # just the transcript text
+aai transcribe call.mp3 -o id          # just the transcript id
+aai transcribe call.mp3 -o utterances  # speaker-labeled lines
+aai transcribe call.mp3 -o json | jq .  # full JSON when you do want jq
+```
+
+**Read audio from stdin (`-`):**
+
+```sh
+ffmpeg -i talk.mp4 -f wav - | aai transcribe -        # transcribe any video
+curl -sL https://example.com/ep.mp3 | aai transcribe -  # no temp file
+ffmpeg -i in.mp4 -f s16le -ac 1 -ar 16000 - | aai stream -   # live, from a pipe
+```
+
+**Feed transcripts into the LLM Gateway** (`aai llm` reads piped stdin):
+
+```sh
+aai transcribe call.mp3 -o text | aai llm "summarize, then list action items"
+cat notes.txt | aai llm "turn these into a changelog"
+```
+
+**Stream, then summarize.** Piped `stream`/`agent` emit clean transcript lines with
+`-o text`. A Ctrl-C in a pipe hits both sides, so to stop the producer *and* let the
+consumer finish, signal only the producer — or end the stream on its own:
+
+```sh
+# end after 30s by signaling just the producer (macOS: brew install coreutils, use gtimeout)
+timeout -s INT 30s aai stream -o text | aai llm "summarize"
+
+# or end on a natural pause (server-side inactivity timeout, in seconds)
+aai stream -o text --inactivity-timeout 5 | aai llm "summarize the call"
+
+# capture then process (most robust)
+aai stream -o text > call.txt        # Ctrl-C to stop
+aai llm "summarize" < call.txt
 ```
 
 ## AI coding agents
