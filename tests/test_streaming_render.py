@@ -62,13 +62,6 @@ def test_human_long_partial_clears_wrapped_rows():
     assert "\x1b[1A" in buf.getvalue()  # moved up over the wrapped rows to clear them
 
 
-def test_human_llm_line_rendered():
-    r, buf = _human()
-    r.turn(_turn("hola", True))
-    r.llm("the summary")
-    assert "the summary" in buf.getvalue()
-
-
 def test_human_stopped_announced():
     r, buf = _human()
     r.stopped()
@@ -97,20 +90,6 @@ def test_termination_json_emits_duration():
     r = StreamRenderer(json_mode=True, out=out)
     r.termination(types.SimpleNamespace(audio_duration_seconds=12.5))
     assert json.loads(out.getvalue()) == {"type": "termination", "audio_duration_seconds": 12.5}
-
-
-def test_llm_json_emits_event():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=True, out=out)
-    r.llm("the summary")
-    assert json.loads(out.getvalue()) == {"type": "llm", "content": "the summary"}
-
-
-def test_llm_ignores_empty_content():
-    out = io.StringIO()
-    r = StreamRenderer(json_mode=True, out=out)
-    r.llm("")
-    assert out.getvalue() == ""
 
 
 def test_close_is_noop_in_json_mode():
@@ -159,12 +138,3 @@ def test_listening_is_silent_in_json_mode():
     r = StreamRenderer(json_mode=True, out=out)
     r.listening()
     assert out.getvalue() == ""  # the "Listening…" line is human-only
-
-
-def test_human_llm_line_is_branded():
-    r, buf = _human(color_system="truecolor")
-    r.turn(_turn("hola", True))
-    r.llm("the summary")
-    out = buf.getvalue()
-    assert "the summary" in out
-    assert "\x1b[" in out  # brand styling emits ANSI

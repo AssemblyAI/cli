@@ -53,7 +53,7 @@ def test_llm_sends_prompt_and_prints_output(monkeypatch):
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["output"] == "4"
-    assert data["model"] == "claude-sonnet-4-6"
+    assert data["model"] == "claude-haiku-4-5-20251001"
     assert seen["transcript_id"] is None
     assert seen["messages"][0]["content"] == "What is 2+2?"
 

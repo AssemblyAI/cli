@@ -352,3 +352,30 @@ def test_agent_show_code_uses_single_full_duplex_stream():
     assert "RawOutputStream" not in code
     # No audioop: it's deprecated and removed in Python 3.13, so the script stays portable.
     assert "audioop" not in code
+
+
+def test_stream_show_code_includes_llm_follow_loop():
+    code = code_gen.stream(
+        {"speech_model": "universal_streaming"},
+        llm={
+            "prompts": ["summarize", "translate to french"],
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 500,
+        },
+    )
+    ast.parse(code)
+    assert "from openai import OpenAI" in code
+    assert "llm-gateway.assemblyai.com" in code
+    # Both prompts appear, in order, for the chain.
+    assert code.index("summarize") < code.index("translate to french")
+    # Still streams from the mic, refreshing the answer on each finalized turn.
+    assert "MicrophoneStream" in code
+    assert "end_of_turn" in code
+    assert "claude-haiku-4-5-20251001" in code
+
+
+def test_stream_show_code_without_llm_is_plain_scaffold():
+    code = code_gen.stream({})
+    ast.parse(code)
+    assert "from openai import OpenAI" not in code  # no gateway when --llm absent
+    assert "MicrophoneStream" in code

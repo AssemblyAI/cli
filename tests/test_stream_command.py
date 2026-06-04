@@ -238,9 +238,9 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
     assert {"type": "turn", "transcript": "from file", "end_of_turn": True} in lines
 
 
-def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
+def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
     config.set_api_key("default", "sk_live")
-    seen = {}
+    seen = {"texts": []}
 
     def fake(api_key, source, *, params, on_turn=None, **kwargs):
         if on_turn:
@@ -248,20 +248,20 @@ def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
             on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="partial", end_of_turn=False))  # ignored
 
-    def fake_transform(api_key, *, prompt, model, transcript_text, max_tokens):
-        seen["prompt"] = prompt
+    def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
+        seen["texts"].append(transcript_text)
+        seen["prompts"] = prompts
         seen["model"] = model
-        seen["transcript_text"] = transcript_text
         seen["max_tokens"] = max_tokens
-        return "hello world"
+        return f"answer:{transcript_text}"
 
     monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
-    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.transform_transcript", fake_transform)
+    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.run_chain", fake_run_chain)
     result = runner.invoke(
         app,
         [
             "stream",
-            "--llm-gateway-prompt",
+            "--llm",
             "translate to english",
             "--model",
             "gpt-4.1",
@@ -271,12 +271,47 @@ def test_stream_prompt_transforms_accumulated_transcript(monkeypatch):
         ],
     )
     assert result.exit_code == 0
-    # The full transcript (finalized turns only) is sent for one transform.
-    assert seen["transcript_text"] == "hola mundo"
+    # One refresh per finalized turn, over the growing transcript (partials ignored).
+    assert seen["texts"] == ["hola", "hola mundo"]
+    assert seen["prompts"] == ["translate to english"]
     assert seen["model"] == "gpt-4.1"
     assert seen["max_tokens"] == 50
     lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
-    assert {"type": "llm", "content": "hello world"} in lines
+    assert {"turns": 1, "output": "answer:hola"} in lines
+    assert {"turns": 2, "output": "answer:hola mundo"} in lines
+    # Live mode replaces the raw turn envelopes; only follow refreshes reach stdout.
+    assert '"type"' not in result.output
+
+
+def test_stream_llm_chains_multiple_prompts(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+        if on_turn:
+            on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
+
+    def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
+        seen["prompts"] = prompts
+        return "done"
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
+    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.run_chain", fake_run_chain)
+    result = runner.invoke(
+        app, ["stream", "--llm", "summarize", "--llm", "translate to french", "--json"]
+    )
+    assert result.exit_code == 0
+    assert seen["prompts"] == ["summarize", "translate to french"]
+
+
+def test_stream_llm_rejects_output_text(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.stream.client.stream_audio",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not stream")),
+    )
+    result = runner.invoke(app, ["stream", "--llm", "summarize", "-o", "text"])
+    assert result.exit_code == 2  # --llm renders a panel/NDJSON; -o text is contradictory
 
 
 def test_stream_without_prompt_does_not_transform(monkeypatch):
@@ -287,15 +322,15 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
-    def fake_transform(*a, **k):
+    def fake_run_chain(*a, **k):
         called["ran"] = True
         return "x"
 
     monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake)
-    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.transform_transcript", fake_transform)
+    monkeypatch.setattr("assemblyai_cli.commands.stream.llm.run_chain", fake_run_chain)
     result = runner.invoke(app, ["stream", "--json"])
     assert result.exit_code == 0
-    assert called["ran"] is False  # no --llm-gateway-prompt -> no gateway call
+    assert called["ran"] is False  # no --llm -> no gateway call
 
 
 def test_stream_prompt_biases_speech_model(monkeypatch):
@@ -479,3 +514,15 @@ def test_stream_output_text_emits_plain_finalized_turns(monkeypatch):
     # Final turn only, plain text; partials and JSON envelopes are not on stdout.
     assert result.output.strip() == "hello world"
     assert '"type"' not in result.output
+
+
+def test_stream_show_code_with_llm_emits_follow_loop(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("must not stream")
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", _boom)
+    result = runner.invoke(app, ["stream", "--llm", "summarize", "--show-code"])
+    assert result.exit_code == 0
+    assert "from openai import OpenAI" in result.output
+    assert "summarize" in result.output
+    assert "run_chain" in result.output  # the live transcribe->LLM-per-turn loop

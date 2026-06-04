@@ -109,10 +109,10 @@ def transcribe(
         None, "--config", help="Set any TranscriptionConfig field as KEY=VALUE (repeatable)."
     ),
     config_file: str = typer.Option(None, "--config-file", help="JSON file of config fields."),
-    # llm gateway transform (existing)
-    llm_gateway_prompt: list[str] = typer.Option(
+    # llm gateway transform
+    llm_prompt: list[str] = typer.Option(
         None,
-        "--llm-gateway-prompt",
+        "--llm",
         help="Transform the finished transcript through LLM Gateway. Repeatable: each "
         "prompt runs on the previous one's response (a chain), the first on the transcript.",
     ),
@@ -197,8 +197,8 @@ def transcribe(
             # yields a runnable file.
             audio = client.resolve_audio_source(source, sample=sample)
             gateway = (
-                {"prompts": list(llm_gateway_prompt), "model": model, "max_tokens": max_tokens}
-                if llm_gateway_prompt
+                {"prompts": list(llm_prompt), "model": model, "max_tokens": max_tokens}
+                if llm_prompt
                 else None
             )
             output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
@@ -232,12 +232,12 @@ def transcribe(
             print(client.select_transcript_field(transcript, output_field))
             return
 
-        if llm_gateway_prompt:
+        if llm_prompt:
             # Chain the prompts: the first runs over the transcript (injected server-side
             # via transcript_id); each subsequent prompt runs over the prior response.
             steps: list[dict[str, str]] = []
             previous: str | None = None
-            for i, prompt_text in enumerate(llm_gateway_prompt):
+            for i, prompt_text in enumerate(llm_prompt):
                 # First prompt runs over the transcript (by id); each later one over
                 # the prior response.
                 target = (
