@@ -15,6 +15,8 @@ import uuid
 from pathlib import Path
 
 import assemblyai as aai
+from assemblyai.api import get_transcript  # single non-blocking GET (see status())
+from assemblyai.client import Client
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -51,9 +53,13 @@ async def transcribe(file: UploadFile) -> dict[str, str]:
 
 @app.get("/api/status/{transcript_id}")
 def status(transcript_id: str) -> dict[str, object]:
-    t = aai.Transcript.get_by_id(transcript_id)
+    # One non-blocking GET. NOTE: aai.Transcript.get_by_id() BLOCKS until the job
+    # finishes (it calls wait_for_completion) — wrong for a poll endpoint, and it
+    # would time out on serverless. api.get_transcript does a single request and
+    # uses the SDK's configured client (auth + region from aai.settings).
+    t = get_transcript(Client.get_default().http_client, transcript_id)
     if t.status == aai.TranscriptStatus.error:
         raise HTTPException(status_code=502, detail=t.error or "Transcription failed")
     if t.status == aai.TranscriptStatus.completed:
-        return {"status": "completed", "transcript": t.json_response}
+        return {"status": "completed", "transcript": t.dict()}
     return {"status": str(getattr(t.status, "value", t.status))}
