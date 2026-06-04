@@ -1204,10 +1204,10 @@ from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.init import keys, runner, scaffold, steps, templates
 
-app = typer.Typer(
-    help="Scaffold a runnable AssemblyAI web app and open it in your browser.",
-    no_args_is_help=False,  # bare `aai init` runs the interactive picker (or errors if no TTY)
-)
+# Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
+# uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
+# no name. Bare `aai init` runs the command with template=None -> the interactive picker.
+app = typer.Typer()
 
 
 def _pick_template() -> str:
@@ -1239,7 +1239,7 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
     return Path.cwd() / f"{template}-app"
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def init(
     ctx: typer.Context,
     template: str = typer.Argument(None, help="Template id: transcribe, stream, agent, llm."),
@@ -1355,10 +1355,11 @@ _COMMAND_ORDER = (
 )
 ```
 
-Register the typer app (near the other `add_typer` calls):
+Register the typer app (near the other `add_typer` calls) — **no `name=`**, so the
+single `init` command flattens to `aai init` (same as `app.add_typer(transcribe.app)`):
 
 ```python
-app.add_typer(init.app, name="init")
+app.add_typer(init.app)
 ```
 
 - [ ] **Step 5: Re-export the public surface**
@@ -1387,11 +1388,12 @@ __all__ = [
 Run: `uv run pytest tests/test_init_command.py -v`
 Expected: PASS (9 tests).
 
-> If `app.add_typer(init.app, name="init")` plus `@app.callback(invoke_without_command=True)`
-> doesn't bind the positional `template`/`directory` arguments as expected, fall back to
-> registering `init` as a single `@app.command()` on a dedicated sub-typer (mirror how
-> `samples`/`claude` expose commands) — the test contract (args + flags + exit codes) is
-> what matters, not the registration mechanism.
+> This mirrors the verified `aai transcribe` registration (`typer.Typer()` + a single
+> `@app.command()` + `app.add_typer(...)` with no name), which renders as
+> `aai transcribe [OPTIONS] [SOURCE]` — a flat leaf command with positional args. So
+> `aai init [OPTIONS] [TEMPLATE] [DIRECTORY]` binds the positionals the same way; bare
+> `aai init` runs the command with `template=None` and falls into the picker (which
+> errors helpfully under CliRunner since there's no TTY).
 
 - [ ] **Step 7: Commit**
 
