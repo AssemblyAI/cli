@@ -63,6 +63,7 @@ source = { editable = "." }
 dependencies = [
     { name = "assemblyai" },
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "httpx" },
     { name = "keyring" },
     { name = "openai" },
     { name = "platformdirs" },
@@ -89,6 +90,7 @@ requires-dist = [
     { name = "assemblyai", specifier = ">=0.34" },
     { name = "audioop-lts", marker = "python_full_version >= '3.13'", specifier = ">=0.2" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "keyring", specifier = ">=24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "openai", specifier = ">=1.40" },

@@ -31,6 +31,7 @@ dependencies = [
     "assemblyai>=0.64.4",
     "rich>=15.0.0",
     "keyring>=25.7.0",
+    "httpx>=0.28.1",
     "platformdirs>=4.10.0",
     "tomli-w>=1.2.0",
     "websockets>=16.0",
