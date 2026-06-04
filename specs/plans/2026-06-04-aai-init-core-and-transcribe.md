@@ -315,17 +315,25 @@ def _load_app(monkeypatch):
     fake_aai.TranscriptStatus.error = "error"
     submitted = MagicMock(id="t-123")
     fake_aai.Transcriber.return_value.submit.return_value = submitted
-    done = MagicMock(status="completed", error=None,
-                     json_response={"text": "hello world", "utterances": []})
-    fake_aai.Transcript.get_by_id.return_value = done
+
+    # The template fetches status via the SDK's non-blocking api.get_transcript,
+    # so stub the assemblyai.api and assemblyai.client submodules too.
+    fake_api = MagicMock()
+    done = MagicMock(status="completed", error=None)
+    done.dict.return_value = {"text": "hello world", "utterances": []}
+    fake_api.get_transcript.return_value = done
+    fake_client = MagicMock()
+
     monkeypatch.setitem(sys.modules, "assemblyai", fake_aai)
+    monkeypatch.setitem(sys.modules, "assemblyai.api", fake_api)
+    monkeypatch.setitem(sys.modules, "assemblyai.client", fake_client)
 
     spec = importlib.util.spec_from_file_location(
         "_tmpl_transcribe", TEMPLATE_DIR / "api" / "index.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.app, fake_aai
+    return module.app, fake_aai, fake_api
 
 
 def test_required_files_exist():
@@ -341,7 +349,7 @@ def test_template_ships_no_real_key():
 
 
 def test_index_route_serves_page(monkeypatch):
-    app, _ = _load_app(monkeypatch)
+    app, _aai, _api = _load_app(monkeypatch)
     client = TestClient(app)
     resp = client.get("/")
     assert resp.status_code == 200
@@ -349,7 +357,7 @@ def test_index_route_serves_page(monkeypatch):
 
 
 def test_submit_returns_transcript_id(monkeypatch):
-    app, fake = _load_app(monkeypatch)
+    app, fake, _api = _load_app(monkeypatch)
     client = TestClient(app)
     resp = client.post("/api/transcribe", files={"file": ("a.mp3", b"\x00\x01", "audio/mpeg")})
     assert resp.status_code == 200
@@ -358,13 +366,33 @@ def test_submit_returns_transcript_id(monkeypatch):
 
 
 def test_status_returns_completed_transcript(monkeypatch):
-    app, _ = _load_app(monkeypatch)
+    app, _aai, _api = _load_app(monkeypatch)
     client = TestClient(app)
     resp = client.get("/api/status/t-123")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "completed"
     assert body["transcript"]["text"] == "hello world"
+
+
+def test_status_returns_processing_when_not_done(monkeypatch):
+    # A poll endpoint MUST report a non-terminal status without blocking. This guards
+    # against regressing to the blocking aai.Transcript.get_by_id() (which would only
+    # ever return completed/error, making this branch dead code).
+    app, _aai, fake_api = _load_app(monkeypatch)
+    fake_api.get_transcript.return_value = MagicMock(status="processing", error=None)
+    client = TestClient(app)
+    resp = client.get("/api/status/t-xyz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "processing"}
+
+
+def test_status_returns_502_on_error(monkeypatch):
+    app, _aai, fake_api = _load_app(monkeypatch)
+    fake_api.get_transcript.return_value = MagicMock(status="error", error="bad audio")
+    client = TestClient(app)
+    resp = client.get("/api/status/t-bad")
+    assert resp.status_code == 502
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -393,6 +421,8 @@ import uuid
 from pathlib import Path
 
 import assemblyai as aai
+from assemblyai.api import get_transcript  # single non-blocking GET (see status())
+from assemblyai.client import Client
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -429,11 +459,15 @@ async def transcribe(file: UploadFile) -> dict[str, str]:
 
 @app.get("/api/status/{transcript_id}")
 def status(transcript_id: str) -> dict[str, object]:
-    t = aai.Transcript.get_by_id(transcript_id)
+    # One non-blocking GET. NOTE: aai.Transcript.get_by_id() BLOCKS until the job
+    # finishes (it calls wait_for_completion) — wrong for a poll endpoint, and it
+    # would time out on serverless. api.get_transcript does a single request and
+    # uses the SDK's configured client (auth + region from aai.settings).
+    t = get_transcript(Client.get_default().http_client, transcript_id)
     if t.status == aai.TranscriptStatus.error:
         raise HTTPException(status_code=502, detail=t.error or "Transcription failed")
     if t.status == aai.TranscriptStatus.completed:
-        return {"status": "completed", "transcript": t.json_response}
+        return {"status": "completed", "transcript": t.dict()}
     return {"status": str(getattr(t.status, "value", t.status))}
 ```
 
@@ -610,7 +644,7 @@ Then: `uv sync --extra dev`
 - [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_init_template_transcribe.py -v`
-Expected: PASS (5 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 8: Commit**
 
@@ -1395,6 +1429,116 @@ locally and deploy to Vercel as-is. Your key is written to a git-ignored `.env`
 ```bash
 git add README.md
 git commit -m "docs: document aai init"
+```
+
+---
+
+## Task 10: Cross-template contract tests (keep every example working)
+
+**Files:**
+- Create: `tests/test_init_template_contract.py`
+
+**Why:** The templates are user-facing starter apps that drift from the SDK/API over
+time. A parametrized contract test — discovering every template directory on disk —
+catches the breakages a single smoke test misses, and **auto-covers the future
+`stream`/`agent`/`llm` templates** the moment their directories land. These are
+static-analysis checks (no app load, no network), so they're fast and robust.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_init_template_contract.py
+import ast
+import re
+from pathlib import Path
+
+import pytest
+
+TEMPLATES_ROOT = Path("aai_cli/init/templates")
+TEMPLATE_DIRS = sorted(
+    p for p in TEMPLATES_ROOT.iterdir() if p.is_dir() and not p.name.startswith("__")
+)
+# Map an import name to its PyPI distribution where they differ.
+_PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
+_STDLIB = {"os", "tempfile", "uuid", "pathlib", "__future__", "json", "typing"}
+
+
+@pytest.fixture(params=TEMPLATE_DIRS, ids=lambda p: p.name)
+def template_dir(request):
+    return request.param
+
+
+def test_required_files_present(template_dir):
+    for rel in ("api/index.py", "index.html", "vercel.json",
+                "requirements.txt", "README.md", "gitignore", "env.example"):
+        assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
+
+
+def test_no_committed_dotenv_or_real_key(template_dir):
+    assert not (template_dir / ".env").exists(), f"{template_dir.name} ships a real .env"
+    assert "your_assemblyai_api_key_here" in (template_dir / "env.example").read_text()
+
+
+def test_frontend_routes_exist_in_backend(template_dir):
+    """Every /api path the page fetches must be a route the backend registers."""
+    html = (template_dir / "index.html").read_text()
+    fetched = set(re.findall(r'fetch\(\s*["\'`](/api/[^"\'`?]+)', html))
+    # Also catch template-literal paths like fetch(`/api/status/${id}`) and "/api/x/" + id
+    fetched |= set(re.findall(r'["\'`](/api/[A-Za-z0-9_\-/]+?)(?:/?\$\{|/?["\'`]\s*\+)', html))
+    src = (template_dir / "api" / "index.py").read_text()
+    registered = set(re.findall(r'@app\.\w+\(\s*["\']([^"\']+)["\']', src))
+    registered_bases = {re.sub(r"/\{[^}]+\}$", "", r).rstrip("/") for r in registered}
+    for path in fetched:
+        base = path.rstrip("/")
+        assert any(base == r or base.startswith(r + "/") for r in registered_bases), (
+            f"{template_dir.name}: index.html fetches {path!r}, "
+            f"not registered in api/index.py (routes: {sorted(registered_bases)})"
+        )
+
+
+def test_requirements_cover_backend_imports(template_dir):
+    """Every third-party import in api/index.py appears in requirements.txt."""
+    tree = ast.parse((template_dir / "api" / "index.py").read_text())
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.add(node.names[0].name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            imports.add(node.module.split(".")[0])
+    third_party = imports - _STDLIB
+    reqs = (template_dir / "requirements.txt").read_text().lower()
+    for pkg in third_party:
+        dist = _PKG_MAP.get(pkg, pkg)
+        assert dist in reqs, f"{template_dir.name}: import {pkg!r} ({dist}) missing from requirements.txt"
+
+
+def test_status_endpoint_does_not_block(template_dir):
+    """Guard against the blocking SDK call: a poll endpoint must not wait_for_completion."""
+    src = (template_dir / "api" / "index.py").read_text()
+    tree = ast.parse(src)
+    blocking = {"get_by_id", "wait_for_completion"}
+    called = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert not (called & blocking), (
+        f"{template_dir.name}: uses blocking SDK call {called & blocking} — "
+        f"poll endpoints must do a single non-blocking fetch"
+    )
+```
+
+- [ ] **Step 2: Run test to verify it passes (transcribe already satisfies the contract)**
+
+Run: `uv run pytest tests/test_init_template_contract.py -v`
+Expected: PASS — 5 checks × however many templates exist (just `transcribe` for now).
+
+> If any check fails for `transcribe`, the contract found a real defect — fix the
+> template, not the test. (The route-regex and import-detection are intentionally
+> conservative; if a legitimate future template pattern trips them, widen the regex
+> rather than weakening the assertion.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/test_init_template_contract.py
+git commit -m "test(init): parametrized template contract tests (keep examples working)"
 ```
 
 ---
