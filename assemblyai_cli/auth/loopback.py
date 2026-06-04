@@ -30,7 +30,7 @@ def capture_callback(timeout: float = 120.0) -> CallbackResult:
     done = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - stdlib API name
+        def do_GET(self) -> None:  # stdlib API name
             parsed = urlparse(self.path)
             if parsed.path != endpoints.LOOPBACK_PATH:
                 self.send_response(404)

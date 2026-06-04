@@ -10,9 +10,9 @@ def _hit(path: str) -> None:
     # Retry briefly until the server thread is bound.
     for _ in range(50):
         try:
-            urllib.request.urlopen(url, timeout=2).read()
+            urllib.request.urlopen(url, timeout=2).read()  # noqa: S310 - fixed localhost URL
             return
-        except Exception:
+        except OSError:
             time.sleep(0.05)
 
 

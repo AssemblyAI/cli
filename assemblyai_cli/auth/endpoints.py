@@ -23,7 +23,7 @@ AMS_BASE_URL = os.environ.get(
     "AAI_AUTH_AMS_URL", "https://ams.sandbox000.assemblyai-labs.com"
 )
 
-CLI_TOKEN_NAME = "AssemblyAI CLI"
+CLI_TOKEN_NAME = "AssemblyAI CLI"  # noqa: S105 - display name, not a credential
 
 
 def redirect_uri() -> str:
