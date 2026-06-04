@@ -140,6 +140,32 @@ The agent is full-duplex — your mic stays open while it speaks, so you can int
 mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself on your
 speakers.
 
+## Show the code
+
+Add `--show-code` to `transcribe`, `stream`, or `agent` to print the equivalent Python
+SDK code **instead of running** the command — a ready-to-edit starting point for your
+own app. It builds the script from exactly the flags you passed, needs no API key
+(the generated code reads `ASSEMBLYAI_API_KEY` from the environment), and writes plain
+Python to stdout, so you can redirect it straight into a file:
+
+```sh
+aai transcribe --sample --speaker-labels --show-code        # print the equivalent script
+aai transcribe call.mp3 --sentiment-analysis --show-code > my_transcribe.py
+aai stream --show-code                                      # the microphone-streaming idiom
+aai agent --voice ivy --show-code                           # the full-duplex agent loop
+```
+
+The generated transcribe code includes result handling for the analysis features you
+enabled. With `--llm-gateway-prompt` (repeatable — each prompt runs on the previous
+response), it emits the chained LLM Gateway calls too:
+
+```sh
+aai transcribe call.mp3 \
+  --llm-gateway-prompt "summarize" \
+  --llm-gateway-prompt "translate the summary to Spanish" \
+  --show-code > summarize_then_translate.py
+```
+
 ## AI coding agents
 
 Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so
@@ -157,7 +183,12 @@ skipped (with the manual command to run), not treated as an error.
 
 ## Development
 
+This project uses [uv](https://docs.astral.sh/uv/). Run tools through `uv run` so they
+use the locked environment (`pyproject.toml` + `uv.lock`):
+
 ```sh
-pip install -e ".[dev]"
+uv sync --extra dev        # create/refresh the project venv with dev dependencies
+uv run aai --help          # run the CLI from the locked environment
+uv run pytest              # run the test suite (uv run mypy / ruff likewise)
 ./scripts/check.sh         # ruff + mypy + pytest (the same checks CI runs on every PR)
 ```
