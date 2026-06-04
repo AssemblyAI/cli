@@ -16,11 +16,18 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
 def get(
     ctx: typer.Context,
     transcript_id: str = typer.Argument(..., help="Transcript id."),
+    output_field: str = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Print one field of the result: text, id, status, utterances, or json.",
+    ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
     def body(state: AppState, json_mode: bool) -> None:
+        output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.get_transcript(api_key, transcript_id)
         if client.status_str(transcript) == "error":
@@ -28,6 +35,10 @@ def get(
                 getattr(transcript, "error", None) or "Transcript failed.",
                 transcript_id=transcript_id,
             )
+        if output_field is not None:
+            # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
+            print(client.select_transcript_field(transcript, output_field))
+            return
         output.emit(
             {
                 "id": transcript.id,

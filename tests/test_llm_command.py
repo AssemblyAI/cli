@@ -200,6 +200,64 @@ def test_llm_follow_ignores_blank_lines(monkeypatch):
     assert len(calls) == 2
 
 
+def test_llm_output_text_prints_raw_answer(monkeypatch):
+    _auth()
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("just the answer")
+    )
+    result = runner.invoke(app, ["llm", "hi", "-o", "text"])
+    assert result.exit_code == 0
+    # Raw text, not JSON — composes cleanly into the next pipe stage.
+    assert result.output.strip() == "just the answer"
+    assert "{" not in result.output
+
+
+def test_llm_output_json_forces_json(monkeypatch):
+    _auth()
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hello")
+    )
+    result = runner.invoke(app, ["llm", "hi", "-o", "json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["output"] == "hello"
+
+
+def test_llm_output_invalid_field_exits_2(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(app, ["llm", "hi", "-o", "bogus"])
+    assert result.exit_code == 2
+
+
+def test_llm_output_with_follow_is_rejected(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(app, ["llm", "hi", "-f", "-o", "text"], input="x\n")
+    assert result.exit_code == 2
+    assert "one-shot" in result.output
+
+
+def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
+    _auth()
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 2:
+            raise KeyboardInterrupt  # user hits Ctrl-C mid-meeting
+        return _payload("ok")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(
+        app, ["llm", "summarize", "--follow", "--json"], input="alpha\nbeta\ngamma\n"
+    )
+    # Ctrl-C is a normal stop, not an error.
+    assert result.exit_code == 0
+    updates = [json.loads(line) for line in result.output.splitlines() if line.strip()]
+    assert len(updates) == 1
+    assert updates[0]["turns"] == 1
+
+
 def test_llm_passes_model_and_max_tokens(monkeypatch):
     _auth()
     seen = {}

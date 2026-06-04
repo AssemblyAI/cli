@@ -20,6 +20,36 @@ def test_get_prints_transcript_text():
     assert "retrieved text" in result.output
 
 
+def test_get_output_text_prints_raw():
+    config.set_api_key("default", "sk_live")
+    fake = MagicMock()
+    fake.id = "t_42"
+    fake.text = "retrieved text"
+    fake.status = "completed"
+    with patch("assemblyai_cli.commands.transcripts.client.get_transcript", return_value=fake):
+        result = runner.invoke(app, ["transcripts", "get", "t_42", "-o", "text"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "retrieved text"
+
+
+def test_get_output_id_prints_id():
+    config.set_api_key("default", "sk_live")
+    fake = MagicMock()
+    fake.id = "t_42"
+    fake.text = "retrieved text"
+    fake.status = "completed"
+    with patch("assemblyai_cli.commands.transcripts.client.get_transcript", return_value=fake):
+        result = runner.invoke(app, ["transcripts", "get", "t_42", "-o", "id"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "t_42"
+
+
+def test_get_output_invalid_field_exits_2():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["transcripts", "get", "t_42", "-o", "bogus"])
+    assert result.exit_code == 2
+
+
 def test_list_renders_rows():
     config.set_api_key("default", "sk_live")
     rows = [{"id": "t1", "status": "completed"}, {"id": "t2", "status": "processing"}]

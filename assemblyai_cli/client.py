@@ -91,6 +91,31 @@ def status_str(transcript: aai.Transcript) -> str:
     return str(getattr(status, "value", status))
 
 
+# Fields `transcribe` and `transcripts get` expose via `-o/--output` (raw, pipe-friendly).
+TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "json")
+
+
+def select_transcript_field(transcript: Any, field: str) -> str:
+    """Render a single transcript field for ``-o/--output``."""
+    if field == "id":
+        return str(getattr(transcript, "id", "") or "")
+    if field == "status":
+        return status_str(transcript)
+    if field == "utterances":
+        utterances = getattr(transcript, "utterances", None) or []
+        if utterances:
+            return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
+        return str(getattr(transcript, "text", "") or "")
+    if field == "json":
+        payload = getattr(transcript, "json_response", None) or {
+            "id": transcript.id,
+            "status": status_str(transcript),
+            "text": transcript.text,
+        }
+        return json.dumps(payload, default=str)
+    return str(getattr(transcript, "text", "") or "")  # "text" (and the validated default)
+
+
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
     _configure(api_key)
     try:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import contextlib
+import os
+import sys
 from typing import TYPE_CHECKING
 
 import typer
@@ -92,3 +95,25 @@ app.add_typer(claude.app, name="claude")
 def version() -> None:
     """Show the CLI version."""
     typer.echo(__version__)
+
+
+def _silence_stdout() -> None:
+    """Point stdout at /dev/null so the interpreter-shutdown flush can't re-raise."""
+    with contextlib.suppress(OSError):
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+
+def run() -> None:
+    """Console-script entry point: run the app, exiting cleanly on a closed pipe.
+
+    A downstream consumer (e.g. `aai … | head`) can close the pipe before we finish
+    writing. Without this, the write — or Python's flush at shutdown — raises
+    BrokenPipeError and prints an ugly "Exception ignored" traceback. We treat a
+    closed pipe as success: silence stdout and exit 0. Streaming commands also catch
+    it earlier; this is the catch-all for the one-shot `output.emit`/`print` paths.
+    """
+    try:
+        app(prog_name="aai")
+    except BrokenPipeError:
+        _silence_stdout()
+        sys.exit(0)

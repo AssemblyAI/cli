@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, TypeVar
 from rich.markup import escape
 
 from assemblyai_cli import theme
+from assemblyai_cli.errors import UsageError
 
 if TYPE_CHECKING:
     from assemblyai_cli.errors import CLIError
@@ -37,11 +38,34 @@ def resolve_json(*, explicit: bool) -> bool:
     return explicit or _is_agentic()
 
 
+def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
+    """Reject an unknown ``-o/--output`` value with a consistent, listing error."""
+    if field is not None and field not in allowed:
+        raise UsageError(f"Unknown --output {field!r}. Choose one of: {', '.join(allowed)}.")
+
+
+def stream_output_modes(field: str | None, json_mode: bool) -> tuple[bool, bool]:
+    """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
+
+    Shared by `stream` and `agent`, whose renderers take the same two flags: `text`
+    emits plain finalized lines, `json` forces NDJSON, and an unset field falls back
+    to the auto-detected `json_mode` (JSON when piped/agentic, human otherwise).
+    """
+    validate_output_field(field, ("text", "json"))
+    text_mode = field == "text"
+    return text_mode, (field == "json") or (json_mode and not text_mode)
+
+
 def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(data, default=str))
     else:
         console.print(human_renderer(data))
+
+
+def emit_ndjson(obj: object) -> None:
+    """Write one newline-delimited JSON record to stdout, flushed for live pipelines."""
+    print(json.dumps(obj, default=str), flush=True)
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:

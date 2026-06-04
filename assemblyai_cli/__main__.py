@@ -1,4 +1,4 @@
-from assemblyai_cli.main import app
+from assemblyai_cli.main import run
 
 if __name__ == "__main__":
-    app(prog_name="aai")
+    run()

@@ -111,8 +111,7 @@ def stream(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        if output_field is not None and output_field not in ("text", "json"):
-            raise UsageError(f"Unknown --output {output_field!r}. Choose one of: text, json.")
+        text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
 
         def make_flags(rate: int) -> dict[str, object]:
             flags: dict[str, object] = {
@@ -167,11 +166,7 @@ def stream(
         elif from_file and (sample_rate is not None or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
 
-        text_mode = output_field == "text"
-        renderer = StreamRenderer(
-            json_mode=(output_field == "json") or (json_mode and not text_mode),
-            text_mode=text_mode,
-        )
+        renderer = StreamRenderer(json_mode=json_mode, text_mode=text_mode)
         # Collect finalized turns so we can transform the full transcript at the end.
         turns: list[str] = []
 

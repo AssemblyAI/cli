@@ -229,6 +229,75 @@ aai stream -o text > call.txt        # Ctrl-C to stop
 aai llm "summarize" < call.txt
 ```
 
+## Recipes
+
+A cookbook of `aai` composed with common Unix tools. macOS shown; on Linux swap
+`pbcopy`/`pbpaste` → `xclip -sel clip`/`xclip -o` and `say` → `spd-say`.
+
+**Live meeting scribe** — `-o text` streams one finalized turn per line; `aai llm -f`
+re-summarizes the growing transcript in place on every turn (Ctrl-C to stop):
+
+```sh
+aai stream -o text | aai llm -f --model claude-haiku-4-5-20251001 "summarize todos as I talk"
+```
+
+**Chain `aai llm` into other tools** with `-o text` — it prints just the answer, so it
+pipes onward cleanly (no `jq` needed):
+
+```sh
+aai transcribe call.mp3 -o text | aai llm -o text "list action items" | pbcopy
+```
+
+**`aai llm` is a general text filter** — it reads stdin, audio optional:
+
+```sh
+git log --oneline -30 | aai llm "write release notes grouped by feature/fix"
+cat error.log         | aai llm "what's the root cause and the one-line fix?"
+```
+
+**Translate a sample, then port the generated code** — `--show-code` prints the Python
+for the pipeline you described, and `aai llm` rewrites it in another language:
+
+```sh
+aai transcribe --sample --llm-gateway-prompt "translate to french" --show-code | aai llm "rewrite in rust"
+```
+
+**Mine the analysis JSON with `jq`** — enable a feature, then slice `-o json`:
+
+```sh
+aai transcribe call.mp3 --sentiment-analysis -o json | jq -r '.sentiment_analysis_results[] | "\(.sentiment)\t\(.text)"'
+aai transcribe call.mp3 --entity-detection  -o json | jq -r '.entities[] | "\(.entity_type): \(.text)"' | sort -u
+```
+
+**Pick a past transcript with `fzf`, then summarize it:**
+
+```sh
+aai transcripts list --json \
+  | jq -r '.[] | "\(.id)\t\(.status)\t\(.created)"' \
+  | fzf | cut -f1 \
+  | xargs -I{} aai llm "summarize the key decisions" --transcript-id {}
+```
+
+**Who talked the most** (speaker-labeled utterances + `awk`):
+
+```sh
+aai transcribe call.mp3 --speaker-labels -o utterances | awk -F: '{print $1}' | sort | uniq -c | sort -rn
+```
+
+**Redact PII before it leaves your machine:**
+
+```sh
+aai transcribe call.mp3 --redact-pii --redact-pii-policy person_name,phone_number,email_address -o text | pbcopy
+```
+
+**DIY voice assistant** — speak a question, hear the answer (use headphones):
+
+```sh
+aai stream -o text | while IFS= read -r line; do
+  echo "$line" | aai llm -o text "answer in one short sentence" | say
+done
+```
+
 ## AI coding agents
 
 Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so

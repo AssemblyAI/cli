@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import typer
 
@@ -30,30 +28,6 @@ def _render_transform_steps(d: dict) -> str:
     if len(steps) == 1:
         return str(steps[0]["output"])
     return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
-
-
-_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "json")
-
-
-def _select_output(transcript: Any, field: str) -> str:
-    """Render a single transcript field for ``-o/--output`` (raw, pipe-friendly)."""
-    if field == "id":
-        return str(getattr(transcript, "id", "") or "")
-    if field == "status":
-        return client.status_str(transcript)
-    if field == "utterances":
-        utterances = getattr(transcript, "utterances", None) or []
-        if utterances:
-            return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
-        return str(getattr(transcript, "text", "") or "")
-    if field == "json":
-        payload = getattr(transcript, "json_response", None) or {
-            "id": transcript.id,
-            "status": client.status_str(transcript),
-            "text": transcript.text,
-        }
-        return json.dumps(payload, default=str)
-    return str(getattr(transcript, "text", "") or "")  # "text" (and the validated default)
 
 
 @app.command()
@@ -165,10 +139,7 @@ def transcribe(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        if output_field is not None and output_field not in _OUTPUT_FIELDS:
-            raise UsageError(
-                f"Unknown --output {output_field!r}. Choose one of: {', '.join(_OUTPUT_FIELDS)}."
-            )
+        output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         flags: dict[str, object] = {
             "speech_model": speech_model,
             "language_code": language_code,
@@ -258,7 +229,7 @@ def transcribe(
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).
-            print(_select_output(transcript, output_field))
+            print(client.select_transcript_field(transcript, output_field))
             return
 
         if llm_gateway_prompt:
@@ -303,7 +274,7 @@ def transcribe(
                 "status": client.status_str(transcript),
                 "text": transcript.text,
             }
-            print(json.dumps(payload, default=str))
+            output.emit(payload, lambda d: d, json_mode=True)
         else:
             transcribe_render.render_transcript_result(transcript, output.console)
 

@@ -57,7 +57,7 @@ dev = [
 ]
 
 [project.scripts]
-aai = "assemblyai_cli.main:app"
+aai = "assemblyai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["assemblyai_cli"]

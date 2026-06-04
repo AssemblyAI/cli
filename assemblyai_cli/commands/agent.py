@@ -63,8 +63,7 @@ def agent(
         raise typer.Exit(code=0)
 
     def body(state: AppState, json_mode: bool) -> None:
-        if output_field is not None and output_field not in ("text", "json"):
-            raise UsageError(f"Unknown --output {output_field!r}. Choose one of: text, json.")
+        text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
         if voice not in VOICES:
             raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")
         if system_prompt_file is not None:
@@ -90,9 +89,8 @@ def agent(
         if from_file and device is not None:
             raise UsageError("--device applies only to microphone input.")
 
-        text_mode = output_field == "text"
         renderer = AgentRenderer(
-            json_mode=(output_field == "json") or (json_mode and not text_mode),
+            json_mode=json_mode,
             text_mode=text_mode,
             mic_input=not from_file,
         )
