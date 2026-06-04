@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from assemblyai_cli import youtube
-from assemblyai_cli.errors import CLIError
+from aai_cli import youtube
+from aai_cli.errors import CLIError
 
 
 def test_is_youtube_url_variants():

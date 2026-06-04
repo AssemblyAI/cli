@@ -2,7 +2,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from assemblyai_cli.main import app
+from aai_cli.main import app
 
 runner = CliRunner()
 

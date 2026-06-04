@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
-from assemblyai_cli.main import app
+from aai_cli import config
+from aai_cli.main import app
 
 runner = CliRunner()
 
@@ -20,7 +20,7 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
     def fake_run_session(*a, **k):
         called["ran"] = True
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--list-voices"])
     assert result.exit_code == 0
     assert "ivy" in result.output
@@ -51,7 +51,7 @@ def test_agent_drives_renderer_json(monkeypatch):
         renderer.user_final("hello agent")
         renderer.agent_transcript("hello human", interrupted=False)
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--json"])
     assert result.exit_code == 0
     lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
@@ -79,7 +79,7 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
         seen["prompt"] = system_prompt
         seen["full_duplex"] = full_duplex
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     prompt_file = tmp_path / "p.txt"
     prompt_file.write_text("be a pirate")
     result = runner.invoke(
@@ -102,8 +102,8 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
 
 def test_agent_headphones_notice_in_human_mode(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
     assert "headphones" in result.output.lower()  # mic stays open -> warn to use headphones
@@ -115,21 +115,21 @@ def test_agent_ctrl_c_exits_cleanly(monkeypatch):
     def raise_kbd(*a, **k):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", raise_kbd)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", raise_kbd)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
 
 
 def test_agent_unknown_voice_exits_2(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent", "--voice", "not-a-voice"])
     assert result.exit_code == 2
 
 
 def test_agent_prompt_file_not_found_exits_2(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
     result = runner.invoke(
         app, ["agent", "--system-prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"]
     )
@@ -143,7 +143,7 @@ def _capture_run_session(monkeypatch):
     def fake_run_session(api_key, **kwargs):
         seen.update(kwargs)
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     return seen
 
 
@@ -152,7 +152,7 @@ def test_agent_file_source_streams_clip_and_exits_after_reply(monkeypatch, tmp_p
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")  # FileSource is faked below; contents don't matter
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
     seen = _capture_run_session(monkeypatch)
 
     result = runner.invoke(app, ["agent", str(wav)])
@@ -162,7 +162,7 @@ def test_agent_file_source_streams_clip_and_exits_after_reply(monkeypatch, tmp_p
     assert seen["exit_after_reply"] is True
     assert seen["full_duplex"] is True
     assert seen["greeting"] == ""
-    from assemblyai_cli.agent.audio import NullPlayer
+    from aai_cli.agent.audio import NullPlayer
 
     assert isinstance(seen["player"], NullPlayer)
 
@@ -175,7 +175,7 @@ def test_agent_sample_uses_hosted_clip(monkeypatch):
         captured["src"] = src
         return "filesrc"
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", fake_file_source)
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", fake_file_source)
     seen = _capture_run_session(monkeypatch)
 
     result = runner.invoke(app, ["agent", "--sample"])
@@ -186,7 +186,7 @@ def test_agent_sample_uses_hosted_clip(monkeypatch):
 
 def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav), "--device", "1"])
@@ -195,9 +195,9 @@ def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
 
 def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav)])
@@ -207,13 +207,13 @@ def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
 
 def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
 
     def fake_run_session(api_key, *, renderer, **kwargs):
         renderer.connected()  # session.ready arrives even for a file-driven run
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav)])
@@ -224,7 +224,7 @@ def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
 
 def test_agent_mic_shows_start_talking_notice(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     # Avoid opening real audio hardware; the renderer is what we're testing.
     class FakeDuplex:
@@ -238,12 +238,12 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.DuplexAudio", FakeDuplex)
+    monkeypatch.setattr("aai_cli.commands.agent.DuplexAudio", FakeDuplex)
 
     def fake_run_session(api_key, *, renderer, **kwargs):
         renderer.connected()
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
     assert "start talking" in result.output.lower()  # live mic -> prompt the user to speak
@@ -252,9 +252,7 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
 def test_agent_show_code_prints_without_session(monkeypatch):
     # Print-only: emits the agent script, never starts a session or opens audio, no auth.
     called = []
-    monkeypatch.setattr(
-        "assemblyai_cli.commands.agent.run_session", lambda *a, **k: called.append(True)
-    )
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: called.append(True))
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code"])
     assert result.exit_code == 0
     assert called == []  # never ran a session
@@ -268,7 +266,7 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
         raise AssertionError("must not run a session")
 
     monkeypatch.setattr(
-        "assemblyai_cli.commands.agent.run_session",
+        "aai_cli.commands.agent.run_session",
         _boom,
     )
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code", "--json"])
@@ -279,13 +277,13 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
 def test_agent_output_text_emits_plain_transcript(monkeypatch):
     # `-o text` -> plain you:/agent: lines on stdout (pipe into aai llm).
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("assemblyai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
 
     def fake_run_session(api_key, *, renderer, **kwargs):
         renderer.user_final("hello there")
         renderer.agent_transcript("hi, how can I help?", interrupted=False)
 
-    monkeypatch.setattr("assemblyai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--sample", "-o", "text"])
     assert result.exit_code == 0
     assert "you: hello there" in result.output

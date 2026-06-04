@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "assemblyai-cli"
+name = "aai-cli"
 version = "0.1.0"
 description = "Command-line interface for AssemblyAI"
 readme = "README.md"
@@ -31,6 +31,7 @@ dependencies = [
     "assemblyai>=0.64.4",
     "rich>=15.0.0",
     "keyring>=25.7.0",
+    "httpx>=0.28.1",
     "platformdirs>=4.10.0",
     "tomli-w>=1.2.0",
     "websockets>=16.0",
@@ -57,10 +58,10 @@ dev = [
 ]
 
 [project.scripts]
-aai = "assemblyai_cli.main:run"
+aai = "aai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["assemblyai_cli"]
+packages = ["aai_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,7 +71,7 @@ markers = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["assemblyai_cli", "tests"]
+files = ["aai_cli", "tests"]
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true
@@ -96,4 +97,4 @@ ignore = ["E501", "B008", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
-"tests/**" = ["S101", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]
+"tests/**" = ["S101", "S105", "S106", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]

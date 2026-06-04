@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
-from assemblyai_cli.main import app
+from aai_cli import config
+from aai_cli.main import app
 
 runner = CliRunner()
 
@@ -40,7 +40,7 @@ def _enum_or_str(value):
 def test_transcribe_sample_prints_text():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         result = runner.invoke(app, ["transcribe", "--sample"])
     assert result.exit_code == 0
@@ -58,7 +58,7 @@ def test_transcribe_requires_source():
 def test_transcribe_passes_speaker_labels():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
     assert tx.call_args.kwargs["config"].speaker_labels is True
@@ -66,9 +66,7 @@ def test_transcribe_passes_speaker_labels():
 
 def test_transcribe_json_output():
     _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--json"])
     assert '"id": "t_1"' in result.output
 
@@ -80,9 +78,7 @@ def test_transcribe_unauthenticated_exits_2():
 
 def test_transcribe_output_text_field():
     _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "text"])
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"  # raw text, pipe-friendly
@@ -90,9 +86,7 @@ def test_transcribe_output_text_field():
 
 def test_transcribe_output_id_field():
     _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--output", "id"])
     assert result.exit_code == 0
     assert result.output.strip() == "t_1"
@@ -102,7 +96,7 @@ def test_transcribe_output_srt_field():
     _auth()
     t = _fake_transcript()
     t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
-    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=t):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "srt"])
     assert result.exit_code == 0
     assert "00:00:00,000 --> 00:00:02,000" in result.output  # SRT body, pipe-friendly
@@ -111,9 +105,7 @@ def test_transcribe_output_srt_field():
 
 def test_transcribe_output_invalid_exits_2():
     _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "bogus"])
     assert result.exit_code == 2  # unknown field rejected
 
@@ -129,7 +121,7 @@ def test_transcribe_reads_audio_from_stdin(monkeypatch):
         seen["bytes"] = pathlib.Path(audio).read_bytes()
         return _fake_transcript()
 
-    monkeypatch.setattr("assemblyai_cli.commands.transcribe.client.transcribe", fake_transcribe)
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", fake_transcribe)
     result = runner.invoke(app, ["transcribe", "-", "-o", "text"], input=b"RIFFfake-wav-bytes")
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"
@@ -149,7 +141,7 @@ def test_transcribe_status_renders_enum_value():
     t = _fake_transcript()
     t.status = aai.TranscriptStatus.completed
     t.json_response = None
-    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=t):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--json"])
     assert result.exit_code == 0
     assert '"status": "completed"' in result.output
@@ -165,12 +157,8 @@ def test_transcribe_prompt_transforms_json(monkeypatch):
         seen["transcript_id"] = transcript_id
         return "a short summary"
 
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        monkeypatch.setattr(
-            "assemblyai_cli.commands.transcribe.llm.transform_transcript", fake_transform
-        )
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
+        monkeypatch.setattr("aai_cli.commands.transcribe.llm.transform_transcript", fake_transform)
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--llm", "summarize", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -194,12 +182,8 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
         )
         return f"out({prompt})"
 
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        monkeypatch.setattr(
-            "assemblyai_cli.commands.transcribe.llm.transform_transcript", fake_transform
-        )
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
+        monkeypatch.setattr("aai_cli.commands.transcribe.llm.transform_transcript", fake_transform)
         result = runner.invoke(
             app,
             [
@@ -225,12 +209,10 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
 
 def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         monkeypatch.setattr(
-            "assemblyai_cli.commands.transcribe.llm.transform_transcript",
+            "aai_cli.commands.transcribe.llm.transform_transcript",
             lambda *a, **k: "TRANSFORMED",
         )
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--llm", "summarize"])
@@ -242,7 +224,7 @@ def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
 def test_transcribe_prompt_biases_speech_model():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "expect medical terms"])
     assert result.exit_code == 0
@@ -253,7 +235,7 @@ def test_transcribe_prompt_biases_speech_model():
 def test_transcribe_maps_analysis_flags():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(
             app,
@@ -277,7 +259,7 @@ def test_transcribe_maps_analysis_flags():
 def test_transcribe_redact_pii_policy_csv():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(
             app,
@@ -300,7 +282,7 @@ def test_transcribe_redact_pii_policy_csv():
 def test_transcribe_config_escape_hatch():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(app, ["transcribe", "audio.mp3", "--config", "speech_threshold=0.5"])
     assert tx.call_args.kwargs["config"].raw.speech_threshold == 0.5
@@ -308,9 +290,7 @@ def test_transcribe_config_escape_hatch():
 
 def test_transcribe_unknown_config_field_exits_2():
     _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--config", "bogus=1"])
     assert result.exit_code == 2
     assert "bogus" in result.output
@@ -319,7 +299,7 @@ def test_transcribe_unknown_config_field_exits_2():
 def test_transcribe_webhook_auth_header():
     _auth()
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         runner.invoke(
             app,
@@ -342,11 +322,9 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path
     _auth()
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
-    monkeypatch.setattr(
-        "assemblyai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake
-    )
+    monkeypatch.setattr("aai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake)
     with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         result = runner.invoke(app, ["transcribe", "https://youtu.be/abc", "--json"])
     assert result.exit_code == 0
@@ -357,7 +335,7 @@ def test_transcribe_show_code_prints_without_transcribing(monkeypatch):
     # Print-only: emits code, never calls the API, needs no auth.
     called = []
     monkeypatch.setattr(
-        "assemblyai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.commands.transcribe.client.transcribe",
         lambda *a, **k: called.append(True),
     )
     result = runner.invoke(app, ["transcribe", "--sample", "--speaker-labels", "--show-code"])
@@ -374,7 +352,7 @@ def test_transcribe_show_code_ignores_json_flag(monkeypatch):
         raise AssertionError("must not transcribe")
 
     monkeypatch.setattr(
-        "assemblyai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.commands.transcribe.client.transcribe",
         _boom,
     )
     result = runner.invoke(app, ["transcribe", "--sample", "--show-code", "--json"])
@@ -388,8 +366,8 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not call the API")
 
-    monkeypatch.setattr("assemblyai_cli.commands.transcribe.client.transcribe", _boom)
-    monkeypatch.setattr("assemblyai_cli.commands.transcribe.llm.transform_transcript", _boom)
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.commands.transcribe.llm.transform_transcript", _boom)
     result = runner.invoke(
         app,
         ["transcribe", "--sample", "--llm", "translate to spanish", "--show-code"],
@@ -402,11 +380,11 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
 
 def test_transcribe_renders_summary_human(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     t = _fake_transcript()
     t.summary = "three bullet summary"
     t.chapters = []
-    with patch("assemblyai_cli.commands.transcribe.client.transcribe", return_value=t):
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=t):
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--summarization"])
     assert result.exit_code == 0
     assert "Summary:" in result.output

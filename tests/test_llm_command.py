@@ -3,8 +3,8 @@ import types
 
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
-from assemblyai_cli.main import app
+from aai_cli import config
+from aai_cli.main import app
 
 runner = CliRunner()
 
@@ -29,7 +29,7 @@ def test_llm_help_lists_command():
 def test_llm_list_models_exits_without_network(monkeypatch):
     called = {"ran": False}
     monkeypatch.setattr(
-        "assemblyai_cli.commands.llm.gateway.complete",
+        "aai_cli.commands.llm.gateway.complete",
         lambda *a, **k: called.__setitem__("ran", True),
     )
     result = runner.invoke(app, ["llm", "--list-models"])
@@ -48,7 +48,7 @@ def test_llm_sends_prompt_and_prints_output(monkeypatch):
         seen["transcript_id"] = transcript_id
         return _payload("4")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(app, ["llm", "What is 2+2?", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -67,7 +67,7 @@ def test_llm_transcript_id_injected(monkeypatch):
         seen["content"] = messages[0]["content"]
         return _payload("summary")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(app, ["llm", "summarize", "--transcript-id", "t_7", "--json"])
     assert result.exit_code == 0
     assert seen["transcript_id"] == "t_7"
@@ -83,7 +83,7 @@ def test_llm_reads_content_from_stdin(monkeypatch):
         seen["transcript_id"] = transcript_id
         return _payload("done")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(app, ["llm", "summarize", "--json"], input="meeting notes here")
     assert result.exit_code == 0
     # The piped text is injected into the prompt content; no transcript id is used.
@@ -101,7 +101,7 @@ def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
         seen["transcript_id"] = transcript_id
         return _payload("s")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app, ["llm", "summarize", "--transcript-id", "t_9", "--json"], input="ignored stdin"
     )
@@ -113,7 +113,7 @@ def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
 
 def test_llm_missing_prompt_exits_2(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm"])
     assert result.exit_code == 2
 
@@ -131,7 +131,7 @@ def test_llm_follow_summarizes_each_turn(monkeypatch):
         calls.append(messages[-1]["content"])
         return _payload(f"summary-{len(calls)}")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app,
         ["llm", "summarize action items", "--follow", "--json"],
@@ -158,7 +158,7 @@ def test_llm_follow_includes_system_prompt(monkeypatch):
         seen["system"] = messages[0]["content"]
         return _payload("ok")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app,
         ["llm", "summarize", "--follow", "--system", "You are a scribe", "--json"],
@@ -171,7 +171,7 @@ def test_llm_follow_includes_system_prompt(monkeypatch):
 
 def test_llm_follow_rejects_transcript_id(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(
         app,
         ["llm", "summarize", "--follow", "--transcript-id", "t_1", "--json"],
@@ -189,7 +189,7 @@ def test_llm_follow_ignores_blank_lines(monkeypatch):
         calls.append(messages[-1]["content"])
         return _payload("ok")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app,
         ["llm", "summarize", "--follow", "--json"],
@@ -203,7 +203,7 @@ def test_llm_follow_ignores_blank_lines(monkeypatch):
 def test_llm_output_text_prints_raw_answer(monkeypatch):
     _auth()
     monkeypatch.setattr(
-        "assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("just the answer")
+        "aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("just the answer")
     )
     result = runner.invoke(app, ["llm", "hi", "-o", "text"])
     assert result.exit_code == 0
@@ -214,9 +214,7 @@ def test_llm_output_text_prints_raw_answer(monkeypatch):
 
 def test_llm_output_json_forces_json(monkeypatch):
     _auth()
-    monkeypatch.setattr(
-        "assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hello")
-    )
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hello"))
     result = runner.invoke(app, ["llm", "hi", "-o", "json"])
     assert result.exit_code == 0
     assert json.loads(result.output)["output"] == "hello"
@@ -224,14 +222,14 @@ def test_llm_output_json_forces_json(monkeypatch):
 
 def test_llm_output_invalid_field_exits_2(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "hi", "-o", "bogus"])
     assert result.exit_code == 2
 
 
 def test_llm_output_with_follow_is_rejected(monkeypatch):
     _auth()
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "hi", "-f", "-o", "text"], input="x\n")
     assert result.exit_code == 2
     assert "one-shot" in result.output
@@ -247,7 +245,7 @@ def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
             raise KeyboardInterrupt  # user hits Ctrl-C mid-meeting
         return _payload("ok")
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app, ["llm", "summarize", "--follow", "--json"], input="alpha\nbeta\ngamma\n"
     )
@@ -267,7 +265,7 @@ def test_llm_passes_model_and_max_tokens(monkeypatch):
         seen["max_tokens"] = max_tokens
         return _payload()
 
-    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
     result = runner.invoke(
         app, ["llm", "hi", "--model", "gemini-2.5-flash", "--max-tokens", "42", "--json"]
     )

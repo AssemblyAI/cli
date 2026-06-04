@@ -15,7 +15,7 @@ echo "==> ruff format --check (src + tests)"
 uv run ruff format --check .
 
 echo "==> mypy (src + tests)"
-uv run mypy  # files = ["assemblyai_cli", "tests"] in pyproject.toml
+uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
 
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
@@ -23,7 +23,7 @@ markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cach
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
 # a live API key + kokoro. Run them with: uv run pytest -m e2e
-uv run pytest -q -m "not e2e" --cov=assemblyai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+uv run pytest -q -m "not e2e" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render

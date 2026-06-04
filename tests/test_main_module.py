@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-import assemblyai_cli.main as main_mod
+import aai_cli.main as main_mod
 
 
 def test_run_exits_clean_on_broken_pipe(monkeypatch):
@@ -14,7 +14,7 @@ def test_run_exits_clean_on_broken_pipe(monkeypatch):
 
     monkeypatch.setattr(main_mod, "app", boom)
     # Don't dup2 the real stdout fd during the test; just verify the exit contract.
-    monkeypatch.setattr("assemblyai_cli.stdio.silence_stdout", lambda: None)
+    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
     with pytest.raises(SystemExit) as exc:
         main_mod.run()
     assert exc.value.code == 0
@@ -33,9 +33,9 @@ def test_run_passes_through_normal_exit(monkeypatch):
 
 
 def test_python_dash_m_entrypoint_runs():
-    """`python -m assemblyai_cli` wires up the Typer app (exercises __main__.py)."""
+    """`python -m aai_cli` wires up the Typer app (exercises __main__.py)."""
     result = subprocess.run(
-        [sys.executable, "-m", "assemblyai_cli", "--help"],
+        [sys.executable, "-m", "aai_cli", "--help"],
         capture_output=True,
         text=True,
     )
@@ -45,7 +45,7 @@ def test_python_dash_m_entrypoint_runs():
 
 def test_python_dash_m_version():
     result = subprocess.run(
-        [sys.executable, "-m", "assemblyai_cli", "version"],
+        [sys.executable, "-m", "aai_cli", "version"],
         capture_output=True,
         text=True,
     )

@@ -4,8 +4,8 @@ import httpx
 import openai
 import pytest
 
-from assemblyai_cli import llm
-from assemblyai_cli.errors import APIError, NotAuthenticated
+from aai_cli import llm
+from aai_cli.errors import APIError
 
 _REQUEST = httpx.Request("POST", f"{llm.GATEWAY_BASE_URL}/chat/completions")
 
@@ -55,21 +55,21 @@ def test_complete_passes_transcript_id_as_extra_body(monkeypatch):
     assert seen["extra_body"] == {"transcript_id": "t_42"}
 
 
-def test_complete_auth_error_maps_to_not_authenticated(monkeypatch):
+def test_complete_auth_error_surfaces_gateway_message(monkeypatch):
     err = openai.AuthenticationError(
         "bad key", response=httpx.Response(401, request=_REQUEST), body=None
     )
     _fake_client(monkeypatch, error=err)
-    with pytest.raises(NotAuthenticated):
+    with pytest.raises(APIError, match="access denied"):
         llm.complete("sk", model="m", messages=[])
 
 
-def test_complete_permission_error_maps_to_not_authenticated(monkeypatch):
+def test_complete_permission_error_surfaces_gateway_message(monkeypatch):
     err = openai.PermissionDeniedError(
         "forbidden", response=httpx.Response(403, request=_REQUEST), body=None
     )
     _fake_client(monkeypatch, error=err)
-    with pytest.raises(NotAuthenticated):
+    with pytest.raises(APIError, match="access denied"):
         llm.complete("sk", model="m", messages=[])
 
 

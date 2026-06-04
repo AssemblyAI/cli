@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from assemblyai_cli import theme
-from assemblyai_cli import transcribe_render as tr
+from aai_cli import theme
+from aai_cli import transcribe_render as tr
 
 
 def _render(transcript) -> str:

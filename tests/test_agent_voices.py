@@ -1,4 +1,4 @@
-from assemblyai_cli.agent import voices
+from aai_cli.agent import voices
 
 
 def test_voices_includes_default():

@@ -1,7 +1,7 @@
 import pytest
 
-from assemblyai_cli import config
-from assemblyai_cli.errors import NotAuthenticated
+from aai_cli import config
+from aai_cli.errors import NotAuthenticated
 
 
 def test_set_and_get_api_key_roundtrip():
@@ -55,7 +55,7 @@ def test_clear_api_key_missing_is_silent():
 def test_invalid_profile_name_rejected():
     import pytest
 
-    from assemblyai_cli.errors import CLIError
+    from aai_cli.errors import CLIError
 
     with pytest.raises(CLIError):
         config.set_api_key("bad name!", "sk_x")
@@ -64,10 +64,18 @@ def test_invalid_profile_name_rejected():
 def test_empty_api_key_flag_rejected():
     import pytest
 
-    from assemblyai_cli.errors import CLIError
+    from aai_cli.errors import CLIError
 
     with pytest.raises(CLIError):
         config.resolve_api_key(api_key_flag="")
+
+
+def test_malformed_config_raises_clean_error(tmp_config):
+    from aai_cli.errors import CLIError
+
+    (tmp_config / "config.toml").write_text("this is not = = valid toml ===\n")
+    with pytest.raises(CLIError):
+        config.get_active_profile()
 
 
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):

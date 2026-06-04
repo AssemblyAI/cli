@@ -68,11 +68,11 @@ def _synthesize_wav(pipeline: Any, text: str, path: Path, *, lead_silence_s: flo
 
 
 def _run_cli(args: list[str], key: str, *, timeout: int = 120) -> subprocess.CompletedProcess[str]:
-    """Run `python -m assemblyai_cli <args>` against the working tree with the real key."""
+    """Run `python -m aai_cli <args>` against the working tree with the real key."""
     env = dict(os.environ)
     env["ASSEMBLYAI_API_KEY"] = key
     return subprocess.run(
-        [sys.executable, "-m", "assemblyai_cli", *args],
+        [sys.executable, "-m", "aai_cli", *args],
         capture_output=True,
         text=True,
         timeout=timeout,

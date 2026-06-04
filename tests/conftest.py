@@ -41,8 +41,24 @@ class MemoryKeyring(KeyringBackend):
 
 @pytest.fixture(autouse=True)
 def isolate_env(monkeypatch):
-    for var in ("ASSEMBLYAI_API_KEY", "CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "NO_COLOR"):
+    for var in (
+        "ASSEMBLYAI_API_KEY",
+        "AAI_ENV",
+        "CI",
+        "CLAUDECODE",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "NO_COLOR",
+    ):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def reset_active_environment():
+    # The active environment is a process-global (set at CLI startup); pin it to
+    # the default before each test so unit tests aren't affected by ordering.
+    from aai_cli import environments
+
+    environments.set_active(environments.get(environments.DEFAULT_ENV))
 
 
 @pytest.fixture(autouse=True)
@@ -56,5 +72,5 @@ def memory_keyring():
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr("assemblyai_cli.config.config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("aai_cli.config.config_dir", lambda: cfg_dir)
     return cfg_dir

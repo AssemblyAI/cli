@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from assemblyai_cli.errors import CLIError
-from assemblyai_cli.microphone import (
+from aai_cli.errors import CLIError
+from aai_cli.microphone import (
     _FALLBACK_RATE,
     MicrophoneSource,
     _default_mic_stream,

@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from assemblyai_cli.agent.audio import Player, _default_output_stream
-from assemblyai_cli.errors import CLIError
+from aai_cli.agent.audio import Player, _default_output_stream
+from aai_cli.errors import CLIError
 
 
 class FakeStream:
@@ -123,7 +123,7 @@ def test_player_resamples_source_to_device_rate():
     assert len(written) > 240 * 2  # upsampled to ~48 kHz -> more bytes than the 24 kHz input
 
 
-from assemblyai_cli.agent.audio import DuplexAudio  # noqa: E402
+from aai_cli.agent.audio import DuplexAudio  # noqa: E402
 
 
 def test_duplex_opens_at_device_rate_and_closes():
