@@ -30,7 +30,7 @@ def _json_or_raise(resp: httpx.Response) -> Any:
 
 def discover(token: str) -> dict[str, Any]:
     """POST /v2/auth/discover with a discovery_oauth token -> {orgs, email, IST}."""
-    with httpx.Client(base_url=endpoints.AMS_BASE_URL, timeout=_TIMEOUT) as client:
+    with httpx.Client(base_url=endpoints.ams_base(), timeout=_TIMEOUT) as client:
         resp = client.post(
             "/v2/auth/discover",
             json={"token": token, "token_type": "discovery_oauth"},
@@ -40,7 +40,7 @@ def discover(token: str) -> dict[str, Any]:
 
 def exchange(intermediate_session_token: str, organization_id: str) -> dict[str, Any]:
     """POST /v2/auth/exchange -> SignedInResponse {account, session_jwt, session_token}."""
-    with httpx.Client(base_url=endpoints.AMS_BASE_URL, timeout=_TIMEOUT) as client:
+    with httpx.Client(base_url=endpoints.ams_base(), timeout=_TIMEOUT) as client:
         resp = client.post(
             "/v2/auth/exchange",
             json={
@@ -54,7 +54,7 @@ def exchange(intermediate_session_token: str, organization_id: str) -> dict[str,
 def get_auth(session_jwt: str) -> dict[str, Any]:
     """GET /v1/auth (session cookie) -> account incl. `id`."""
     with httpx.Client(
-        base_url=endpoints.AMS_BASE_URL,
+        base_url=endpoints.ams_base(),
         timeout=_TIMEOUT,
         cookies={"stytch_session_jwt": session_jwt},
     ) as client:
@@ -65,7 +65,7 @@ def get_auth(session_jwt: str) -> dict[str, Any]:
 def list_projects(account_id: int, session_jwt: str) -> list[dict[str, Any]]:
     """GET /v1/users/accounts/{id}/projects -> [{project, tokens[]}]."""
     with httpx.Client(
-        base_url=endpoints.AMS_BASE_URL,
+        base_url=endpoints.ams_base(),
         timeout=_TIMEOUT,
         cookies={"stytch_session_jwt": session_jwt},
     ) as client:
@@ -78,7 +78,7 @@ def create_token(
 ) -> dict[str, Any]:
     """POST /v1/users/accounts/{id}/tokens -> TokenSchema incl. `api_key`."""
     with httpx.Client(
-        base_url=endpoints.AMS_BASE_URL,
+        base_url=endpoints.ams_base(),
         timeout=_TIMEOUT,
         cookies={"stytch_session_jwt": session_jwt},
     ) as client:

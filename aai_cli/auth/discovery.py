@@ -15,11 +15,11 @@ def build_start_url() -> str:
     server is loopback-only, single-shot.
     """
     base = (
-        f"{endpoints.STYTCH_PROJECT_DOMAIN}"
+        f"{endpoints.stytch_domain()}"
         f"/v1/b2b/public/oauth/{endpoints.STYTCH_OAUTH_PROVIDER}/discovery/start"
     )
     params = {
-        "public_token": endpoints.STYTCH_PUBLIC_TOKEN,
+        "public_token": endpoints.stytch_public_token(),
         "discovery_redirect_url": endpoints.redirect_uri(),
     }
     return f"{base}?{urlencode(params)}"

@@ -12,7 +12,7 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
-from aai_cli import stdio
+from aai_cli import environments, stdio
 from aai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
@@ -32,6 +32,7 @@ def resolve_audio_source(source: str | None, *, sample: bool) -> str:
 
 def _configure(api_key: str) -> None:
     aai.settings.api_key = api_key
+    aai.settings.base_url = environments.active().api_base
 
 
 def validate_key(api_key: str) -> bool:
@@ -156,7 +157,9 @@ def stream_audio(
     `params` is a fully-built StreamingParameters (sample_rate/speech_model/etc).
     """
     sc = StreamingClient(
-        StreamingClientOptions(api_key=api_key, api_host="streaming.assemblyai.com")
+        StreamingClientOptions(
+            api_key=api_key, api_host=environments.active().streaming_host
+        )
     )
 
     def _guard(cb: Callable[[Any], Any]) -> Callable[[Any, Any], None]:

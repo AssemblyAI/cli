@@ -53,7 +53,7 @@ def run_login_flow() -> str:
     if not organizations:
         raise APIError(
             "Signed in, but this identity has no AssemblyAI account yet. "
-            f"Create one at {endpoints.SIGNUP_URL}, then run 'aai login' again."
+            f"Create one at {endpoints.signup_url()}, then run 'aai login' again."
         )
     organization_id = organizations[0]["organization_id"]
 

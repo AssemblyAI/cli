@@ -81,6 +81,21 @@ def get_api_key(profile: str) -> str | None:
     return keyring.get_password(KEYRING_SERVICE, profile)
 
 
+def get_profile_env(profile: str) -> str | None:
+    """The backend environment recorded for a profile, if any (e.g. 'sandbox000')."""
+    profiles = _load().get("profiles", {})
+    value = profiles.get(profile, {}).get("env")
+    return str(value) if value is not None else None
+
+
+def set_profile_env(profile: str, env: str) -> None:
+    """Bind a backend environment to a profile so its key and hosts stay matched."""
+    _validate_profile(profile)
+    data = _load()
+    data.setdefault("profiles", {}).setdefault(profile, {})["env"] = env
+    _dump(data)
+
+
 def clear_api_key(profile: str) -> None:
     with contextlib.suppress(keyring.errors.PasswordDeleteError):
         keyring.delete_password(KEYRING_SERVICE, profile)

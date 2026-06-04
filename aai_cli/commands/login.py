@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import client, config, output
+from aai_cli import client, config, environments, output
 from aai_cli.auth import run_login_flow
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import APIError, NotAuthenticated
@@ -28,10 +28,13 @@ def login(
             key = api_key
         else:
             key = run_login_flow()
+        env = environments.active().name
         config.set_api_key(profile, key)
+        config.set_profile_env(profile, env)
         output.emit(
-            {"authenticated": True, "profile": profile},
-            lambda _d: f"[aai.success]Authenticated[/aai.success] on profile '{escape(profile)}'.",
+            {"authenticated": True, "profile": profile, "env": env},
+            lambda _d: f"[aai.success]Authenticated[/aai.success] on profile "
+            f"'{escape(profile)}' (env: {escape(env)}).",
             json_mode=json_mode,
         )
 
@@ -70,10 +73,12 @@ def whoami(
         if not key:
             raise NotAuthenticated()
         masked = f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
+        env = environments.active().name
         reachable = client.validate_key(key)
         output.emit(
-            {"profile": profile, "api_key": masked, "reachable": reachable},
-            lambda _d: f"profile={escape(profile)} key={escape(masked)} reachable={reachable}",
+            {"profile": profile, "env": env, "api_key": masked, "reachable": reachable},
+            lambda _d: f"profile={escape(profile)} env={escape(env)} "
+            f"key={escape(masked)} reachable={reachable}",
             json_mode=json_mode,
         )
 

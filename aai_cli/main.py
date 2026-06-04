@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, stdio
+from aai_cli import __version__, environments, stdio
 from aai_cli.commands import (
     agent,
     claude,
@@ -23,7 +23,8 @@ from aai_cli.commands import (
     transcribe,
     transcripts,
 )
-from aai_cli.context import AppState
+from aai_cli.context import AppState, resolve_environment
+from aai_cli.errors import CLIError
 
 # The order commands appear under `aai --help`: core transcription first, then
 # voice/LLM, then account, then tooling, with `version` last. Names not listed
@@ -71,8 +72,20 @@ app = typer.Typer(
 def main(
     ctx: typer.Context,
     profile: str = typer.Option(None, "--profile", "-p", help="Named credential profile."),
+    env: str = typer.Option(
+        None, "--env", help="Backend environment (production, sandbox000)."
+    ),
+    sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
 ) -> None:
-    ctx.obj = AppState(profile=profile)
+    if sandbox and env is None:
+        env = "sandbox000"
+    state = AppState(profile=profile, env=env)
+    ctx.obj = state
+    try:
+        environments.set_active(resolve_environment(state))
+    except CLIError as err:
+        typer.echo(err.message, err=True)
+        raise typer.Exit(code=err.exit_code) from None
 
 
 # Commands are registered in the order they should appear in `aai --help`:

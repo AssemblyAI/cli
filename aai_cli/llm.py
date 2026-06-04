@@ -5,10 +5,12 @@ from typing import Any
 import openai
 from openai import OpenAI
 
+from aai_cli import environments
 from aai_cli.errors import APIError, auth_failure
 
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
-# pointed at this base URL. (The synchronous gateway has no assemblyai-SDK client.)
+# pointed at this base URL. This is the production host used in generated code
+# snippets (code_gen); runtime calls use the active environment's gateway base.
 GATEWAY_BASE_URL = "https://llm-gateway.assemblyai.com/v1"
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 1000
@@ -58,7 +60,7 @@ def build_messages(
 
 
 def _client(api_key: str) -> OpenAI:
-    return OpenAI(api_key=api_key, base_url=GATEWAY_BASE_URL)
+    return OpenAI(api_key=api_key, base_url=environments.active().llm_gateway_base)
 
 
 def complete(
