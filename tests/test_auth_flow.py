@@ -1,7 +1,7 @@
 import pytest
 
-from assemblyai_cli.auth import flow, loopback
-from assemblyai_cli.errors import APIError
+from aai_cli.auth import flow, loopback
+from aai_cli.errors import APIError
 
 
 def test_find_or_create_reuses_existing_cli_key(monkeypatch):

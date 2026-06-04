@@ -3,9 +3,9 @@ import wave
 
 import pytest
 
-from assemblyai_cli.errors import CLIError
-from assemblyai_cli.streaming import sources
-from assemblyai_cli.streaming.sources import FileSource
+from aai_cli.errors import CLIError
+from aai_cli.streaming import sources
+from aai_cli.streaming.sources import FileSource
 
 
 def _write_wav(path, *, seconds=0.5, rate=16000):
@@ -150,7 +150,7 @@ def test_filesource_ffmpeg_failure_raises(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FailProc())
-    from assemblyai_cli.errors import APIError
+    from aai_cli.errors import APIError
 
     with pytest.raises(APIError):
         list(sources.FileSource(str(p), sleep=lambda _s: None))

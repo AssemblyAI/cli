@@ -8,10 +8,10 @@ import wave
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from assemblyai_cli import config_builder as cb
-from assemblyai_cli.agent.render import AgentRenderer
-from assemblyai_cli.streaming import sources
-from assemblyai_cli.streaming.render import StreamRenderer
+from aai_cli import config_builder as cb
+from aai_cli.agent.render import AgentRenderer
+from aai_cli.streaming import sources
+from aai_cli.streaming.render import StreamRenderer
 
 
 @given(text=st.text())

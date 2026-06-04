@@ -1,6 +1,6 @@
 import io
 
-from assemblyai_cli import theme
+from aai_cli import theme
 
 
 def test_make_console_resolves_named_styles():
@@ -46,8 +46,8 @@ def test_speaker_style_deterministic_and_in_palette():
 
 
 def test_output_console_is_themed_and_error_is_styled(monkeypatch):
-    from assemblyai_cli import output, theme
-    from assemblyai_cli.errors import CLIError
+    from aai_cli import output, theme
+    from aai_cli.errors import CLIError
 
     buf = io.StringIO()
     monkeypatch.setattr(

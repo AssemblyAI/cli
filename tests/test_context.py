@@ -1,8 +1,8 @@
 import typer
 from typer.testing import CliRunner
 
-from assemblyai_cli.context import AppState, run_command
-from assemblyai_cli.errors import NotAuthenticated
+from aai_cli.context import AppState, run_command
+from aai_cli.errors import NotAuthenticated
 
 runner = CliRunner()
 

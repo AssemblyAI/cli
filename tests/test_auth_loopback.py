@@ -2,7 +2,7 @@ import threading
 import time
 import urllib.request
 
-from assemblyai_cli.auth import endpoints, loopback
+from aai_cli.auth import endpoints, loopback
 
 
 def _hit(path: str) -> None:

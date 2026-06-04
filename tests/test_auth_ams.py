@@ -1,8 +1,8 @@
 import httpx
 import pytest
 
-from assemblyai_cli.auth import ams
-from assemblyai_cli.errors import APIError, NotAuthenticated
+from aai_cli.auth import ams
+from aai_cli.errors import APIError, NotAuthenticated
 
 
 def _patch_transport(monkeypatch, handler):

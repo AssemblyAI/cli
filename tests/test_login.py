@@ -2,28 +2,28 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
-from assemblyai_cli.main import app
+from aai_cli import config
+from aai_cli.main import app
 
 runner = CliRunner()
 
 
 def test_login_with_api_key_flag_stores_key():
-    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_flag"
 
 
 def test_login_rejects_invalid_key():
-    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=False):
+    with patch("aai_cli.commands.login.client.validate_key", return_value=False):
         result = runner.invoke(app, ["login", "--api-key", "sk_bad"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
 
 
 def test_login_stores_under_named_profile():
-    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["--profile", "staging", "login", "--api-key", "sk_s"])
     assert result.exit_code == 0
     assert config.get_api_key("staging") == "sk_s"
@@ -33,7 +33,7 @@ def test_whoami_reports_authenticated():
     import json
 
     config.set_api_key("default", "sk_1234567890")
-    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["whoami", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -56,7 +56,7 @@ def test_logout_clears_key():
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):
     monkeypatch.setattr(
-        "assemblyai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth"
+        "aai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth"
     )
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
@@ -64,12 +64,12 @@ def test_login_oauth_flow_stores_returned_key(monkeypatch):
 
 
 def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
-    from assemblyai_cli.errors import APIError
+    from aai_cli.errors import APIError
 
     def boom():
         raise APIError("Login timed out waiting for the browser.")
 
-    monkeypatch.setattr("assemblyai_cli.commands.login.run_login_flow", boom)
+    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", boom)
     result = runner.invoke(app, ["login"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
@@ -77,10 +77,10 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
 
 def test_login_api_key_flag_still_bypasses_oauth(monkeypatch):
     monkeypatch.setattr(
-        "assemblyai_cli.commands.login.run_login_flow",
+        "aai_cli.commands.login.run_login_flow",
         lambda: (_ for _ in ()).throw(AssertionError("OAuth must not run with --api-key")),
     )
-    with patch("assemblyai_cli.commands.login.client.validate_key", return_value=True):
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["login", "--api-key", "sk_flag2"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_flag2"

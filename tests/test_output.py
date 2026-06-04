@@ -1,6 +1,6 @@
 import json
 
-from assemblyai_cli import output
+from aai_cli import output
 
 
 def test_resolve_json_true_when_explicit(monkeypatch):
@@ -70,7 +70,7 @@ def test_print_code_plain_when_piped(monkeypatch, capsys):
 
 
 def test_print_code_highlights_for_interactive_human(monkeypatch, capsys):
-    from assemblyai_cli import theme
+    from aai_cli import theme
 
     monkeypatch.setattr(output, "_is_agentic", lambda: False)
     monkeypatch.setattr(

@@ -1,4 +1,4 @@
-from assemblyai_cli.auth import endpoints
+from aai_cli.auth import endpoints
 
 
 def test_redirect_uri_is_fixed_loopback():

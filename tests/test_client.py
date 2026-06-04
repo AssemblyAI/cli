@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 import assemblyai as aai
 import pytest
 
-from assemblyai_cli import client
-from assemblyai_cli.errors import APIError
+from aai_cli import client
+from aai_cli.errors import APIError
 
 
 def _stream_params(sample_rate: int = 16000):
@@ -79,7 +79,7 @@ def test_list_transcripts_auth_error_becomes_apierror():
 
 
 def test_list_transcripts_rejected_key_becomes_not_authenticated():
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     with patch.object(client.aai, "Transcriber") as T:
         T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(
@@ -90,7 +90,7 @@ def test_list_transcripts_rejected_key_becomes_not_authenticated():
 
 
 def test_resolve_audio_source_sample_explicit_and_missing():
-    from assemblyai_cli.errors import UsageError
+    from aai_cli.errors import UsageError
 
     assert client.resolve_audio_source(None, sample=True) == client.SAMPLE_AUDIO_URL
     assert client.resolve_audio_source("clip.mp3", sample=False) == "clip.mp3"
@@ -143,7 +143,7 @@ def test_select_transcript_field_srt_network_error_becomes_apierror():
 
 
 def test_select_transcript_field_srt_auth_error_becomes_not_authenticated():
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     t = MagicMock()
     t.export_subtitles_srt.side_effect = RuntimeError("HTTP 401 Unauthorized")
@@ -166,7 +166,7 @@ def test_get_transcript_generic_error_becomes_apierror():
 
 
 def test_get_transcript_auth_error_becomes_not_authenticated():
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     with patch.object(
         client.aai.Transcript, "get_by_id", side_effect=RuntimeError("HTTP 401 Unauthorized")
@@ -184,7 +184,7 @@ def test_transcribe_network_error_becomes_apierror():
 
 
 def test_transcribe_auth_error_becomes_not_authenticated():
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     fake_transcriber = MagicMock()
     fake_transcriber.transcribe.side_effect = RuntimeError("Invalid API key")
@@ -278,7 +278,7 @@ def test_stream_audio_connect_error_becomes_apierror(monkeypatch):
 
 
 def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     class ConnectUnauthorized(_FakeStreamingClient):
         def connect(self, params):
@@ -290,7 +290,7 @@ def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
 
 
 def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
-    from assemblyai_cli.errors import NotAuthenticated
+    from aai_cli.errors import NotAuthenticated
 
     class AuthErrClient(_FakeStreamingClient):
         def stream(self, source):
@@ -319,7 +319,7 @@ def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
     # reader thread; the guard must swallow it instead of dumping a thread traceback.
     monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
     # never touch the real stdout fd during the test
-    monkeypatch.setattr("assemblyai_cli.stdio.silence_stdout", lambda: None)
+    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
 
     def on_turn(_event):
         raise BrokenPipeError
@@ -328,7 +328,7 @@ def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
 
 
 def test_stream_audio_passes_through_clierror(monkeypatch):
-    from assemblyai_cli.errors import CLIError
+    from aai_cli.errors import CLIError
 
     class StreamRaisesCLIError(_FakeStreamingClient):
         def stream(self, source):
@@ -343,7 +343,7 @@ def test_stream_audio_passes_through_clierror(monkeypatch):
 def test_transcribe_passes_prebuilt_config(monkeypatch):
     import assemblyai as aai
 
-    from assemblyai_cli import client
+    from aai_cli import client
 
     captured = {}
 
@@ -365,7 +365,7 @@ def test_transcribe_passes_prebuilt_config(monkeypatch):
 def test_stream_audio_accepts_params(monkeypatch):
     from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
 
-    from assemblyai_cli import client
+    from aai_cli import client
 
     captured = {}
 
@@ -385,7 +385,7 @@ def test_stream_audio_accepts_params(monkeypatch):
         def disconnect(self, terminate=True):
             pass
 
-    monkeypatch.setattr("assemblyai_cli.client.StreamingClient", FakeSC)
+    monkeypatch.setattr("aai_cli.client.StreamingClient", FakeSC)
     params = StreamingParameters(
         sample_rate=16000, speech_model=SpeechModel.universal_streaming_multilingual
     )

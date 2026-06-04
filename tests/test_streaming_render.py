@@ -4,8 +4,8 @@ import types
 
 import pytest
 
-from assemblyai_cli import theme
-from assemblyai_cli.streaming.render import StreamRenderer
+from aai_cli import theme
+from aai_cli.streaming.render import StreamRenderer
 
 
 def _turn(transcript, end_of_turn):

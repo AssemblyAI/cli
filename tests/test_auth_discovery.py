@@ -1,6 +1,6 @@
 from urllib.parse import parse_qs, urlparse
 
-from assemblyai_cli.auth import discovery, endpoints
+from aai_cli.auth import discovery, endpoints
 
 
 def test_build_start_url_targets_b2b_discovery_for_provider():

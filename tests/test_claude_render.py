@@ -1,7 +1,7 @@
 import io
 
-from assemblyai_cli import theme
-from assemblyai_cli.commands.claude import _render_steps
+from aai_cli import theme
+from aai_cli.commands.claude import _render_steps
 
 
 def test_render_steps_colors_status():

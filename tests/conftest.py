@@ -56,5 +56,5 @@ def memory_keyring():
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr("assemblyai_cli.config.config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("aai_cli.config.config_dir", lambda: cfg_dir)
     return cfg_dir

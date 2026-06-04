@@ -4,10 +4,10 @@ from collections import namedtuple
 import pytest
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
-from assemblyai_cli.commands import doctor
-from assemblyai_cli.errors import APIError
-from assemblyai_cli.main import app
+from aai_cli import config
+from aai_cli.commands import doctor
+from aai_cli.errors import APIError
+from aai_cli.main import app
 
 runner = CliRunner()
 
@@ -16,11 +16,11 @@ runner = CliRunner()
 def healthy(monkeypatch):
     """A fully-ready environment: valid key, all tools present, a microphone."""
     config.set_api_key("default", "sk_1234567890")
-    monkeypatch.setattr("assemblyai_cli.commands.doctor.client.validate_key", lambda _key: True)
+    monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", lambda _key: True)
     monkeypatch.setattr(
-        "assemblyai_cli.commands.doctor.shutil.which", lambda tool: f"/usr/bin/{tool}"
+        "aai_cli.commands.doctor.shutil.which", lambda tool: f"/usr/bin/{tool}"
     )
-    monkeypatch.setattr("assemblyai_cli.commands.doctor._probe_input_devices", lambda: 2)
+    monkeypatch.setattr("aai_cli.commands.doctor._probe_input_devices", lambda: 2)
 
 
 def _checks(result):
@@ -45,7 +45,7 @@ def test_doctor_no_api_key_fails(healthy):
 
 
 def test_doctor_rejected_key_fails(healthy, monkeypatch):
-    monkeypatch.setattr("assemblyai_cli.commands.doctor.client.validate_key", lambda _key: False)
+    monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", lambda _key: False)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 1
     assert _checks(result)["api-key"]["status"] == "fail"
@@ -55,7 +55,7 @@ def test_doctor_network_error_is_a_failure(healthy, monkeypatch):
     def boom(_key):
         raise APIError("Network error contacting AssemblyAI: timeout")
 
-    monkeypatch.setattr("assemblyai_cli.commands.doctor.client.validate_key", boom)
+    monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", boom)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 1
     api = _checks(result)["api-key"]
@@ -65,7 +65,7 @@ def test_doctor_network_error_is_a_failure(healthy, monkeypatch):
 
 def test_doctor_ffmpeg_missing_warns_but_passes(healthy, monkeypatch):
     monkeypatch.setattr(
-        "assemblyai_cli.commands.doctor.shutil.which",
+        "aai_cli.commands.doctor.shutil.which",
         lambda tool: None if tool == "ffmpeg" else f"/usr/bin/{tool}",
     )
     result = runner.invoke(app, ["doctor", "--json"])
@@ -78,7 +78,7 @@ def test_doctor_audio_unavailable_warns_but_passes(healthy, monkeypatch):
     def no_audio():
         raise ImportError("no sounddevice")
 
-    monkeypatch.setattr("assemblyai_cli.commands.doctor._probe_input_devices", no_audio)
+    monkeypatch.setattr("aai_cli.commands.doctor._probe_input_devices", no_audio)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 0
     audio = _checks(result)["audio"]
@@ -87,7 +87,7 @@ def test_doctor_audio_unavailable_warns_but_passes(healthy, monkeypatch):
 
 
 def test_doctor_no_microphone_warns(healthy, monkeypatch):
-    monkeypatch.setattr("assemblyai_cli.commands.doctor._probe_input_devices", lambda: 0)
+    monkeypatch.setattr("aai_cli.commands.doctor._probe_input_devices", lambda: 0)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 0
     assert _checks(result)["audio"]["status"] == "warn"
@@ -95,7 +95,7 @@ def test_doctor_no_microphone_warns(healthy, monkeypatch):
 
 def test_doctor_coding_agent_missing_warns(healthy, monkeypatch):
     monkeypatch.setattr(
-        "assemblyai_cli.commands.doctor.shutil.which",
+        "aai_cli.commands.doctor.shutil.which",
         lambda tool: None if tool in ("claude", "npx") else f"/usr/bin/{tool}",
     )
     result = runner.invoke(app, ["doctor", "--json"])

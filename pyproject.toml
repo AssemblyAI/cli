@@ -58,10 +58,10 @@ dev = [
 ]
 
 [project.scripts]
-aai = "assemblyai_cli.main:run"
+aai = "aai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["assemblyai_cli"]
+packages = ["aai_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -71,7 +71,7 @@ markers = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["assemblyai_cli", "tests"]
+files = ["aai_cli", "tests"]
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true

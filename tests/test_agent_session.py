@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from assemblyai_cli.agent.session import VoiceAgentSession, _send_audio_loop, run_session
-from assemblyai_cli.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.agent.session import VoiceAgentSession, _send_audio_loop, run_session
+from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
 class FakeRenderer:
@@ -240,7 +240,7 @@ def test_run_session_mid_stream_1008_raises_not_authenticated():
 def test_run_session_surfaces_mic_open_failure_from_capture_thread():
     import threading as _threading
 
-    from assemblyai_cli.errors import CLIError
+    from aai_cli.errors import CLIError
 
     class _BoomMic:
         def __iter__(self):

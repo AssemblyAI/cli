@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from assemblyai_cli.main import app
+from aai_cli.main import app
 
 runner = CliRunner()
 
@@ -12,7 +12,7 @@ def test_help_runs():
 
 
 def test_version_command():
-    from assemblyai_cli import __version__
+    from aai_cli import __version__
 
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0

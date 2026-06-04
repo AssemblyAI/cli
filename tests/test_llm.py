@@ -4,8 +4,8 @@ import httpx
 import openai
 import pytest
 
-from assemblyai_cli import llm
-from assemblyai_cli.errors import APIError, NotAuthenticated
+from aai_cli import llm
+from aai_cli.errors import APIError, NotAuthenticated
 
 _REQUEST = httpx.Request("POST", f"{llm.GATEWAY_BASE_URL}/chat/completions")
 

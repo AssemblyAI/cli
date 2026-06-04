@@ -5,7 +5,7 @@ from typing import ClassVar
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from assemblyai_cli.code_gen import serialize
+from aai_cli.code_gen import serialize
 
 settings.register_profile("codegen", max_examples=150)
 settings.load_profile("codegen")
@@ -45,7 +45,7 @@ def test_config_kwarg_lines_empty_dict():
 # ---------------------------------------------------------------------------
 from assemblyai.streaming.v3 import SpeechModel  # noqa: E402
 
-from assemblyai_cli import config_builder  # noqa: E402
+from aai_cli import config_builder  # noqa: E402
 
 # JSON-ish values that repr()->eval() round-trips (string keys, no NaN/inf).
 _json = st.recursive(
@@ -103,7 +103,7 @@ def test_serializer_round_trips_full_stream_domain(merged):
     assert eval(src, {"SpeechModel": SpeechModel}) == merged  # noqa: S307
 
 
-from assemblyai_cli.code_gen import snippets  # noqa: E402
+from aai_cli.code_gen import snippets  # noqa: E402
 
 
 def test_result_handling_includes_only_enabled_features():
@@ -126,7 +126,7 @@ def test_every_render_feature_has_a_snippet():
     # but no `_render_speaker_labels` function, so it is an allowed orphan.
     import inspect
 
-    from assemblyai_cli import transcribe_render
+    from aai_cli import transcribe_render
 
     rendered = {
         name[len("_render_") :]
@@ -144,7 +144,7 @@ def test_every_render_feature_has_a_snippet():
 
 import ast  # noqa: E402
 
-from assemblyai_cli import code_gen  # noqa: E402
+from aai_cli import code_gen  # noqa: E402
 
 
 def test_transcribe_render_parses_and_uses_env_key():

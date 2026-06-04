@@ -1,4 +1,4 @@
-from assemblyai_cli.errors import APIError, CLIError, NotAuthenticated, is_auth_failure
+from aai_cli.errors import APIError, CLIError, NotAuthenticated, is_auth_failure
 
 
 def test_not_authenticated_defaults():
