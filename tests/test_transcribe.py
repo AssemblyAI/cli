@@ -78,6 +78,35 @@ def test_transcribe_unauthenticated_exits_2():
     assert result.exit_code == 2
 
 
+def test_transcribe_output_text_field():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "text"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "hello world"  # raw text, pipe-friendly
+
+
+def test_transcribe_output_id_field():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--output", "id"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "t_1"
+
+
+def test_transcribe_output_invalid_exits_2():
+    _auth()
+    with patch(
+        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ):
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "bogus"])
+    assert result.exit_code == 2  # unknown field rejected
+
+
 def test_transcribe_status_renders_enum_value():
     import assemblyai as aai
 
