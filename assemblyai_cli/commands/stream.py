@@ -92,6 +92,12 @@ def stream(
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    output_field: str = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Output mode: 'text' (finalized turns as plain lines, pipe-friendly) or 'json'.",
+    ),
     show_code: bool = typer.Option(
         False,
         "--show-code",
@@ -105,6 +111,9 @@ def stream(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
+        if output_field is not None and output_field not in ("text", "json"):
+            raise UsageError(f"Unknown --output {output_field!r}. Choose one of: text, json.")
+
         def make_flags(rate: int) -> dict[str, object]:
             flags: dict[str, object] = {
                 "sample_rate": rate,
@@ -158,7 +167,11 @@ def stream(
         elif from_file and (sample_rate is not None or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
 
-        renderer = StreamRenderer(json_mode=json_mode)
+        text_mode = output_field == "text"
+        renderer = StreamRenderer(
+            json_mode=(output_field == "json") or (json_mode and not text_mode),
+            text_mode=text_mode,
+        )
         # Collect finalized turns so we can transform the full transcript at the end.
         turns: list[str] = []
 

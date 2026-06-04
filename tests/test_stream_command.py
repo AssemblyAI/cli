@@ -462,3 +462,20 @@ def test_stream_stdin_rejects_device(monkeypatch):
     config.set_api_key("default", "sk_live")
     result = runner.invoke(app, ["stream", "-", "--device", "2"], input=b"\x00\x00")
     assert result.exit_code == 2  # --device applies only to the microphone
+
+
+def test_stream_output_text_emits_plain_finalized_turns(monkeypatch):
+    # `-o text` -> only finalized transcripts as plain stdout lines (pipe into aai llm).
+    config.set_api_key("default", "sk_live")
+
+    def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):
+        if on_turn:
+            on_turn(types.SimpleNamespace(transcript="partial", end_of_turn=False))
+            on_turn(types.SimpleNamespace(transcript="hello world", end_of_turn=True))
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "-", "-o", "text"], input=b"\x00\x00")
+    assert result.exit_code == 0
+    # Final turn only, plain text; partials and JSON envelopes are not on stdout.
+    assert result.output.strip() == "hello world"
+    assert '"type"' not in result.output
