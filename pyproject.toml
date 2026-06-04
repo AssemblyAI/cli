@@ -62,11 +62,6 @@ aai = "assemblyai_cli.main:app"
 [tool.hatch.build.targets.wheel]
 packages = ["assemblyai_cli"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"assemblyai_cli/templates/transcribe.py.tmpl" = "assemblyai_cli/templates/transcribe.py.tmpl"
-"assemblyai_cli/templates/stream.py.tmpl" = "assemblyai_cli/templates/stream.py.tmpl"
-"assemblyai_cli/templates/agent.py.tmpl" = "assemblyai_cli/templates/agent.py.tmpl"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

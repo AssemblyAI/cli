@@ -1,27 +1,39 @@
 from __future__ import annotations
 
-import os
-from importlib import resources
 from pathlib import Path
 
 import typer
+from assemblyai.streaming.v3 import SpeechModel
 from rich.markup import escape
 
-from assemblyai_cli import config, output
+from assemblyai_cli import client, code_gen, output
+from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
+from assemblyai_cli.agent.voices import DEFAULT_VOICE
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import CLIError
+from assemblyai_cli.streaming.sources import TARGET_RATE
 
 app = typer.Typer(
     help="Scaffold runnable AssemblyAI starter scripts.",
     no_args_is_help=True,
 )
 
-# template name -> (template resource filename, output filename)
-TEMPLATES = {
-    "transcribe": ("transcribe.py.tmpl", "transcribe.py"),
-    "stream": ("stream.py.tmpl", "stream.py"),
-    "agent": ("agent.py.tmpl", "agent.py"),
-}
+SAMPLES = ("transcribe", "stream", "agent")
+
+
+def _generate(name: str) -> str:
+    """Render a starter script via the same generator behind `--show-code`."""
+    if name == "transcribe":
+        return code_gen.transcribe({}, client.SAMPLE_AUDIO_URL)
+    if name == "stream":
+        return code_gen.stream(
+            {
+                "sample_rate": TARGET_RATE,
+                "format_turns": True,
+                "speech_model": SpeechModel.u3_rt_pro,
+            }
+        )
+    return code_gen.agent(DEFAULT_VOICE, DEFAULT_PROMPT, DEFAULT_GREETING)
 
 
 @app.command(name="list")
@@ -29,12 +41,11 @@ def list_(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """List available sample templates."""
+    """List available sample scripts."""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        names = sorted(TEMPLATES)
         output.emit(
-            names,
+            list(SAMPLES),
             lambda d: "Available samples:\n" + "\n".join(f"  - {n}" for n in d),
             json_mode=json_mode,
         )
@@ -49,41 +60,32 @@ def create(
     force: bool = typer.Option(False, "--force", help="Overwrite an existing sample file."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Scaffold a runnable starter script with your API key injected."""
+    """Scaffold a runnable starter script (reads ASSEMBLYAI_API_KEY from the environment)."""
 
-    def body(state: AppState, json_mode: bool) -> None:
-        if name not in TEMPLATES:
+    def body(_state: AppState, json_mode: bool) -> None:
+        if name not in SAMPLES:
             raise CLIError(
-                f"Unknown sample '{name}'. Try: {', '.join(sorted(TEMPLATES))}.",
+                f"Unknown sample '{name}'. Try: {', '.join(SAMPLES)}.",
                 error_type="unknown_sample",
                 exit_code=1,
             )
-        api_key = config.resolve_api_key(profile=state.profile)
-        tmpl_file, out_file = TEMPLATES[name]
-        template = resources.files("assemblyai_cli.templates").joinpath(tmpl_file).read_text()
-        rendered = template.replace("{{API_KEY}}", api_key)
-
         target_dir = Path.cwd() / name
         target_dir.mkdir(parents=True, exist_ok=True)
-        target_dir.chmod(0o700)
-        target = target_dir / out_file
+        target = target_dir / f"{name}.py"
         if target.exists() and not force:
             raise CLIError(
                 f"{target} already exists. Delete it or pass --force to overwrite.",
                 error_type="file_exists",
                 exit_code=1,
             )
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            fh.write(rendered)
-        target.chmod(0o600)
+        target.write_text(_generate(name))
 
         output.emit(
             {"created": str(target)},
             lambda d: (
                 f"Created {escape(d['created'])}\n"
-                f"[aai.warn]Note:[/aai.warn] this file contains your API key — do not commit it.\n"
-                f"Run it with: python {escape(d['created'])}"
+                f'Set your key (export ASSEMBLYAI_API_KEY="…"), then run: '
+                f"python {escape(d['created'])}"
             ),
             json_mode=json_mode,
         )

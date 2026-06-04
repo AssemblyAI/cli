@@ -2,10 +2,11 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from assemblyai_cli import config
 from assemblyai_cli.main import app
 
 runner = CliRunner()
+
+_ENV_KEY = 'os.environ["ASSEMBLYAI_API_KEY"]'
 
 
 def test_samples_list_shows_transcribe():
@@ -22,16 +23,12 @@ def test_samples_list_shows_templates():
     assert "agent" in result.output
 
 
-def test_samples_create_agent_writes_script_with_key(tmp_path, monkeypatch):
+def test_samples_create_agent_uses_env_key(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
     result = runner.invoke(app, ["samples", "create", "agent"])
     assert result.exit_code == 0
-    script = Path(tmp_path, "agent", "agent.py")
-    assert script.exists()
-    body = script.read_text()
-    assert "sk_injected" in body
-    assert "{{API_KEY}}" not in body
+    body = Path(tmp_path, "agent", "agent.py").read_text()
+    assert _ENV_KEY in body  # reads the key from the environment, no secret in the file
     assert "session.update" in body  # the voice-agent handshake
     assert "sounddevice" in body  # audio backend (PortAudio bundled in the wheel)
     assert "pyaudio" not in body
@@ -43,29 +40,29 @@ def test_samples_no_subcommand_lists_commands():
     assert "list" in result.output and "create" in result.output
 
 
-def test_samples_create_stream_writes_script_with_key(tmp_path, monkeypatch):
+def test_samples_create_stream_uses_env_key(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
     result = runner.invoke(app, ["samples", "create", "stream"])
     assert result.exit_code == 0
-    script = Path(tmp_path, "stream", "stream.py")
-    assert script.exists()
-    body = script.read_text()
-    assert "sk_injected" in body
-    assert "{{API_KEY}}" not in body
+    body = Path(tmp_path, "stream", "stream.py").read_text()
+    assert _ENV_KEY in body
     assert "MicrophoneStream" in body
 
 
-def test_samples_create_writes_script_with_key(tmp_path, monkeypatch):
+def test_samples_create_transcribe_uses_env_key(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
     result = runner.invoke(app, ["samples", "create", "transcribe"])
     assert result.exit_code == 0
-    script = Path(tmp_path, "transcribe", "transcribe.py")
-    assert script.exists()
-    body = script.read_text()
-    assert "sk_injected" in body
-    assert "{{API_KEY}}" not in body
+    body = Path(tmp_path, "transcribe", "transcribe.py").read_text()
+    assert _ENV_KEY in body
+    assert "import assemblyai as aai" in body
+
+
+def test_samples_create_needs_no_auth(tmp_path, monkeypatch):
+    # Scaffolding writes no secret, so it works without being logged in.
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["samples", "create", "transcribe"])
+    assert result.exit_code == 0
 
 
 def test_samples_create_unknown_name_errors():
@@ -73,15 +70,8 @@ def test_samples_create_unknown_name_errors():
     assert result.exit_code == 1
 
 
-def test_samples_create_unauthenticated_exits_2(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    result = runner.invoke(app, ["samples", "create", "transcribe"])
-    assert result.exit_code == 2
-
-
 def test_samples_create_refuses_existing_without_force(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
     assert runner.invoke(app, ["samples", "create", "transcribe"]).exit_code == 0
     # Second run without --force must refuse.
     result = runner.invoke(app, ["samples", "create", "transcribe"])
@@ -90,19 +80,15 @@ def test_samples_create_refuses_existing_without_force(tmp_path, monkeypatch):
 
 def test_samples_create_force_overwrites(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
     assert runner.invoke(app, ["samples", "create", "transcribe"]).exit_code == 0
     result = runner.invoke(app, ["samples", "create", "transcribe", "--force"])
     assert result.exit_code == 0
 
 
-def test_samples_create_file_is_owner_only(tmp_path, monkeypatch):
-    import stat
+def test_samples_create_is_valid_python(tmp_path, monkeypatch):
+    import ast
 
     monkeypatch.chdir(tmp_path)
-    config.set_api_key("default", "sk_injected")
-    assert runner.invoke(app, ["samples", "create", "transcribe"]).exit_code == 0
-    from pathlib import Path
-
-    mode = stat.S_IMODE(Path(tmp_path, "transcribe", "transcribe.py").stat().st_mode)
-    assert mode == 0o600
+    for name in ("transcribe", "stream", "agent"):
+        assert runner.invoke(app, ["samples", "create", name]).exit_code == 0
+        ast.parse(Path(tmp_path, name, f"{name}.py").read_text())  # generated code parses
