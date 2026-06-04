@@ -16,6 +16,8 @@ docs/
 
 # Local scratch scripts (often contain live keys)
 transcribe/
+# But do track the packaged template
+!aai_cli/init/templates/transcribe/
 
 # Wrong tool for this project (hatchling + uv); never commit a poetry lock
 poetry.lock

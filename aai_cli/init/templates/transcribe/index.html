@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transcribe &amp; explore · AssemblyAI</title>
+  <style>
+    body { font: 15px/1.6 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 20px; }
+    #drop { border: 2px dashed #bbb; border-radius: 10px; padding: 28px; text-align: center; cursor: pointer; }
+    #drop.busy { opacity: .6; pointer-events: none; }
+    .chips span { display: inline-block; background: #eef; border-radius: 99px; padding: 3px 10px; margin: 2px; font-size: 12px; }
+    .turn { margin: 6px 0; }
+    .spk { font-weight: 600; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>🎧 Transcribe &amp; explore</h1>
+  <p>Pick an audio or video file. The server transcribes it with AssemblyAI and returns speakers, chapters, sentiment, entities, and highlights.</p>
+
+  <label id="drop">
+    <input id="file" type="file" accept="audio/*,video/*" hidden />
+    <span id="droplabel">Click to choose a file</span>
+  </label>
+
+  <p id="status"></p>
+  <div id="result"></div>
+
+  <script>
+    const fileInput = document.getElementById("file");
+    const drop = document.getElementById("drop");
+    const statusEl = document.getElementById("status");
+    const result = document.getElementById("result");
+
+    drop.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => fileInput.files[0] && upload(fileInput.files[0]));
+
+    async function upload(file) {
+      drop.classList.add("busy");
+      result.innerHTML = "";
+      statusEl.textContent = "Uploading…";
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/transcribe", { method: "POST", body });
+      if (!res.ok) { statusEl.textContent = "Error: " + (await res.text()); drop.classList.remove("busy"); return; }
+      const { id } = await res.json();
+      poll(id);
+    }
+
+    async function poll(id) {
+      statusEl.textContent = "Transcribing…";
+      const res = await fetch("/api/status/" + id);
+      if (!res.ok) { statusEl.textContent = "Error: " + (await res.text()); drop.classList.remove("busy"); return; }
+      const data = await res.json();
+      if (data.status !== "completed") { setTimeout(() => poll(id), 2000); return; }
+      statusEl.textContent = "Done.";
+      drop.classList.remove("busy");
+      render(data.transcript);
+    }
+
+    function render(t) {
+      const chips = [];
+      if (t.chapters) chips.push("Chapters");
+      if (t.sentiment_analysis_results) chips.push("Sentiment");
+      if (t.entities) chips.push("Entities");
+      if (t.auto_highlights_result) chips.push("Highlights");
+      const utterances = (t.utterances || []).map(
+        (u) => `<div class="turn"><span class="spk">Speaker ${u.speaker}:</span> ${escapeHtml(u.text)}</div>`
+      ).join("");
+      result.innerHTML =
+        `<div class="chips">${chips.map((c) => `<span>${c}</span>`).join("")}</div>` +
+        (utterances || `<pre>${escapeHtml(t.text || "")}</pre>`);
+    }
+
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+  </script>
+</body>
+</html>
