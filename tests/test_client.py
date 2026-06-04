@@ -289,6 +289,18 @@ def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):
     assert StreamFails.last.disconnected  # still disconnected in finally
 
 
+def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
+    # A closed downstream pipe makes a turn write raise BrokenPipeError on the SDK's
+    # reader thread; the guard must swallow it instead of dumping a thread traceback.
+    monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
+    monkeypatch.setattr(client.os, "dup2", lambda *a, **k: None)  # never touch real stdout
+
+    def on_turn(_event):
+        raise BrokenPipeError
+
+    client.stream_audio("sk", [b"\x00"], params=_stream_params(), on_turn=on_turn)  # no raise
+
+
 def test_stream_audio_passes_through_clierror(monkeypatch):
     from assemblyai_cli.errors import CLIError
 

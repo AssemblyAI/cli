@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import sys
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -115,13 +118,29 @@ def stream_audio(
     sc = StreamingClient(
         StreamingClientOptions(api_key=api_key, api_host="streaming.assemblyai.com")
     )
+
+    def _guard(cb: Callable[[Any], Any]) -> Callable[[Any, Any], None]:
+        # Event callbacks run on the SDK's reader thread. If the downstream pipe is
+        # gone (e.g. a Ctrl-C'd `| aai llm`, or `| head`), writing a turn raises
+        # BrokenPipeError there with no handler -> an ugly thread traceback. Swallow
+        # it and point stdout at /dev/null so the interpreter's exit-flush can't
+        # re-raise either; the main thread still stops via Ctrl-C / source EOF.
+        def handler(_client: Any, event: Any) -> None:
+            try:
+                cb(event)
+            except BrokenPipeError:
+                with contextlib.suppress(Exception):
+                    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+        return handler
+
     errors: list[object] = []
     if on_begin is not None:
-        sc.on(StreamingEvents.Begin, lambda _client, event: on_begin(event))
+        sc.on(StreamingEvents.Begin, _guard(on_begin))
     if on_turn is not None:
-        sc.on(StreamingEvents.Turn, lambda _client, event: on_turn(event))
+        sc.on(StreamingEvents.Turn, _guard(on_turn))
     if on_termination is not None:
-        sc.on(StreamingEvents.Termination, lambda _client, event: on_termination(event))
+        sc.on(StreamingEvents.Termination, _guard(on_termination))
     sc.on(StreamingEvents.Error, lambda _client, error: errors.append(error))
 
     try:
