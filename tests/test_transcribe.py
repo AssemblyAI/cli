@@ -107,6 +107,30 @@ def test_transcribe_output_invalid_exits_2():
     assert result.exit_code == 2  # unknown field rejected
 
 
+def test_transcribe_reads_audio_from_stdin(monkeypatch):
+    import pathlib
+
+    _auth()
+    seen = {}
+
+    def fake_transcribe(api_key, audio, *, config):
+        # The piped bytes are buffered to a temp file the SDK can upload.
+        seen["bytes"] = pathlib.Path(audio).read_bytes()
+        return _fake_transcript()
+
+    monkeypatch.setattr("assemblyai_cli.commands.transcribe.client.transcribe", fake_transcribe)
+    result = runner.invoke(app, ["transcribe", "-", "-o", "text"], input=b"RIFFfake-wav-bytes")
+    assert result.exit_code == 0
+    assert result.output.strip() == "hello world"
+    assert seen["bytes"] == b"RIFFfake-wav-bytes"
+
+
+def test_transcribe_empty_stdin_exits_2():
+    _auth()
+    result = runner.invoke(app, ["transcribe", "-"], input=b"")
+    assert result.exit_code == 2  # nothing piped -> usage error
+
+
 def test_transcribe_status_renders_enum_value():
     import assemblyai as aai
 

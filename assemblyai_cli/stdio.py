@@ -15,3 +15,14 @@ def piped_stdin_text() -> str | None:
         return None
     data = stream.read()
     return data if data.strip() else None
+
+
+def read_binary_stdin() -> bytes:
+    """Read all bytes piped on stdin, for a ``-`` audio source.
+
+    Used by ``cat call.wav | aai transcribe -`` and ``ffmpeg … | aai transcribe -``.
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:  # e.g. a text-only stub in tests
+        return sys.stdin.read().encode() if sys.stdin is not None else b""
+    return bytes(buffer.read())

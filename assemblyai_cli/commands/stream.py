@@ -11,7 +11,7 @@ from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 from assemblyai_cli.microphone import MicrophoneSource
 from assemblyai_cli.streaming.render import StreamRenderer
-from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource
+from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
 
@@ -150,8 +150,12 @@ def stream(
             return
 
         api_key = config.resolve_api_key(profile=state.profile)
+        from_stdin = source == "-"
         from_file = bool(source) or sample
-        if from_file and (sample_rate is not None or device is not None):
+        if from_stdin:
+            if device is not None:
+                raise UsageError("--device applies only to microphone input.")
+        elif from_file and (sample_rate is not None or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
 
         renderer = StreamRenderer(json_mode=json_mode)
@@ -165,7 +169,7 @@ def stream(
                 if text:
                     turns.append(text)
 
-        def run(audio: FileSource | MicrophoneSource, rate: int) -> None:
+        def run(audio: FileSource | MicrophoneSource | StdinSource, rate: int) -> None:
             merged = config_builder.merge_streaming_params(
                 flags=make_flags(rate), overrides=list(config_kv or []), config_file=config_file
             )
@@ -200,7 +204,11 @@ def stream(
                 )
                 renderer.llm(transformed)
 
-        if source and youtube.is_youtube_url(source):
+        if from_stdin:
+            # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | aai stream -`).
+            stdin_src = StdinSource(sample_rate=sample_rate or TARGET_RATE)
+            run(stdin_src, stdin_src.sample_rate)
+        elif source and youtube.is_youtube_url(source):
             # Fetch the audio first, then stream the local file in real time.
             with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
                 local = youtube.download_audio(source, Path(td))

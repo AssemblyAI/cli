@@ -441,3 +441,24 @@ def test_stream_show_code_ignores_json_flag(monkeypatch):
     result = runner.invoke(app, ["stream", "--show-code", "--json"])
     assert result.exit_code == 0
     assert "StreamingClient(" in result.output
+
+
+def test_stream_reads_raw_pcm_from_stdin(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake_stream_audio(api_key, source, *, params, on_begin=None, **_kwargs):
+        seen["rate"] = params.sample_rate
+        seen["audio"] = b"".join(source)  # consume the StdinSource
+
+    monkeypatch.setattr("assemblyai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "-"], input=b"\x01\x02" * 100)
+    assert result.exit_code == 0
+    assert seen["rate"] == 16000  # default raw-PCM rate
+    assert seen["audio"] == b"\x01\x02" * 100
+
+
+def test_stream_stdin_rejects_device(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "-", "--device", "2"], input=b"\x00\x00")
+    assert result.exit_code == 2  # --device applies only to the microphone

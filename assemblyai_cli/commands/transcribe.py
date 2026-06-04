@@ -14,6 +14,7 @@ from assemblyai_cli import (
     config_builder,
     llm,
     output,
+    stdio,
     transcribe_render,
     youtube,
 )
@@ -234,15 +235,26 @@ def transcribe(
 
         tc = config_builder.construct_transcription_config(merged)
 
-        audio = client.resolve_audio_source(source, sample=sample)
         api_key = config.resolve_api_key(profile=state.profile)
-        if youtube.is_youtube_url(audio):
-            # Fetch the audio first; AssemblyAI can't read a YouTube watch URL itself.
-            with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-                local = youtube.download_audio(audio, Path(td))
+        if source == "-":
+            # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
+            # The SDK uploads a path, so buffer the bytes to a temp file first.
+            data = stdio.read_binary_stdin()
+            if not data:
+                raise UsageError("No audio received on stdin.")
+            with tempfile.TemporaryDirectory(prefix="aai-stdin-") as td:
+                local = Path(td) / "audio"
+                local.write_bytes(data)
                 transcript = client.transcribe(api_key, str(local), config=tc)
         else:
-            transcript = client.transcribe(api_key, audio, config=tc)
+            audio = client.resolve_audio_source(source, sample=sample)
+            if youtube.is_youtube_url(audio):
+                # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
+                with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
+                    local = youtube.download_audio(audio, Path(td))
+                    transcript = client.transcribe(api_key, str(local), config=tc)
+            else:
+                transcript = client.transcribe(api_key, audio, config=tc)
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).

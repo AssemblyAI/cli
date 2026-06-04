@@ -3,10 +3,12 @@ from __future__ import annotations
 import contextlib
 import shutil
 import subprocess
+import sys
 import time
 import wave
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 from assemblyai_cli.errors import APIError, CLIError
 
@@ -130,6 +132,29 @@ class FileSource:
             raise APIError(
                 f"ffmpeg could not decode {self.source}: {detail or f'exit {proc.returncode}'}"
             )
+
+
+class StdinSource:
+    """Streams raw PCM16 mono audio piped on stdin.
+
+    Expects signed 16-bit little-endian mono PCM at ``sample_rate`` (default 16 kHz):
+    ``ffmpeg -i in.mp4 -f s16le -acodec pcm_s16le -ac 1 -ar 16000 - | aai stream -``.
+    """
+
+    def __init__(self, *, sample_rate: int = TARGET_RATE, stdin: Any = None) -> None:
+        self.source = "-"
+        self.sample_rate = sample_rate
+        self._stdin = stdin  # injectable for tests; defaults to sys.stdin.buffer
+
+    def __iter__(self) -> Iterator[bytes]:
+        stream: Any = self._stdin
+        if stream is None:
+            stream = getattr(sys.stdin, "buffer", sys.stdin)
+        while True:
+            data = stream.read(CHUNK_BYTES)
+            if not data:
+                return
+            yield bytes(data)
 
 
 # MicrophoneSource (mic capture) lives in assemblyai_cli.microphone and is shared
