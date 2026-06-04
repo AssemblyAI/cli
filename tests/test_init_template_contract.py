@@ -19,8 +19,15 @@ def template_dir(request):
 
 
 def test_required_files_present(template_dir):
-    for rel in ("api/index.py", "index.html", "vercel.json",
-                "requirements.txt", "README.md", "gitignore", "env.example"):
+    for rel in (
+        "api/index.py",
+        "index.html",
+        "vercel.json",
+        "requirements.txt",
+        "README.md",
+        "gitignore",
+        "env.example",
+    ):
         assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
 
 
@@ -59,7 +66,9 @@ def test_requirements_cover_backend_imports(template_dir):
     reqs = (template_dir / "requirements.txt").read_text().lower()
     for pkg in third_party:
         dist = _PKG_MAP.get(pkg, pkg)
-        assert dist in reqs, f"{template_dir.name}: import {pkg!r} ({dist}) missing from requirements.txt"
+        assert dist in reqs, (
+            f"{template_dir.name}: import {pkg!r} ({dist}) missing from requirements.txt"
+        )
 
 
 def test_status_endpoint_does_not_block(template_dir):
