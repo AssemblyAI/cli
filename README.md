@@ -40,7 +40,7 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 | `aai agent` | Live two-way voice conversation with a voice agent. |
 | `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
 | `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
-| `aai samples create <name>` | Scaffold a runnable starter script with your key injected. |
+| `aai samples create <name>` | Scaffold a runnable starter script (reads your key from `ASSEMBLYAI_API_KEY`). |
 
 Add `--json` to any command for machine-readable output (it's also the default when
 output is piped or run by an agent). Errors always go to **stderr**, so stdout stays
