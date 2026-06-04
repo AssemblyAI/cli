@@ -298,7 +298,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 TEMPLATE_DIR = Path("aai_cli/init/templates/transcribe")
