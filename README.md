@@ -291,15 +291,21 @@ aai transcribe call.mp3 --speaker-labels -o utterances | awk -F: '{print $1}' | 
 aai transcribe call.mp3 --redact-pii --redact-pii-policy person_name,phone_number,email_address -o text | pbcopy
 ```
 
-**Burn captions onto a video** — `-o srt` writes a SubRip file; ffmpeg's `subtitles`
-filter reads it from disk (it needs a seekable file, so the `.srt` is a real
-intermediate, not a pipe). Works on a local file or a YouTube URL:
+**Caption a YouTube video (sing-along subtitles)** — download the video, transcribe it
+to SubRip with `-o srt`, then burn the captions in with ffmpeg. These steps pass *files*
+to each other (not stdin/stdout), and ffmpeg's `subtitles` filter needs a seekable file,
+so chain them with `&&` rather than `|` — each step runs only if the previous succeeds:
 
 ```sh
-aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID" -o srt > captions.srt
-yt-dlp -f 'bv*+ba/b' -o video.mp4 "https://www.youtube.com/watch?v=VIDEO_ID"
-ffmpeg -i video.mp4 -vf "subtitles=captions.srt" -c:a copy out.mp4
+URL="https://www.youtube.com/watch?v=6YzGOq42zLk&list=RD6YzGOq42zLk&start_radio=1"
+
+yt-dlp --no-playlist -f 'bv*+ba/b' --merge-output-format mp4 -o video.mp4 "$URL" && aai transcribe video.mp4 -o srt > captions.srt && ffmpeg -i video.mp4 -vf "subtitles=captions.srt" -c:a copy out.mp4
 ```
+
+`--no-playlist` matters for music links: the `&list=RD…` suffix is an autoplay radio, so
+without it yt-dlp downloads an endless mix instead of the one video. This burns in
+**static per-line captions** — for true word-by-word karaoke highlighting you'd render an
+ASS subtitle file from the transcript's word timings (`-o json` → `words[]`) instead.
 
 **DIY voice assistant** — speak a question, hear the answer (use headphones):
 
