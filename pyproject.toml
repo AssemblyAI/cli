@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "assemblyai-cli"
+name = "aai-cli"
 version = "0.1.0"
 description = "Command-line interface for AssemblyAI"
 readme = "README.md"
