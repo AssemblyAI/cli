@@ -38,6 +38,7 @@ dependencies = [
     "sounddevice>=0.5.5",
     "openai>=2.41.0",
     "yt-dlp>=2026.3.17",
+    "questionary>=2.0.1",
     # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
     "audioop-lts>=0.2; python_version >= '3.13'",
 ]
@@ -62,6 +63,7 @@ aai = "aai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aai_cli"]
+artifacts = ["aai_cli/init/templates/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
