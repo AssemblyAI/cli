@@ -252,9 +252,7 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
 def test_agent_show_code_prints_without_session(monkeypatch):
     # Print-only: emits the agent script, never starts a session or opens audio, no auth.
     called = []
-    monkeypatch.setattr(
-        "aai_cli.commands.agent.run_session", lambda *a, **k: called.append(True)
-    )
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: called.append(True))
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code"])
     assert result.exit_code == 0
     assert called == []  # never ran a session

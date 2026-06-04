@@ -55,9 +55,7 @@ def test_logout_clears_key():
 
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):
-    monkeypatch.setattr(
-        "aai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth"
-    )
+    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth")
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"
@@ -87,9 +85,7 @@ def test_login_api_key_flag_still_bypasses_oauth(monkeypatch):
 
 
 def test_login_binds_env_to_profile(monkeypatch):
-    monkeypatch.setattr(
-        "aai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth"
-    )
+    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", lambda: "sk_from_oauth")
     result = runner.invoke(app, ["--env", "sandbox000", "login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"

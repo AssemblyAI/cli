@@ -157,9 +157,7 @@ def stream_audio(
     `params` is a fully-built StreamingParameters (sample_rate/speech_model/etc).
     """
     sc = StreamingClient(
-        StreamingClientOptions(
-            api_key=api_key, api_host=environments.active().streaming_host
-        )
+        StreamingClientOptions(api_key=api_key, api_host=environments.active().streaming_host)
     )
 
     def _guard(cb: Callable[[Any], Any]) -> Callable[[Any, Any], None]:

@@ -214,9 +214,7 @@ def test_llm_output_text_prints_raw_answer(monkeypatch):
 
 def test_llm_output_json_forces_json(monkeypatch):
     _auth()
-    monkeypatch.setattr(
-        "aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hello")
-    )
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hello"))
     result = runner.invoke(app, ["llm", "hi", "-o", "json"])
     assert result.exit_code == 0
     assert json.loads(result.output)["output"] == "hello"

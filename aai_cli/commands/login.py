@@ -33,8 +33,10 @@ def login(
         config.set_profile_env(profile, env)
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
-            lambda _d: f"[aai.success]Authenticated[/aai.success] on profile "
-            f"'{escape(profile)}' (env: {escape(env)}).",
+            lambda _d: (
+                f"[aai.success]Authenticated[/aai.success] on profile "
+                f"'{escape(profile)}' (env: {escape(env)})."
+            ),
             json_mode=json_mode,
         )
 
@@ -77,8 +79,10 @@ def whoami(
         reachable = client.validate_key(key)
         output.emit(
             {"profile": profile, "env": env, "api_key": masked, "reachable": reachable},
-            lambda _d: f"profile={escape(profile)} env={escape(env)} "
-            f"key={escape(masked)} reachable={reachable}",
+            lambda _d: (
+                f"profile={escape(profile)} env={escape(env)} "
+                f"key={escape(masked)} reachable={reachable}"
+            ),
             json_mode=json_mode,
         )
 

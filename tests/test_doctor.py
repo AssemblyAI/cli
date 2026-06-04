@@ -17,9 +17,7 @@ def healthy(monkeypatch):
     """A fully-ready environment: valid key, all tools present, a microphone."""
     config.set_api_key("default", "sk_1234567890")
     monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", lambda _key: True)
-    monkeypatch.setattr(
-        "aai_cli.commands.doctor.shutil.which", lambda tool: f"/usr/bin/{tool}"
-    )
+    monkeypatch.setattr("aai_cli.commands.doctor.shutil.which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr("aai_cli.commands.doctor._probe_input_devices", lambda: 2)
 
 

@@ -133,9 +133,7 @@ def test_stream_sample_uses_hosted_clip(monkeypatch):
     from aai_cli import client
 
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr(
-        "aai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg"
-    )
+    monkeypatch.setattr("aai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg")
     seen = {}
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _capture_source(seen))
     result = runner.invoke(app, ["stream", "--sample"])
@@ -147,9 +145,7 @@ def test_stream_sample_uses_hosted_clip(monkeypatch):
 
 def test_stream_url_source_uses_filesource(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr(
-        "aai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg"
-    )
+    monkeypatch.setattr("aai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg")
     seen = {}
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _capture_source(seen))
     result = runner.invoke(app, ["stream", "https://example.com/clip.mp3"])
@@ -357,9 +353,7 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
         w.setsampwidth(2)
         w.setframerate(16000)
         w.writeframes(b"\x00\x01" * 100)
-    monkeypatch.setattr(
-        "aai_cli.commands.stream.youtube.download_audio", lambda url, d: fake
-    )
+    monkeypatch.setattr("aai_cli.commands.stream.youtube.download_audio", lambda url, d: fake)
     seen = {}
 
     def fake_stream(api_key, source, *, params, **kwargs):
