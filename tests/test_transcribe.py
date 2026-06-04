@@ -252,31 +252,33 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path
     assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
 
 
-def test_transcribe_show_code_prints_python(monkeypatch):
-    _auth()
-    monkeypatch.setattr("assemblyai_cli.output.resolve_json", lambda *, explicit: False)
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(app, ["transcribe", "--sample", "--speaker-labels", "--show-code"])
+def test_transcribe_show_code_prints_without_transcribing(monkeypatch):
+    # Print-only: emits code, never calls the API, needs no auth.
+    called = []
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.transcribe.client.transcribe",
+        lambda *a, **k: called.append(True),
+    )
+    result = runner.invoke(app, ["transcribe", "--sample", "--speaker-labels", "--show-code"])
     assert result.exit_code == 0
+    assert called == []  # never transcribed
     assert "import assemblyai as aai" in result.output
     assert "TranscriptionConfig(" in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
 
 
-def test_transcribe_show_code_suppressed_in_json_mode():
-    _auth()
-    with patch(
-        "assemblyai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
-    ):
-        result = runner.invoke(
-            app, ["transcribe", "--sample", "--speaker-labels", "--show-code", "--json"]
-        )
+def test_transcribe_show_code_ignores_json_flag(monkeypatch):
+    # --show-code is print-only; --json does not suppress or wrap it.
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr(
+        "assemblyai_cli.commands.transcribe.client.transcribe",
+        _boom,
+    )
+    result = runner.invoke(app, ["transcribe", "--sample", "--show-code", "--json"])
     assert result.exit_code == 0
-    assert "import assemblyai as aai" not in result.stdout
-    assert "# Equivalent Python:" not in result.stdout
-    assert '"id": "t_1"' in result.stdout
+    assert "import assemblyai as aai" in result.output
 
 
 def test_transcribe_renders_summary_human(monkeypatch):
