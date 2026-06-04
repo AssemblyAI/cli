@@ -664,8 +664,6 @@ git commit -m "feat(init): transcribe template (FastAPI submit+poll, Vercel-read
 
 ```python
 # tests/test_init_scaffold.py
-from pathlib import Path
-
 import pytest
 
 from aai_cli.errors import CLIError
