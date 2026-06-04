@@ -19,7 +19,7 @@ app = typer.Typer()
 
 
 def _pick_template() -> str:
-    """Interactive picker; raises UsageError when there's no TTY to prompt on."""
+    """Interactive picker; raises a usage error when there's no TTY to prompt on."""
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         raise CLIError(
             "No template given and not running interactively. "

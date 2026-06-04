@@ -1201,7 +1201,7 @@ from rich.markup import escape
 
 from aai_cli import output
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
+from aai_cli.errors import CLIError
 from aai_cli.init import keys, runner, scaffold, steps, templates
 
 # Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
@@ -1211,11 +1211,13 @@ app = typer.Typer()
 
 
 def _pick_template() -> str:
-    """Interactive picker; raises UsageError when there's no TTY to prompt on."""
+    """Interactive picker; raises a usage error when there's no TTY to prompt on."""
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        raise UsageError(
+        raise CLIError(
             "No template given and not running interactively. "
-            f"Pass one of: {', '.join(templates.TEMPLATE_ORDER)}."
+            f"Pass one of: {', '.join(templates.TEMPLATE_ORDER)}.",
+            error_type="usage_error",
+            exit_code=1,
         )
     import questionary
 
@@ -1258,16 +1260,20 @@ def init(
         if chosen is None:
             chosen = _pick_template()
         if not templates.is_template(chosen):
-            raise UsageError(
+            raise CLIError(
                 f"Unknown template {chosen!r}. Choose one of: "
-                f"{', '.join(templates.TEMPLATE_ORDER)}."
+                f"{', '.join(templates.TEMPLATE_ORDER)}.",
+                error_type="usage_error",
+                exit_code=1,
             )
 
         target = _resolve_dir(directory, chosen, here=here)
         if scaffold.target_conflict(target) and not force:
-            raise UsageError(
+            raise CLIError(
                 f"{target} already exists and is not empty. "
-                f"Use --force to overwrite or pick another directory."
+                f"Use --force to overwrite or pick another directory.",
+                error_type="usage_error",
+                exit_code=1,
             )
 
         api_key = keys.resolve_optional_api_key(profile=state.profile)
@@ -1362,26 +1368,29 @@ single `init` command flattens to `aai init` (same as `app.add_typer(transcribe.
 app.add_typer(init.app)
 ```
 
-- [ ] **Step 5: Re-export the public surface**
+If `tests/test_smoke.py` asserts the exact set/order of top-level commands, add
+`"init"` to that expected list too (placed after `samples`, matching `_COMMAND_ORDER`).
+
+- [ ] **Step 5: Keep `aai_cli/init/__init__.py` minimal**
+
+Do NOT re-export submodule members from the package `__init__`. Consumers import the
+submodules directly (`from aai_cli.init import scaffold` → the module, then
+`scaffold.scaffold(...)`), and re-exporting a function named `scaffold` here would
+shadow the `scaffold` submodule. Leave `__init__.py` as the minimal marker created in
+Task 1:
 
 ```python
 # aai_cli/init/__init__.py
+# Submodules (templates, keys, scaffold, runner, steps) are imported directly by
+# consumers (e.g. `from aai_cli.init import scaffold`); re-exporting their members
+# here would shadow the same-named submodule (notably `scaffold`), so we don't.
 from __future__ import annotations
-
-from aai_cli.init.keys import resolve_optional_api_key
-from aai_cli.init.scaffold import scaffold, target_conflict
-from aai_cli.init.templates import TEMPLATE_ORDER, TEMPLATES, is_template, title_for
-
-__all__ = [
-    "TEMPLATES",
-    "TEMPLATE_ORDER",
-    "is_template",
-    "title_for",
-    "scaffold",
-    "target_conflict",
-    "resolve_optional_api_key",
-]
 ```
+
+> Note on error type: these raises use `CLIError(error_type="usage_error", exit_code=1)`
+> rather than `UsageError` (which forces exit code 2). Exit code **1** matches the
+> existing `aai samples` scaffolder's convention for "unknown name"/"file exists" and
+> the test assertions. `run_command` renders any `CLIError` cleanly.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
