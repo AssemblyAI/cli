@@ -22,8 +22,15 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: System audio deps (PortAudio for sounddevice)
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      # PortAudio backs sounddevice; ffmpeg decodes non-WAV/URL audio (the `--sample`
+      # stream tests build a FileSource for the hosted sample, which needs ffmpeg).
+      - name: System deps (PortAudio + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+
+      # check.sh lints Markdown via the markdownlint CLI (a Node tool); pin to the
+      # version used locally. The runner ships Node, so a global npm install suffices.
+      - name: markdownlint CLI
+        run: npm install -g markdownlint-cli@0.45.0
 
       # check.sh runs every tool through `uv run` / `uv build` for a locked,
       # reproducible env, so uv must be on PATH (installed from PyPI to match the
@@ -44,8 +51,9 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: System audio deps (PortAudio for sounddevice)
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      # PortAudio backs sounddevice; ffmpeg decodes the `--sample` stream source.
+      - name: System deps (PortAudio + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
 
       # The local pytest hook runs `python -m pytest`, so the package must be importable.
       - name: Install
