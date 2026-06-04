@@ -28,13 +28,55 @@ aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
 
+## API key & security
+
+`aai` resolves your key in this order:
+
+1. The `ASSEMBLYAI_API_KEY` environment variable.
+2. The OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret
+   Service), written only when you run `aai login`.
+
+Two things worth knowing: the key is **never stored in a plaintext dotfile** —
+`aai login` puts it in the OS keyring, and the only on-disk config (`config.toml`)
+holds just profile names. And there is **no `--api-key` flag on run commands**
+(`transcribe`, `stream`, …), so a key can't leak into `ps` output or shell history
+via a command's arguments.
+
+**Prefer not to persist the key at all?** Skip `aai login` and set the environment
+variable instead — it's checked *before* the keyring, so nothing is ever written to
+disk:
+
+```sh
+ASSEMBLYAI_API_KEY=sk_... aai transcribe call.mp3
+```
+
+Prefixing it on a single command (rather than `export`-ing it) scopes the secret to
+that one process. To also keep it out of your shell history, inject it from a secret
+manager at call time:
+
+```sh
+# 1Password CLI
+ASSEMBLYAI_API_KEY=$(op read "op://Private/AssemblyAI/api key") aai transcribe call.mp3
+op run -- aai transcribe call.mp3                          # …or wrap the whole command
+
+# HashiCorp Vault
+ASSEMBLYAI_API_KEY=$(vault kv get -field=key secret/assemblyai) aai stream
+
+# macOS Keychain (a generic-password item you manage)
+ASSEMBLYAI_API_KEY=$(security find-generic-password -w -s assemblyai -a "$USER") aai transcribe call.mp3
+```
+
+In CI, set `ASSEMBLYAI_API_KEY` as a masked secret — nothing is stored. The env var
+also overrides a stored key for one-off use; `aai logout` purges the keyring entry,
+and `aai whoami` / `aai doctor` confirm which source is active without printing the key.
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `aai login` / `logout` / `whoami` | Manage the stored API key. |
 | `aai doctor` | Check your environment is ready (API key, network, ffmpeg, microphone, agent tooling). |
-| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm-gateway-prompt` to transform the result, `--show-code` to print the equivalent Python). |
+| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm` to transform the result through LLM Gateway, `--show-code` to print the equivalent Python). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | Live two-way voice conversation with a voice agent. |
@@ -128,19 +170,33 @@ aai stream --sample \
 
 ## Live transcript → live LLM
 
-`aai stream -o text` writes one finalized turn per line and flushes immediately, so it
-can drive `aai llm` turn by turn. Add `--follow` (`-f`) to `aai llm` to keep re-running
-your prompt over the *growing* transcript, refreshing the answer in place on every turn:
+`aai stream --llm "PROMPT"` runs a prompt over the live transcript through LLM Gateway,
+refreshing the answer on every finalized turn — one command, no pipe to wire up:
+
+```sh
+aai stream --llm "summarize action items as I talk"
+```
+
+It's repeatable, so prompts chain — each runs on the previous one's response:
+
+```sh
+aai stream --llm "extract action items" --llm "rewrite them as a checklist"
+```
+
+On a terminal you watch one evolving panel; piped onward it emits one JSON object per
+refresh (`{"turns": N, "output": "…"}`). Ctrl-C to stop.
+
+**Prefer the pipe?** The same thing composes from the primitives: `aai stream -o text`
+writes one finalized turn per line, and `aai llm -f` (`--follow`) re-runs your prompt
+over the *growing* transcript. Reach for this when you want a `--system` prompt or other
+tools in the pipeline:
 
 ```sh
 aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items as I talk"
 ```
 
-On a terminal you watch one evolving summary; piped onward it emits one JSON object per
-refresh (`{"turns": N, "output": "…"}`). Each finalized turn triggers a fresh call over
-the full transcript, so the answer is always current. Ctrl-C to stop. Without `--follow`,
-`aai llm` stays one-shot — it reads stdin to EOF and answers once (`cat notes | aai llm
-"summarize"`).
+Without `--follow`, `aai llm` stays one-shot — it reads stdin to EOF and answers once
+(`cat notes | aai llm "summarize"`).
 
 ## Voice agent
 
@@ -173,15 +229,17 @@ aai agent --voice ivy --show-code                           # the full-duplex ag
 ```
 
 The generated transcribe code includes result handling for the analysis features you
-enabled. With `--llm-gateway-prompt` (repeatable — each prompt runs on the previous
-response), it emits the chained LLM Gateway calls too:
+enabled. With `--llm` (repeatable — each prompt runs on the previous response), it emits
+the chained LLM Gateway calls too:
 
 ```sh
 aai transcribe call.mp3 \
-  --llm-gateway-prompt "summarize" \
-  --llm-gateway-prompt "translate the summary to Spanish" \
+  --llm "summarize" \
+  --llm "translate the summary to Spanish" \
   --show-code > summarize_then_translate.py
 ```
+
+`aai stream --llm "…" --show-code` likewise emits the live transcribe→LLM-per-turn loop.
 
 ## Pipelines
 
@@ -207,23 +265,24 @@ curl -sL https://example.com/ep.mp3 | aai transcribe -  # no temp file
 ffmpeg -i in.mp4 -f s16le -ac 1 -ar 16000 - | aai stream -   # live, from a pipe
 ```
 
-**Feed transcripts into the LLM Gateway** (`aai llm` reads piped stdin):
+**Feed text into the LLM Gateway** (`aai llm` reads piped stdin). For a transcript,
+`aai transcribe --llm "…"` does it in one step — the pipe is for any *other* text:
 
 ```sh
-aai transcribe call.mp3 -o text | aai llm "summarize, then list action items"
 cat notes.txt | aai llm "turn these into a changelog"
 ```
 
-**Stream, then summarize.** Piped `stream`/`agent` emit clean transcript lines with
-`-o text`. A Ctrl-C in a pipe hits both sides, so to stop the producer *and* let the
+**Pipe a live stream into other tools.** For live LLM summaries use `aai stream --llm`
+(above) — one process, clean Ctrl-C. To pipe the live transcript into a *different* tool,
+note that a Ctrl-C in a pipe hits both sides, so to stop the producer and let the
 consumer finish, signal only the producer — or end the stream on its own:
 
 ```sh
 # end after 30s by signaling just the producer (macOS: brew install coreutils, use gtimeout)
-timeout -s INT 30s aai stream -o text | aai llm "summarize"
+timeout -s INT 30s aai stream -o text | grep -i "action item"
 
 # or end on a natural pause (server-side inactivity timeout, in seconds)
-aai stream -o text --inactivity-timeout 5 | aai llm "summarize the call"
+aai stream -o text --inactivity-timeout 5 > call.txt
 
 # capture then process (most robust)
 aai stream -o text > call.txt        # Ctrl-C to stop
@@ -234,13 +293,6 @@ aai llm "summarize" < call.txt
 
 A cookbook of `aai` composed with common Unix tools. macOS shown; on Linux swap
 `pbcopy`/`pbpaste` → `xclip -sel clip`/`xclip -o` and `say` → `spd-say`.
-
-**Live meeting scribe** — `-o text` streams one finalized turn per line; `aai llm -f`
-re-summarizes the growing transcript in place on every turn (Ctrl-C to stop):
-
-```sh
-aai stream -o text | aai llm -f --model claude-haiku-4-5-20251001 "summarize todos as I talk"
-```
 
 **Chain `aai llm` into other tools** with `-o text` — it prints just the answer, so it
 pipes onward cleanly (no `jq` needed):
@@ -260,7 +312,7 @@ cat error.log         | aai llm "what's the root cause and the one-line fix?"
 for the pipeline you described, and `aai llm` rewrites it in another language:
 
 ```sh
-aai transcribe --sample --llm-gateway-prompt "translate to french" --show-code | aai llm "rewrite in rust"
+aai transcribe --sample --llm "translate to french" --show-code | aai llm "rewrite in rust"
 ```
 
 **Mine the analysis JSON with `jq`** — enable a feature, then slice `-o json`:

@@ -52,17 +52,6 @@ class StreamRenderer(BaseRenderer):
                 }
             )
 
-    def llm(self, content: str) -> None:
-        """Render the LLM Gateway transform of the full transcript (shown last)."""
-        if not content:
-            return
-        if self.json_mode:
-            self._emit({"type": "llm", "content": content})
-        elif self.text_mode:
-            self._write(content + "\n")
-        else:
-            self._line(Text("\N{ELECTRIC LIGHT BULB} " + content, style="aai.brand"))
-
     def stopped(self) -> None:
         if self.text_mode:
             self._status("Stopped.")

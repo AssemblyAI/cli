@@ -171,9 +171,7 @@ def test_transcribe_prompt_transforms_json(monkeypatch):
         monkeypatch.setattr(
             "assemblyai_cli.commands.transcribe.llm.transform_transcript", fake_transform
         )
-        result = runner.invoke(
-            app, ["transcribe", "audio.mp3", "--llm-gateway-prompt", "summarize", "--json"]
-        )
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--llm", "summarize", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["text"] == "hello world"  # raw transcript still present in JSON
@@ -181,7 +179,7 @@ def test_transcribe_prompt_transforms_json(monkeypatch):
     assert steps == [{"prompt": "summarize", "output": "a short summary"}]
     # The transform is injected server-side via the transcript id.
     assert seen["transcript_id"] == "t_1"
-    assert seen["model"] == "claude-sonnet-4-6"
+    assert seen["model"] == "claude-haiku-4-5-20251001"
 
 
 def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
@@ -208,9 +206,9 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch):
                 "transcribe",
                 "audio.mp3",
                 "--json",
-                "--llm-gateway-prompt",
+                "--llm",
                 "summarize",
-                "--llm-gateway-prompt",
+                "--llm",
                 "translate",
             ],
         )
@@ -235,9 +233,7 @@ def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
             "assemblyai_cli.commands.transcribe.llm.transform_transcript",
             lambda *a, **k: "TRANSFORMED",
         )
-        result = runner.invoke(
-            app, ["transcribe", "audio.mp3", "--llm-gateway-prompt", "summarize"]
-        )
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--llm", "summarize"])
     assert result.exit_code == 0
     assert "TRANSFORMED" in result.output
     assert "hello world" not in result.output  # human mode shows the transform only
@@ -387,7 +383,7 @@ def test_transcribe_show_code_ignores_json_flag(monkeypatch):
 
 
 def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
-    # --llm-gateway-prompt must be reflected in the generated code, still without
+    # --llm must be reflected in the generated code, still without
     # transcribing or calling the gateway.
     def _boom(*a, **k):
         raise AssertionError("must not call the API")
@@ -396,7 +392,7 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
     monkeypatch.setattr("assemblyai_cli.commands.transcribe.llm.transform_transcript", _boom)
     result = runner.invoke(
         app,
-        ["transcribe", "--sample", "--llm-gateway-prompt", "translate to spanish", "--show-code"],
+        ["transcribe", "--sample", "--llm", "translate to spanish", "--show-code"],
     )
     assert result.exit_code == 0
     assert "llm-gateway.assemblyai.com" in result.output

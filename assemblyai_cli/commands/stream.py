@@ -9,6 +9,7 @@ from assemblyai.streaming.v3 import SpeechModel
 from assemblyai_cli import client, code_gen, config, config_builder, llm, output, youtube
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
+from assemblyai_cli.follow import FollowRenderer
 from assemblyai_cli.microphone import MicrophoneSource
 from assemblyai_cli.streaming.render import StreamRenderer
 from assemblyai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
@@ -84,10 +85,12 @@ def stream(
     config_file: str = typer.Option(None, "--config-file", help="JSON file of streaming fields."),
     # existing
     prompt: str = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
-    llm_gateway_prompt: str = typer.Option(
+    llm_prompt: list[str] = typer.Option(
         None,
-        "--llm-gateway-prompt",
-        help="After streaming, transform the full transcript through LLM Gateway.",
+        "--llm",
+        help="Run a prompt over the live transcript through LLM Gateway, refreshing the "
+        "answer on every finalized turn. Repeatable: each prompt runs on the previous "
+        "one's response (a chain).",
     ),
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
@@ -154,7 +157,12 @@ def stream(
                 overrides=list(config_kv or []),
                 config_file=config_file,
             )
-            output.print_code(code_gen.stream(merged))
+            gateway = (
+                {"prompts": list(llm_prompt), "model": model, "max_tokens": max_tokens}
+                if llm_prompt
+                else None
+            )
+            output.print_code(code_gen.stream(merged, llm=gateway))
             return
 
         api_key = config.resolve_api_key(profile=state.profile)
@@ -166,16 +174,38 @@ def stream(
         elif from_file and (sample_rate is not None or device is not None):
             raise UsageError("--sample-rate and --device apply only to microphone input.")
 
+        if llm_prompt and text_mode:
+            raise UsageError(
+                "--llm renders a live panel (or NDJSON when piped); it can't be combined "
+                "with -o text."
+            )
+
         renderer = StreamRenderer(json_mode=json_mode, text_mode=text_mode)
-        # Collect finalized turns so we can transform the full transcript at the end.
-        turns: list[str] = []
+        # In --llm mode the answer is rendered live by a FollowRenderer instead of the
+        # raw turns; transcript accumulates the finalized turns we re-run the chain over.
+        follow = FollowRenderer(json_mode=json_mode) if llm_prompt else None
+        transcript: list[str] = []
 
         def on_turn(event: object) -> None:
-            renderer.turn(event)
-            if llm_gateway_prompt and getattr(event, "end_of_turn", False):
-                text = getattr(event, "transcript", "") or ""
-                if text:
-                    turns.append(text)
+            if follow is None:
+                renderer.turn(event)
+                return
+            # Live LLM mode: re-run the prompt chain over the growing transcript on every
+            # finalized turn, refreshing one evolving answer (partials are ignored).
+            if not getattr(event, "end_of_turn", False):
+                return
+            text = getattr(event, "transcript", "") or ""
+            if not text:
+                return
+            transcript.append(text)
+            answer = llm.run_chain(
+                api_key,
+                list(llm_prompt),
+                transcript_text=" ".join(transcript),
+                model=model,
+                max_tokens=max_tokens,
+            )
+            follow(answer, len(transcript))
 
         def run(audio: FileSource | MicrophoneSource | StdinSource, rate: int) -> None:
             merged = config_builder.merge_streaming_params(
@@ -183,34 +213,35 @@ def stream(
             )
             params = config_builder.construct_streaming_params(merged)
 
-            try:
-                client.stream_audio(
-                    api_key,
-                    audio,
-                    params=params,
-                    on_begin=renderer.begin,
-                    on_turn=on_turn,
-                    on_termination=renderer.termination,
-                )
-            except KeyboardInterrupt:
-                # Ctrl-C is a normal "user stopped" signal -> exit 0 (still transform below).
-                renderer.close()
-                renderer.stopped()
-            except BrokenPipeError:
-                # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
-                raise typer.Exit(code=0) from None
-            finally:
-                renderer.close()
+            def drive() -> None:
+                try:
+                    client.stream_audio(
+                        api_key,
+                        audio,
+                        params=params,
+                        on_begin=None if follow is not None else renderer.begin,
+                        on_turn=on_turn,
+                        on_termination=None if follow is not None else renderer.termination,
+                    )
+                except KeyboardInterrupt:
+                    # Ctrl-C is a normal "user stopped" signal -> exit 0.
+                    if follow is None:
+                        renderer.close()
+                        renderer.stopped()
+                except BrokenPipeError:
+                    # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
+                    raise typer.Exit(code=0) from None
+                finally:
+                    if follow is None:
+                        renderer.close()
 
-            if llm_gateway_prompt and turns:
-                transformed = llm.transform_transcript(
-                    api_key,
-                    prompt=llm_gateway_prompt,
-                    model=model,
-                    transcript_text=" ".join(turns),
-                    max_tokens=max_tokens,
-                )
-                renderer.llm(transformed)
+            # The FollowRenderer is a context manager (it owns the live panel); enter it
+            # around the whole session so it stops cleanly and prints the final answer.
+            if follow is not None:
+                with follow:
+                    drive()
+            else:
+                drive()
 
         if from_stdin:
             # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | aai stream -`).
@@ -230,7 +261,10 @@ def stream(
             # Announce "Listening…" only once the device is open and recording,
             # not when the session opens — so early speech isn't lost in the gap.
             mic = MicrophoneSource(
-                device=device, capture_rate=sample_rate, on_open=renderer.listening
+                device=device,
+                capture_rate=sample_rate,
+                # In --llm mode the FollowRenderer owns the screen, so skip the notice.
+                on_open=(lambda: None) if follow is not None else renderer.listening,
             )
             run(mic, mic.sample_rate)
 
