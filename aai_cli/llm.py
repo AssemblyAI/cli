@@ -6,7 +6,7 @@ import openai
 from openai import OpenAI
 
 from aai_cli import environments
-from aai_cli.errors import APIError, auth_failure
+from aai_cli.errors import APIError
 
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
 # pointed at this base URL. This is the production host used in generated code
@@ -74,8 +74,8 @@ def complete(
     """Create a chat completion via the gateway and return the OpenAI response.
 
     `transcript_id` is passed through as an extra body field so the gateway can
-    inject the transcript text server-side. Auth failures map to NotAuthenticated
-    and everything else to APIError, matching the rest of the CLI.
+    inject the transcript text server-side. Access/permission and other gateway
+    errors surface the gateway's own message as APIError.
     """
     client = _client(api_key)
     extra_body = {"transcript_id": transcript_id} if transcript_id is not None else None
@@ -87,7 +87,11 @@ def complete(
             extra_body=extra_body,
         )
     except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
-        raise auth_failure() from exc
+        # The gateway returns 401/403 for both an invalid key and a plan
+        # entitlement block ("no access to LLM Gateway"), so surface its actual
+        # message rather than a generic "run aai login" that misleads unpaid
+        # accounts (the key is fine; the feature requires a paid plan).
+        raise APIError(f"LLM Gateway access denied: {exc}") from exc
     except openai.OpenAIError as exc:
         raise APIError(f"LLM Gateway request failed: {exc}") from exc
 
