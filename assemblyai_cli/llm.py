@@ -10,7 +10,7 @@ from assemblyai_cli.errors import APIError, auth_failure
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
 # pointed at this base URL. (The synchronous gateway has no assemblyai-SDK client.)
 GATEWAY_BASE_URL = "https://llm-gateway.assemblyai.com/v1"
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 1000
 
 # Exact tag the gateway substitutes with a transcript's text when `transcript_id`
@@ -131,3 +131,27 @@ def transform_transcript(
         transcript_id=transcript_id,
     )
     return content_of(response)
+
+
+def run_chain(
+    api_key: str,
+    prompts: list[str],
+    *,
+    transcript_text: str,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> str:
+    """Run a chain of prompts over inline transcript text and return the final output.
+
+    The first prompt runs over `transcript_text`; each subsequent prompt runs over the
+    previous prompt's response. Used by live streaming (`stream --llm`), where there is
+    no transcript id to inject server-side, so the text is always inlined.
+    """
+    output = ""
+    text = transcript_text
+    for prompt in prompts:
+        output = transform_transcript(
+            api_key, prompt=prompt, model=model, max_tokens=max_tokens, transcript_text=text
+        )
+        text = output
+    return output

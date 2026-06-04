@@ -136,7 +136,7 @@ def test_transcribe_prompt_transforms_via_gateway(real_api_key):
         [
             "transcribe",
             "--sample",
-            "--llm-gateway-prompt",
+            "--llm",
             "Summarize this transcript in one short sentence.",
             "--json",
         ],
@@ -163,7 +163,7 @@ def test_e2e_transcribe_analysis(real_api_key):
     assert payload.get("summary") or payload.get("chapters"), f"no analysis fields: {payload!r}"
 
 
-def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path):
+def test_stream_prompt_transforms_live(real_api_key, kokoro_pipeline, tmp_path):
     spoken = "the quick brown fox jumps over the lazy dog"
     wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "fox.wav")
 
@@ -171,7 +171,7 @@ def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path
         [
             "stream",
             str(wav),
-            "--llm-gateway-prompt",
+            "--llm",
             "Summarize the transcript in one short sentence.",
             "--json",
         ],
@@ -179,6 +179,7 @@ def test_stream_prompt_transforms_at_end(real_api_key, kokoro_pipeline, tmp_path
     )
     assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
     events = _ndjson(proc.stdout)
-    # The full transcript is transformed once after streaming, emitted as a final llm event.
-    llm_events = [e for e in events if e.get("type") == "llm" and e.get("content")]
-    assert llm_events, f"no transcript transform came back; events={events}"
+    # Live mode re-runs the prompt over the growing transcript, emitting one refresh
+    # ({"turns": N, "output": ...}) per finalized turn.
+    refreshes = [e for e in events if e.get("output")]
+    assert refreshes, f"no live transform refresh came back; events={events}"

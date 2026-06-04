@@ -133,3 +133,42 @@ def test_transform_transcript_roundtrips(monkeypatch):
     assert out == "SUMMARY"
     assert seen["transcript_id"] == "t_9"
     assert llm.TRANSCRIPT_TAG in seen["messages"][0]["content"]
+
+
+def test_run_chain_single_prompt_runs_over_transcript(monkeypatch):
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        seen["messages"] = messages
+        seen["transcript_id"] = transcript_id
+        return _response("SUMMARY")
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    out = llm.run_chain("sk", ["summarize"], transcript_text="hola mundo", model="m", max_tokens=50)
+    assert out == "SUMMARY"
+    # No transcript_id in live mode -> the text is inlined into the prompt.
+    assert seen["transcript_id"] is None
+    content = seen["messages"][-1]["content"]
+    assert "summarize" in content and "hola mundo" in content
+
+
+def test_run_chain_threads_output_through_prompts(monkeypatch):
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append(messages[-1]["content"])
+        return _response(f"out{len(calls)}")
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    out = llm.run_chain(
+        "sk",
+        ["summarize", "translate to french"],
+        transcript_text="hola mundo",
+        model="m",
+        max_tokens=50,
+    )
+    assert out == "out2"  # final step's output
+    assert len(calls) == 2
+    assert "summarize" in calls[0] and "hola mundo" in calls[0]
+    # Second prompt runs over the FIRST step's output, not the transcript.
+    assert "translate to french" in calls[1] and "out1" in calls[1]
