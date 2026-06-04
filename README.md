@@ -38,7 +38,7 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | Live two-way voice conversation with a voice agent. |
-| `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (optionally over a transcript with `--transcript-id`). |
+| `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
 | `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
 | `aai samples create <name>` | Scaffold a runnable starter script with your key injected. |
 
@@ -125,6 +125,22 @@ aai stream --sample \
   --keyterms-prompt "AssemblyAI" \
   --config vad_threshold=0.7
 ```
+
+## Live transcript → live LLM
+
+`aai stream -o text` writes one finalized turn per line and flushes immediately, so it
+can drive `aai llm` turn by turn. Add `--follow` (`-f`) to `aai llm` to keep re-running
+your prompt over the *growing* transcript, refreshing the answer in place on every turn:
+
+```sh
+aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items as I talk"
+```
+
+On a terminal you watch one evolving summary; piped onward it emits one JSON object per
+refresh (`{"turns": N, "output": "…"}`). Each finalized turn triggers a fresh call over
+the full transcript, so the answer is always current. Ctrl-C to stop. Without `--follow`,
+`aai llm` stays one-shot — it reads stdin to EOF and answers once (`cat notes | aai llm
+"summarize"`).
 
 ## Voice agent
 

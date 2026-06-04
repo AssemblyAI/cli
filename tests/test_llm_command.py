@@ -123,6 +123,83 @@ def test_llm_unauthenticated_exits_2():
     assert result.exit_code == 2
 
 
+def test_llm_follow_summarizes_each_turn(monkeypatch):
+    _auth()
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append(messages[-1]["content"])
+        return _payload(f"summary-{len(calls)}")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(
+        app,
+        ["llm", "summarize action items", "--follow", "--json"],
+        input="we ship friday\nbob owns the deploy\n",
+    )
+    assert result.exit_code == 0
+    updates = [json.loads(line) for line in result.output.splitlines() if line.strip()]
+    # One update per finalized turn, full transcript accumulating each time.
+    assert len(updates) == 2
+    assert "we ship friday" in calls[0]
+    assert "bob owns the deploy" not in calls[0]
+    assert "we ship friday" in calls[1]
+    assert "bob owns the deploy" in calls[1]
+    assert updates[-1]["output"] == "summary-2"
+    assert updates[-1]["turns"] == 2
+
+
+def test_llm_follow_includes_system_prompt(monkeypatch):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        seen["roles"] = [m["role"] for m in messages]
+        seen["system"] = messages[0]["content"]
+        return _payload("ok")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(
+        app,
+        ["llm", "summarize", "--follow", "--system", "You are a scribe", "--json"],
+        input="one turn\n",
+    )
+    assert result.exit_code == 0
+    assert seen["roles"][0] == "system"
+    assert seen["system"] == "You are a scribe"
+
+
+def test_llm_follow_rejects_transcript_id(monkeypatch):
+    _auth()
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(
+        app,
+        ["llm", "summarize", "--follow", "--transcript-id", "t_1", "--json"],
+        input="x\n",
+    )
+    assert result.exit_code == 2
+    assert "transcript-id" in result.output
+
+
+def test_llm_follow_ignores_blank_lines(monkeypatch):
+    _auth()
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append(messages[-1]["content"])
+        return _payload("ok")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(
+        app,
+        ["llm", "summarize", "--follow", "--json"],
+        input="first\n\n   \nsecond\n",
+    )
+    assert result.exit_code == 0
+    # Blank/whitespace-only lines don't trigger a call.
+    assert len(calls) == 2
+
+
 def test_llm_passes_model_and_max_tokens(monkeypatch):
     _auth()
     seen = {}
