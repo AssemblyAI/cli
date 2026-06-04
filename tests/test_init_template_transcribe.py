@@ -58,6 +58,13 @@ def test_template_ships_no_real_key():
     assert "your_assemblyai_api_key_here" in (TEMPLATE_DIR / "env.example").read_text()
 
 
+def test_base_url_env_is_applied(monkeypatch):
+    # aai init writes ASSEMBLYAI_BASE_URL so a sandbox key targets the sandbox host.
+    monkeypatch.setenv("ASSEMBLYAI_BASE_URL", "https://api.sb.example")
+    _app, fake, _api = _load_app(monkeypatch)
+    assert fake.settings.base_url == "https://api.sb.example"
+
+
 def test_index_route_serves_page(monkeypatch):
     app, _aai, _api = _load_app(monkeypatch)
     client = TestClient(app)

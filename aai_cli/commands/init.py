@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import output
+from aai_cli import environments, output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.init import keys, runner, scaffold, steps, templates
@@ -61,7 +61,7 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
 @app.command()
 def init(
     ctx: typer.Context,
-    template: str = typer.Argument(None, help="Template id: transcribe, stream, agent, llm."),
+    template: str = typer.Argument(None, help="Template to scaffold (omit to pick interactively)."),
     directory: str = typer.Argument(None, help="Target directory (default: <template>-app)."),
     no_install: bool = typer.Option(
         False, "--no-install", help="Scaffold only; don't install or launch."
@@ -104,7 +104,9 @@ def init(
             )
 
         api_key = keys.resolve_optional_api_key(profile=state.profile)
-        scaffold.scaffold(chosen, target, api_key=api_key)
+        # Pin the app to the active environment's API host so a sandbox key (minted by
+        # `aai login` against a non-prod env) isn't rejected by the production default.
+        scaffold.scaffold(chosen, target, api_key=api_key, base_url=environments.active().api_base)
 
         report: list[steps.Step] = [
             {"name": "scaffold", "status": "created", "detail": str(target)}

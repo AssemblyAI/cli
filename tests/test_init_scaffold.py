@@ -25,6 +25,18 @@ def test_scaffold_writes_env_with_key(tmp_path):
     assert "ASSEMBLYAI_API_KEY=sk-real-key" in env
 
 
+def test_scaffold_writes_base_url_when_given(tmp_path):
+    target = tmp_path / "app"
+    scaffold.scaffold("transcribe", target, api_key="k", base_url="https://api.sb.example")
+    assert "ASSEMBLYAI_BASE_URL=https://api.sb.example" in (target / ".env").read_text()
+
+
+def test_scaffold_omits_base_url_when_none(tmp_path):
+    target = tmp_path / "app"
+    scaffold.scaffold("transcribe", target, api_key="k")
+    assert "ASSEMBLYAI_BASE_URL" not in (target / ".env").read_text()
+
+
 def test_scaffold_skips_pycache(tmp_path):
     # Importing a template's api/index.py during our own test run leaves a
     # __pycache__ next to it; the scaffolder must not copy that into the project.

@@ -25,6 +25,10 @@ from fastapi.responses import FileResponse
 
 load_dotenv()
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY", "")
+# Target the same AssemblyAI environment the key was minted for. `aai init` writes
+# this for you; leave it unset to use the production default.
+if base_url := os.environ.get("ASSEMBLYAI_BASE_URL"):
+    aai.settings.base_url = base_url
 
 # A public sample so you can try it instantly without uploading anything.
 SAMPLE_URL = "https://assembly.ai/wildfires.mp3"

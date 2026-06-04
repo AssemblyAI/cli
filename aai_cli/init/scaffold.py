@@ -64,11 +64,20 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
             out.write_bytes(child.read_bytes())
 
 
-def scaffold(template: str, target: Path, *, api_key: str | None) -> Path:
-    """Copy the template into `target` and write `.env`. Returns `target`."""
+def scaffold(
+    template: str, target: Path, *, api_key: str | None, base_url: str | None = None
+) -> Path:
+    """Copy the template into `target` and write `.env`. Returns `target`.
+
+    `base_url`, when given, pins the generated app to the same AssemblyAI environment
+    the key was minted for (e.g. a sandbox) — otherwise a sandbox key would be rejected
+    by the production default.
+    """
     root = _template_root(template)
     target.mkdir(parents=True, exist_ok=True)
     _copy_tree(root, target)
-    key = api_key or PLACEHOLDER_KEY
-    (target / ".env").write_text(f"ASSEMBLYAI_API_KEY={key}\n")
+    lines = [f"ASSEMBLYAI_API_KEY={api_key or PLACEHOLDER_KEY}"]
+    if base_url:
+        lines.append(f"ASSEMBLYAI_BASE_URL={base_url}")
+    (target / ".env").write_text("\n".join(lines) + "\n")
     return target
