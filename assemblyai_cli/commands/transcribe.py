@@ -108,7 +108,9 @@ def transcribe(
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
     show_code: bool = typer.Option(
-        False, "--show-code", help="Also print the equivalent Python SDK code."
+        False,
+        "--show-code",
+        help="Print the equivalent Python SDK code and exit (does not transcribe).",
     ),
 ) -> None:
     """Transcribe an audio file, URL, or YouTube URL with the full TranscriptionConfig surface.
@@ -169,6 +171,15 @@ def transcribe(
         merged = config_builder.merge_transcribe_config(
             flags=flags, overrides=list(config_kv or []), config_file=config_file
         )
+
+        if show_code:
+            # Print-only: build the equivalent script from the flags and exit without
+            # transcribing or authenticating. Raw stdout so `--show-code > script.py`
+            # yields a runnable file.
+            audio = client.resolve_audio_source(source, sample=sample)
+            print(code_gen.transcribe(merged, audio))
+            return
+
         tc = config_builder.construct_transcription_config(merged)
 
         audio = client.resolve_audio_source(source, sample=sample)
@@ -214,14 +225,5 @@ def transcribe(
             print(json.dumps(payload, default=str))
         else:
             transcribe_render.render_transcript_result(transcript, output.console)
-            if show_code:
-                # Code-gen is a bonus; never let it crash the real transcript output.
-                try:
-                    rendered = code_gen.transcribe(merged, audio)
-                except Exception as exc:  # noqa: BLE001
-                    output.console.print(f"[dim]# could not render sample code: {exc}[/dim]")
-                else:
-                    output.console.print("\n[dim]# Equivalent Python:[/dim]")
-                    output.console.print(rendered)
 
     run_command(ctx, body, json=json_out)

@@ -31,12 +31,14 @@ def test_stream_registered_top_level():
 
 
 def test_help_lists_commands_in_workflow_order():
-    import click
+    from typer.core import TyperGroup
     from typer.main import get_command
 
     cmd = get_command(app)
-    assert isinstance(cmd, click.Group)
-    names = cmd.list_commands(click.Context(cmd))  # the order shown under --help
+    # Typer (>=0.13) vendors its own click; the root command is a TyperGroup.
+    assert isinstance(cmd, TyperGroup)
+    ctx = cmd.make_context("aai", [], resilient_parsing=True)
+    names = cmd.list_commands(ctx)  # the order shown under --help
     # Core transcription first, then voice/LLM, account, tooling, version last.
     assert names == [
         "transcribe",

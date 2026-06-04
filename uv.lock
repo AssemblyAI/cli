@@ -97,7 +97,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
     { name = "sounddevice", specifier = ">=0.5" },
     { name = "tomli-w", specifier = ">=1.0" },
-    { name = "typer", specifier = ">=0.12" },
+    { name = "typer", specifier = ">=0.13" },
     { name = "websockets", specifier = ">=13" },
     { name = "yt-dlp", specifier = ">=2024.0" },
 ]

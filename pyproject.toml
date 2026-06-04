@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "typer>=0.12",
+    "typer>=0.13",  # >=0.13 vendors its own click (typer._click); we no longer import click
     "assemblyai>=0.34",
     "rich>=13.0",
     "keyring>=24.0",

@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-import click
+from typing import TYPE_CHECKING
+
 import typer
 from typer.core import TyperGroup
+
+if TYPE_CHECKING:
+    # Typer (>=0.13) vendors its own click; TyperGroup.list_commands receives this
+    # context type, not the upstream click.Context. Imported for typing only.
+    from typer._click.core import Context as ClickContext
 
 from assemblyai_cli import __version__
 from assemblyai_cli.commands import (
@@ -44,7 +50,7 @@ class _OrderedGroup(TyperGroup):
     order alone can't place `version` last; sorting here controls help output.
     """
 
-    def list_commands(self, ctx: click.Context) -> list[str]:
+    def list_commands(self, ctx: ClickContext) -> list[str]:
         rank = {name: i for i, name in enumerate(_COMMAND_ORDER)}
         return sorted(
             super().list_commands(ctx), key=lambda name: (rank.get(name, len(rank)), name)

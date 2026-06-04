@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from assemblyai_cli import client, code_gen, config, output
+from assemblyai_cli import client, code_gen, config
 from assemblyai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from assemblyai_cli.agent.render import AgentRenderer
 from assemblyai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
@@ -41,7 +41,9 @@ def agent(
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
     show_code: bool = typer.Option(
-        False, "--show-code", help="Also print the equivalent Python SDK code."
+        False,
+        "--show-code",
+        help="Print the equivalent Python SDK code and exit (does not start a session).",
     ),
 ) -> None:
     """Have a live two-way voice conversation with an AssemblyAI voice agent.
@@ -55,12 +57,8 @@ def agent(
         raise typer.Exit(code=0)
 
     def body(state: AppState, json_mode: bool) -> None:
-        api_key = config.resolve_api_key(profile=state.profile)
         if voice not in VOICES:
             raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")
-        from_file = bool(source) or sample
-        if from_file and device is not None:
-            raise UsageError("--device applies only to microphone input.")
         if system_prompt_file is not None:
             try:
                 system_prompt_text = system_prompt_file.read_text(encoding="utf-8")
@@ -72,6 +70,17 @@ def agent(
                 ) from exc
         else:
             system_prompt_text = system_prompt
+
+        if show_code:
+            # Print-only: emit the equivalent agent script from the flags and exit
+            # without authenticating or opening audio. Raw stdout for `> script.py`.
+            print(code_gen.agent(voice, system_prompt_text, greeting))
+            return
+
+        api_key = config.resolve_api_key(profile=state.profile)
+        from_file = bool(source) or sample
+        if from_file and device is not None:
+            raise UsageError("--device applies only to microphone input.")
 
         renderer = AgentRenderer(json_mode=json_mode, mic_input=not from_file)
         audio: Any
@@ -113,16 +122,5 @@ def agent(
         finally:
             with contextlib.suppress(BrokenPipeError):
                 renderer.close()
-
-        if show_code and not json_mode:
-            # Bonus artifact; never crash the session. Show the greeting the user chose
-            # (not the file-suppressed "" passed to run_session) and always the mic idiom.
-            try:
-                rendered = code_gen.agent(voice, system_prompt_text, greeting)
-            except Exception as exc:  # noqa: BLE001
-                output.console.print(f"[dim]# could not render sample code: {exc}[/dim]")
-            else:
-                output.console.print("\n[dim]# Equivalent Python (microphone agent):[/dim]")
-                output.console.print(rendered)
 
     run_command(ctx, body, json=json_out)

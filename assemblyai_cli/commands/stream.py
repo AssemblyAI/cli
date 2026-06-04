@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import SpeechModel
 
-from assemblyai_cli import client, code_gen, config, config_builder, llm, output, youtube
+from assemblyai_cli import client, code_gen, config, config_builder, llm, youtube
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
 from assemblyai_cli.microphone import MicrophoneSource
@@ -93,7 +93,9 @@ def stream(
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
     show_code: bool = typer.Option(
-        False, "--show-code", help="Also print the equivalent Python SDK code."
+        False,
+        "--show-code",
+        help="Print the equivalent Python SDK code and exit (does not stream).",
     ),
 ) -> None:
     """Transcribe live audio in real time with the full StreamingParameters surface.
@@ -103,23 +105,7 @@ def stream(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        api_key = config.resolve_api_key(profile=state.profile)
-        from_file = bool(source) or sample
-        if from_file and (sample_rate is not None or device is not None):
-            raise UsageError("--sample-rate and --device apply only to microphone input.")
-
-        renderer = StreamRenderer(json_mode=json_mode)
-        # Collect finalized turns so we can transform the full transcript at the end.
-        turns: list[str] = []
-
-        def on_turn(event: object) -> None:
-            renderer.turn(event)
-            if llm_gateway_prompt and getattr(event, "end_of_turn", False):
-                text = getattr(event, "transcript", "") or ""
-                if text:
-                    turns.append(text)
-
-        def run(audio: FileSource | MicrophoneSource, rate: int) -> None:
+        def make_flags(rate: int) -> dict[str, object]:
             flags: dict[str, object] = {
                 "sample_rate": rate,
                 "speech_model": speech_model,
@@ -149,9 +135,39 @@ def stream(
             if header is not None:
                 flags["webhook_auth_header_name"] = header[0]
                 flags["webhook_auth_header_value"] = header[1]
+            return flags
 
+        if show_code:
+            # Print-only: emit the canonical microphone-streaming script (16 kHz) from
+            # the flags and exit without opening audio or authenticating. Raw stdout so
+            # `--show-code > script.py` yields a runnable file.
             merged = config_builder.merge_streaming_params(
-                flags=flags, overrides=list(config_kv or []), config_file=config_file
+                flags=make_flags(TARGET_RATE),
+                overrides=list(config_kv or []),
+                config_file=config_file,
+            )
+            print(code_gen.stream(merged))
+            return
+
+        api_key = config.resolve_api_key(profile=state.profile)
+        from_file = bool(source) or sample
+        if from_file and (sample_rate is not None or device is not None):
+            raise UsageError("--sample-rate and --device apply only to microphone input.")
+
+        renderer = StreamRenderer(json_mode=json_mode)
+        # Collect finalized turns so we can transform the full transcript at the end.
+        turns: list[str] = []
+
+        def on_turn(event: object) -> None:
+            renderer.turn(event)
+            if llm_gateway_prompt and getattr(event, "end_of_turn", False):
+                text = getattr(event, "transcript", "") or ""
+                if text:
+                    turns.append(text)
+
+        def run(audio: FileSource | MicrophoneSource, rate: int) -> None:
+            merged = config_builder.merge_streaming_params(
+                flags=make_flags(rate), overrides=list(config_kv or []), config_file=config_file
             )
             params = config_builder.construct_streaming_params(merged)
 
@@ -183,17 +199,6 @@ def stream(
                     max_tokens=max_tokens,
                 )
                 renderer.llm(transformed)
-
-            if show_code and not json_mode:
-                # Bonus artifact; never crash the stream. Always the microphone idiom
-                # (the canonical SDK starting point) even when a file was streamed.
-                try:
-                    rendered = code_gen.stream(merged)
-                except Exception as exc:  # noqa: BLE001
-                    output.console.print(f"[dim]# could not render sample code: {exc}[/dim]")
-                else:
-                    output.console.print("\n[dim]# Equivalent Python (microphone streaming):[/dim]")
-                    output.console.print(rendered)
 
         if source and youtube.is_youtube_url(source):
             # Fetch the audio first, then stream the local file in real time.

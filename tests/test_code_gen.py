@@ -49,11 +49,13 @@ _json = st.recursive(
     | st.integers()
     | st.floats(allow_nan=False, allow_infinity=False)
     | st.text(st.characters(blacklist_categories=["Cs"]), max_size=8),
-    lambda children: st.lists(children, max_size=3)
-    | st.dictionaries(
-        st.text(st.characters(min_codepoint=97, max_codepoint=122), min_size=1, max_size=5),
-        children,
-        max_size=3,
+    lambda children: (
+        st.lists(children, max_size=3)
+        | st.dictionaries(
+            st.text(st.characters(min_codepoint=97, max_codepoint=122), min_size=1, max_size=5),
+            children,
+            max_size=3,
+        )
     ),
     max_leaves=5,
 )
