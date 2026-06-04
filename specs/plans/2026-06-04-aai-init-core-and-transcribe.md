@@ -693,6 +693,15 @@ def test_scaffold_writes_env_with_key(tmp_path):
     assert "ASSEMBLYAI_API_KEY=sk-real-key" in env
 
 
+def test_scaffold_skips_pycache(tmp_path):
+    # Importing a template's api/index.py during our own test run leaves a
+    # __pycache__ next to it; the scaffolder must not copy that into the project.
+    target = tmp_path / "app"
+    scaffold.scaffold("transcribe", target, api_key=None)
+    assert not list(target.rglob("__pycache__"))
+    assert not list(target.rglob("*.pyc"))
+
+
 def test_scaffold_writes_placeholder_when_no_key(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold("transcribe", target, api_key=None)
@@ -739,6 +748,10 @@ PLACEHOLDER_KEY = "your_assemblyai_api_key_here"
 # Template files stored under plain names -> their real dotted names on copy.
 _DOTFILE_RENAMES = {"gitignore": ".gitignore", "env.example": ".env.example"}
 
+# Never copy build/test detritus into the user's fresh project. (Loading a template's
+# api/index.py during our own tests leaves a __pycache__ next to it.)
+_SKIP_NAMES = {"__pycache__"}
+
 
 def _template_root(template: str) -> Traversable:
     if not templates.is_template(template):
@@ -758,6 +771,8 @@ def target_conflict(target: Path) -> bool:
 
 def _copy_tree(node: Traversable, dest: Path) -> None:
     for child in node.iterdir():
+        if child.name in _SKIP_NAMES or child.name.endswith(".pyc"):
+            continue
         name = _DOTFILE_RENAMES.get(child.name, child.name)
         out = dest / name
         if child.is_dir():
@@ -789,7 +804,7 @@ def scaffold(template: str, target: Path, *, api_key: str | None) -> Path:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_init_scaffold.py -v`
-Expected: PASS (5 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
