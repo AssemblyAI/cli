@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import webbrowser
-
 import typer
 from rich.markup import escape
 
 from assemblyai_cli import client, config, output
+from assemblyai_cli.auth import run_login_flow
 from assemblyai_cli.context import AppState, resolve_profile, run_command
 from assemblyai_cli.errors import APIError, NotAuthenticated
 
 app = typer.Typer()
-
-DASHBOARD_KEYS_URL = "https://www.assemblyai.com/dashboard/api-keys"
 
 
 @app.command()
@@ -20,24 +17,17 @@ def login(
     api_key: str = typer.Option(None, "--api-key", help="Provide key non-interactively."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Authenticate by storing an API key (browser-assisted on a terminal)."""
+    """Authenticate via your browser (Stytch); stores a CLI API key."""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
-        key = api_key
-        if not key:
-            output.console.print(
-                f"Opening the AssemblyAI dashboard to get your API key:\n  {DASHBOARD_KEYS_URL}"
-            )
-            try:
-                webbrowser.open(DASHBOARD_KEYS_URL)
-            except Exception:  # noqa: BLE001 - opening a browser is best-effort
-                output.console.print(
-                    "[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]"
-                )
-            key = typer.prompt("Paste your API key", hide_input=True)
-        if not client.validate_key(key):
-            raise APIError("That API key was rejected (HTTP 401). Check it and retry.")
+        if api_key:
+            # Non-interactive escape hatch for CI/automation.
+            if not client.validate_key(api_key):
+                raise APIError("That API key was rejected (HTTP 401). Check it and retry.")
+            key = api_key
+        else:
+            key = run_login_flow()
         config.set_api_key(profile, key)
         output.emit(
             {"authenticated": True, "profile": profile},
