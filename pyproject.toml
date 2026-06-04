@@ -37,6 +37,8 @@ dependencies = [
     "sounddevice>=0.5",
     "openai>=1.40",
     "yt-dlp>=2024.0",
+    # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
+    "audioop-lts>=0.2; python_version >= '3.13'",
 ]
 
 [project.urls]

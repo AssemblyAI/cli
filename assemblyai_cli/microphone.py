@@ -41,7 +41,9 @@ def _resample(chunk: bytes, state: Any, *, src_rate: int, dst_rate: int) -> tupl
     import warnings
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)  # audioop is deprecated but stdlib
+        # audioop is deprecated stdlib on 3.11/3.12 (warning suppressed here) and is
+        # provided by the `audioop-lts` package on 3.13+, where it left the stdlib.
+        warnings.simplefilter("ignore", DeprecationWarning)
         import audioop
     return audioop.ratecv(chunk, 2, 1, src_rate, dst_rate, state)
 

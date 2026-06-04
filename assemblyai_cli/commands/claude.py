@@ -92,13 +92,18 @@ _SKILL_REMOVE = ["npx", "-y", "skills", "remove", "assemblyai", "--global"]
 _SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
 
 
-def _install_skill() -> Step:
+def _install_skill(force: bool) -> Step:
     if shutil.which("npx") is None:
         return {
             "name": "skill",
             "status": "skipped",
             "detail": f"Node.js/npx not found. Install Node.js, then run: {_SKILL_ADD_HINT}",
         }
+    # Idempotent like the MCP step: if the skill is already on disk and the user
+    # didn't ask to --force, report `already` instead of silently re-downloading
+    # it and always claiming `installed`.
+    if _skill_installed() and not force:
+        return {"name": "skill", "status": "already", "detail": f"assemblyai skill at {_skill_dir()}"}
     # --global: install at user scope (not project scope, which `skills` auto-selects
     # when run inside a project) so the skill lands in ~/.claude/skills where `status`
     # looks. npx -y skips its install prompt; the longer timeout covers the download.
@@ -214,7 +219,7 @@ def install(
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
-        steps = [_install_mcp(scope, force), _install_skill()]
+        steps = [_install_mcp(scope, force), _install_skill(force)]
         output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)

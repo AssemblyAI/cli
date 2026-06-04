@@ -176,6 +176,48 @@ def test_install_idempotent_when_mcp_present(monkeypatch):
     assert not any(c[:3] == ["claude", "mcp", "add"] for c in fake.calls)
 
 
+def test_install_skill_idempotent_when_present(monkeypatch):
+    # Regression: a repeat install must report the skill as `already` (like MCP),
+    # not re-run `npx skills add` and claim `installed` every time.
+    _all_tools_present(monkeypatch)
+    skill = _skill_path()
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# AssemblyAI")
+    fake = FakeRun({("claude", "mcp", "get"): 1})
+    monkeypatch.setattr("assemblyai_cli.commands.claude.subprocess.run", fake)
+
+    result = runner.invoke(app, ["claude", "install"])
+    assert result.exit_code == 0
+    statuses = {s["name"]: s["status"] for s in json.loads(result.output)["steps"]}
+    assert statuses["skill"] == "already"
+    # No `npx … add` should have run — the skill was already present.
+    assert not any(c[0] == "npx" and "add" in c for c in fake.calls)
+
+
+def test_install_force_reinstalls_skill(monkeypatch):
+    # --force must re-run `npx skills add` even when the skill is already present.
+    _all_tools_present(monkeypatch)
+    skill = _skill_path()
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# AssemblyAI")
+    fake = FakeRun({("claude", "mcp", "get"): 1})
+    monkeypatch.setattr("assemblyai_cli.commands.claude.subprocess.run", fake)
+
+    result = runner.invoke(app, ["claude", "install", "--force"])
+    assert result.exit_code == 0
+    statuses = {s["name"]: s["status"] for s in json.loads(result.output)["steps"]}
+    assert statuses["skill"] == "installed"
+    assert [
+        "npx",
+        "-y",
+        "skills",
+        "add",
+        "AssemblyAI/assemblyai-skill",
+        "--global",
+        "--yes",
+    ] in fake.calls
+
+
 def test_install_force_removes_then_adds(monkeypatch):
     _all_tools_present(monkeypatch)
     fake = FakeRun({("claude", "mcp", "get"): 0})
