@@ -74,6 +74,43 @@ def test_llm_transcript_id_injected(monkeypatch):
     assert "{{ transcript }}" in seen["content"]
 
 
+def test_llm_reads_content_from_stdin(monkeypatch):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        seen["content"] = messages[0]["content"]
+        seen["transcript_id"] = transcript_id
+        return _payload("done")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(app, ["llm", "summarize", "--json"], input="meeting notes here")
+    assert result.exit_code == 0
+    # The piped text is injected into the prompt content; no transcript id is used.
+    assert "summarize" in seen["content"]
+    assert "meeting notes here" in seen["content"]
+    assert seen["transcript_id"] is None
+
+
+def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        seen["content"] = messages[0]["content"]
+        seen["transcript_id"] = transcript_id
+        return _payload("s")
+
+    monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(
+        app, ["llm", "summarize", "--transcript-id", "t_9", "--json"], input="ignored stdin"
+    )
+    assert result.exit_code == 0
+    assert seen["transcript_id"] == "t_9"
+    assert "ignored stdin" not in seen["content"]
+    assert "{{ transcript }}" in seen["content"]
+
+
 def test_llm_missing_prompt_exits_2(monkeypatch):
     _auth()
     monkeypatch.setattr("assemblyai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())

@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from assemblyai_cli import config, output
+from assemblyai_cli import config, output, stdio
 from assemblyai_cli import llm as gateway
 from assemblyai_cli.context import AppState, run_command
 from assemblyai_cli.errors import UsageError
@@ -15,6 +15,7 @@ app = typer.Typer()
 def llm(
     ctx: typer.Context,
     prompt: str = typer.Argument(None, help="The prompt to send to the model."),
+    # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | aai llm "summarize"`).
     model: str = typer.Option(gateway.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     transcript_id: str = typer.Option(
         None, "--transcript-id", help="Inject this transcript's text into the prompt."
@@ -40,7 +41,12 @@ def llm(
         if not prompt:
             raise UsageError("Provide a prompt, or use --list-models.")
         api_key = config.resolve_api_key(profile=state.profile)
-        messages = gateway.build_messages(prompt, system=system, transcript_id=transcript_id)
+        # Text piped on stdin becomes the content the prompt operates on, unless an
+        # explicit --transcript-id is given (that injects server-side and takes priority).
+        stdin_text = stdio.piped_stdin_text() if not transcript_id else None
+        messages = gateway.build_messages(
+            prompt, system=system, transcript_id=transcript_id, transcript_text=stdin_text
+        )
         response = gateway.complete(
             api_key,
             model=model,
