@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,6 @@ import keyring
 import keyring.errors  # keyring.errors is not re-exported by keyring/__init__
 import platformdirs
 import tomli_w
-import tomllib
 
 from aai_cli.errors import NotAuthenticated
 

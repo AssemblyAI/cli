@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
 ```
 
 The installer uses [`pipx`](https://pipx.pypa.io) when available (falling back to
-`pip --user`) and requires Python 3.10+. Prefer to do it yourself:
+`pip --user`) and requires Python 3.11+. Prefer to do it yourself:
 
 ```sh
 pipx install "git+https://github.com/AssemblyAI/cli.git"   # or: pip install --user ...
