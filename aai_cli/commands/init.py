@@ -71,8 +71,12 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
 )
 def init(
     ctx: typer.Context,
-    template: str = typer.Argument(None, help="Template to scaffold (omit to pick interactively)."),
-    directory: str = typer.Argument(None, help="Target directory (default: <template>-app)."),
+    template: str | None = typer.Argument(
+        None, help="Template to scaffold (omit to pick interactively)."
+    ),
+    directory: str | None = typer.Argument(
+        None, help="Target directory (default: <template>-app)."
+    ),
     no_install: bool = typer.Option(
         False, "--no-install", help="Scaffold only; don't install or launch."
     ),

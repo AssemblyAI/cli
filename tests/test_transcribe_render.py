@@ -42,6 +42,21 @@ def test_renders_text_only_when_no_analysis():
     assert "Summary" not in out
 
 
+def test_render_helpers_handle_invalid_dynamic_values():
+    assert tr._mapping("bad") == {}
+    assert tr._int_value(True) == 0
+    assert tr._int_value(12) == 12
+    assert tr._int_value(12.9) == 12
+    assert tr._int_value("13") == 13
+    assert tr._int_value("bad") == 0
+    assert tr._int_value(object()) == 0
+    assert tr._float_value(True) == 0.0
+    assert tr._float_value(1) == 1.0
+    assert tr._float_value("1.5") == 1.5
+    assert tr._float_value("bad") == 0.0
+    assert tr._float_value(object()) == 0.0
+
+
 def test_renders_per_speaker_utterances():
     transcript = SimpleNamespace(
         text="flat",

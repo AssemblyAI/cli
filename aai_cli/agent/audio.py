@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from aai_cli.errors import CLIError
-from aai_cli.microphone import _default_rate, _resample, audio_missing_error
+from aai_cli.microphone import audio_missing_error, default_rate, resample_pcm16
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 
@@ -19,7 +19,7 @@ def _output_default_rate(device: int | None = None) -> int:
     'paramErr' (-50) from forcing an unsupported one; agent audio (24 kHz) is
     resampled to it. Falls back to a safe default when the device can't be queried.
     """
-    return _default_rate("output", device)
+    return default_rate("output", device)
 
 
 class NullPlayer:
@@ -141,7 +141,7 @@ class DuplexAudio:
     def feed(self, pcm: bytes) -> None:
         """Queue target-rate PCM for playback, resampled to the device rate."""
         if self._device_rate != self._target:
-            pcm, self._out_state = _resample(
+            pcm, self._out_state = resample_pcm16(
                 pcm, self._out_state, src_rate=self._target, dst_rate=self._device_rate
             )
         with self._lock:
@@ -163,7 +163,7 @@ class DuplexAudio:
             if chunk is None:
                 return
             if self._device_rate != self._target:
-                chunk, state = _resample(
+                chunk, state = resample_pcm16(
                     chunk, state, src_rate=self._device_rate, dst_rate=self._target
                 )
             yield chunk

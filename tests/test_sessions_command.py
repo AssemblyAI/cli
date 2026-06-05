@@ -4,6 +4,8 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
+from aai_cli.commands import sessions
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -11,6 +13,12 @@ runner = CliRunner()
 
 def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
+    )
 
 
 def _human(monkeypatch):
@@ -36,6 +44,11 @@ def test_sessions_list_renders_rows():
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data[0]["session_id"] == "s_1"
+
+
+def test_session_rows_filter_invalid_items():
+    assert sessions._session_rows("bad") == []
+    assert sessions._session_rows([{"session_id": "s_1"}, "bad"]) == [{"session_id": "s_1"}]
 
 
 def test_sessions_list_renders_table_human(monkeypatch):
@@ -84,6 +97,11 @@ def test_sessions_get_renders_detail(monkeypatch):
     assert "s_1" in result.output and "universal" in result.output
 
 
-def test_sessions_requires_session():
-    result = runner.invoke(app, ["sessions", "list"])
+def test_sessions_without_session_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    with patch("aai_cli.commands.sessions.ams.list_streaming", return_value={"data": []}) as list_:
+        result = runner.invoke(app, ["sessions", "list", "--json"])
     assert result.exit_code == 2
+    assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
+    list_.assert_not_called()
+    assert "Run the same command again" in result.output

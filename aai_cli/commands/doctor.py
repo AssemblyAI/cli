@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import TypedDict
+from collections.abc import Mapping, Sequence
+from typing import Protocol, TypedDict
 
 import typer
 from rich.markup import escape
@@ -23,6 +24,15 @@ class Check(TypedDict):
     affects: list[str]
     detail: str
     fix: str | None
+
+
+class DoctorResult(TypedDict):
+    ok: bool
+    checks: list[Check]
+
+
+class _SoundDeviceModule(Protocol):
+    def query_devices(self) -> Sequence[Mapping[str, object]]: ...
 
 
 # Status -> (affordance symbol, render style). "fail" is a blocker; "warn" is
@@ -112,10 +122,21 @@ def _check_ffmpeg() -> Check:
 
 def _probe_input_devices() -> int:
     """Number of available microphone (input) devices. Raises if audio is unavailable."""
-    import sounddevice as sd
-
+    sd = _sounddevice()
     devices = sd.query_devices()
-    return sum(1 for d in devices if d.get("max_input_channels", 0) > 0)
+    return sum(1 for device in devices if _input_channels(device) > 0)
+
+
+def _sounddevice() -> _SoundDeviceModule:
+    import sounddevice as module
+
+    sd: _SoundDeviceModule = module
+    return sd
+
+
+def _input_channels(device: Mapping[str, object]) -> int:
+    channels = device.get("max_input_channels")
+    return channels if isinstance(channels, int) else 0
 
 
 def _check_audio() -> Check:
@@ -175,8 +196,8 @@ def _check_coding_agent() -> Check:
     }
 
 
-def _render(data: dict[str, object]) -> str:
-    checks: list[Check] = data["checks"]  # type: ignore[assignment]
+def _render(data: DoctorResult) -> str:
+    checks = data["checks"]
     lines = [output.heading("Environment check")]
     for c in checks:
         symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
@@ -218,7 +239,8 @@ def doctor(
             _check_coding_agent(),
         ]
         ok = not any(c["status"] == "fail" for c in checks)
-        output.emit({"ok": ok, "checks": checks}, _render, json_mode=json_mode)
+        payload: DoctorResult = {"ok": ok, "checks": checks}
+        output.emit(payload, _render, json_mode=json_mode)
         if not ok:
             raise typer.Exit(code=1)
 

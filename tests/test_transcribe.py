@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -11,6 +12,12 @@ runner = CliRunner()
 
 def _auth():
     config.set_api_key("default", "sk_live")
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
+    )
 
 
 def _fake_transcript():
@@ -71,9 +78,16 @@ def test_transcribe_json_output():
     assert '"id": "t_1"' in result.output
 
 
-def test_transcribe_unauthenticated_exits_2():
-    result = runner.invoke(app, ["transcribe", "--sample"])
+def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    with patch(
+        "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
+    ) as tx:
+        result = runner.invoke(app, ["transcribe", "--sample"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    tx.assert_not_called()
+    assert "Run the same command again" in result.output
 
 
 def test_transcribe_output_text_field():

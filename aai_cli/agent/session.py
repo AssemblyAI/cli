@@ -71,41 +71,41 @@ class VoiceAgentSession:
         if handler is not None:
             handler(self, event)
 
-    def _on_session_ready(self, _event: dict[str, Any]) -> None:
+    def on_session_ready(self, _event: dict[str, Any]) -> None:
         with self._lock:
             self.ready = True
         if self.ready_event is not None:
             self.ready_event.set()
         self.renderer.connected()
 
-    def _on_speech_started(self, _event: dict[str, Any]) -> None:
+    def on_speech_started(self, _event: dict[str, Any]) -> None:
         if self.full_duplex:
             self.player.flush()
 
-    def _on_user_delta(self, event: dict[str, Any]) -> None:
+    def on_user_delta(self, event: dict[str, Any]) -> None:
         self.renderer.user_partial(event.get("text", ""))
 
-    def _on_user_final(self, event: dict[str, Any]) -> None:
+    def on_user_final(self, event: dict[str, Any]) -> None:
         self._saw_user = True
         self.renderer.user_final(event.get("text", ""))
 
-    def _on_reply_started(self, _event: dict[str, Any]) -> None:
+    def on_reply_started(self, _event: dict[str, Any]) -> None:
         if not self.full_duplex:
             with self._lock:
                 self.muted = True
         self.renderer.reply_started()
 
-    def _on_reply_audio(self, event: dict[str, Any]) -> None:
+    def on_reply_audio(self, event: dict[str, Any]) -> None:
         data = event.get("data")
         if data:
             self.player.enqueue(base64.b64decode(data))
 
-    def _on_agent_transcript(self, event: dict[str, Any]) -> None:
+    def on_agent_transcript(self, event: dict[str, Any]) -> None:
         self.renderer.agent_transcript(
             event.get("text", ""), interrupted=bool(event.get("interrupted", False))
         )
 
-    def _on_reply_done(self, event: dict[str, Any]) -> None:
+    def on_reply_done(self, event: dict[str, Any]) -> None:
         if not self.full_duplex:
             with self._lock:
                 self.muted = False
@@ -117,7 +117,7 @@ class VoiceAgentSession:
         if self.exit_after_reply and self._saw_user and not interrupted:
             self.finished = True
 
-    def _raise_error(self, event: dict[str, Any]) -> None:
+    def raise_error(self, event: dict[str, Any]) -> None:
         code = event.get("code", "")
         message = event.get("message") or code or "Voice agent error."
         if code in _AUTH_ERROR_CODES:
@@ -132,15 +132,15 @@ class VoiceAgentSession:
 # Server event type -> the VoiceAgentSession method that handles it. Types absent
 # here (input.speech.stopped, tool.call, anything unrecognized) are ignored.
 _EVENT_HANDLERS: dict[str, Callable[[VoiceAgentSession, dict[str, Any]], None]] = {
-    "session.ready": VoiceAgentSession._on_session_ready,
-    "input.speech.started": VoiceAgentSession._on_speech_started,
-    "transcript.user.delta": VoiceAgentSession._on_user_delta,
-    "transcript.user": VoiceAgentSession._on_user_final,
-    "reply.started": VoiceAgentSession._on_reply_started,
-    "reply.audio": VoiceAgentSession._on_reply_audio,
-    "transcript.agent": VoiceAgentSession._on_agent_transcript,
-    "reply.done": VoiceAgentSession._on_reply_done,
-    "session.error": VoiceAgentSession._raise_error,
+    "session.ready": VoiceAgentSession.on_session_ready,
+    "input.speech.started": VoiceAgentSession.on_speech_started,
+    "transcript.user.delta": VoiceAgentSession.on_user_delta,
+    "transcript.user": VoiceAgentSession.on_user_final,
+    "reply.started": VoiceAgentSession.on_reply_started,
+    "reply.audio": VoiceAgentSession.on_reply_audio,
+    "transcript.agent": VoiceAgentSession.on_agent_transcript,
+    "reply.done": VoiceAgentSession.on_reply_done,
+    "session.error": VoiceAgentSession.raise_error,
 }
 
 

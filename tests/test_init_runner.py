@@ -110,7 +110,7 @@ def test_wait_for_port_returns_false_on_timeout(monkeypatch):
 def test_run_setup_returns_last_success(monkeypatch):
     ran = []
 
-    def fake_run(cmd, cwd, capture_output, text):
+    def fake_run(cmd, cwd, capture_output, check, text):
         ran.append(cmd)
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
 
@@ -123,7 +123,7 @@ def test_run_setup_returns_last_success(monkeypatch):
 def test_run_setup_stops_at_first_failure(monkeypatch):
     ran = []
 
-    def fake_run(cmd, cwd, capture_output, text):
+    def fake_run(cmd, cwd, capture_output, check, text):
         ran.append(cmd)
         return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="boom")
 

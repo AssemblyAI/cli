@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 from collections import namedtuple
 
 import pytest
@@ -146,8 +148,22 @@ def test_check_audio_handles_portaudio_failure(monkeypatch):
     assert "PortAudio" in check["detail"]
 
 
+def test_probe_input_devices_counts_integer_input_channels(monkeypatch):
+    class FakeSoundDevice(types.ModuleType):
+        def query_devices(self):
+            return [
+                {"max_input_channels": 1},
+                {"max_input_channels": "bad"},
+                {"max_input_channels": 0},
+            ]
+
+    fake_sd = FakeSoundDevice("sounddevice")
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    assert doctor._probe_input_devices() == 1
+
+
 def test_render_ok_payload_shows_ready():
-    payload = {
+    payload: doctor.DoctorResult = {
         "ok": True,
         "checks": [
             {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
@@ -159,7 +175,7 @@ def test_render_ok_payload_shows_ready():
 
 
 def test_render_problem_payload_shows_fix_and_problem_banner():
-    payload = {
+    payload: doctor.DoctorResult = {
         "ok": False,
         "checks": [
             {

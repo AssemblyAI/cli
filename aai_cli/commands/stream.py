@@ -36,7 +36,7 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro.value
 )
 def stream(
     ctx: typer.Context,
-    source: str = typer.Argument(
+    source: str | None = typer.Argument(
         None,
         help="Audio file path, URL, or YouTube URL to stream. Omit to use the microphone.",
     ),
@@ -51,55 +51,67 @@ def stream(
     speech_model: str = typer.Option(
         DEFAULT_SPEECH_MODEL, "--speech-model", help="Streaming speech model."
     ),
-    encoding: str = typer.Option(None, "--encoding", help="pcm_s16le or pcm_mulaw."),
-    language_detection: bool = typer.Option(
+    encoding: str | None = typer.Option(None, "--encoding", help="pcm_s16le or pcm_mulaw."),
+    language_detection: bool | None = typer.Option(
         None, "--language-detection", help="Auto-detect the spoken language."
     ),
-    domain: str = typer.Option(None, "--domain", help="Domain preset (e.g. medical)."),
+    domain: str | None = typer.Option(None, "--domain", help="Domain preset (e.g. medical)."),
     # turn detection
-    end_of_turn_confidence_threshold: float = typer.Option(
+    end_of_turn_confidence_threshold: float | None = typer.Option(
         None, "--end-of-turn-confidence-threshold", help="0-1 end-of-turn confidence."
     ),
-    min_turn_silence: int = typer.Option(None, "--min-turn-silence", help="Min turn silence (ms)."),
-    max_turn_silence: int = typer.Option(None, "--max-turn-silence", help="Max turn silence (ms)."),
-    vad_threshold: float = typer.Option(None, "--vad-threshold", help="Voice-activity threshold."),
-    format_turns: bool = typer.Option(
+    min_turn_silence: int | None = typer.Option(
+        None, "--min-turn-silence", help="Min turn silence (ms)."
+    ),
+    max_turn_silence: int | None = typer.Option(
+        None, "--max-turn-silence", help="Max turn silence (ms)."
+    ),
+    vad_threshold: float | None = typer.Option(
+        None, "--vad-threshold", help="Voice-activity threshold."
+    ),
+    format_turns: bool | None = typer.Option(
         None, "--format-turns/--no-format-turns", help="Punctuate/format finalized turns."
     ),
-    include_partial_turns: bool = typer.Option(
+    include_partial_turns: bool | None = typer.Option(
         None, "--include-partial-turns", help="Emit partial turns."
     ),
     # features
-    keyterms_prompt: list[str] = typer.Option(
+    keyterms_prompt: list[str] | None = typer.Option(
         None, "--keyterms-prompt", help="Boost a key term (repeatable)."
     ),
-    filter_profanity: bool = typer.Option(None, "--filter-profanity", help="Mask profanity."),
-    speaker_labels: bool = typer.Option(None, "--speaker-labels", help="Label speakers."),
-    max_speakers: int = typer.Option(None, "--max-speakers", help="Max speakers."),
-    voice_focus: str = typer.Option(None, "--voice-focus", help="near_field or far_field."),
-    voice_focus_threshold: float = typer.Option(
+    filter_profanity: bool | None = typer.Option(
+        None, "--filter-profanity", help="Mask profanity."
+    ),
+    speaker_labels: bool | None = typer.Option(None, "--speaker-labels", help="Label speakers."),
+    max_speakers: int | None = typer.Option(None, "--max-speakers", help="Max speakers."),
+    voice_focus: str | None = typer.Option(None, "--voice-focus", help="near_field or far_field."),
+    voice_focus_threshold: float | None = typer.Option(
         None, "--voice-focus-threshold", help="Voice-focus threshold."
     ),
-    redact_pii: bool = typer.Option(None, "--redact-pii", help="Redact PII from turns."),
-    redact_pii_policy: str = typer.Option(
+    redact_pii: bool | None = typer.Option(None, "--redact-pii", help="Redact PII from turns."),
+    redact_pii_policy: str | None = typer.Option(
         None, "--redact-pii-policy", help="Comma-separated PII policies."
     ),
-    redact_pii_sub: str = typer.Option(None, "--redact-pii-sub", help="hash or entity_name."),
-    inactivity_timeout: int = typer.Option(
+    redact_pii_sub: str | None = typer.Option(
+        None, "--redact-pii-sub", help="hash or entity_name."
+    ),
+    inactivity_timeout: int | None = typer.Option(
         None, "--inactivity-timeout", help="Auto-close after N seconds idle."
     ),
-    webhook_url: str = typer.Option(None, "--webhook-url", help="Webhook URL."),
-    webhook_auth_header: str = typer.Option(
+    webhook_url: str | None = typer.Option(None, "--webhook-url", help="Webhook URL."),
+    webhook_auth_header: str | None = typer.Option(
         None, "--webhook-auth-header", help="Webhook auth header as NAME:VALUE."
     ),
     # escape hatch
-    config_kv: list[str] = typer.Option(
+    config_kv: list[str] | None = typer.Option(
         None, "--config", help="Set any StreamingParameters field as KEY=VALUE (repeatable)."
     ),
-    config_file: str = typer.Option(None, "--config-file", help="JSON file of streaming fields."),
+    config_file: str | None = typer.Option(
+        None, "--config-file", help="JSON file of streaming fields."
+    ),
     # existing
-    prompt: str = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
-    llm_prompt: list[str] = typer.Option(
+    prompt: str | None = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
+    llm_prompt: list[str] | None = typer.Option(
         None,
         "--llm",
         help="Run a prompt over the live transcript through LLM Gateway, refreshing the "
@@ -109,7 +121,7 @@ def stream(
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
-    output_field: str = typer.Option(
+    output_field: str | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -128,7 +140,7 @@ def stream(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
+        text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
 
         def make_flags(rate: int) -> dict[str, object]:
             flags: dict[str, object] = {
@@ -168,7 +180,7 @@ def stream(
                 overrides=list(config_kv or []),
                 config_file=config_file,
             )
-            gateway = code_gen.gateway_options(llm_prompt, model, max_tokens)
+            gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
             output.print_code(code_gen.stream(merged, llm=gateway))
             return
 
@@ -190,7 +202,8 @@ def stream(
         renderer = StreamRenderer(json_mode=json_mode, text_mode=text_mode)
         # In --llm mode the answer is rendered live by a FollowRenderer instead of the
         # raw turns; transcript accumulates the finalized turns we re-run the chain over.
-        follow = FollowRenderer(json_mode=json_mode) if llm_prompt else None
+        llm_prompts = list(llm_prompt or [])
+        follow = FollowRenderer(json_mode=json_mode) if llm_prompts else None
         transcript: list[str] = []
 
         def on_turn(event: object) -> None:
@@ -207,7 +220,7 @@ def stream(
             transcript.append(text)
             answer = llm.run_chain(
                 api_key,
-                list(llm_prompt),
+                llm_prompts,
                 transcript_text=" ".join(transcript),
                 model=model,
                 max_tokens=max_tokens,

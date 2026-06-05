@@ -24,7 +24,7 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
 def get(
     ctx: typer.Context,
     transcript_id: str = typer.Argument(..., help="Transcript id."),
-    output_field: str = typer.Option(
+    output_field: str | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -45,7 +45,7 @@ def get(
             )
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
-            print(client.select_transcript_field(transcript, output_field))
+            output.emit_text(client.select_transcript_field(transcript, output_field))
             return
         output.emit(
             client.transcript_summary(transcript),

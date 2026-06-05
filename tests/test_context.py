@@ -2,13 +2,14 @@ import typer
 from typer.testing import CliRunner
 
 from aai_cli import config, environments
+from aai_cli.auth.flow import LoginResult
 from aai_cli.context import AppState, env_override_warning, run_command
-from aai_cli.errors import NotAuthenticated
+from aai_cli.errors import APIError, NotAuthenticated, auth_failure
 
 runner = CliRunner()
 
 
-def _make_app(body):
+def _make_app(body, **run_options):
     app = typer.Typer()
 
     @app.callback()
@@ -17,7 +18,7 @@ def _make_app(body):
 
     @app.command()
     def go(ctx: typer.Context):
-        run_command(ctx, body)
+        run_command(ctx, body, **run_options)
 
     return app
 
@@ -26,7 +27,107 @@ def test_run_command_maps_cli_error_to_exit_code():
     def body(state, json_mode):
         raise NotAuthenticated()
 
+    result = runner.invoke(_make_app(body, auto_login=False), ["go"])
+    assert result.exit_code == 2
+
+
+def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: LoginResult(
+            api_key="sk_auto",
+            session_jwt="jwt_auto",
+            session_token="tok_auto",
+            account_id=42,
+        ),
+    )
+    calls = {"count": 0}
+
+    def body(state, json_mode):
+        calls["count"] += 1
+        raise NotAuthenticated()
+
     result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 2
+    assert calls["count"] == 1
+    assert config.get_session("default") == {"jwt": "jwt_auto", "token": "tok_auto"}
+    assert config.get_account_id("default") == 42
+    assert config.resolve_api_key() == "sk_auto"
+    assert "Run the same command again" in result.output
+
+
+def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: LoginResult(
+            api_key="sk_auto",
+            session_jwt="jwt_auto",
+            session_token="tok_auto",
+            account_id=42,
+        ),
+    )
+    monkeypatch.setattr(
+        "aai_cli.context.config.set_api_key",
+        lambda *_args: (_ for _ in ()).throw(OSError("keyring is unavailable")),
+    )
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 1
+    assert "could not save the credentials" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_run_command_auto_login_failure_is_clean(monkeypatch):
+    def fail_login():
+        raise APIError("Login timed out waiting for the browser.")
+
+    monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 1
+    assert "Login timed out" in result.output
+
+
+def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
+    monkeypatch.setenv(config.ENV_API_KEY, "sk_bad")
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("env key retry cannot be fixed")),
+    )
+
+    def body(state, json_mode):
+        raise auth_failure()
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 2
+
+
+def test_run_command_never_auto_logs_in_login_command(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("login command must not auto-login")),
+    )
+
+    app = typer.Typer()
+
+    @app.callback()
+    def cb(ctx: typer.Context):
+        ctx.obj = AppState()
+
+    @app.command(name="login")
+    def login_cmd(ctx: typer.Context):
+        def body(state, json_mode):
+            raise NotAuthenticated()
+
+        run_command(ctx, body)
+
+    result = runner.invoke(app, ["login"])
     assert result.exit_code == 2
 
 

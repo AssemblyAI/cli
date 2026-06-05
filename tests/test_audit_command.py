@@ -4,6 +4,8 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
+from aai_cli.commands import audit
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -11,6 +13,12 @@ runner = CliRunner()
 
 def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
+    )
 
 
 def _human(monkeypatch):
@@ -40,6 +48,13 @@ def test_audit_renders_rows():
     assert data[0]["action_taken"] == "token.create"
 
 
+def test_audit_rows_filter_invalid_items():
+    assert audit._audit_rows({"data": "bad"}) == []
+    assert audit._audit_rows({"data": [{"action_taken": "token.create"}, "bad"]}) == [
+        {"action_taken": "token.create"}
+    ]
+
+
 def test_audit_passes_filters():
     _auth()
     with patch(
@@ -59,10 +74,10 @@ def test_audit_human_mode_renders_table(monkeypatch):
         "data": [
             {
                 "id": 1,
-                "log_time": "2026-06-01T12:00:00Z",
+                "log_time": "2026-06-01T12:00:00.123456Z",
                 "actor_type": "member",
                 "actor_id": 7,
-                "action_taken": "token.create",
+                "action_taken": "token__created",
                 "resource_type": "token",
                 "resource_id": "10",
             },
@@ -70,7 +85,8 @@ def test_audit_human_mode_renders_table(monkeypatch):
                 "id": 2,
                 "log_time": "2026-06-01T12:01:00Z",
                 "actor_type": "member",
-                "action_taken": "login",
+                "actor_id": 7,
+                "action_taken": "login__succeeded",
                 "resource_type": None,
             },
         ]
@@ -78,9 +94,91 @@ def test_audit_human_mode_renders_table(monkeypatch):
     with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
         result = runner.invoke(app, ["audit"])
     assert result.exit_code == 0
-    assert "login" in result.output and "token.create" in result.output
+    assert "API key created" in result.output
+    assert "2026-06-01 12:00:00" in result.output
+    assert "token #10" in result.output
+    assert "member #7" in result.output
+    assert "Login succeeded" not in result.output
+    assert "Hidden: 1 login event" in result.output
 
 
-def test_audit_requires_session():
-    result = runner.invoke(app, ["audit"])
+def test_audit_helpers_format_edge_cases():
+    assert audit._format_action("account__created") == "Account created"
+    assert audit._format_action("account__tos.accepted") == "Terms accepted"
+    assert audit._format_action("custom_event.name") == "Custom event name"
+    assert audit._format_action(None) == "Unknown"
+    assert audit._is_login({"action_taken": "login.succeeded"}) is True
+    assert audit._parse_time(None) is None
+    assert audit._parse_time("bad") is None
+    assert audit._format_time("2026-06-01T12:00:00") == "2026-06-01 12:00:00"
+    assert audit._format_time("bad") == "bad"
+    assert audit._actor_label({"actor_type": "system"}) == "system"
+    assert audit._actor_label({"actor_type": "system", "actor_id": 1}) == "system #1"
+    assert audit._resource_label({}) == ""
+    assert audit._resource_label({"resource_type": "api_token"}) == "api token"
+    assert audit._audit_rows({"data": "bad"}) == []
+
+
+def test_audit_human_empty_result(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value={"data": []}):
+        result = runner.invoke(app, ["audit"])
+    assert result.exit_code == 0
+    assert "No audit events found" in result.output
+
+
+def test_audit_can_include_login_events(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "data": [
+            {
+                "id": 1,
+                "log_time": "2026-06-01T12:01:00Z",
+                "actor_type": "member",
+                "actor_id": 7,
+                "action_taken": "login__succeeded",
+                "resource_type": "account",
+                "resource_id": "42",
+            }
+        ]
+    }
+    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
+        result = runner.invoke(app, ["audit", "--include-logins"])
+    assert result.exit_code == 0
+    assert "Login succeeded" in result.output
+    assert "Hidden:" not in result.output
+
+
+def test_audit_summarizes_all_login_rows(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "data": [
+            {
+                "id": 1,
+                "log_time": "2026-06-01T12:01:00Z",
+                "actor_type": "member",
+                "actor_id": 7,
+                "action_taken": "login__succeeded",
+                "resource_type": "account",
+                "resource_id": "42",
+            }
+        ]
+    }
+    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
+        result = runner.invoke(app, ["audit"])
+    assert result.exit_code == 0
+    assert "No notable audit events" in result.output
+    assert "Hidden: 1 login event" in result.output
+
+
+def test_audit_without_session_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value={"data": []}) as logs:
+        result = runner.invoke(app, ["audit", "--json"])
     assert result.exit_code == 2
+    assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
+    logs.assert_not_called()
+    assert "Run the same command again" in result.output

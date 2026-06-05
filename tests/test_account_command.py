@@ -4,6 +4,8 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
+from aai_cli.commands import account
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -11,6 +13,12 @@ runner = CliRunner()
 
 def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
+    )
 
 
 def _human(monkeypatch):
@@ -29,9 +37,17 @@ def test_balance_formats_dollars(monkeypatch):
     assert "$25.75" in result.output
 
 
-def test_balance_requires_session():
-    result = runner.invoke(app, ["balance"])
+def test_balance_without_session_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    with patch(
+        "aai_cli.commands.account.ams.get_balance",
+        return_value={"account_id": 42, "balance_in_cents": 2575},
+    ) as get_balance:
+        result = runner.invoke(app, ["balance", "--json"])
     assert result.exit_code == 2
+    assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
+    get_balance.assert_not_called()
+    assert "Run the same command again" in result.output
 
 
 def test_usage_defaults_date_range_and_renders(monkeypatch):
@@ -81,6 +97,135 @@ def test_usage_renders_table_human(monkeypatch):
     assert "2026-05-01" in result.output and "12.5" in result.output
 
 
+def test_usage_helpers_handle_unparseable_values():
+    assert account._parse_usage_timestamp(None) is None
+    assert account._parse_usage_timestamp("") is None
+    assert account._parse_usage_timestamp("not-a-date") is None
+    assert account._format_usage_day(None) == ""
+    assert account._usage_number(True) == 0.0
+    assert account._usage_number("12.5") == 12.5
+    assert account._usage_number("bad") == 0.0
+    assert account._usage_number(object()) == 0.0
+
+
+def test_usage_helpers_format_windows_and_line_items():
+    assert account._usage_items({"usage_items": "bad"}) == []
+    assert account._usage_items({"usage_items": [{"total": 1}, "bad"]}) == [{"total": 1}]
+    assert account._window_label({"start_timestamp": "bad"}) == "bad"
+    assert (
+        account._window_label(
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-03T00:00:00Z",
+            }
+        )
+        == "2026-01-01 to 2026-01-03"
+    )
+    assert account._line_item_label({"name": "minutes", "total": "12.500"}) == "minutes: 12.5"
+    assert account._line_item_label({"product": "streaming"}) == "streaming"
+    assert account._line_item_label({"quantity": 3}) == "3"
+    assert account._line_item_label({}) == ""
+    assert account._line_items_summary({"line_items": "bad"}) == ""
+
+
+def test_usage_human_renders_breakdown(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "usage_items": [
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+                "total": 10,
+                "line_items": [{"name": "minutes", "total": 10}],
+            }
+        ]
+    }
+    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
+        result = runner.invoke(app, ["usage"])
+    assert result.exit_code == 0
+    assert "breakdown" in result.output
+    assert "minutes: 10" in result.output
+
+
+def test_usage_human_summarizes_empty_range(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    with patch("aai_cli.commands.account.ams.get_usage", return_value={"usage_items": []}):
+        result = runner.invoke(app, ["usage"])
+    assert result.exit_code == 0
+    assert "No usage windows returned" in result.output
+
+
+def test_usage_human_hides_zero_windows_by_default(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "usage_items": [
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+                "total": 0.0,
+                "line_items": [],
+            },
+            {
+                "start_timestamp": "2026-01-02T00:00:00Z",
+                "end_timestamp": "2026-01-03T00:00:00Z",
+                "total": 12.5,
+                "line_items": [],
+            },
+        ]
+    }
+    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
+        result = runner.invoke(app, ["usage"])
+    assert result.exit_code == 0
+    assert "Usage total: 12.5" in result.output
+    assert "2026-01-01" not in result.output
+    assert "2026-01-02" in result.output
+    assert "Hidden: 1 zero-usage window" in result.output
+
+
+def test_usage_human_can_include_zero_windows(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "usage_items": [
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+                "total": 0.0,
+                "line_items": [],
+            }
+        ]
+    }
+    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
+        result = runner.invoke(app, ["usage", "--all"])
+    assert result.exit_code == 0
+    assert "2026-01-01" in result.output
+    assert "No usage in this range" not in result.output
+
+
+def test_usage_human_summarizes_all_zero_range(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "usage_items": [
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+                "total": 0.0,
+                "line_items": [],
+            }
+        ]
+    }
+    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
+        result = runner.invoke(app, ["usage"])
+    assert result.exit_code == 0
+    assert "Usage total: 0" in result.output
+    assert "No usage in this range" in result.output
+    assert "2026-01-01" not in result.output
+
+
 def test_usage_passes_explicit_dates():
     _auth()
     with patch(
@@ -108,7 +253,7 @@ def test_limits_renders_services(monkeypatch):
     _human(monkeypatch)
     with patch(
         "aai_cli.commands.account.ams.get_rate_limits",
-        return_value={"rate_limits": [{"service": "transcript", "magnitude": 200}]},
+        return_value={"rate_limits": ["bad", {"service": "transcript", "magnitude": 200}]},
     ):
         result = runner.invoke(app, ["limits"])
     assert result.exit_code == 0

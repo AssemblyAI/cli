@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Iterable, Iterator
-from typing import Any
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Any, Protocol, cast
 
 from aai_cli.errors import CLIError
 
@@ -17,6 +17,24 @@ with warnings.catch_warnings():
 _FALLBACK_RATE = 48000
 
 
+class _RawInputStream(Protocol):
+    def start(self) -> None: ...
+
+    def read(self, frames: int) -> tuple[bytes, object]: ...
+
+    def stop(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _SoundDeviceModule(Protocol):
+    RawInputStream: Callable[..., _RawInputStream]
+
+    def query_devices(
+        self, device: int | None = None, kind: str | None = None
+    ) -> Mapping[str, object]: ...
+
+
 def audio_missing_error() -> CLIError:
     """The shared 'sounddevice can't be imported' error for mic and speaker paths."""
     return CLIError(
@@ -27,30 +45,38 @@ def audio_missing_error() -> CLIError:
     )
 
 
-def _default_rate(kind: str, device: int | None = None) -> int:
+def _sounddevice() -> _SoundDeviceModule:
+    try:
+        import sounddevice as module
+    except ImportError as exc:
+        raise audio_missing_error() from exc
+    return cast("_SoundDeviceModule", module)
+
+
+def default_rate(kind: str, device: int | None = None) -> int:
     """A device's native sample rate for `kind` ("input" or "output").
 
     Opening a device at its own rate avoids CoreAudio 'paramErr' (-50) failures
     that happen when it's forced to an unsupported rate. Falls back to a safe
     default if the device can't be queried (no device, headless CI).
     """
+    sd = _sounddevice()
     try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise audio_missing_error() from exc
-    try:
-        rate = int(sd.query_devices(device, kind)["default_samplerate"])
+        raw_rate = sd.query_devices(device, kind).get("default_samplerate", _FALLBACK_RATE)
+        if not isinstance(raw_rate, str | int | float):
+            return _FALLBACK_RATE
+        rate = int(float(raw_rate))
     except Exception:  # noqa: BLE001 - any query failure -> safe fallback, never crash here
         return _FALLBACK_RATE
     return rate if rate > 0 else _FALLBACK_RATE
 
 
 def _device_default_rate(device: int | None = None) -> int:
-    """The input device's native sample rate (see `_default_rate`)."""
-    return _default_rate("input", device)
+    """The input device's native sample rate (see `default_rate`)."""
+    return default_rate("input", device)
 
 
-def _resample(chunk: bytes, state: Any, *, src_rate: int, dst_rate: int) -> tuple[bytes, Any]:
+def resample_pcm16(chunk: bytes, state: Any, *, src_rate: int, dst_rate: int) -> tuple[bytes, Any]:
     """Resample one PCM16 mono fragment from `src_rate` to `dst_rate`."""
     return audioop.ratecv(chunk, 2, 1, src_rate, dst_rate, state)
 
@@ -61,7 +87,7 @@ class _SoundDeviceMic:
     Yields ~100 ms blocks; closeable so MicrophoneSource can tear it down.
     """
 
-    def __init__(self, stream: Any, blocksize: int) -> None:
+    def __init__(self, stream: _RawInputStream, blocksize: int) -> None:
         self._stream = stream
         self._blocksize = blocksize
 
@@ -79,10 +105,7 @@ class _SoundDeviceMic:
 
 def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
     """A sounddevice-backed PCM16 mic stream (imported lazily to keep startup fast)."""
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise audio_missing_error() from exc
+    sd = _sounddevice()
 
     blocksize = max(1, sample_rate // 10)  # ~100 ms per read
     stream = sd.RawInputStream(
@@ -141,11 +164,12 @@ class MicrophoneSource:
         state: Any = None
         try:
             for chunk in stream:
+                out = chunk
                 if self.target_rate is not None and self.target_rate != self._capture_rate:
-                    chunk, state = _resample(
+                    out, state = resample_pcm16(
                         chunk, state, src_rate=self._capture_rate, dst_rate=self.target_rate
                     )
-                yield chunk
+                yield out
         finally:
             if callable(close):
                 close()

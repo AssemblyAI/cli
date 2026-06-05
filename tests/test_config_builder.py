@@ -12,7 +12,7 @@ def _param_names(model_cls) -> set[str]:
     return set(getattr(model_cls, "model_fields", None) or model_cls.__fields__)
 
 
-def _dump(model) -> dict:
+def _dump(model) -> dict[str, object]:
     dumped = (
         model.model_dump(exclude_none=True)
         if hasattr(model, "model_dump")
@@ -138,7 +138,7 @@ def test_streaming_params_minimal():
 
 
 @pytest.mark.parametrize(
-    "field,raw,expected,extra",
+    ("field", "raw", "expected", "extra"),
     [
         ("punctuate", "false", False, []),
         ("multichannel", "true", True, []),

@@ -21,6 +21,7 @@ console = theme.make_console()
 error_console = theme.make_console(stderr=True)
 
 _AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
+_MIN_MASKABLE_SECRET_LENGTH = 8
 
 
 def _stdout_is_tty() -> bool:
@@ -44,7 +45,7 @@ def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
         raise UsageError(f"Unknown --output {field!r}. Choose one of: {', '.join(allowed)}.")
 
 
-def stream_output_modes(field: str | None, json_mode: bool) -> tuple[bool, bool]:
+def stream_output_modes(field: str | None, *, json_mode: bool) -> tuple[bool, bool]:
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
     Shared by `stream` and `agent`, whose renderers take the same two flags: `text`
@@ -58,7 +59,7 @@ def stream_output_modes(field: str | None, json_mode: bool) -> tuple[bool, bool]
 
 def mask_secret(value: str) -> str:
     """Render a secret (API key, token) for display: first 3 + last 4 chars, else ``***``."""
-    return f"{value[:3]}…{value[-4:]}" if len(value) > 7 else "***"
+    return f"{value[:3]}…{value[-4:]}" if len(value) >= _MIN_MASKABLE_SECRET_LENGTH else "***"
 
 
 def success(text: str) -> str:
@@ -101,6 +102,11 @@ def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> 
 def emit_ndjson(obj: object) -> None:
     """Write one newline-delimited JSON record to stdout, flushed for live pipelines."""
     print(json.dumps(obj, default=str), flush=True)
+
+
+def emit_text(text: str) -> None:
+    """Write one raw text value to stdout for pipe-friendly single-field output."""
+    print(text)
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:

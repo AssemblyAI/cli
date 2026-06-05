@@ -148,6 +148,13 @@ def test_select_transcript_field_utterances_falls_back_to_text_when_absent():
     assert client.select_transcript_field(t, "utterances") == "plain transcript"
 
 
+def test_select_transcript_field_utterances_ignores_non_list_value():
+    t = MagicMock()
+    t.utterances = "bad"
+    t.text = "plain transcript"
+    assert client.select_transcript_field(t, "utterances") == "plain transcript"
+
+
 def test_select_transcript_field_srt_uses_sdk():
     t = MagicMock()
     t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
@@ -246,10 +253,16 @@ class _FakeStreamingClient:
 def test_stream_audio_wires_handlers_and_streams(monkeypatch):
     monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
     turns = []
+    begins = []
     client.stream_audio(
-        "sk", [b"\x00"], params=_stream_params(), on_turn=lambda e: turns.append(e.transcript)
+        "sk",
+        [b"\x00"],
+        params=_stream_params(),
+        on_begin=lambda e: begins.append(e),
+        on_turn=lambda e: turns.append(e.transcript),
     )
     assert turns == ["hi"]
+    assert begins == []
     last = _FakeStreamingClient.last
     assert last is not None
     assert last.connected

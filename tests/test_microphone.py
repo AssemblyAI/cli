@@ -180,6 +180,13 @@ def test_device_default_rate_falls_back_on_query_error(monkeypatch):
     assert _device_default_rate(None) == _FALLBACK_RATE
 
 
+def test_device_default_rate_falls_back_on_non_numeric_rate(monkeypatch):
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.query_devices = lambda device, kind: {"default_samplerate": object()}
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    assert _device_default_rate(None) == _FALLBACK_RATE
+
+
 def test_sounddevice_mic_yields_bytes_then_stops_and_closes():
     stream = _FakeRawStream()
     mic = _SoundDeviceMic(stream, blocksize=1024)

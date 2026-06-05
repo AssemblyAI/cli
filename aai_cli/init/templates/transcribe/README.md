@@ -2,7 +2,7 @@
 
 Transcribe an audio/video URL (defaults to a public sample) or upload a file, and
 see the transcript with speaker labels, chapters, sentiment, entities, and
-highlights. Built with FastAPI + a single HTML page.
+highlights. Built with FastAPI + static HTML/CSS/JS. There is no frontend build step.
 
 ## Run locally
 
@@ -23,4 +23,5 @@ No extra config — `vercel.json` routes the page and the `/api` function.
 
 - Show chapter summaries and highlight timestamps.
 - Add a waveform / audio player synced to the transcript.
-- Swap the analysis features in `CONFIG` (api/index.py).
+- Swap the analysis features in `TRANSCRIPTION_CONFIG_KWARGS` (`api/settings.py`).
+- Change transcript rendering in `static/app.js`.

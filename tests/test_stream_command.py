@@ -4,6 +4,7 @@ import types
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -17,6 +18,12 @@ def _drive_turns(
         on_begin(types.SimpleNamespace(id="sess"))
     if on_turn:
         on_turn(types.SimpleNamespace(transcript="hello world", end_of_turn=True))
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
+    )
 
 
 def test_stream_help_lists_command():
@@ -114,9 +121,17 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
     assert "Listening" not in result.output  # no mic -> no listening notice
 
 
-def test_stream_unauthenticated_exits_2():
-    result = runner.invoke(app, ["stream"])
+def test_stream_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        raise AssertionError(f"streaming should not start after auto-login: {api_key}")
+
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "--json"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    assert "Run the same command again" in result.output
 
 
 def _capture_source(seen):

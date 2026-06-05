@@ -1,4 +1,5 @@
-import importlib.util
+import importlib
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -7,12 +8,11 @@ from fastapi.testclient import TestClient
 TEMPLATE_DIR = Path("aai_cli/init/templates/agent")
 
 
-def _load_app():
-    spec = importlib.util.spec_from_file_location("_tmpl_agent", TEMPLATE_DIR / "api" / "index.py")
-    assert spec and spec.loader  # spec_from_file_location is typed Optional
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _load_app(monkeypatch):
+    for name in ("api.index", "api.settings", "api"):
+        sys.modules.pop(name, None)
+    monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
+    return importlib.import_module("api.index")
 
 
 def _ok_response(token="tok-123"):
@@ -23,7 +23,7 @@ def _ok_response(token="tok-123"):
 
 
 def test_token_returns_token_and_agent_ws_url(monkeypatch):
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
     monkeypatch.setattr(mod.httpx2, "get", lambda *a, **k: _ok_response())
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 200
@@ -35,7 +35,7 @@ def test_token_returns_token_and_agent_ws_url(monkeypatch):
 def test_token_uses_bearer_authorization_header(monkeypatch):
     # The Voice Agent token uses Bearer auth (unlike the streaming token).
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-test")
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
     captured = {}
 
     def fake_get(url, params=None, headers=None):
@@ -50,13 +50,13 @@ def test_token_uses_bearer_authorization_header(monkeypatch):
 
 def test_page_reads_reply_audio_from_data_field():
     # reply.audio carries the base64 PCM in `data` (not `audio`); guard the regression.
-    html = (TEMPLATE_DIR / "index.html").read_text()
-    assert "reply.audio" in html
-    assert "ev.data" in html
+    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    assert "reply.audio" in app_js
+    assert "event.data" in app_js
 
 
 def test_token_surfaces_error_as_502(monkeypatch):
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
 
     def boom(*a, **k):
         raise RuntimeError("network down")

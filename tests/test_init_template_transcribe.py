@@ -1,4 +1,4 @@
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -31,23 +31,25 @@ def _load_app(monkeypatch):
     monkeypatch.setitem(sys.modules, "assemblyai", fake_aai)
     monkeypatch.setitem(sys.modules, "assemblyai.api", fake_api)
     monkeypatch.setitem(sys.modules, "assemblyai.client", fake_client)
+    for name in ("api.index", "api.settings", "api"):
+        sys.modules.pop(name, None)
+    monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
 
-    spec = importlib.util.spec_from_file_location(
-        "_tmpl_transcribe", TEMPLATE_DIR / "api" / "index.py"
-    )
-    assert spec and spec.loader  # spec_from_file_location is typed Optional
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = importlib.import_module("api.index")
     return module.app, fake_aai, fake_api
 
 
 def test_required_files_exist():
     for rel in (
         "api/index.py",
+        "api/settings.py",
         "index.html",
+        "static/app.js",
+        "static/styles.css",
         "vercel.json",
         "requirements.txt",
         "README.md",
+        "AGENTS.md",
         "gitignore",
         "env.example",
     ):
@@ -69,6 +71,8 @@ def test_base_url_env_is_applied(monkeypatch):
 def test_page_explores_all_features_and_speakers():
     # Guard the UI surface: each audio-intelligence view + per-speaker coloring stay wired.
     html = (TEMPLATE_DIR / "index.html").read_text()
+    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    ui_src = html + app_js
     for token in (
         "chapters",
         "sentiment_analysis_results",
@@ -77,7 +81,7 @@ def test_page_explores_all_features_and_speakers():
         "speakerColor",
         "/api/ask",  # the LLM Gateway Q&A panel
     ):
-        assert token in html, token
+        assert token in ui_src, token
 
 
 def test_ask_calls_llm_gateway_with_transcript_id(monkeypatch):

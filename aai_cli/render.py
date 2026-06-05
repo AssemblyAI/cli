@@ -54,8 +54,8 @@ class BaseRenderer:
         except BrokenPipeError:
             # Consumer (e.g. `| head`) went away — let the command stop cleanly.
             raise
-        except Exception:  # noqa: BLE001, S110 - other downstream write errors are non-fatal
-            pass
+        except OSError:
+            return
 
     # --- human output (Rich) ----------------------------------------------
     def _console_obj(self) -> Console:

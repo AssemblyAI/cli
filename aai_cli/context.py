@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import keyring.errors
 import typer
 
 from aai_cli import config, environments, output
+from aai_cli.auth import run_login_flow
 from aai_cli.environments import Environment
-from aai_cli.errors import CLIError
+from aai_cli.errors import REJECTED_KEY_MESSAGE, APIError, CLIError, NotAuthenticated
 
 
 @dataclass
@@ -84,14 +87,76 @@ def env_override_warning(state: AppState) -> str | None:
     return state.env_override_warning()
 
 
+def _persist_browser_login(state: AppState) -> None:
+    profile = state.resolve_profile()
+    env = environments.active().name
+    result = run_login_flow()
+    config.set_api_key(profile, result.api_key)
+    config.set_profile_env(profile, env)
+    config.set_session(
+        profile,
+        session_jwt=result.session_jwt,
+        session_token=result.session_token,
+        account_id=result.account_id,
+    )
+
+
+def _login_persistence_error(exc: object) -> APIError:
+    return APIError(
+        f"Signed in, but could not save the credentials locally: {exc}",
+        suggestion="Run 'aai login' again, or check your keyring/config permissions.",
+    )
+
+
+def _rerun_after_login_error() -> CLIError:
+    return CLIError(
+        "Signed in. Run the command again to continue.",
+        error_type="login_required",
+        exit_code=2,
+        suggestion="Run the same command again.",
+    )
+
+
+def _should_auto_login(ctx: typer.Context, err: NotAuthenticated) -> bool:
+    command_name = ctx.command.name if ctx.command else None
+    if command_name in {"login", "logout"}:
+        return False
+    # An invalid ASSEMBLYAI_API_KEY would still take precedence after browser login,
+    # so retrying cannot fix that case.
+    return not (os.environ.get(config.ENV_API_KEY) and err.message == REJECTED_KEY_MESSAGE)
+
+
 def run_command(
-    ctx: typer.Context, fn: Callable[[AppState, bool], None], *, json: bool = False
+    ctx: typer.Context,
+    fn: Callable[[AppState, bool], None],
+    *,
+    json: bool = False,
+    auto_login: bool = True,
 ) -> None:
     """Execute a command body, mapping CLIError to clean output + exit code."""
     state: AppState = ctx.obj
     json_mode = output.resolve_json(explicit=json)
     try:
         fn(state, json_mode)
+    except NotAuthenticated as err:
+        if not auto_login or not _should_auto_login(ctx, err):
+            output.emit_error(err, json_mode=json_mode)
+            raise typer.Exit(code=err.exit_code) from None
+        try:
+            output.error_console.print(
+                "[aai.muted]Not signed in; starting browser login.[/aai.muted]"
+            )
+            _persist_browser_login(state)
+        except CLIError as login_err:
+            output.emit_error(login_err, json_mode=json_mode)
+            raise typer.Exit(code=login_err.exit_code) from None
+        except (OSError, RuntimeError, keyring.errors.KeyringError) as exc:
+            persistence_err = _login_persistence_error(exc)
+            output.emit_error(persistence_err, json_mode=json_mode)
+            raise typer.Exit(code=persistence_err.exit_code) from None
+        rerun_err = _rerun_after_login_error()
+        output.emit_error(rerun_err, json_mode=json_mode)
+        raise typer.Exit(code=rerun_err.exit_code) from None
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None

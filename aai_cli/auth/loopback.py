@@ -46,7 +46,7 @@ def capture_callback(timeout: float = 120.0) -> CallbackResult:
             self.wfile.write(_SUCCESS_HTML)
             done.set()
 
-        def log_message(self, *args: object) -> None:  # silence stderr logging
+        def log_message(self, format: str, *args: object) -> None:  # silence stderr logging
             pass
 
     try:

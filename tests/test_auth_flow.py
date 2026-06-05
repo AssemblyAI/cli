@@ -19,6 +19,23 @@ def test_find_or_create_reuses_existing_cli_key(monkeypatch):
     assert flow.find_or_create_cli_key(1, "jwt") == "sk_cli"
 
 
+def test_json_shape_helpers_filter_invalid_values():
+    assert flow._as_mapping("bad") is None
+    assert flow._mapping_list("bad") == []
+    assert flow._mapping_list([{"ok": 1}, "bad"]) == [{"ok": 1}]
+
+
+@pytest.mark.parametrize("value", [True, "bad", object()])
+def test_require_int_rejects_invalid_values(value):
+    with pytest.raises(APIError):
+        flow._require_int({"id": value}, "id", "an id")
+
+
+def test_require_mapping_rejects_non_object_value():
+    with pytest.raises(APIError):
+        flow._require_mapping({"project": "bad"}, "project", "a project")
+
+
 def test_find_or_create_creates_when_absent(monkeypatch):
     projects = [{"project": {"id": 7}, "tokens": []}]
     monkeypatch.setattr(flow.ams, "list_projects", lambda acct, jwt: projects)
@@ -170,8 +187,18 @@ def test_run_login_flow_multi_org_notes_selection(monkeypatch, capsys):
     monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
 
     assert flow.run_login_flow().api_key == "sk_final"
-    out = capsys.readouterr().out
-    assert "Acme" in out  # the chosen org is named rather than silently picked
+    err = capsys.readouterr().err
+    assert "Acme" in err  # the chosen org is named rather than silently picked
+
+
+def test_open_browser_prints_fallback_to_stderr(monkeypatch, capsys):
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: (_ for _ in ()).throw(OSError()))
+
+    flow._open_browser("https://login.example")
+
+    err = capsys.readouterr().err
+    assert "https://login.example" in err
+    assert "Could not open a browser" in err
 
 
 def test_run_login_flow_missing_session_token_raises_api_error(monkeypatch):

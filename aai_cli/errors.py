@@ -80,6 +80,7 @@ _AUTH_FAILURE_HINTS = (
 
 REJECTED_KEY_MESSAGE = "Your API key was rejected."
 REJECTED_KEY_SUGGESTION = "Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY."
+_VOICE_AGENT_POLICY_VIOLATION_CODE = 1008
 
 
 def _has_auth_status_code(exc: object) -> bool:
@@ -94,7 +95,7 @@ def _has_auth_status_code(exc: object) -> bool:
     code = getattr(exc, "code", None)
     if code is None:
         code = getattr(getattr(exc, "rcvd", None), "code", None)
-    if code == 1008:
+    if code == _VOICE_AGENT_POLICY_VIOLATION_CODE:
         return True
     response = getattr(exc, "response", None)
     return getattr(response, "status_code", None) in (401, 403)

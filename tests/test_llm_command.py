@@ -4,6 +4,7 @@ import types
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -11,6 +12,12 @@ runner = CliRunner()
 
 def _auth():
     config.set_api_key("default", "sk_live")
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
+    )
 
 
 def _payload(content="four"):
@@ -120,9 +127,17 @@ def test_llm_missing_prompt_exits_2(monkeypatch):
     assert result.exit_code == 2
 
 
-def test_llm_unauthenticated_exits_2():
-    result = runner.invoke(app, ["llm", "hello"])
+def test_llm_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        raise AssertionError(f"LLM request should not run after auto-login: {api_key}")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(app, ["llm", "hello", "--json"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    assert "Run the same command again" in result.output
 
 
 def test_llm_follow_summarizes_each_turn(monkeypatch):

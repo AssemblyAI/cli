@@ -3,9 +3,16 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
+    )
 
 
 def test_get_prints_transcript_text():
@@ -59,9 +66,15 @@ def test_list_renders_rows():
     assert "t1" in result.output and "t2" in result.output
 
 
-def test_list_unauthenticated_exits_2():
-    result = runner.invoke(app, ["transcripts", "list"])
+def test_list_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    rows = [{"id": "t1", "status": "completed"}]
+    with patch("aai_cli.commands.transcripts.client.list_transcripts", return_value=rows) as list_:
+        result = runner.invoke(app, ["transcripts", "list", "--json"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    list_.assert_not_called()
+    assert "Run the same command again" in result.output
 
 
 def test_list_human_mode_renders_table(monkeypatch):
