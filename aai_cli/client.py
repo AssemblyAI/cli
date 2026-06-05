@@ -64,13 +64,13 @@ def validate_key(api_key: str) -> bool:
     _configure(api_key)
     try:
         aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=1))
-        return True
     except aai.types.AssemblyAIError as exc:
         if is_auth_failure(exc):
             return False
         raise APIError(f"Could not validate key: {exc}") from exc
     except Exception as exc:
         raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
+    return True
 
 
 def _item_to_dict(item: Any) -> dict[str, Any]:

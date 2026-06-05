@@ -8,6 +8,7 @@ build/
 .ruff_cache/
 .mypy_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # Editor/agent local artifacts: keep personal settings local, but track the
