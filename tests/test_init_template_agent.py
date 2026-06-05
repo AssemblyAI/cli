@@ -50,7 +50,7 @@ def test_token_uses_bearer_authorization_header(monkeypatch):
 
 def test_page_reads_reply_audio_from_data_field():
     # reply.audio carries the base64 PCM in `data` (not `audio`); guard the regression.
-    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    app_js = (TEMPLATE_DIR / "public" / "static" / "app.js").read_text()
     assert "reply.audio" in app_js
     assert "event.data" in app_js
 

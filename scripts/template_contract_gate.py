@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import json
 import re
 import subprocess
 import sys
@@ -16,10 +15,9 @@ _REQUIRED_FILES = (
     "api/index.py",
     "api/__init__.py",
     "api/settings.py",
-    "index.html",
-    "static/app.js",
-    "static/styles.css",
-    "vercel.json",
+    "public/index.html",
+    "public/static/app.js",
+    "public/static/styles.css",
     "requirements.txt",
     "README.md",
     "AGENTS.md",
@@ -52,24 +50,26 @@ def _required_files(template: str, path: Path) -> None:
     for rel in _REQUIRED_FILES:
         if not (path / rel).exists():
             _fail(f"{template}: missing {rel}")
-    if template in {"live-captions", "voice-agent"} and not (path / "static/audio.js").exists():
-        _fail(f"{template}: missing static/audio.js")
+    if template in {"live-captions", "voice-agent"} and not (
+        path / "public/static/audio.js"
+    ).exists():
+        _fail(f"{template}: missing public/static/audio.js")
 
 
 def _html_static_refs(template: str, path: Path) -> None:
-    html = (path / "index.html").read_text(encoding="utf-8")
+    html = (path / "public/index.html").read_text(encoding="utf-8")
     refs = set(re.findall(r'(?:href|src)=["\'](/static/[^"\']+)', html))
     if not refs:
-        _fail(f"{template}: index.html should load static assets")
+        _fail(f"{template}: public/index.html should load static assets")
     for ref in refs:
-        if not (path / ref.lstrip("/")).exists():
-            _fail(f"{template}: index.html references missing asset {ref!r}")
+        if not (path / "public" / ref.lstrip("/")).exists():
+            _fail(f"{template}: public/index.html references missing asset {ref!r}")
 
 
 def _frontend_routes(template: str, path: Path) -> None:
-    frontend = (path / "index.html").read_text(encoding="utf-8")
+    frontend = (path / "public/index.html").read_text(encoding="utf-8")
     frontend += "\n".join(
-        asset.read_text(encoding="utf-8") for asset in (path / "static").glob("*.js")
+        asset.read_text(encoding="utf-8") for asset in (path / "public/static").glob("*.js")
     )
     fetched = set(re.findall(r'fetch\(\s*["\'`](/api/[^"\'`?]+)', frontend))
     fetched |= set(re.findall(r'["\'`](/api/[A-Za-z0-9_\-/]+?)(?:/?\$\{|/?["\'`]\s*\+)', frontend))
@@ -138,13 +138,9 @@ def _import_api(template: str, path: Path) -> None:
         _fail(f"{template}: FastAPI app does not register /")
 
 
-def _parse_json_files(template: str, path: Path) -> None:
+def _parse_python_files(path: Path) -> None:
     for source in (path / "api").glob("*.py"):
         ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-    try:
-        json.loads((path / "vercel.json").read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        _fail(f"{template}: vercel.json is invalid JSON: {exc}")
 
 
 def _untracked_template_files() -> None:
@@ -176,7 +172,7 @@ def main() -> int:
         _html_static_refs(template, path)
         _frontend_routes(template, path)
         _requirements_cover_imports(template, path)
-        _parse_json_files(template, path)
+        _parse_python_files(path)
         _import_api(template, path)
     sys.stdout.write(f"validated {len(templates.TEMPLATE_ORDER)} init templates\n")
     return 0

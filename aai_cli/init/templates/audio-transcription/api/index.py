@@ -6,7 +6,8 @@ Each call stays short, so it's serverless-friendly:
   GET  /api/status/{id}      -> poll; returns the full transcript JSON when complete
   POST /api/ask              -> ask a question about a transcript via the LLM Gateway
 
-The browser (index.html + static/app.js) submits a URL or file, then polls status.
+The browser (public/index.html + public/static/app.js) submits a URL or file, then
+polls status.
 Your API key stays on the server — the browser never sees it.
 """
 
@@ -35,13 +36,14 @@ if settings.ASSEMBLYAI_BASE_URL:
 CONFIG = aai.TranscriptionConfig(**settings.TRANSCRIPTION_CONFIG_KWARGS)
 
 ROOT = Path(__file__).resolve().parent.parent
+PUBLIC = ROOT / "public"
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+app.mount("/static", StaticFiles(directory=PUBLIC / "static"), name="static")
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(ROOT / "index.html")
+    return FileResponse(PUBLIC / "index.html")
 
 
 def _submit(audio: str) -> dict[str, str]:

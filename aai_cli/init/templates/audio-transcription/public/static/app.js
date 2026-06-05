@@ -1,7 +1,14 @@
 const APP_CONFIG = {
   sampleUrl: "https://assembly.ai/wildfires.mp3",
   pollIntervalMs: 2000,
-  speakerPalette: ["#171717", "#525252", "#737373", "#262626", "#404040", "#a3a3a3"],
+  speakerPalette: [
+    "#171717",
+    "#525252",
+    "#737373",
+    "#262626",
+    "#404040",
+    "#a3a3a3",
+  ],
 };
 
 const els = {
@@ -39,7 +46,7 @@ async function transcribeUrl(url) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
-    })
+    }),
   );
 }
 
@@ -75,7 +82,10 @@ async function poll(id) {
 
   const data = await res.json();
   if (data.status !== "completed") {
-    window.setTimeout(() => poll(id).catch((error) => fail(String(error))), APP_CONFIG.pollIntervalMs);
+    window.setTimeout(
+      () => poll(id).catch((error) => fail(String(error))),
+      APP_CONFIG.pollIntervalMs,
+    );
     return;
   }
 
@@ -97,7 +107,9 @@ async function ask(question) {
       body: JSON.stringify({ transcript_id: currentId, question }),
     });
     const data = await res.json();
-    els.answer.textContent = res.ok ? data.answer : "Error: " + (data.detail || res.statusText);
+    els.answer.textContent = res.ok
+      ? data.answer
+      : "Error: " + (data.detail || res.statusText);
   } catch (error) {
     els.answer.textContent = "Error: " + (error.message || String(error));
   } finally {
@@ -107,7 +119,9 @@ async function ask(question) {
 
 function speakerColor(speaker) {
   return (speakerSeen[speaker] ??=
-    APP_CONFIG.speakerPalette[Object.keys(speakerSeen).length % APP_CONFIG.speakerPalette.length]);
+    APP_CONFIG.speakerPalette[
+      Object.keys(speakerSeen).length % APP_CONFIG.speakerPalette.length
+    ]);
 }
 
 function explore(transcript) {
@@ -116,17 +130,29 @@ function explore(transcript) {
   ];
 
   if (transcript.chapters?.length) {
-    views.push({ label: `Chapters - ${transcript.chapters.length}`, render: () => renderChapters(transcript.chapters) });
+    views.push({
+      label: `Chapters - ${transcript.chapters.length}`,
+      render: () => renderChapters(transcript.chapters),
+    });
   }
   if (transcript.sentiment_analysis_results?.length) {
-    views.push({ label: "Sentiment", render: () => renderSentiment(transcript.sentiment_analysis_results) });
+    views.push({
+      label: "Sentiment",
+      render: () => renderSentiment(transcript.sentiment_analysis_results),
+    });
   }
   if (transcript.entities?.length) {
-    views.push({ label: `Entities - ${transcript.entities.length}`, render: () => renderEntities(transcript.entities) });
+    views.push({
+      label: `Entities - ${transcript.entities.length}`,
+      render: () => renderEntities(transcript.entities),
+    });
   }
   const highlights = transcript.auto_highlights_result?.results || [];
   if (highlights.length) {
-    views.push({ label: "Highlights", render: () => renderHighlights(highlights) });
+    views.push({
+      label: "Highlights",
+      render: () => renderHighlights(highlights),
+    });
   }
 
   renderTabs(views);
@@ -140,7 +166,8 @@ function renderTabs(views) {
     button.textContent = view.label;
     button.addEventListener("click", () => {
       els.view.replaceChildren(view.render());
-      for (const child of els.tabs.children) child.classList.toggle("is-active", child === button);
+      for (const child of els.tabs.children)
+        child.classList.toggle("is-active", child === button);
     });
     els.tabs.appendChild(button);
     if (index === 0) button.click();
@@ -156,25 +183,41 @@ function renderTranscript(transcript) {
 }
 
 function renderSentiment(results) {
-  return fragment(results.map((item) => {
-    const pill = element("span", { className: "sentiment-pill" }, item.sentiment || "");
-    if (["POSITIVE", "NEGATIVE", "NEUTRAL"].includes(item.sentiment)) {
-      pill.dataset.sentiment = item.sentiment.toLowerCase();
-    }
-    return turnNode(item.speaker || "?", item.text, pill);
-  }));
+  return fragment(
+    results.map((item) => {
+      const pill = element(
+        "span",
+        { className: "sentiment-pill" },
+        item.sentiment || "",
+      );
+      if (["POSITIVE", "NEGATIVE", "NEUTRAL"].includes(item.sentiment)) {
+        pill.dataset.sentiment = item.sentiment.toLowerCase();
+      }
+      return turnNode(item.speaker || "?", item.text, pill);
+    }),
+  );
 }
 
 function renderChapters(chapters) {
-  return fragment(chapters.map((chapter) => {
-    const node = element("article", { className: "chapter-card" });
-    node.append(
-      element("h4", {}, chapter.headline || chapter.gist || "Chapter"),
-      element("span", { className: "timestamp" }, `${fmt(chapter.start)} - ${fmt(chapter.end)}`),
-      element("p", { className: "chapter-summary" }, chapter.summary || chapter.gist || "")
-    );
-    return node;
-  }));
+  return fragment(
+    chapters.map((chapter) => {
+      const node = element("article", { className: "chapter-card" });
+      node.append(
+        element("h4", {}, chapter.headline || chapter.gist || "Chapter"),
+        element(
+          "span",
+          { className: "timestamp" },
+          `${fmt(chapter.start)} - ${fmt(chapter.end)}`,
+        ),
+        element(
+          "p",
+          { className: "chapter-summary" },
+          chapter.summary || chapter.gist || "",
+        ),
+      );
+      return node;
+    }),
+  );
 }
 
 function renderEntities(entities) {
@@ -182,19 +225,39 @@ function renderEntities(entities) {
   for (const entity of entities) {
     (groups[entity.entity_type] ??= []).push(entity.text);
   }
-  return fragment(Object.entries(groups).map(([type, items]) => {
-    const group = element("section", { className: "entity-group" }, element("div", { className: "entity-label" }, type));
-    for (const text of new Set(items)) {
-      group.appendChild(element("span", { className: "entity-tag" }, text));
-    }
-    return group;
-  }));
+  return fragment(
+    Object.entries(groups).map(([type, items]) => {
+      const group = element(
+        "section",
+        { className: "entity-group" },
+        element("div", { className: "entity-label" }, type),
+      );
+      for (const text of new Set(items)) {
+        group.appendChild(element("span", { className: "entity-tag" }, text));
+      }
+      return group;
+    }),
+  );
 }
 
 function renderHighlights(results) {
-  return fragment([...results].sort((a, b) => b.rank - a.rank).map((highlight) =>
-    element("div", { className: "highlight-row" }, element("span", { className: "highlight-count" }, `${highlight.count}x`), " ", highlight.text)
-  ));
+  return fragment(
+    [...results]
+      .sort((a, b) => b.rank - a.rank)
+      .map((highlight) =>
+        element(
+          "div",
+          { className: "highlight-row" },
+          element(
+            "span",
+            { className: "highlight-count" },
+            `${highlight.count}x`,
+          ),
+          " ",
+          highlight.text,
+        ),
+      ),
+  );
 }
 
 function turnNode(speaker, text, extra = null) {
@@ -202,7 +265,11 @@ function turnNode(speaker, text, extra = null) {
   const node = element("article", { className: "transcript-turn" });
   node.style.borderLeftColor = color;
 
-  const name = element("span", { className: "speaker-label" }, `Speaker ${speaker}`);
+  const name = element(
+    "span",
+    { className: "speaker-label" },
+    `Speaker ${speaker}`,
+  );
   name.style.color = color;
   node.append(name);
   if (extra) node.append(extra);
@@ -232,7 +299,9 @@ function fail(message) {
 function element(tag, options = {}, ...children) {
   const node = document.createElement(tag);
   if (options.className) node.className = options.className;
-  node.append(...children.filter((child) => child !== null && child !== undefined));
+  node.append(
+    ...children.filter((child) => child !== null && child !== undefined),
+  );
   return node;
 }
 
