@@ -317,6 +317,14 @@ def parse_auth_header(value: str | None) -> tuple[str, str] | None:
     return name.strip(), header_value.strip()
 
 
+def auth_header_flags(value: str | None) -> dict[str, object]:
+    """Webhook auth-header config flags for a `NAME:VALUE` value, or `{}` when unset."""
+    header = parse_auth_header(value)
+    if header is None:
+        return {}
+    return {"webhook_auth_header_name": header[0], "webhook_auth_header_value": header[1]}
+
+
 def load_custom_spelling(path: str) -> dict[str, object]:
     """Load a custom-spelling JSON map (e.g. {"AssemblyAI": ["assembly ai"]})."""
     try:

@@ -159,9 +159,8 @@ def run_session(
     agent's first reply to the spoken input and the capture thread waits for
     session.ready before streaming the source.
     """
-    _connect = connect
-    if _connect is None:
-        from websockets.sync.client import connect as _connect
+    if connect is None:
+        from websockets.sync.client import connect
 
     ready_event = threading.Event() if exit_after_reply else None
     session = VoiceAgentSession(
@@ -173,7 +172,7 @@ def run_session(
     )
 
     try:
-        ws = _connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
+        ws = connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
         if _is_auth_rejection(exc):
             raise auth_failure() from exc
