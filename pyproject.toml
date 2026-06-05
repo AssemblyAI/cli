@@ -77,6 +77,7 @@ exclude = ["**/__pycache__", "**/*.pyc"]
 testpaths = ["tests"]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY + kokoro; skip otherwise)",
+    "install_script: real install via install.sh from a locally-built wheel; asserts `aai` runs (slow; needs network + uv/pipx; skip otherwise)",
 ]
 
 [tool.mypy]

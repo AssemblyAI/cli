@@ -32,7 +32,9 @@ fi
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
 # a live API key + kokoro. Run them with: uv run pytest -m e2e
-uv run pytest -q -m "not e2e" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+# Exclude install_script: it builds a wheel and runs install.sh for real (slow; needs
+# network + uv/pipx). Run it with: uv run pytest -m install_script
+uv run pytest -q -m "not e2e and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render
