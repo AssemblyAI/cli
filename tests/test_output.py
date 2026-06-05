@@ -61,6 +61,32 @@ def test_emit_error_json_goes_to_stderr(capsys):
     assert captured.out == ""
 
 
+def test_emit_error_renders_suggestion_line(capsys):
+    import types
+
+    err = types.SimpleNamespace(
+        message="bad thing",
+        suggestion="try this instead",
+        to_dict=lambda: {"error": {}},
+    )
+    output.emit_error(err, json_mode=False)
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err
+    assert "bad thing" in captured.err
+    assert "Suggestion:" in captured.err
+    assert "try this instead" in captured.err
+    assert captured.out == ""
+
+
+def test_emit_error_no_suggestion_line_when_absent(capsys):
+    import types
+
+    err = types.SimpleNamespace(message="bad thing", suggestion=None, to_dict=lambda: {"error": {}})
+    output.emit_error(err, json_mode=False)
+    captured = capsys.readouterr()
+    assert "Suggestion:" not in captured.err
+
+
 def test_print_code_plain_when_piped(monkeypatch, capsys):
     monkeypatch.setattr(output, "_is_agentic", lambda: True)
     output.print_code("import os\nprint(os.getcwd())\n")
