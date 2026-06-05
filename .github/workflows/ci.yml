@@ -4,7 +4,6 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
 
 # Least privilege: CI only needs to read the repo. Actions are pinned to commit
 # SHAs (a moved tag can't silently change what runs); Dependabot keeps them current.
