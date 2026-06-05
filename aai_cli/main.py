@@ -13,13 +13,17 @@ if TYPE_CHECKING:
 
 from aai_cli import __version__, environments, stdio
 from aai_cli.commands import (
+    account,
     agent,
+    audit,
     claude,
     doctor,
     init,
+    keys,
     llm,
     login,
     samples,
+    sessions,
     stream,
     transcribe,
     transcripts,
@@ -34,8 +38,14 @@ _COMMAND_ORDER = (
     "transcribe",
     "stream",
     "transcripts",
+    "sessions",
     "agent",
     "llm",
+    "balance",
+    "usage",
+    "limits",
+    "keys",
+    "audit",
     "login",
     "logout",
     "whoami",
@@ -97,13 +107,17 @@ def main(
 app.add_typer(transcribe.app)
 app.add_typer(stream.app)
 app.add_typer(transcripts.app, name="transcripts")
+app.add_typer(sessions.app, name="sessions")
+app.add_typer(audit.app)  # audit
 app.add_typer(agent.app)
 app.add_typer(llm.app)
+app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples")
 app.add_typer(init.app)
 app.add_typer(claude.app, name="claude")
+app.add_typer(keys.app, name="keys")
 
 
 @app.command()

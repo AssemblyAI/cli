@@ -29,19 +29,31 @@ def login(
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
+        env = environments.active().name
         if api_key:
-            # Non-interactive escape hatch for CI/automation.
+            # Non-interactive escape hatch for CI/automation: no AMS session is
+            # obtained, so account self-service commands won't work for this profile.
             if not client.validate_key(api_key):
                 raise APIError(
                     "That API key was rejected (HTTP 401).",
                     suggestion="Check the key and retry.",
                 )
-            key = api_key
+            config.set_api_key(profile, api_key)
+            config.set_profile_env(profile, env)
+            # Clear any session from a prior browser login: this profile is now
+            # api-key-only, so account self-service must report it needs a browser
+            # login rather than silently reusing the old (possibly different) identity.
+            config.clear_session(profile)
         else:
-            key = run_login_flow()
-        env = environments.active().name
-        config.set_api_key(profile, key)
-        config.set_profile_env(profile, env)
+            result = run_login_flow()
+            config.set_api_key(profile, result.api_key)
+            config.set_profile_env(profile, env)
+            config.set_session(
+                profile,
+                session_jwt=result.session_jwt,
+                session_token=result.session_token,
+                account_id=result.account_id,
+            )
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
             lambda _d: (
@@ -70,6 +82,7 @@ def logout(
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         config.clear_api_key(profile)
+        config.clear_session(profile)
         output.emit(
             {"logged_out": True, "profile": profile},
             lambda _d: f"Logged out of profile '{escape(profile)}'.",
@@ -97,14 +110,24 @@ def whoami(
         key = config.get_api_key(profile)
         if not key:
             raise NotAuthenticated()
-        masked = f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
+        masked = output.mask_secret(key)
         env = environments.active().name
         reachable = client.validate_key(key)
+        session_label = "stored" if config.get_session(profile) else "none"
+        account_id = config.get_account_id(profile)
         output.emit(
-            {"profile": profile, "env": env, "api_key": masked, "reachable": reachable},
+            {
+                "profile": profile,
+                "env": env,
+                "api_key": masked,
+                "reachable": reachable,
+                "account_id": account_id,
+                "session": session_label,
+            },
             lambda _d: (
                 f"profile={escape(profile)} env={escape(env)} "
-                f"key={escape(masked)} reachable={reachable}"
+                f"key={escape(masked)} reachable={reachable} "
+                f"account={account_id} session={session_label}"
             ),
             json_mode=json_mode,
         )

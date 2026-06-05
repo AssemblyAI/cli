@@ -70,7 +70,7 @@ def test_run_login_flow_happy_path(monkeypatch):
     )
     monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
 
-    assert flow.run_login_flow() == "sk_final"
+    assert flow.run_login_flow().api_key == "sk_final"
     assert opened["url"].startswith("https://")
 
 
@@ -131,7 +131,7 @@ def test_run_login_flow_uses_exchange_account(monkeypatch):
     monkeypatch.setattr(
         flow.ams,
         "exchange",
-        lambda ist, org: {"account": {"id": 42}, "session_jwt": "jwt"},
+        lambda ist, org: {"account": {"id": 42}, "session_jwt": "jwt", "session_token": "t"},
     )
     captured = {}
 
@@ -140,7 +140,7 @@ def test_run_login_flow_uses_exchange_account(monkeypatch):
         return "sk_final"
 
     monkeypatch.setattr(flow, "find_or_create_cli_key", fake_find)
-    assert flow.run_login_flow() == "sk_final"
+    assert flow.run_login_flow().api_key == "sk_final"
     assert captured["acct"] == 42
 
 
@@ -163,11 +163,13 @@ def test_run_login_flow_multi_org_notes_selection(monkeypatch, capsys):
         },
     )
     monkeypatch.setattr(
-        flow.ams, "exchange", lambda ist, org: {"account": {"id": 9}, "session_jwt": "jwt"}
+        flow.ams,
+        "exchange",
+        lambda ist, org: {"account": {"id": 9}, "session_jwt": "jwt", "session_token": "t"},
     )
     monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
 
-    assert flow.run_login_flow() == "sk_final"
+    assert flow.run_login_flow().api_key == "sk_final"
     out = capsys.readouterr().out
     assert "Acme" in out  # the chosen org is named rather than silently picked
 
@@ -225,3 +227,36 @@ def test_run_login_flow_zero_orgs_raises(monkeypatch):
     )
     with pytest.raises(APIError, match="no AssemblyAI account"):
         flow.run_login_flow()
+
+
+def test_run_login_flow_returns_session_material(monkeypatch):
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(
+        flow,
+        "_capture",
+        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth", error=None),
+    )
+    monkeypatch.setattr(
+        flow.ams,
+        "discover",
+        lambda token: {
+            "organizations": [{"organization_id": "org_1"}],
+            "intermediate_session_token": "ist_1",
+        },
+    )
+    monkeypatch.setattr(
+        flow.ams,
+        "exchange",
+        lambda ist, org: {
+            "session_jwt": "jwt_1",
+            "session_token": "tok_1",
+            "account": {"id": 99},
+        },
+    )
+    monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_key")
+
+    result = flow.run_login_flow()
+    assert result.api_key == "sk_key"
+    assert result.session_jwt == "jwt_1"
+    assert result.session_token == "tok_1"
+    assert result.account_id == 99

@@ -2,11 +2,23 @@ from __future__ import annotations
 
 import webbrowser
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
+
+
+@dataclass
+class LoginResult:
+    """Everything a successful browser login yields: a usable API key plus the
+    Stytch session the AMS self-service commands authenticate with."""
+
+    api_key: str
+    session_jwt: str
+    session_token: str
+    account_id: int
 
 
 def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
@@ -73,8 +85,8 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     return str(_require(created, "api_key", "an API key"))
 
 
-def run_login_flow() -> str:
-    """Drive the full browser + AMS login and return a usable AssemblyAI API key."""
+def run_login_flow() -> LoginResult:
+    """Drive the full browser + AMS login and return a LoginResult."""
     _open_browser(discovery.build_start_url())
     result = _capture()
 
@@ -109,7 +121,14 @@ def run_login_flow() -> str:
     intermediate_session_token = _require(disc, "intermediate_session_token", "a session token")
     signed_in = ams.exchange(intermediate_session_token, organization_id)
     session_jwt = _require(signed_in, "session_jwt", "a session token")
+    session_token = _require(signed_in, "session_token", "a session token")
     # `exchange` already returns the signed-in account, so read the id from it
     # rather than making a second GET /v1/auth round-trip.
-    account_id = _require(_require(signed_in, "account", "an account"), "id", "an account id")
-    return find_or_create_cli_key(int(account_id), session_jwt)
+    account_id = int(_require(_require(signed_in, "account", "an account"), "id", "an account id"))
+    api_key = find_or_create_cli_key(account_id, session_jwt)
+    return LoginResult(
+        api_key=api_key,
+        session_jwt=session_jwt,
+        session_token=session_token,
+        account_id=account_id,
+    )

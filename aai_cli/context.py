@@ -27,6 +27,25 @@ def resolve_environment(state: AppState) -> Environment:
     return environments.resolve(state.env, profile_env)
 
 
+def resolve_session(state: AppState) -> tuple[int, str]:
+    """Account id + Stytch session JWT for AMS self-service commands.
+
+    These endpoints authenticate with the browser-login session, not the API
+    key. Raises NotAuthenticated when the active profile has no stored session
+    (e.g. it was set up with `aai login --api-key`, or the session expired).
+    """
+    from aai_cli.errors import NotAuthenticated
+
+    profile = resolve_profile(state)
+    session = config.get_session(profile)
+    account_id = config.get_account_id(profile)
+    if session is None or account_id is None:
+        raise NotAuthenticated(
+            "These commands need a browser login. Run 'aai login' (without --api-key)."
+        )
+    return account_id, session["jwt"]
+
+
 def env_override_warning(state: AppState) -> str | None:
     """A warning when an explicit --env contradicts the profile's stored env.
 
