@@ -38,6 +38,19 @@ def test_human_turn_shows_and_finalizes_text():
     assert "hello world" in buf.getvalue()
 
 
+def test_human_turn_labels_parallel_sources():
+    r, buf = _human(color_system="truecolor")
+    r.turn(_turn("hello from me", True), source="you")
+    r.turn(_turn("hello from audio", True), source="system")
+    r.close()
+    out = buf.getvalue()
+    assert "You:" in out
+    assert "hello from me" in out
+    assert "System:" in out
+    assert "hello from audio" in out
+    assert "\x1b[" in out
+
+
 def test_human_begin_is_silent_until_mic_opens():
     # The session opening (Begin) no longer prints "Listening…"; that waits for
     # the mic to actually open and start recording (renderer.listening()).
@@ -84,6 +97,21 @@ def test_json_mode_emits_ndjson_events():
     lines = [json.loads(line) for line in out.getvalue().splitlines()]
     assert lines[0] == {"type": "begin", "id": "sess_1"}
     assert lines[1] == {"type": "turn", "transcript": "hi", "end_of_turn": True}
+
+
+def test_json_mode_emits_source_when_labeled():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.begin(types.SimpleNamespace(id="sess_1"), source="system")
+    r.turn(_turn("hi", True), source="you")
+    lines = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert lines[0] == {"type": "begin", "id": "sess_1", "source": "system"}
+    assert lines[1] == {
+        "type": "turn",
+        "transcript": "hi",
+        "end_of_turn": True,
+        "source": "you",
+    }
 
 
 def test_termination_json_emits_duration():

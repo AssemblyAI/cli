@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-# id -> human-facing title shown in the picker. Ids mirror the CLI's commands.
+# id -> human-facing title shown in the picker. Ids are Vercel-style
+# project/example slugs rather than CLI command names.
 #
 # Every id here MUST have a directory under templates/<id>/ (a test enforces both
 # directions) — the picker must never advertise a template that would crash on scaffold.
 TEMPLATES: dict[str, str] = {
-    "transcribe": "Transcribe a pre-recorded file (+ chat with it via LLM Gateway)",
-    "stream": "Live captions (mic → browser)",
-    "agent": "Talk to a voice agent",
+    "audio-transcription": "Audio Transcription",
+    "live-captions": "Live Captions",
+    "voice-agent": "Voice Agent",
 }
 
-# Display order for the picker and `--help`, matching the CLI's command order.
-TEMPLATE_ORDER: tuple[str, ...] = ("transcribe", "stream", "agent")
+# Display order for the picker and `--help`.
+TEMPLATE_ORDER: tuple[str, ...] = ("audio-transcription", "live-captions", "voice-agent")
 
 
 def is_template(name: str) -> bool:

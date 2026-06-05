@@ -11,8 +11,8 @@ uvicorn api.index:app --reload --port 3000
 - `api/settings.py`: backend customization for AssemblyAI config, sample URL, and LLM Gateway model.
 - `api/index.py`: server routes. Keep `ASSEMBLYAI_API_KEY` here on the server.
 - `static/app.js`: browser workflow, polling, tab rendering, and transcript Q&A UI.
-- `static/styles.css`: visual styling only.
-- `index.html`: page structure and static asset links.
+- `static/styles.css`: visual styling only; the top `:root` block is the primary theme/layout edit point.
+- `index.html`: page structure and static asset links. IDs are JavaScript hooks; classes are styling hooks.
 
 ## Change Points
 
@@ -20,6 +20,8 @@ uvicorn api.index:app --reload --port 3000
 - Sample audio URL: edit `SAMPLE_URL` in `api/settings.py` and the matching input value in `index.html`.
 - LLM answer behavior: edit `LLM_MODEL` in `api/settings.py` or the `/api/ask` prompt in `api/index.py`.
 - Transcript display: edit renderer functions in `static/app.js`.
+- Visual theme/layout: edit the monotone Vercel-style tokens in `static/styles.css` before changing component rules.
+- UI state styling: status, tabs, and sentiment use `data-state`, `.is-active`, or `data-sentiment`; prefer CSS changes over JS class rewrites.
 
 ## Invariants
 

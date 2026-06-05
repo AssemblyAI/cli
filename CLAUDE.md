@@ -62,7 +62,7 @@ Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `tr
 - **`agent/`** — full-duplex voice agent (mic in, TTS out via `voices.py`).
 - **`code_gen/`** — backs `--show-code` on `transcribe`/`stream`/`agent`: builds a ready-to-run Python SDK script from exactly the flags passed (no API key needed; generated code reads `ASSEMBLYAI_API_KEY`).
 - **`auth/`** — browser-assisted `aai login` via AMS + **Stytch B2B OAuth discovery** (`discovery.py`, `flow.py`, `loopback.py`, `ams.py`). Not Stytch Connected Apps.
-- **`init/`** — scaffolds a self-contained FastAPI + HTML starter (`transcribe`/`stream`/`agent` templates), optionally installs deps and opens the browser; writes the key to a git-ignored `.env`.
+- **`init/`** — scaffolds a self-contained FastAPI + HTML starter (`audio-transcription`/`live-captions`/`voice-agent` templates), optionally installs deps and opens the browser; writes the key to a git-ignored `.env`.
 - **`commands/claude.py`** — `aai claude install/status/remove` shells out to `claude mcp add` (the `assemblyai-docs` MCP) and `npx skills add` (the AssemblyAI skill). Missing `claude`/`npx` is reported and skipped, not an error.
 
 ## Conventions

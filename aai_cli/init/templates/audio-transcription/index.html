@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transcribe a pre-recorded file · AssemblyAI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="template-page audio-transcription-template">
+  <main class="app-shell">
+    <header class="page-header">
+      <h1 class="page-title">Transcribe a pre-recorded file</h1>
+      <p class="page-subtitle">Transcribe an audio or video URL (or upload a file), then explore speakers, chapters, sentiment, entities, and highlights.</p>
+    </header>
+
+    <section class="panel upload-panel">
+      <div class="control-row">
+        <input id="url" class="text-input url-input" type="url" value="https://assembly.ai/wildfires.mp3"
+               placeholder="https://example.com/audio.mp3" />
+        <button id="go" class="button button-primary">Transcribe</button>
+      </div>
+      <div class="divider">or</div>
+      <label class="upload-dropzone">
+        <input id="file" type="file" accept="audio/*,video/*" hidden />
+        Upload an audio or video file
+      </label>
+    </section>
+
+    <p id="status" class="status-pill" aria-live="polite"></p>
+
+    <section id="ask" class="panel qa-panel" hidden>
+      <div class="question-row">
+        <input id="q" class="text-input question-input" type="text" placeholder="Ask a question about this transcript..." />
+        <button id="askBtn" class="button button-primary">Ask</button>
+      </div>
+      <div id="answer" class="answer-panel"></div>
+    </section>
+
+    <nav id="tabs" class="tab-list" aria-label="Transcript views"></nav>
+    <div id="view" class="result-view"></div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

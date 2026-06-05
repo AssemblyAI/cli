@@ -203,7 +203,7 @@
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   template       [TEMPLATE]   Template to scaffold (omit to pick             │
   │                               interactively).                                │
-  │   directory      [DIRECTORY]  Target directory (default: <template>-app).    │
+  │   directory      [DIRECTORY]  Target directory (default: <template>).        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --no-install                 Scaffold only; don't install or launch.         │
@@ -218,10 +218,10 @@
    Examples
    Scaffold a new app interactively
    $ aai init
-   Scaffold a transcribe app into ./my-app
-   $ aai init transcribe my-app
+   Scaffold an audio transcription app into ./my-app
+   $ aai init audio-transcription my-app
    Scaffold into the current directory
-   $ aai init transcribe --here
+   $ aai init audio-transcription --here
   
   
   
@@ -527,6 +527,14 @@
   │                                                         native).             │
   │ --device                                       INTEGER  Microphone device    │
   │                                                         index.               │
+  │ --system-audio                                          macOS only: stream   │
+  │                                                         system/app audio and │
+  │                                                         microphone as        │
+  │                                                         separate sessions.   │
+  │ --system-audio-only                                     macOS only: stream   │
+  │                                                         system/app audio     │
+  │                                                         without the          │
+  │                                                         microphone.          │
   │ --speech-model                                 TEXT     Streaming speech     │
   │                                                         model.               │
   │                                                         [default: u3-rt-pro] │
@@ -608,6 +616,8 @@
    Examples
    Stream from your microphone
    $ aai stream
+   Stream mic + system audio on macOS
+   $ aai stream --system-audio
    Stream the hosted sample
    $ aai stream --sample
    Summarize action items live as you talk

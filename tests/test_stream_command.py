@@ -508,6 +508,149 @@ def test_stream_stdin_rejects_device(monkeypatch):
     assert result.exit_code == 2  # --device applies only to the microphone
 
 
+def test_stream_system_audio_uses_macos_source(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {"source_types": []}
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            seen["system_on_open"] = on_open
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            if seen["system_on_open"]:
+                seen["system_on_open"]()
+            return iter([b"system"])
+
+    class FakeMic:
+        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
+            seen["mic_target_rate"] = target_rate
+            seen["mic_device"] = device
+            seen["mic_capture_rate"] = capture_rate
+            seen["mic_on_open"] = on_open
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            if seen["mic_on_open"]:
+                seen["mic_on_open"]()
+            return iter([b"mic"])
+
+    def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):
+        source_type = type(source).__name__
+        seen["source_types"].append(source_type)
+        seen.setdefault("rates", []).append(params.sample_rate)
+        if on_begin:
+            on_begin(types.SimpleNamespace(id=source_type))
+        list(source)
+        if on_turn:
+            on_turn(types.SimpleNamespace(transcript=source_type, end_of_turn=True))
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
+    assert result.exit_code == 0
+    assert set(seen["source_types"]) == {"FakeSystemAudio", "FakeMic"}
+    assert seen["rates"] == [16000, 16000]
+    assert seen["mic_target_rate"] == 16000
+    lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
+    assert {
+        "type": "turn",
+        "transcript": "FakeSystemAudio",
+        "end_of_turn": True,
+        "source": "system",
+    } in lines
+    assert {"type": "turn", "transcript": "FakeMic", "end_of_turn": True, "source": "you"} in lines
+
+
+def test_stream_system_audio_only_disables_mic(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"\x00\x00"])
+
+    def fail_mic(**_kwargs):
+        raise AssertionError("system-audio-only must not open the microphone")
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", fail_mic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _capture_source(seen))
+    result = runner.invoke(app, ["stream", "--system-audio-only", "--json"])
+    assert result.exit_code == 0
+    assert type(seen["source"]).__name__ == "FakeSystemAudio"
+
+
+def test_stream_system_audio_rejects_other_sources():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "--system-audio", "--sample"])
+    assert result.exit_code == 2
+    assert "cannot be combined" in result.output
+
+
+def test_stream_system_audio_forwards_mic_device_flags(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"system"])
+
+    class FakeMic:
+        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
+            seen["target_rate"] = target_rate
+            seen["device"] = device
+            seen["capture_rate"] = capture_rate
+            self.sample_rate = target_rate
+
+        def __iter__(self):
+            return iter([b"mic"])
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        list(source)
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(
+        app,
+        ["stream", "--system-audio", "--device", "2", "--sample-rate", "44100", "--json"],
+    )
+    assert result.exit_code == 0
+    assert seen == {"target_rate": 16000, "device": 2, "capture_rate": 44100}
+
+
+def test_stream_system_audio_only_rejects_mic_device_flags():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "--system-audio-only", "--device", "2"])
+    assert result.exit_code == 2
+    assert "--device" in result.output
+
+    result = runner.invoke(app, ["stream", "--system-audio-only", "--sample-rate", "44100"])
+    assert result.exit_code == 2
+    assert "--sample-rate" in result.output
+
+
+def test_stream_system_audio_rejects_both_modes():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "--system-audio", "--system-audio-only"])
+    assert result.exit_code == 2
+    assert "either --system-audio" in result.output
+
+
+def test_stream_show_code_rejects_system_audio():
+    result = runner.invoke(app, ["stream", "--system-audio", "--show-code"])
+    assert result.exit_code == 2
+    assert "--show-code" in result.output
+
+
 def test_stream_output_text_emits_plain_finalized_turns(monkeypatch):
     # `-o text` -> only finalized transcripts as plain stdout lines (pipe into aai llm).
     config.set_api_key("default", "sk_live")

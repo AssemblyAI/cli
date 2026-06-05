@@ -22,7 +22,7 @@ connBtn.addEventListener("click", () => (connected ? hangup() : connect().catch(
 
 function setStatus(message, state) {
   statusEl.textContent = message;
-  statusEl.className = state;
+  statusEl.dataset.state = state;
 }
 
 async function connect() {
@@ -67,7 +67,7 @@ async function startMic() {
 
   connected = true;
   connBtn.textContent = "■ Hang up";
-  connBtn.classList.add("live");
+  connBtn.dataset.state = "connected";
   setStatus("● Connected - just talk", "live");
 }
 
@@ -93,12 +93,13 @@ function bargeIn() {
   if (player) player.stopQueuedAudio();
 }
 
-function addTurn(className, speaker, text) {
+function addTurn(speakerKind, speaker, text) {
   if (!text) return;
   const turn = document.createElement("div");
-  turn.className = "turn " + className;
+  turn.className = "conversation-turn";
+  turn.dataset.speaker = speakerKind;
   const who = document.createElement("span");
-  who.className = "who";
+  who.className = "turn-speaker";
   who.textContent = speaker + ": ";
   turn.append(who, document.createTextNode(text));
   logEl.appendChild(turn);
@@ -108,7 +109,7 @@ function addTurn(className, speaker, text) {
 function hangup() {
   connected = false;
   connBtn.textContent = "● Connect";
-  connBtn.classList.remove("live");
+  connBtn.dataset.state = "idle";
   setStatus("Disconnected", "idle");
   bargeIn();
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();

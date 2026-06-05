@@ -38,7 +38,7 @@ def test_required_files_present(template_dir):
 
 
 def test_realtime_templates_have_audio_helpers(template_dir):
-    if template_dir.name in {"stream", "agent"}:
+    if template_dir.name in {"live-captions", "voice-agent"}:
         assert (template_dir / "static" / "audio.js").exists()
 
 

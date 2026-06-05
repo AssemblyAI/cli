@@ -5,9 +5,9 @@ from aai_cli.init import templates
 _TEMPLATES_ROOT = Path("aai_cli/init/templates")
 
 
-def test_transcribe_is_registered():
-    assert "transcribe" in templates.TEMPLATES
-    assert "transcribe" in templates.TEMPLATE_ORDER
+def test_audio_transcription_is_registered():
+    assert "audio-transcription" in templates.TEMPLATES
+    assert "audio-transcription" in templates.TEMPLATE_ORDER
 
 
 def test_order_matches_registry():
@@ -37,10 +37,10 @@ def test_every_shipped_directory_is_registered():
 
 
 def test_title_for_known_and_unknown():
-    assert "Transcribe" in templates.title_for("transcribe")
+    assert "Audio Transcription" in templates.title_for("audio-transcription")
     assert templates.title_for("nope") == "nope"  # falls back to the raw id
 
 
 def test_is_template():
-    assert templates.is_template("transcribe") is True
+    assert templates.is_template("audio-transcription") is True
     assert templates.is_template("nope") is False

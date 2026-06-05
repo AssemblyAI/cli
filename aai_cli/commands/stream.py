@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import queue
 import tempfile
+import threading
+from collections.abc import Iterable
 from pathlib import Path
 
 import typer
@@ -12,6 +15,7 @@ from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
 from aai_cli.microphone import MicrophoneSource
+from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
@@ -25,6 +29,7 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro.value
     epilog=examples_epilog(
         [
             ("Stream from your microphone", "aai stream"),
+            ("Stream mic + system audio on macOS", "aai stream --system-audio"),
             ("Stream the hosted sample", "aai stream --sample"),
             (
                 "Summarize action items live as you talk",
@@ -47,6 +52,16 @@ def stream(
         help="Force a microphone capture rate in Hz (default: device native).",
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
+    system_audio: bool = typer.Option(
+        False,
+        "--system-audio",
+        help="macOS only: stream system/app audio and microphone as separate sessions.",
+    ),
+    system_audio_only: bool = typer.Option(
+        False,
+        "--system-audio-only",
+        help="macOS only: stream system/app audio without the microphone.",
+    ),
     # model & input
     speech_model: str = typer.Option(
         DEFAULT_SPEECH_MODEL, "--speech-model", help="Streaming speech model."
@@ -141,6 +156,9 @@ def stream(
 
     def body(state: AppState, json_mode: bool) -> None:
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
+        from_stdin = source == "-"
+        from_file = bool(source) or sample
+        from_system_audio = system_audio or system_audio_only
 
         def make_flags(rate: int) -> dict[str, object]:
             flags: dict[str, object] = {
@@ -175,6 +193,8 @@ def stream(
             # Print-only: emit the canonical microphone-streaming script (16 kHz) from
             # the flags and exit without opening audio or authenticating. Raw stdout so
             # `--show-code > script.py` yields a runnable file.
+            if from_system_audio:
+                raise UsageError("--show-code does not support macOS system audio capture yet.")
             merged = config_builder.merge_streaming_params(
                 flags=make_flags(TARGET_RATE),
                 overrides=list(config_kv or []),
@@ -185,9 +205,18 @@ def stream(
             return
 
         api_key = config.resolve_api_key(profile=state.profile)
-        from_stdin = source == "-"
-        from_file = bool(source) or sample
-        if from_stdin:
+        if system_audio and system_audio_only:
+            raise UsageError("Use either --system-audio or --system-audio-only, not both.")
+        if from_system_audio:
+            if from_file:
+                raise UsageError(
+                    "--system-audio cannot be combined with an audio source or --sample."
+                )
+            if system_audio_only and (sample_rate is not None or device is not None):
+                raise UsageError(
+                    "--sample-rate and --device require microphone input; use --system-audio."
+                )
+        elif from_stdin:
             if device is not None:
                 raise UsageError("--device applies only to microphone input.")
         elif from_file and (sample_rate is not None or device is not None):
@@ -205,65 +234,158 @@ def stream(
         llm_prompts = list(llm_prompt or [])
         follow = FollowRenderer(json_mode=json_mode) if llm_prompts else None
         transcript: list[str] = []
+        callback_lock = threading.RLock()
+        listening_lock = threading.Lock()
+        listening_started = False
 
-        def on_turn(event: object) -> None:
-            if follow is None:
-                renderer.turn(event)
-                return
-            # Live LLM mode: re-run the prompt chain over the growing transcript on every
-            # finalized turn, refreshing one evolving answer (partials are ignored).
-            if not getattr(event, "end_of_turn", False):
-                return
-            text = getattr(event, "transcript", "") or ""
-            if not text:
-                return
-            transcript.append(text)
-            answer = llm.run_chain(
-                api_key,
-                llm_prompts,
-                transcript_text=" ".join(transcript),
-                model=model,
-                max_tokens=max_tokens,
-            )
-            follow(answer, len(transcript))
+        def listening_once() -> None:
+            nonlocal listening_started
+            with listening_lock:
+                if listening_started:
+                    return
+                listening_started = True
+            renderer.listening()
 
-        def run(audio: FileSource | MicrophoneSource | StdinSource, rate: int) -> None:
+        def on_turn(event: object, *, source_label: str | None = None) -> None:
+            with callback_lock:
+                if follow is None:
+                    renderer.turn(event, source=source_label)
+                    return
+                # Live LLM mode: re-run the prompt chain over the growing transcript on every
+                # finalized turn, refreshing one evolving answer (partials are ignored).
+                if not getattr(event, "end_of_turn", False):
+                    return
+                text = getattr(event, "transcript", "") or ""
+                if not text:
+                    return
+                if source_label is not None:
+                    display_source = {"system": "System", "you": "You"}.get(
+                        source_label,
+                        source_label,
+                    )
+                    text = f"{display_source}: {text}"
+                transcript.append(text)
+                answer = llm.run_chain(
+                    api_key,
+                    llm_prompts,
+                    transcript_text=" ".join(transcript),
+                    model=model,
+                    max_tokens=max_tokens,
+                )
+                follow(answer, len(transcript))
+
+        def stream_one(
+            audio: Iterable[bytes],
+            rate: int,
+            *,
+            source_label: str | None = None,
+        ) -> None:
             merged = config_builder.merge_streaming_params(
                 flags=make_flags(rate), overrides=list(config_kv or []), config_file=config_file
             )
             params = config_builder.construct_streaming_params(merged)
+            client.stream_audio(
+                api_key,
+                audio,
+                params=params,
+                on_begin=(
+                    None
+                    if follow is not None
+                    else lambda event: renderer.begin(event, source=source_label)
+                ),
+                on_turn=lambda event: on_turn(event, source_label=source_label),
+                on_termination=(
+                    None
+                    if follow is not None
+                    else lambda event: renderer.termination(event, source=source_label)
+                ),
+            )
+
+        def run(audio: Iterable[bytes], rate: int, *, source_label: str | None = None) -> None:
+            try:
+                # The FollowRenderer is a context manager (it owns the live panel); enter it
+                # around the whole session so it stops cleanly and prints the final answer.
+                if follow is not None:
+                    with follow:
+                        stream_one(audio, rate, source_label=source_label)
+                else:
+                    stream_one(audio, rate, source_label=source_label)
+            except KeyboardInterrupt:
+                # Ctrl-C is a normal "user stopped" signal -> exit 0.
+                if follow is None:
+                    renderer.close()
+                    renderer.stopped()
+            except BrokenPipeError:
+                # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
+                raise typer.Exit(code=0) from None
+            finally:
+                if follow is None:
+                    renderer.close()
+
+        def run_parallel(streams: list[tuple[str, Iterable[bytes], int]]) -> None:
+            errors: queue.Queue[Exception] = queue.Queue()
+
+            def worker(source_label: str, audio: Iterable[bytes], rate: int) -> None:
+                try:
+                    stream_one(audio, rate, source_label=source_label)
+                except Exception as exc:  # noqa: BLE001 - propagate worker failures on main thread
+                    errors.put(exc)
 
             def drive() -> None:
-                try:
-                    client.stream_audio(
-                        api_key,
-                        audio,
-                        params=params,
-                        on_begin=None if follow is not None else renderer.begin,
-                        on_turn=on_turn,
-                        on_termination=None if follow is not None else renderer.termination,
+                threads = [
+                    threading.Thread(
+                        target=worker,
+                        args=(source_label, audio, rate),
+                        daemon=True,
                     )
-                except KeyboardInterrupt:
-                    # Ctrl-C is a normal "user stopped" signal -> exit 0.
-                    if follow is None:
-                        renderer.close()
-                        renderer.stopped()
-                except BrokenPipeError:
-                    # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
-                    raise typer.Exit(code=0) from None
-                finally:
-                    if follow is None:
-                        renderer.close()
+                    for source_label, audio, rate in streams
+                ]
+                for thread in threads:
+                    thread.start()
+                while any(thread.is_alive() for thread in threads):
+                    for thread in threads:
+                        thread.join(timeout=0.1)
+                    if not errors.empty():
+                        raise errors.get()
+                if not errors.empty():
+                    raise errors.get()
 
-            # The FollowRenderer is a context manager (it owns the live panel); enter it
-            # around the whole session so it stops cleanly and prints the final answer.
-            if follow is not None:
-                with follow:
+            try:
+                if follow is not None:
+                    with follow:
+                        drive()
+                else:
                     drive()
-            else:
-                drive()
+            except KeyboardInterrupt:
+                if follow is None:
+                    renderer.close()
+                    renderer.stopped()
+            except BrokenPipeError:
+                raise typer.Exit(code=0) from None
+            finally:
+                if follow is None:
+                    renderer.close()
 
-        if from_stdin:
+        if from_system_audio:
+            system = MacSystemAudioSource(
+                on_open=(lambda: None) if follow is not None else listening_once,
+            )
+            if system_audio_only:
+                run(system, system.sample_rate, source_label="system")
+            else:
+                mic = MicrophoneSource(
+                    target_rate=TARGET_RATE,
+                    device=device,
+                    capture_rate=sample_rate,
+                    on_open=(lambda: None) if follow is not None else listening_once,
+                )
+                run_parallel(
+                    [
+                        ("system", system, system.sample_rate),
+                        ("you", mic, mic.sample_rate),
+                    ]
+                )
+        elif from_stdin:
             # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | aai stream -`).
             stdin_src = StdinSource(sample_rate=sample_rate or TARGET_RATE)
             run(stdin_src, stdin_src.sample_rate)
@@ -284,7 +406,7 @@ def stream(
                 device=device,
                 capture_rate=sample_rate,
                 # In --llm mode the FollowRenderer owns the screen, so skip the notice.
-                on_open=(lambda: None) if follow is not None else renderer.listening,
+                on_open=(lambda: None) if follow is not None else listening_once,
             )
             run(mic, mic.sample_rate)
 

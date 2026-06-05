@@ -1,7 +1,7 @@
 const APP_CONFIG = {
   sampleUrl: "https://assembly.ai/wildfires.mp3",
   pollIntervalMs: 2000,
-  speakerPalette: ["#4338ca", "#0d9488", "#b45309", "#be185d", "#15803d", "#7c3aed"],
+  speakerPalette: ["#171717", "#525252", "#737373", "#262626", "#404040", "#a3a3a3"],
 };
 
 const els = {
@@ -136,10 +136,11 @@ function renderTabs(views) {
   els.tabs.replaceChildren();
   for (const [index, view] of views.entries()) {
     const button = document.createElement("button");
+    button.className = "tab-button";
     button.textContent = view.label;
     button.addEventListener("click", () => {
       els.view.replaceChildren(view.render());
-      for (const child of els.tabs.children) child.classList.toggle("active", child === button);
+      for (const child of els.tabs.children) child.classList.toggle("is-active", child === button);
     });
     els.tabs.appendChild(button);
     if (index === 0) button.click();
@@ -151,14 +152,14 @@ function renderTranscript(transcript) {
   if (turns.length) {
     return fragment(turns.map((turn) => turnNode(turn.speaker, turn.text)));
   }
-  return element("pre", {}, transcript.text || "");
+  return element("pre", { className: "transcript-pre" }, transcript.text || "");
 }
 
 function renderSentiment(results) {
   return fragment(results.map((item) => {
-    const pill = element("span", { className: "sent" }, item.sentiment || "");
+    const pill = element("span", { className: "sentiment-pill" }, item.sentiment || "");
     if (["POSITIVE", "NEGATIVE", "NEUTRAL"].includes(item.sentiment)) {
-      pill.classList.add(item.sentiment);
+      pill.dataset.sentiment = item.sentiment.toLowerCase();
     }
     return turnNode(item.speaker || "?", item.text, pill);
   }));
@@ -166,11 +167,11 @@ function renderSentiment(results) {
 
 function renderChapters(chapters) {
   return fragment(chapters.map((chapter) => {
-    const node = element("div", { className: "chapter" });
+    const node = element("article", { className: "chapter-card" });
     node.append(
       element("h4", {}, chapter.headline || chapter.gist || "Chapter"),
-      element("span", { className: "time" }, `${fmt(chapter.start)} - ${fmt(chapter.end)}`),
-      element("p", {}, chapter.summary || chapter.gist || "")
+      element("span", { className: "timestamp" }, `${fmt(chapter.start)} - ${fmt(chapter.end)}`),
+      element("p", { className: "chapter-summary" }, chapter.summary || chapter.gist || "")
     );
     return node;
   }));
@@ -182,9 +183,9 @@ function renderEntities(entities) {
     (groups[entity.entity_type] ??= []).push(entity.text);
   }
   return fragment(Object.entries(groups).map(([type, items]) => {
-    const group = element("div", { className: "egroup" }, element("div", { className: "elabel" }, type));
+    const group = element("section", { className: "entity-group" }, element("div", { className: "entity-label" }, type));
     for (const text of new Set(items)) {
-      group.appendChild(element("span", { className: "etag" }, text));
+      group.appendChild(element("span", { className: "entity-tag" }, text));
     }
     return group;
   }));
@@ -192,20 +193,20 @@ function renderEntities(entities) {
 
 function renderHighlights(results) {
   return fragment([...results].sort((a, b) => b.rank - a.rank).map((highlight) =>
-    element("div", { className: "hl" }, element("span", { className: "count" }, `${highlight.count}x`), " ", highlight.text)
+    element("div", { className: "highlight-row" }, element("span", { className: "highlight-count" }, `${highlight.count}x`), " ", highlight.text)
   ));
 }
 
 function turnNode(speaker, text, extra = null) {
   const color = speakerColor(speaker);
-  const node = element("div", { className: "turn" });
+  const node = element("article", { className: "transcript-turn" });
   node.style.borderLeftColor = color;
 
-  const name = element("span", { className: "spk" }, `Speaker ${speaker}`);
+  const name = element("span", { className: "speaker-label" }, `Speaker ${speaker}`);
   name.style.color = color;
   node.append(name);
   if (extra) node.append(extra);
-  node.append(element("div", { className: "t" }, text));
+  node.append(element("div", { className: "transcript-text" }, text));
   return node;
 }
 
@@ -220,7 +221,7 @@ function busy(on) {
 
 function setStatus(message, state) {
   els.status.textContent = message;
-  els.status.className = state;
+  els.status.dataset.state = state;
 }
 
 function fail(message) {

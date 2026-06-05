@@ -12,8 +12,8 @@ uvicorn api.index:app --reload --port 3000
 - `api/index.py`: `/api/token` route. Keep `ASSEMBLYAI_API_KEY` here on the server.
 - `static/app.js`: browser state, WebSocket lifecycle, and Streaming API params.
 - `static/audio.js`: microphone pipeline and PCM downsampling helpers.
-- `static/styles.css`: visual styling only.
-- `index.html`: page structure and static asset links.
+- `static/styles.css`: visual styling only; the top `:root` block is the primary theme/layout edit point.
+- `index.html`: page structure and static asset links. IDs are JavaScript hooks; classes are styling hooks.
 
 ## Change Points
 
@@ -21,6 +21,8 @@ uvicorn api.index:app --reload --port 3000
 - Backend token lifetime or non-production hosts: edit `api/settings.py`.
 - Caption rendering: edit `onMessage` in `static/app.js`.
 - Microphone/downsampling behavior: edit `static/audio.js`.
+- Visual theme/layout: edit the monotone Vercel-style tokens in `static/styles.css` before changing component rules.
+- UI state styling: record and status state use `data-state`; prefer CSS changes over JS class rewrites.
 
 ## Invariants
 

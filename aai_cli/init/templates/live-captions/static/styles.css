@@ -1,0 +1,179 @@
+/* THEME TOKENS: edit this block first for monotone colors, spacing, radii, and width. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.12 0 0);
+  --card: oklch(1 0 0);
+  --primary: oklch(0.12 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.38 0 0);
+  --muted-foreground: oklch(0.58 0 0);
+  --border: oklch(0.9 0 0);
+  --ring: oklch(0.5 0 0);
+  --shadow-panel: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
+  --shadow-focus: 0 0 0 1px oklch(0 0 0 / 0.08), 0 2px 8px -2px oklch(0 0 0 / 0.08);
+  --color-bg: var(--background);
+  --color-surface: var(--card);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--primary);
+  --color-accent-contrast: var(--primary-foreground);
+  --color-danger: var(--foreground);
+  --color-danger-strong: var(--foreground);
+  --color-danger-soft: var(--secondary);
+  --color-neutral: var(--secondary-foreground);
+  --color-neutral-soft: var(--secondary);
+  --radius-panel: 8px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+  --space-page-block: 48px;
+  --space-page-inline: 16px;
+  --content-width: 720px;
+}
+
+/* BASE */
+* { box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  padding: var(--space-page-block) var(--space-page-inline);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: 15px/1.6 var(--font-sans);
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  appearance: none;
+  font: inherit;
+}
+
+/* LAYOUT */
+.app-shell {
+  max-width: var(--content-width);
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.page-subtitle {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.control-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* CONTROLS */
+.button {
+  --button-bg: var(--color-accent);
+  --button-fg: var(--color-accent-contrast);
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--button-bg);
+  color: var(--button-fg);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 20px;
+  white-space: nowrap;
+}
+
+.button:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.button:focus-visible {
+  box-shadow: var(--shadow-focus);
+  outline: none;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.record-button[data-state="recording"] {
+  --button-bg: var(--color-danger-strong);
+}
+
+/* STATUS STATES */
+.status-pill {
+  display: inline-block;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+}
+
+.status-pill:empty {
+  display: none;
+}
+
+.status-pill[data-state="live"],
+.status-pill[data-state="error"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.status-pill[data-state="idle"] {
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+}
+
+/* CAPTION VIEW */
+.caption-output {
+  min-height: 120px;
+  margin-top: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+  font-size: 19px;
+  line-height: 1.7;
+  padding: 18px;
+}
+
+.caption-final {
+  color: var(--color-text);
+}
+
+.caption-partial {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --space-page-block: 32px;
+  }
+
+  .button {
+    width: 100%;
+  }
+
+  .status-pill {
+    width: 100%;
+  }
+}
