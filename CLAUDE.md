@@ -28,7 +28,7 @@ uv run pytest tests/test_transcribe.py::test_name -q   # a single test
 The default suite **excludes** two slow/credentialed marker sets (see `scripts/check.sh` and `pyproject.toml`):
 
 ```sh
-uv run pytest -m e2e             # real-API end-to-end; needs ASSEMBLYAI_API_KEY + kokoro, else skips
+uv run pytest -m e2e             # real-API end-to-end; needs ASSEMBLYAI_API_KEY, else skips
 uv run pytest -m install_script  # builds a wheel and runs install.sh for real; needs network + uv/pipx
 ```
 

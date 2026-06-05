@@ -1,13 +1,13 @@
 """End-to-end tests that drive the real `aai` CLI against the live AssemblyAI API.
 
-Speech is synthesized locally with kokoro TTS, then fed through the CLI as a
-subprocess so the binary, argument parsing, auth, audio decoding, and network
-path are all exercised for real — no mocks. Batch tests reuse the hosted
-``--sample`` clip (wildfires.mp3) so they need no TTS.
+Committed speech WAV fixtures are fed through the CLI as a subprocess so the
+binary, argument parsing, auth, audio decoding, and network path are all
+exercised for real — no mocks. Batch tests reuse the hosted ``--sample`` clip
+(wildfires.mp3).
 
-These tests are marked `e2e` and skip (never fail) when the API key, kokoro, or
-numpy is unavailable, so CI and keyless contributors are not blocked. The
-precommit `pytest-e2e` hook runs them; the default unit run excludes them.
+These tests are marked `e2e` and skip (never fail) when the API key is
+unavailable, so CI and keyless contributors are not blocked. The precommit
+`pytest-e2e` hook runs them; the default unit run excludes them.
 
 Coverage: batch transcribe (plain + summarization, auto-chapters, sentiment,
 diarization, LLM transform), live streaming, the voice agent, the LLM command,
@@ -20,8 +20,6 @@ import json
 import os
 import subprocess
 import sys
-import warnings
-import wave
 from pathlib import Path
 from typing import Any
 
@@ -29,61 +27,12 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-KOKORO_RATE = 24000  # kokoro emits 24 kHz float32 mono
-STREAM_RATE = 16000  # what the CLI's fast WAV path expects (16 kHz mono PCM16)
+FIXTURES = Path(__file__).resolve().with_name("fixtures")
+FOX_WAV = FIXTURES / "fox.wav"
+HELLO_WAV = FIXTURES / "hello.wav"
 
 # Stable content words from the hosted wildfires.mp3 sample transcript.
 SAMPLE_WORDS = ("smoke", "wildfires", "canada")
-
-
-@pytest.fixture(scope="session")
-def kokoro_pipeline() -> Any:
-    """Build the kokoro TTS pipeline once per session, or skip if unavailable.
-
-    kokoro/torch emit benign UserWarnings (e.g. torch's single-layer dropout
-    note, HF Hub unauthenticated-rate-limit note) on import and model build. The
-    project runs pytest with ``filterwarnings = error``, so they are suppressed
-    here; warnings from the CLI itself surface in the subprocess, not this filter.
-    """
-    pytest.importorskip("numpy")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        kokoro = pytest.importorskip("kokoro")
-        return kokoro.KPipeline(lang_code="a")  # American English
-
-
-def _synthesize_wav(pipeline: Any, text: str, path: Path, *, lead_silence_s: float = 0.6) -> Path:
-    """Synthesize `text` to a 16 kHz mono PCM16 WAV the CLI can stream directly.
-
-    Resamples kokoro's 24 kHz output to 16 kHz (linear) and prepends a short
-    silence so nothing is clipped before the realtime session is ready.
-    """
-    import numpy as np
-
-    chunks = []
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        for _gs, _ps, audio in pipeline(text, voice="af_heart"):
-            arr = audio.detach().cpu().numpy() if hasattr(audio, "detach") else np.asarray(audio)
-            chunks.append(np.asarray(arr, dtype=np.float32).reshape(-1))
-    samples = np.concatenate(chunks)
-
-    n_dst = round(len(samples) * STREAM_RATE / KOKORO_RATE)
-    resampled = np.interp(
-        np.linspace(0.0, len(samples) - 1, n_dst),
-        np.arange(len(samples)),
-        samples,
-    )
-    pcm = (np.clip(resampled, -1.0, 1.0) * 32767.0).astype("<i2")
-    silence = np.zeros(int(lead_silence_s * STREAM_RATE), dtype="<i2")
-    pcm = np.concatenate([silence, pcm])
-
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(STREAM_RATE)
-        w.writeframes(pcm.tobytes())
-    return path
 
 
 def _run_cli(args: list[str], key: str, *, timeout: int = 120) -> subprocess.CompletedProcess[str]:
@@ -168,11 +117,8 @@ def test_transcribe_prompt_transforms_via_gateway(real_api_key):
 # --- Streaming ------------------------------------------------------------
 
 
-def test_stream_file_transcribes_spoken_text(real_api_key, kokoro_pipeline, tmp_path):
-    spoken = "the quick brown fox jumps over the lazy dog"
-    wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "fox.wav")
-
-    proc = _run_cli(["stream", str(wav), "--json"], real_api_key)
+def test_stream_file_transcribes_spoken_text(real_api_key):
+    proc = _run_cli(["stream", str(FOX_WAV), "--json"], real_api_key)
     assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
 
     events = _ndjson(proc.stdout)
@@ -184,12 +130,15 @@ def test_stream_file_transcribes_spoken_text(real_api_key, kokoro_pipeline, tmp_
         assert word in transcript, f"{word!r} missing from streamed transcript: {transcript!r}"
 
 
-def test_stream_prompt_transforms_live(real_api_key, kokoro_pipeline, tmp_path):
-    spoken = "the quick brown fox jumps over the lazy dog"
-    wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "fox.wav")
-
+def test_stream_prompt_transforms_live(real_api_key):
     proc = _run_cli(
-        ["stream", str(wav), "--llm", "Summarize the transcript in one short sentence.", "--json"],
+        [
+            "stream",
+            str(FOX_WAV),
+            "--llm",
+            "Summarize the transcript in one short sentence.",
+            "--json",
+        ],
         real_api_key,
     )
     assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
@@ -203,11 +152,8 @@ def test_stream_prompt_transforms_live(real_api_key, kokoro_pipeline, tmp_path):
 # --- Voice agent ----------------------------------------------------------
 
 
-def test_agent_file_gets_reply(real_api_key, kokoro_pipeline, tmp_path):
-    spoken = "Hi there. Can you say hello back to me in one short sentence?"
-    wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "hello.wav")
-
-    proc = _run_cli(["agent", str(wav), "--json"], real_api_key)
+def test_agent_file_gets_reply(real_api_key):
+    proc = _run_cli(["agent", str(HELLO_WAV), "--json"], real_api_key)
     assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
 
     events = _ndjson(proc.stdout)
