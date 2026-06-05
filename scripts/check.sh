@@ -69,7 +69,9 @@ else
 fi
 
 echo "==> swift compile (macOS audio helper)"
-if command -v swiftc >/dev/null 2>&1; then
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "   not macOS; skipping compile for macOS-only frameworks"
+elif command -v swiftc >/dev/null 2>&1; then
   swift_module_cache="$(mktemp -d)"
   swift_helper="$swift_module_cache/aai-macos-audio-check"
   swift_error="$swift_module_cache/aai-macos-audio-check.err"
