@@ -10,9 +10,8 @@ build/
 .coverage
 htmlcov/
 
-# Editor/agent and local planning artifacts
+# Editor/agent local artifacts
 .claude/
-docs/
 
 # Local scratch scripts (often contain live keys)
 transcribe/
