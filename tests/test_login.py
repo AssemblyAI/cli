@@ -118,6 +118,7 @@ def test_unknown_env_exits_2():
 
 def test_rejected_api_key_has_suggestion(monkeypatch):
     from typer.testing import CliRunner
+
     from aai_cli import client
     from aai_cli.main import app
 

@@ -292,9 +292,8 @@ def test_agent_output_text_emits_plain_transcript(monkeypatch):
 
 
 def test_unknown_voice_suggests_list_voices():
-    import pytest
-
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["agent", "--voice", "not-a-voice", "--json"])

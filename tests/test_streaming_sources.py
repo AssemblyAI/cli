@@ -203,8 +203,6 @@ def test_filesource_url_without_ffmpeg_raises(monkeypatch):
 
 
 def test_missing_ffmpeg_suggests_install(monkeypatch, tmp_path):
-    import shutil
-
     # A non-WAV file with ffmpeg absent must raise with an actionable suggestion.
     f = tmp_path / "audio.mp3"
     f.write_bytes(b"not really audio")

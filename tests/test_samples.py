@@ -96,13 +96,9 @@ def test_samples_create_is_valid_python(tmp_path, monkeypatch):
 
 
 def test_unknown_sample_has_suggestion():
-    import pytest
-
-    from aai_cli.commands import samples as samples_mod
-    from aai_cli.errors import CLIError
-
     # Drive the command body directly through the Typer app for a clean error.
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["samples", "create", "nope", "--json"])
