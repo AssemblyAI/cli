@@ -1,7 +1,7 @@
 import typer
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli import config, environments
 from aai_cli.context import AppState, env_override_warning, run_command
 from aai_cli.errors import NotAuthenticated
 
@@ -78,3 +78,19 @@ def test_resolve_session_raises_when_no_session():
 
     with pytest.raises(NotAuthenticated):
         resolve_session(AppState())
+
+
+def test_appstate_methods_are_the_single_source_of_truth():
+    # The module-level resolve_* helpers are thin adapters over the AppState methods;
+    # both must agree, and the precedence (default profile + default env) must hold.
+    config.set_profile_env("default", "sandbox000")
+    state = AppState(env="production")
+
+    assert state.resolve_profile() == "default"
+    assert state.resolve_environment().name == "production"  # --env wins over profile
+    assert state.env_override_warning() == env_override_warning(state)
+    assert state.env_override_warning() is not None  # production contradicts sandbox000
+
+
+def test_appstate_environment_falls_back_to_default():
+    assert AppState().resolve_environment().name == environments.DEFAULT_ENV

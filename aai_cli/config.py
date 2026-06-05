@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import re
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -63,8 +64,19 @@ def _load() -> dict[str, Any]:
 def _dump(data: dict) -> None:
     path = _config_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as fh:
-        tomli_w.dump(data, fh)
+    # Write to a sibling temp file and atomically rename over the target, so a crash
+    # (or concurrent reader) mid-write can never leave config.toml truncated into
+    # invalid TOML that _load would then reject. os.replace is atomic within a dir.
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".config-", suffix=".toml.tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            tomli_w.dump(data, fh)
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
 
 
 def get_active_profile() -> str:

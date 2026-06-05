@@ -63,6 +63,7 @@ def capture_callback(timeout: float = 120.0) -> CallbackResult:
         if not done.wait(timeout):
             result.error = "timeout"
     finally:
-        server.shutdown()
+        server.shutdown()  # stop serve_forever()
         thread.join(timeout=5)
+        server.server_close()  # close the listening socket (shutdown() leaves it open)
     return result

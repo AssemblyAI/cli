@@ -128,6 +128,26 @@ def test_transcribe_raises_on_error_status():
     assert exc.value.transcript_id == "t_err"
 
 
+def test_select_transcript_field_utterances_formats_speakers():
+    import types
+
+    t = MagicMock()
+    t.utterances = [
+        types.SimpleNamespace(speaker="A", text="hello"),
+        types.SimpleNamespace(speaker="B", text="hi there"),
+    ]
+    assert (
+        client.select_transcript_field(t, "utterances") == "Speaker A: hello\nSpeaker B: hi there"
+    )
+
+
+def test_select_transcript_field_utterances_falls_back_to_text_when_absent():
+    t = MagicMock()
+    t.utterances = []  # no diarization -> plain transcript text
+    t.text = "plain transcript"
+    assert client.select_transcript_field(t, "utterances") == "plain transcript"
+
+
 def test_select_transcript_field_srt_uses_sdk():
     t = MagicMock()
     t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"

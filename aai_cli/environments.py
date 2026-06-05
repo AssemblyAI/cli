@@ -30,7 +30,9 @@ ENVIRONMENTS: dict[str, Environment] = {
         api_base="https://api.assemblyai.com",
         streaming_host="streaming.assemblyai.com",
         llm_gateway_base="https://llm-gateway.assemblyai.com/v1",
-        # TODO: production AMS + Stytch values are not stood up yet (spec P2/O4).
+        # NOTE: production AMS + Stytch are not provisioned yet — the values below are
+        # placeholders (see the REPLACE_ME token), which is why DEFAULT_ENV stays
+        # "sandbox000". Tracked under spec P2/O4.
         ams_base="https://ams.assemblyai.com",
         stytch_domain="https://api.stytch.com",
         stytch_public_token="public-token-live-REPLACE_ME",  # noqa: S106 - public token, safe to ship

@@ -67,8 +67,8 @@ class UsageError(CLIError):
 # Word-level phrases that mark a failure as "the credentials were rejected" rather
 # than a generic network/protocol error. Matched case-insensitively against str(exc).
 # Deliberately NOT bare numbers like "401"/"403"/"1008": those match unrelated text
-# (transcript ids, byte counts, ports). HTTP status codes and the Voice Agent's 1008
-# close are detected structurally at the call site instead (see agent/session.py).
+# (transcript ids, byte counts, ports). Numeric status/close codes are matched
+# structurally on exception attributes by `_has_auth_status_code` instead.
 _AUTH_FAILURE_HINTS = (
     "unauthorized",
     "forbidden",
@@ -82,8 +82,34 @@ REJECTED_KEY_MESSAGE = "Your API key was rejected."
 REJECTED_KEY_SUGGESTION = "Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY."
 
 
+def _has_auth_status_code(exc: object) -> bool:
+    """True when an exception carries a numeric signal that credentials were rejected.
+
+    Reads exception attributes, never the message text, so a transcript id or byte
+    count that happens to contain "401"/"1008" can't trip it. Covers the two structured
+    cases: the Voice Agent closes a bad-key WebSocket with code 1008 (on ``.code``, or
+    on the received close frame ``.rcvd.code``), and a pre-upgrade HTTP rejection
+    carries 401/403 on ``.response.status_code``.
+    """
+    code = getattr(exc, "code", None)
+    if code is None:
+        code = getattr(getattr(exc, "rcvd", None), "code", None)
+    if code == 1008:
+        return True
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) in (401, 403)
+
+
 def is_auth_failure(exc: object) -> bool:
-    """Heuristic: does this exception/error indicate rejected/invalid credentials?"""
+    """Does this exception/error indicate rejected/invalid credentials?
+
+    Checks structured numeric signals first (WebSocket 1008, HTTP 401/403), then falls
+    back to a case-insensitive text heuristic. Shared by every backend path — REST
+    (client.py), v3 streaming, and the Voice Agent — so a rejected key yields the same
+    exit code no matter which transport surfaced the failure.
+    """
+    if _has_auth_status_code(exc):
+        return True
     text = str(exc).lower()
     return any(hint in text for hint in _AUTH_FAILURE_HINTS)
 

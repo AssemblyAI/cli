@@ -98,9 +98,14 @@ class DuplexAudio:
         self._device = device
         self._factory = stream_factory or _default_duplex_stream
         self._blocksize = max(1, self._device_rate // 10)  # ~100 ms
+        # Thread ownership: `_in` is a thread-safe Queue handed from the PortAudio
+        # callback thread to capture_frames(). `_out` (device-rate playback bytes) is
+        # shared between feed()/flush() (caller thread) and the callback, so every
+        # access goes through `_lock`. `_out_state` (the target->device ratecv state)
+        # is touched ONLY by feed(), never the callback, so it needs no lock.
         self._in: queue.Queue[bytes | None] = queue.Queue()
-        self._out = bytearray()  # device-rate playback bytes
-        self._out_state: Any = None  # ratecv state for target -> device
+        self._out = bytearray()
+        self._out_state: Any = None
         self._lock = threading.Lock()
         self._stream: Any = None
         self._started = False

@@ -148,6 +148,18 @@ def test_should_send_audio_only_when_ready_and_unmuted():
     assert s.should_send_audio() is False  # gated while the agent speaks
 
 
+def test_should_send_audio_reflects_dispatch_mute_cycle():
+    # The duplex gate is driven entirely by dispatched events (the path the receive
+    # loop uses); should_send_audio reads it through the lock from the capture thread.
+    s = _session(full_duplex=False)
+    s.dispatch({"type": "session.ready"})
+    assert s.should_send_audio() is True
+    s.dispatch({"type": "reply.started"})
+    assert s.should_send_audio() is False  # muted while the agent speaks
+    s.dispatch({"type": "reply.done"})
+    assert s.should_send_audio() is True  # gate reopens once the reply finishes
+
+
 class _RecordingWS:
     def __init__(self, fail_on_send=False):
         self.sent = []

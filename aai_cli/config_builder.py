@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import json
 import typing
+from collections.abc import Callable
 from pathlib import Path
 
 import assemblyai as aai
@@ -114,35 +115,41 @@ def _field_annotations(model_cls: type) -> dict[str, object]:
     return {name: field.outer_type_ for name, field in legacy_fields.items()}
 
 
+# Concrete scalar base types -> coercion kind, checked in order. bool precedes int
+# because bool is an int subclass; enum.Enum coerces from its string member values.
+_SCALAR_KINDS: tuple[tuple[type, str], ...] = (
+    (bool, "bool"),
+    (enum.Enum, "str"),
+    (int, "int"),
+    (float, "float"),
+    (str, "str"),
+)
+
+
+def _scalar_kind(annotation: object) -> str:
+    """Coercion kind for a concrete (non-generic) annotation; JSON for anything else."""
+    if isinstance(annotation, type):
+        for base, kind in _SCALAR_KINDS:
+            if issubclass(annotation, base):
+                return kind
+    return "json"  # pydantic submodels and anything else: accept a raw JSON value
+
+
 def _derive_kind(annotation: object) -> str:
     """Map an SDK field annotation to a coercion kind for `coerce_value`."""
     if typing.get_origin(annotation) is typing.Union:
         non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
-        if len(non_none) == 1:
-            annotation = non_none[0]  # unwrap Optional[X]
-        # A genuine multi-type union (e.g. Union[str, LanguageCode]): a string is
-        # always an acceptable input, otherwise fall back to a raw JSON value.
-        elif any(_is_str_like(a) for a in non_none):
-            return "str"
-        else:
-            return "json"
+        if len(non_none) != 1:
+            # A genuine multi-type union (e.g. Union[str, LanguageCode]): a string is
+            # always an acceptable input, otherwise fall back to a raw JSON value.
+            return "str" if any(_is_str_like(a) for a in non_none) else "json"
+        annotation = non_none[0]  # unwrap Optional[X] and classify the inner type
     origin = typing.get_origin(annotation)
     if origin in (list, set, tuple):
         return "list"
     if origin is dict:
         return "json"
-    if isinstance(annotation, type):
-        if issubclass(annotation, bool):  # before int: bool is an int subclass
-            return "bool"
-        if issubclass(annotation, enum.Enum):
-            return "str"
-        if issubclass(annotation, int):
-            return "int"
-        if issubclass(annotation, float):
-            return "float"
-        if issubclass(annotation, str):
-            return "str"
-    return "json"  # pydantic submodels and anything else: accept a raw JSON value
+    return _scalar_kind(annotation)
 
 
 def _is_str_like(annotation: object) -> bool:
@@ -179,34 +186,55 @@ _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
 
+def _coerce_bool(field: str, raw: str) -> object:
+    low = raw.strip().lower()
+    if low in _TRUE:
+        return True
+    if low in _FALSE:
+        return False
+    raise UsageError(f"{field} expects a boolean (true/false), got {raw!r}.")
+
+
+def _coerce_int(field: str, raw: str) -> object:
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise UsageError(f"{field} expects an integer, got {raw!r}.") from exc
+
+
+def _coerce_float(field: str, raw: str) -> object:
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise UsageError(f"{field} expects a number, got {raw!r}.") from exc
+
+
+def _coerce_list(_field: str, raw: str) -> object:
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _coerce_json(field: str, raw: str) -> object:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise UsageError(f"{field} expects a JSON value, got {raw!r}.") from exc
+
+
+# Coercion kind -> coercer. Kinds absent here ("str", and any unknown) pass through raw.
+_COERCERS: dict[str, Callable[[str, str], object]] = {
+    "bool": _coerce_bool,
+    "int": _coerce_int,
+    "float": _coerce_float,
+    "list": _coerce_list,
+    "json": _coerce_json,
+}
+
+
 def coerce_value(field: str, raw: str) -> object:
     """Coerce a string --config value to the type expected by `field`."""
     kind = TRANSCRIBE_COERCE.get(field) or STREAM_COERCE.get(field, "str")
-    if kind == "bool":
-        low = raw.strip().lower()
-        if low in _TRUE:
-            return True
-        if low in _FALSE:
-            return False
-        raise UsageError(f"{field} expects a boolean (true/false), got {raw!r}.")
-    if kind == "int":
-        try:
-            return int(raw)
-        except ValueError as exc:
-            raise UsageError(f"{field} expects an integer, got {raw!r}.") from exc
-    if kind == "float":
-        try:
-            return float(raw)
-        except ValueError as exc:
-            raise UsageError(f"{field} expects a number, got {raw!r}.") from exc
-    if kind == "list":
-        return [part.strip() for part in raw.split(",") if part.strip()]
-    if kind == "json":
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise UsageError(f"{field} expects a JSON value, got {raw!r}.") from exc
-    return raw
+    coercer = _COERCERS.get(kind)
+    return coercer(field, raw) if coercer is not None else raw
 
 
 def parse_config_overrides(fields: dict[str, str], pairs: list[str]) -> dict[str, object]:

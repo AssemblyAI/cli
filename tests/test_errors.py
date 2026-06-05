@@ -65,3 +65,40 @@ def test_is_auth_failure_ignores_bare_numeric_substrings():
     assert not is_auth_failure(Exception("decode failed at frame 1008"))
     assert not is_auth_failure(Exception("transcript abc401 not found"))
     assert not is_auth_failure(Exception("retry after 403 seconds"))
+
+
+def test_is_auth_failure_detects_structural_status_codes():
+    # The structural signals folded in from the old agent-only _is_auth_rejection:
+    # a WebSocket 1008 close (on .code or .rcvd.code) and an HTTP 401/403 response.
+    class _Closed(Exception):
+        code = 1008
+
+    class _Frame:
+        code = 1008
+
+    class _ClosedRcvd(Exception):
+        rcvd = _Frame()
+
+    class _Resp:
+        status_code = 403
+
+    class _HTTPish(Exception):
+        response = _Resp()
+
+    assert is_auth_failure(_Closed("policy violation"))  # no auth word in the text
+    assert is_auth_failure(_ClosedRcvd("connection closed"))
+    assert is_auth_failure(_HTTPish("nope"))
+
+
+def test_is_auth_failure_ignores_unrelated_status_codes():
+    class _Closed(Exception):
+        code = 1000  # normal closure, not a policy rejection
+
+    class _Resp:
+        status_code = 500
+
+    class _HTTPish(Exception):
+        response = _Resp()
+
+    assert not is_auth_failure(_Closed("bye"))
+    assert not is_auth_failure(_HTTPish("server error"))
