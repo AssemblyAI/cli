@@ -61,7 +61,7 @@ def _load() -> dict[str, Any]:
         return data
 
 
-def _dump(data: dict) -> None:
+def _dump(data: dict[str, Any]) -> None:
     path = _config_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     # Write to a sibling temp file and atomically rename over the target, so a crash

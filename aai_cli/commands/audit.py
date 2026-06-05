@@ -34,7 +34,7 @@ def audit(
         payload = ams.list_audit_logs(jwt, limit=limit, action_taken=action, resource_type=resource)
         rows = payload.get("data", [])
 
-        def render(data: list[dict]) -> Table:
+        def render(data: list[dict[str, object]]) -> Table:
             table = Table("time", "actor", "action", "resource", header_style="aai.heading")
             for entry in data:
                 actor = str(entry["actor_type"])

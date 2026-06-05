@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import typer
 from rich.markup import escape
@@ -64,7 +65,7 @@ def usage(
         start_date = start or (today - timedelta(days=30)).isoformat()
         data = ams.get_usage(jwt, start_date, end_date, window)
 
-        def render(d: dict) -> Table:
+        def render(d: dict[str, Any]) -> Table:
             table = Table("window start", "window end", "total", header_style="aai.heading")
             for item in d.get("usage_items", []):
                 table.add_row(
@@ -96,7 +97,7 @@ def limits(
         account_id, jwt = resolve_session(state)
         data = ams.get_rate_limits(account_id, jwt)
 
-        def render(d: dict) -> Table:
+        def render(d: dict[str, Any]) -> Table:
             table = Table("service", "limit", header_style="aai.heading")
             for limit in d.get("rate_limits", []):
                 table.add_row(escape(str(limit["service"])), f"{limit['magnitude']:,}")
