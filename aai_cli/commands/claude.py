@@ -46,6 +46,11 @@ def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess
         )
 
 
+def _proc_detail(proc: subprocess.CompletedProcess[str]) -> str:
+    """The error text from a finished process: stderr if present, else stdout."""
+    return (proc.stderr or proc.stdout).strip()
+
+
 def _mcp_present() -> bool:
     return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
 
@@ -69,14 +74,13 @@ def _install_mcp(scope: str, force: bool) -> Step:
             return {
                 "name": "mcp",
                 "status": "failed",
-                "detail": f"could not remove existing {MCP_NAME}: "
-                + (removed.stderr or removed.stdout).strip(),
+                "detail": f"could not remove existing {MCP_NAME}: " + _proc_detail(removed),
             }
     proc = _run(
         ["claude", "mcp", "add", "--transport", "http", "--scope", scope, MCP_NAME, MCP_URL]
     )
     if proc.returncode != 0:
-        return {"name": "mcp", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+        return {"name": "mcp", "status": "failed", "detail": _proc_detail(proc)}
     return {"name": "mcp", "status": "installed", "detail": f"{MCP_NAME} @ {scope} scope"}
 
 
@@ -106,7 +110,7 @@ def _install_skill(force: bool) -> Step:
     # looks. npx -y skips its install prompt; the longer timeout covers the download.
     proc = _run(_SKILL_ADD, timeout=300)
     if proc.returncode != 0:
-        return {"name": "skill", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+        return {"name": "skill", "status": "failed", "detail": _proc_detail(proc)}
     # Trust the filesystem, not the exit code: confirm the skill actually landed
     # where `status` looks, so the two commands can never disagree.
     if not _skill_installed():
@@ -162,7 +166,7 @@ def _remove_mcp(scope: str | None) -> Step:
         cmd += ["--scope", scope]
     proc = _run(cmd)
     if proc.returncode != 0:
-        return {"name": "mcp", "status": "failed", "detail": (proc.stderr or proc.stdout).strip()}
+        return {"name": "mcp", "status": "failed", "detail": _proc_detail(proc)}
     return {"name": "mcp", "status": "removed", "detail": MCP_NAME}
 
 
@@ -179,7 +183,7 @@ def _remove_skill() -> Step:
     # do the removal (a plain rmtree would choke on the symlink and orphan the store).
     proc = _run(_SKILL_REMOVE, timeout=120)
     if proc.returncode != 0 or _skill_installed():
-        detail = (proc.stderr or proc.stdout).strip() or "skill still present after removal"
+        detail = _proc_detail(proc) or "skill still present after removal"
         return {"name": "skill", "status": "failed", "detail": detail}
     return {"name": "skill", "status": "removed", "detail": str(_skill_dir())}
 

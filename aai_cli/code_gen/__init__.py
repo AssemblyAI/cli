@@ -5,6 +5,13 @@ from aai_cli.code_gen import stream as _stream
 from aai_cli.code_gen import transcribe as _transcribe
 
 
+def gateway_options(prompts: list[str], model: str, max_tokens: int) -> dict[str, object] | None:
+    """The LLM-gateway options dict consumed by `transcribe`/`stream`, or None if no prompts."""
+    if not prompts:
+        return None
+    return {"prompts": list(prompts), "model": model, "max_tokens": max_tokens}
+
+
 def agent(voice: str, system_prompt: str, greeting: str) -> str:
     """Generate runnable Python that reproduces this voice-agent session."""
     return _agent.render(voice, system_prompt, greeting)

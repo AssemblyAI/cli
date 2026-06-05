@@ -155,10 +155,7 @@ def stream(
                 "webhook_url": webhook_url,
                 "prompt": prompt,
             }
-            header = config_builder.parse_auth_header(webhook_auth_header)
-            if header is not None:
-                flags["webhook_auth_header_name"] = header[0]
-                flags["webhook_auth_header_value"] = header[1]
+            flags.update(config_builder.auth_header_flags(webhook_auth_header))
             return flags
 
         if show_code:
@@ -170,11 +167,7 @@ def stream(
                 overrides=list(config_kv or []),
                 config_file=config_file,
             )
-            gateway = (
-                {"prompts": list(llm_prompt), "model": model, "max_tokens": max_tokens}
-                if llm_prompt
-                else None
-            )
+            gateway = code_gen.gateway_options(llm_prompt, model, max_tokens)
             output.print_code(code_gen.stream(merged, llm=gateway))
             return
 

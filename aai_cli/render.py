@@ -44,8 +44,8 @@ class BaseRenderer:
 
     # --- JSON output (plain text; preserves BrokenPipe for `| head`) -------
     def _emit(self, obj: object) -> None:
-        """Write one NDJSON event."""
-        self._write(json.dumps(obj) + "\n")
+        """Write one NDJSON event (default=str matches output.emit_ndjson's safety)."""
+        self._write(json.dumps(obj, default=str) + "\n")
 
     def _write(self, text: str) -> None:
         try:

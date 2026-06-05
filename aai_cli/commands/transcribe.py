@@ -196,10 +196,7 @@ def transcribe(
                 config_builder.translation_request(list(translate_to)) if translate_to else None
             ),
         }
-        header = config_builder.parse_auth_header(webhook_auth_header)
-        if header is not None:
-            flags["webhook_auth_header_name"] = header[0]
-            flags["webhook_auth_header_value"] = header[1]
+        flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
         merged = config_builder.merge_transcribe_config(
             flags=flags, overrides=list(config_kv or []), config_file=config_file
@@ -210,11 +207,7 @@ def transcribe(
             # transcribing or authenticating. Raw stdout so `--show-code > script.py`
             # yields a runnable file.
             audio = client.resolve_audio_source(source, sample=sample)
-            gateway = (
-                {"prompts": list(llm_prompt), "model": model, "max_tokens": max_tokens}
-                if llm_prompt
-                else None
-            )
+            gateway = code_gen.gateway_options(llm_prompt, model, max_tokens)
             output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
             return
 

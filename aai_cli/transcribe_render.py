@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from typing import Any
 
 from rich.console import Console
 from rich.text import Text
@@ -15,6 +16,12 @@ def _fmt_ms(ms: int) -> str:
 
 def _enum_value(obj: object) -> str:
     return str(getattr(obj, "value", obj))
+
+
+def _nested(transcript: object, outer: str, inner: str) -> Any:
+    """Return ``transcript.<outer>.<inner>``, or None if either link is missing/falsy."""
+    mid = getattr(transcript, outer, None)
+    return getattr(mid, inner, None) if mid else None
 
 
 def render_transcript_result(transcript: object, console: Console) -> None:
@@ -63,8 +70,7 @@ def _render_chapters(transcript: object, console: Console) -> None:
 
 
 def _render_highlights(transcript: object, console: Console) -> None:
-    highlights = getattr(transcript, "auto_highlights", None)
-    results = getattr(highlights, "results", None) if highlights else None
+    results = _nested(transcript, "auto_highlights", "results")
     if not results:
         return
     console.print("\n[bold]Highlights:[/bold]")
@@ -92,8 +98,7 @@ def _render_entities(transcript: object, console: Console) -> None:
 
 
 def _render_topics(transcript: object, console: Console) -> None:
-    iab = getattr(transcript, "iab_categories", None)
-    summary = getattr(iab, "summary", None) if iab else None
+    summary = _nested(transcript, "iab_categories", "summary")
     if not summary:
         return
     console.print("\n[bold]Topics:[/bold]")
@@ -102,8 +107,7 @@ def _render_topics(transcript: object, console: Console) -> None:
 
 
 def _render_content_safety(transcript: object, console: Console) -> None:
-    safety = getattr(transcript, "content_safety", None)
-    summary = getattr(safety, "summary", None) if safety else None
+    summary = _nested(transcript, "content_safety", "summary")
     if not summary:
         return
     console.print("\n[bold]Content Safety:[/bold]")
