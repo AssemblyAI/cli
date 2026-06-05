@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -23,7 +24,7 @@ from aai_cli.help_text import examples_epilog
 app = typer.Typer()
 
 
-def _render_transform_steps(d: dict) -> str:
+def _render_transform_steps(d: dict[str, Any]) -> str:
     """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
     steps = d["transform"]["steps"]
     if len(steps) == 1:

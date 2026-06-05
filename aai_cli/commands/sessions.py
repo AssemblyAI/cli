@@ -49,7 +49,7 @@ def list_(
         payload = ams.list_streaming(jwt, limit=limit, status=status)
         rows = payload.get("data", [])
 
-        def render(data: list[dict]) -> Table:
+        def render(data: list[dict[str, object]]) -> Table:
             table = Table(
                 "session id",
                 "status",
@@ -92,7 +92,7 @@ def get(
         _, jwt = resolve_session(state)
         data = ams.get_streaming(session_id, jwt)
 
-        def render(d: dict) -> Table:
+        def render(d: dict[str, object]) -> Table:
             table = Table(show_header=False)
             for field in _DETAIL_FIELDS:
                 value = d.get(field)
