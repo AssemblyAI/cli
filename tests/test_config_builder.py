@@ -58,21 +58,23 @@ def test_parse_config_overrides_requires_equals():
         cb.parse_config_overrides(cb.TRANSCRIBE_FIELDS, ["speaker_labels"])
 
 
-def test_build_transcription_config_layer_precedence(tmp_path):
+def test_transcribe_config_layer_precedence(tmp_path):
     cfg = tmp_path / "c.json"
     cfg.write_text(json.dumps({"speaker_labels": False, "speakers_expected": 5}))
-    tc = cb.build_transcription_config(
-        flags={"speaker_labels": True},  # flag beats file
-        overrides=["speakers_expected=3"],  # --config beats file
-        config_file=str(cfg),
+    tc = cb.construct_transcription_config(
+        cb.merge_transcribe_config(
+            flags={"speaker_labels": True},  # flag beats file
+            overrides=["speakers_expected=3"],  # --config beats file
+            config_file=str(cfg),
+        )
     )
     assert tc.speaker_labels is True
     assert tc.raw.speakers_expected == 3
 
 
-def test_build_transcription_config_ignores_unset_flags():
-    tc = cb.build_transcription_config(
-        flags={"speaker_labels": None}, overrides=[], config_file=None
+def test_transcribe_config_ignores_unset_flags():
+    tc = cb.construct_transcription_config(
+        cb.merge_transcribe_config(flags={"speaker_labels": None}, overrides=[], config_file=None)
     )
     assert tc.speaker_labels is None  # None means "not set", does not override
 
@@ -109,23 +111,27 @@ def test_translation_request_shape():
     assert "es" in json.dumps(su, default=lambda o: getattr(o, "__dict__", str(o)))
 
 
-def test_build_transcription_config_with_translate_payload():
+def test_transcribe_config_with_translate_payload():
     # The SDK must accept the translation payload for speech_understanding without raising.
-    tc = cb.build_transcription_config(
-        flags={"speech_understanding": cb.translation_request(["es", "fr"])},
-        overrides=[],
-        config_file=None,
+    tc = cb.construct_transcription_config(
+        cb.merge_transcribe_config(
+            flags={"speech_understanding": cb.translation_request(["es", "fr"])},
+            overrides=[],
+            config_file=None,
+        )
     )
     assert "es" in json.dumps(
         tc.raw.speech_understanding, default=lambda o: getattr(o, "__dict__", str(o))
     )
 
 
-def test_build_streaming_params_minimal():
-    sp = cb.build_streaming_params(
-        flags={"sample_rate": 16000, "speech_model": "universal_streaming_multilingual"},
-        overrides=["max_turn_silence=400"],
-        config_file=None,
+def test_streaming_params_minimal():
+    sp = cb.construct_streaming_params(
+        cb.merge_streaming_params(
+            flags={"sample_rate": 16000, "speech_model": "universal_streaming_multilingual"},
+            overrides=["max_turn_silence=400"],
+            config_file=None,
+        )
     )
     assert sp.sample_rate == 16000
     assert sp.max_turn_silence == 400
@@ -144,8 +150,8 @@ def test_build_streaming_params_minimal():
     ],
 )
 def test_transcribe_field_coercion_matrix(field, raw, expected, extra):
-    tc = cb.build_transcription_config(
-        flags={}, overrides=[f"{field}={raw}", *extra], config_file=None
+    tc = cb.construct_transcription_config(
+        cb.merge_transcribe_config(flags={}, overrides=[f"{field}={raw}", *extra], config_file=None)
     )
     assert getattr(tc.raw, field) == expected
 
@@ -201,17 +207,6 @@ def test_merge_streaming_params_coerces_speech_model_enum():
     )
     assert merged["speech_model"] is SpeechModel.universal_streaming_multilingual
     assert merged["sample_rate"] == 16000
-
-
-def test_build_transcription_config_still_works():
-    import assemblyai as aai
-
-    from aai_cli import config_builder
-
-    tc = config_builder.build_transcription_config(
-        flags={"speaker_labels": True}, overrides=[], config_file=None
-    )
-    assert isinstance(tc, aai.TranscriptionConfig)
 
 
 # The full field -> coercion-kind mapping is frozen here. Kinds are derived from the

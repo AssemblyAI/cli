@@ -57,10 +57,6 @@ DEFAULT_ENV = "sandbox000"
 _active: Environment | None = None
 
 
-def known() -> tuple[str, ...]:
-    return tuple(ENVIRONMENTS)
-
-
 def get(name: str) -> Environment:
     """The named environment, or a clean CLIError if it's unknown."""
     env = ENVIRONMENTS.get(name)
