@@ -129,7 +129,9 @@ jobs:
       # branch is allowed. Editable install makes `aai_cli` importable for the
       # test's __version__ check; uv builds the wheel; pipx drives the pipx branch.
       - name: Tooling
-        run: python -m pip install -e ".[dev]" uv pipx
+        run: |
+          python -m pip install --upgrade pip  # need pip >= 25.1 for --group
+          python -m pip install -e . --group dev uv pipx
 
       - name: Real install smoke
         run: python -m pytest -q -m install_script ${{ matrix.kfilter }}
