@@ -272,3 +272,12 @@ def test_llm_passes_model_and_max_tokens(monkeypatch):
     assert result.exit_code == 0
     assert seen["model"] == "gemini-2.5-flash"
     assert seen["max_tokens"] == 42
+
+
+def test_llm_help_has_examples():
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["llm", "--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.output

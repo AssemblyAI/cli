@@ -8,11 +8,20 @@ from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Summarize a past transcript", 'aai llm "summarize" --transcript-id 5551234-abcd'),
+            ("Pipe any text in", 'echo "meeting notes" | aai llm "turn into action items"'),
+            ("See available models", "aai llm --list-models"),
+        ]
+    )
+)
 def llm(
     ctx: typer.Context,
     prompt: str = typer.Argument(None, help="The prompt to send to the model."),

@@ -289,3 +289,12 @@ def test_agent_output_text_emits_plain_transcript(monkeypatch):
     assert "you: hello there" in result.output
     assert "agent: hi, how can I help?" in result.output
     assert '"type"' not in result.output  # not NDJSON
+
+
+def test_agent_help_has_examples():
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["agent", "--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.output

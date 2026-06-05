@@ -13,12 +13,22 @@ from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
 from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
+from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import FileSource
 
 app = typer.Typer()
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Start a live voice conversation", "aai agent"),
+            ("Pick a voice and opening line", 'aai agent --voice james --greeting "Hi there"'),
+            ("See available voices", "aai agent --list-voices"),
+            ("Print equivalent Python instead of running", "aai agent --show-code"),
+        ]
+    )
+)
 def agent(
     ctx: typer.Context,
     source: str = typer.Argument(
