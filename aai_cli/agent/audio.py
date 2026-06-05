@@ -36,6 +36,7 @@ def _default_output_stream(rate: int) -> Any:
             f"Could not open the audio output device: {exc}",
             error_type="audio_output_error",
             exit_code=1,
+            suggestion="Check your speaker/output device, then run 'aai doctor'.",
         ) from exc
     return stream
 
@@ -154,6 +155,7 @@ def _default_duplex_stream(*, rate: int, blocksize: int, callback: Any, device: 
             f"Could not open the audio device: {exc}",
             error_type="audio_output_error",
             exit_code=1,
+            suggestion="Check your microphone/output device, then run 'aai doctor'.",
         ) from exc
     return stream
 

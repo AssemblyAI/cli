@@ -15,9 +15,11 @@ def _auth():
 
 def _payload(content="four"):
     # Mimics the OpenAI SDK response object the command reads via content_of/usage_of.
+    # `usage` is a CompletionUsage-like model (model_dump), not a raw dict.
     message = types.SimpleNamespace(role="assistant", content=content)
     choice = types.SimpleNamespace(message=message, finish_reason="stop")
-    return types.SimpleNamespace(choices=[choice], usage={"total_tokens": 3})
+    usage = types.SimpleNamespace(model_dump=lambda: {"total_tokens": 3})
+    return types.SimpleNamespace(choices=[choice], usage=usage)
 
 
 def test_llm_help_lists_command():
@@ -272,3 +274,9 @@ def test_llm_passes_model_and_max_tokens(monkeypatch):
     assert result.exit_code == 0
     assert seen["model"] == "gemini-2.5-flash"
     assert seen["max_tokens"] == 42
+
+
+def test_no_prompt_suggests_list_models():
+    result = runner.invoke(app, ["llm", "--json"])
+    assert result.exit_code == 2
+    assert "--list-models" in result.output

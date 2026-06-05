@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Mapping
 from typing import Any
 
 from aai_cli import output
@@ -8,13 +9,17 @@ from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
 
 
-def _require(mapping: Any, key: str, what: str) -> Any:
+def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
     """Pull a required field out of an AMS response, or raise a clean APIError.
 
     AMS only returns HTTP errors for outright failures; a 200 with an unexpected
     shape would otherwise KeyError into an ugly traceback, so map that to the same
-    "run login again" message the rest of the flow uses.
+    "run login again" message the rest of the flow uses. The return stays `Any`
+    because AMS JSON leaves are untyped and callers coerce them (int()/str()).
     """
+    # Nested calls pass an `Any`-typed value that the type checker accepts as a
+    # Mapping but which may be a non-mapping at runtime (e.g. a malformed 200),
+    # so still guard with isinstance before calling .get.
     value = mapping.get(key) if isinstance(mapping, dict) else None
     if value is None:
         raise APIError(
@@ -55,7 +60,10 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     """Return the existing 'AssemblyAI CLI' key, or create one in the first project."""
     projects = ams.list_projects(account_id, session_jwt)
     if not projects:
-        raise APIError("Your account has no project to create an API key in.")
+        raise APIError(
+            "Your account has no project to create an API key in.",
+            suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
+        )
     for entry in projects:
         for token in entry.get("tokens", []):
             if _is_reusable_cli_token(token):
@@ -71,9 +79,15 @@ def run_login_flow() -> str:
     result = _capture()
 
     if result.error == "timeout":
-        raise APIError("Login timed out waiting for the browser. Run 'aai login' again.")
+        raise APIError(
+            "Login timed out waiting for the browser.",
+            suggestion="Run 'aai login' again.",
+        )
     if result.token_type != "discovery_oauth" or not result.token:  # noqa: S105
-        raise APIError("Login did not return a valid OAuth token. Run 'aai login' again.")
+        raise APIError(
+            "Login did not return a valid OAuth token.",
+            suggestion="Run 'aai login' again.",
+        )
 
     disc = ams.discover(result.token)
     organizations = disc.get("organizations") or []

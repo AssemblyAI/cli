@@ -13,12 +13,22 @@ from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
 from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
+from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import FileSource
 
 app = typer.Typer()
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Start a live voice conversation", "aai agent"),
+            ("Pick a voice and opening line", 'aai agent --voice james --greeting "Hi there"'),
+            ("See available voices", "aai agent --list-voices"),
+            ("Print equivalent Python instead of running", "aai agent --show-code"),
+        ]
+    )
+)
 def agent(
     ctx: typer.Context,
     source: str = typer.Argument(
@@ -65,7 +75,10 @@ def agent(
     def body(state: AppState, json_mode: bool) -> None:
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
         if voice not in VOICES:
-            raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")
+            raise UsageError(
+                f"Unknown voice {voice!r}.",
+                suggestion="Run 'aai agent --list-voices' to see the options.",
+            )
         if system_prompt_file is not None:
             try:
                 system_prompt_text = system_prompt_file.read_text(encoding="utf-8")
@@ -74,6 +87,7 @@ def agent(
                     f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
                     error_type="file_not_found",
                     exit_code=2,
+                    suggestion="Check the path and that the file is readable.",
                 ) from exc
         else:
             system_prompt_text = system_prompt

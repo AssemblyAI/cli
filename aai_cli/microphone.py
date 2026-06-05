@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 from aai_cli.errors import CLIError
@@ -20,9 +20,10 @@ _FALLBACK_RATE = 48000
 def audio_missing_error() -> CLIError:
     """The shared 'sounddevice can't be imported' error for mic and speaker paths."""
     return CLIError(
-        "Audio support (sounddevice) is unavailable. Try: pip install --force-reinstall sounddevice",
+        "Audio support (sounddevice) is unavailable.",
         error_type="mic_missing",
         exit_code=2,
+        suggestion="Reinstall it: pip install --force-reinstall sounddevice",
     )
 
 
@@ -108,7 +109,7 @@ class MicrophoneSource:
         target_rate: int | None = None,
         device: int | None = None,
         capture_rate: int | None = None,
-        stream_factory: Callable[..., Iterator[bytes]] | None = None,
+        stream_factory: Callable[..., Iterable[bytes]] | None = None,
         rate_query: Callable[[int | None], int] | None = None,
         on_open: Callable[[], None] | None = None,
     ) -> None:

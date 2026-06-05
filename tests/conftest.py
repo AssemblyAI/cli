@@ -19,8 +19,9 @@ def real_api_key():
 
 
 class MemoryKeyring(KeyringBackend):
-    # A plain value is the documented way to set a backend's priority.
-    priority = 1
+    # A plain value is the documented way to set a backend's priority; keyring types
+    # the base attribute as a classproperty, so pyright needs the override flagged.
+    priority = 1  # pyright: ignore[reportAssignmentType]
 
     def __init__(self):
         self._store = {}

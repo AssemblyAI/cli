@@ -92,3 +92,10 @@ def test_samples_create_is_valid_python(tmp_path, monkeypatch):
     for name in ("transcribe", "stream", "agent"):
         assert runner.invoke(app, ["samples", "create", name]).exit_code == 0
         ast.parse(Path(tmp_path, name, f"{name}.py").read_text())  # generated code parses
+
+
+def test_unknown_sample_has_suggestion():
+    # Drive the command body directly through the Typer app for a clean error.
+    result = runner.invoke(app, ["samples", "create", "nope", "--json"])
+    assert result.exit_code == 1
+    assert "Try one of" in result.output

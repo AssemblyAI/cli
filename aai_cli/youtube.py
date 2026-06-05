@@ -29,9 +29,10 @@ def download_audio(url: str, dest_dir: Path) -> Path:
         import yt_dlp
     except ImportError as exc:
         raise CLIError(
-            "YouTube support needs yt-dlp. Install it with: pip install yt-dlp",
+            "YouTube support needs yt-dlp.",
             error_type="ytdlp_missing",
             exit_code=2,
+            suggestion="Install it: pip install yt-dlp",
         ) from exc
 
     options = {
@@ -42,7 +43,9 @@ def download_audio(url: str, dest_dir: Path) -> Path:
         "noprogress": True,
     }
     try:
-        with yt_dlp.YoutubeDL(options) as ydl:
+        # yt-dlp types `params` as a private `_Params` TypedDict, but a plain options
+        # dict is the documented public API; pyright can't reconcile the two.
+        with yt_dlp.YoutubeDL(options) as ydl:  # pyright: ignore[reportArgumentType]
             info = ydl.extract_info(url, download=True)
             path = Path(ydl.prepare_filename(info))
     except Exception as exc:  # yt-dlp raises many types; surface one clean CLI error

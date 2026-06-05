@@ -16,14 +16,14 @@ SPEC="${AAI_SPEC:-git+https://github.com/${REPO}.git@${REF}}"
 info() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 err() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; }
 
-# --- Require Python 3.10+ -------------------------------------------------
+# --- Require Python 3.11+ -------------------------------------------------
 PY="$(command -v python3 || command -v python || true)"
 if [ -z "$PY" ]; then
-  err "Python 3.10+ is required, but no python3 was found on PATH."
+  err "Python 3.11+ is required, but no python3 was found on PATH."
   exit 1
 fi
-if ! "$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
-  err "Python 3.10+ is required (found $("$PY" -V 2>&1))."
+if ! "$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+  err "Python 3.11+ is required (found $("$PY" -V 2>&1))."
   exit 1
 fi
 

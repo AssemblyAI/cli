@@ -66,6 +66,8 @@ def _submit(audio: str) -> dict[str, str]:
         raise HTTPException(
             status_code=502, detail=f"Could not start transcription: {exc}"
         ) from exc
+    if transcript.id is None:
+        raise HTTPException(status_code=502, detail="Transcription did not return an id")
     return {"id": transcript.id}
 
 

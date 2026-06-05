@@ -7,6 +7,10 @@ cd "$(dirname "$0")/.."
 # Run the Python tools through `uv run` so they use the project's locked
 # environment (pyproject + uv.lock), not whatever happens to be on PATH. This keeps
 # results reproducible and consistent with `uv run` used everywhere else.
+#
+# The dev dependencies live in [dependency-groups].dev, which uv installs by
+# default (see [tool.uv] default-groups), so `uv run` already has pytest,
+# hypothesis, fastapi, etc. — no `--extra`/`--group` flag needed here.
 
 echo "==> ruff check (src + tests)"
 uv run ruff check .
@@ -16,6 +20,9 @@ uv run ruff format --check .
 
 echo "==> mypy (src + tests)"
 uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
+
+echo "==> pyright (src + tests)"
+uv run pyright  # include = ["aai_cli", "tests"] in [tool.pyright]
 
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
@@ -31,10 +38,13 @@ fi
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
-# a live API key + kokoro. Run them with: uv run pytest -m e2e
-# Exclude install_script: it builds a wheel and runs install.sh for real (slow; needs
-# network + uv/pipx). Run it with: uv run pytest -m install_script
-uv run pytest -q -m "not e2e and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+# a live API key + kokoro. Exclude install (real per-template dep install, slow +
+# network) and install_script (builds a wheel and runs install.sh for real; slow,
+# needs network + uv/pipx). All are uncounted by coverage. Run them with:
+#   uv run pytest -m e2e
+#   uv run pytest -m install
+#   uv run pytest -m install_script
+uv run pytest -q -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render

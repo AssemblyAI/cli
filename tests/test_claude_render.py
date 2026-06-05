@@ -2,10 +2,11 @@ import io
 
 from aai_cli import theme
 from aai_cli.commands.claude import _render
+from aai_cli.steps import Step
 
 
 def test_render_steps_colors_status():
-    data = {
+    data: dict[str, list[Step]] = {
         "steps": [
             {"name": "mcp", "status": "installed", "detail": "/path"},
             {"name": "skill", "status": "failed", "detail": "nope"},

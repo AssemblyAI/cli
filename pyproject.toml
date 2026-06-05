@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "AssemblyAI", email = "support@assemblyai.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["assemblyai", "transcription", "speech-to-text", "cli", "audio", "streaming"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -48,22 +47,35 @@ Homepage = "https://github.com/AssemblyAI/cli"
 Repository = "https://github.com/AssemblyAI/cli"
 Issues = "https://github.com/AssemblyAI/cli/issues"
 
-[project.optional-dependencies]
+[project.scripts]
+aai = "aai_cli.main:run"
+
+# PEP 735 dependency group (not a [project] extra). uv installs this group by
+# default for `uv run`/`uv sync` (see [tool.uv] default-groups below), so the
+# type-checkers and pytest resolve their imports with no `--extra`/`--group` flag
+# — and a plain `.venv` is correct for editors (see [tool.pyright] venv). pip
+# installs it with `pip install --group dev` (requires pip >= 25.1).
+[dependency-groups]
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
     "mypy>=2.1.0",
+    "pyright>=1.1.409",
     "pre-commit>=4.6.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
+    "syrupy>=4.0",
+    "numpy>=2.0.0",  # e2e tests resample kokoro audio (tests/e2e/test_cli_e2e.py)
 ]
 
-[project.scripts]
-aai = "aai_cli.main:run"
+[tool.uv]
+# Install the dev group for every `uv run`/`uv sync` (this is uv's default, pinned
+# here so it's explicit and stable).
+default-groups = ["dev"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["aai_cli"]
@@ -78,10 +90,11 @@ testpaths = ["tests"]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY + kokoro; skip otherwise)",
     "install_script: real install via install.sh from a locally-built wheel; asserts `aai` runs (slow; needs network + uv/pipx; skip otherwise)",
+    "install: install each init template's requirements.txt into a clean venv and import it (slow; needs network + uv; skip otherwise)",
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 files = ["aai_cli", "tests"]
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
@@ -95,9 +108,23 @@ no_implicit_optional = true
 module = "tests.*"
 disallow_untyped_defs = false
 
+[tool.pyright]
+# Second type checker alongside mypy: pyright catches a different (and often
+# stricter) class of issues. Same source scope as mypy (files above).
+include = ["aai_cli", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+# Third-party deps (assemblyai, sounddevice) ship no type stubs.
+reportMissingTypeStubs = false
+# Resolve imports against the uv-managed environment so the CLI and editors
+# (Pylance) report identically. `uv run`/`uv sync` create `.venv` with the dev
+# group, so pytest/fastapi/etc. resolve here. Run `uv sync` once on a fresh clone.
+venvPath = "."
+venv = ".venv"
+
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF"]
