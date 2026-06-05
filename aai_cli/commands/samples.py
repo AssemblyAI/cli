@@ -80,18 +80,20 @@ def create(
     def body(_state: AppState, json_mode: bool) -> None:
         if name not in SAMPLES:
             raise CLIError(
-                f"Unknown sample '{name}'. Try: {', '.join(SAMPLES)}.",
+                f"Unknown sample '{name}'.",
                 error_type="unknown_sample",
                 exit_code=1,
+                suggestion=f"Try one of: {', '.join(SAMPLES)}.",
             )
         target_dir = Path.cwd() / name
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{name}.py"
         if target.exists() and not force:
             raise CLIError(
-                f"{target} already exists. Delete it or pass --force to overwrite.",
+                f"{target} already exists.",
                 error_type="file_exists",
                 exit_code=1,
+                suggestion="Delete it or pass --force to overwrite.",
             )
         target.write_text(_generate(name))
 

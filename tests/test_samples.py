@@ -95,6 +95,21 @@ def test_samples_create_is_valid_python(tmp_path, monkeypatch):
         ast.parse(Path(tmp_path, name, f"{name}.py").read_text())  # generated code parses
 
 
+def test_unknown_sample_has_suggestion():
+    import pytest
+
+    from aai_cli.commands import samples as samples_mod
+    from aai_cli.errors import CLIError
+
+    # Drive the command body directly through the Typer app for a clean error.
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["samples", "create", "nope", "--json"])
+    assert result.exit_code == 1
+    assert "Try one of" in result.output
+
+
 @pytest.mark.parametrize("argv", [["samples", "list"], ["samples", "create"]])
 def test_samples_help_has_examples(argv):
     result = CliRunner().invoke(app, [*argv, "--help"])
