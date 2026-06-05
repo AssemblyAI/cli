@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import webbrowser
-from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TypeVar
 
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from rich.markup import escape
 
-from aai_cli import jsonshape, output
+from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
 
@@ -22,56 +23,68 @@ class LoginResult:
     account_id: int
 
 
-def _as_mapping(value: object) -> dict[str, object] | None:
-    return jsonshape.as_mapping(value)
+# Typed views of the AMS login responses. AMS only returns HTTP errors for outright
+# failures; a 200 with an unexpected shape would otherwise KeyError into an ugly
+# traceback, so each required field's absence becomes the same clean "run login
+# again" APIError via `_parse`. Extra fields (e.g. discover's `email`) are ignored.
+class _Organization(BaseModel):
+    organization_id: str
+    organization_name: str | None = None
 
 
-def _mapping_list(value: object) -> list[dict[str, object]]:
-    return jsonshape.mapping_list(value)
+class _Discovery(BaseModel):
+    intermediate_session_token: str
+    organizations: list[_Organization] = []
 
 
-def _require_int(mapping: Mapping[str, object], key: str, what: str) -> int:
-    value = _require(mapping, key, what)
-    if isinstance(value, bool):
+class _Account(BaseModel):
+    id: int
+
+
+class _SignedIn(BaseModel):
+    session_jwt: str
+    session_token: str
+    account: _Account
+
+
+class _Project(BaseModel):
+    id: int
+
+
+class _Token(BaseModel):
+    # List endpoints may key the display name as either "name" or "token_name"
+    # (the latter matches the create payload), so accept either.
+    name: str | None = None
+    token_name: str | None = None
+    is_disabled: bool = False
+    api_key: str | None = None
+
+
+class _ProjectEntry(BaseModel):
+    project: _Project | None = None
+    tokens: list[_Token] = []
+
+
+class _CreatedToken(BaseModel):
+    api_key: str
+
+
+T = TypeVar("T")
+
+_DISCOVERY: TypeAdapter[_Discovery] = TypeAdapter(_Discovery)
+_SIGNED_IN: TypeAdapter[_SignedIn] = TypeAdapter(_SignedIn)
+_CREATED_TOKEN: TypeAdapter[_CreatedToken] = TypeAdapter(_CreatedToken)
+_PROJECT_LIST: TypeAdapter[list[_ProjectEntry]] = TypeAdapter(list[_ProjectEntry])
+
+
+def _parse(adapter: TypeAdapter[T], data: object) -> T:
+    """Validate an AMS response into a typed view, or raise a clean login error."""
+    try:
+        return adapter.validate_python(data)
+    except ValidationError as exc:
         raise APIError(
-            f"Login failed: the server response was missing {what}. Run 'aai login' again."
-        )
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise APIError(
-                f"Login failed: the server response was missing {what}. Run 'aai login' again."
-            ) from exc
-    raise APIError(f"Login failed: the server response was missing {what}. Run 'aai login' again.")
-
-
-def _require(mapping: Mapping[str, object], key: str, what: str) -> object:
-    """Pull a required field out of an AMS response, or raise a clean APIError.
-
-    AMS only returns HTTP errors for outright failures; a 200 with an unexpected
-    shape would otherwise KeyError into an ugly traceback, so map that to the same
-    "run login again" message the rest of the flow uses. The return stays `object`
-    because AMS JSON leaves are narrowed by callers with int()/str().
-    """
-    value = mapping.get(key)
-    if value is None:
-        raise APIError(
-            f"Login failed: the server response was missing {what}. Run 'aai login' again."
-        )
-    return value
-
-
-def _require_mapping(mapping: Mapping[str, object], key: str, what: str) -> dict[str, object]:
-    value = _require(mapping, key, what)
-    mapped = _as_mapping(value)
-    if mapped is None:
-        raise APIError(
-            f"Login failed: the server response was missing {what}. Run 'aai login' again."
-        )
-    return mapped
+            "Login failed: the server returned an unexpected response. Run 'aai login' again."
+        ) from exc
 
 
 def _open_browser(url: str) -> None:
@@ -91,36 +104,38 @@ def _capture() -> loopback.CallbackResult:
     return loopback.capture_callback()
 
 
-def _is_reusable_cli_token(token: dict[str, object]) -> bool:
-    """A live 'AssemblyAI CLI' token whose key the list actually exposes."""
-    # List endpoints may key the display name as either "name" or "token_name"
-    # (the latter matches the create payload); accept either so we don't mint a
-    # duplicate every login. A token whose api_key the list omits can't be reused.
-    name = token.get("name") or token.get("token_name")
-    return (
-        name == endpoints.CLI_TOKEN_NAME
-        and not token.get("is_disabled")
-        and bool(token.get("api_key"))
-    )
+def _reusable_cli_key(token: _Token) -> str | None:
+    """The api_key of a live 'AssemblyAI CLI' token the list actually exposes, else None.
+
+    A disabled token, or one whose api_key the list omits, can't be reused — we fall
+    through to minting a fresh one instead of duplicating or crashing.
+    """
+    name = token.name or token.token_name
+    if name == endpoints.CLI_TOKEN_NAME and not token.is_disabled and token.api_key:
+        return token.api_key
+    return None
 
 
 def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     """Return the existing 'AssemblyAI CLI' key, or create one in the first project."""
-    projects = ams.list_projects(account_id, session_jwt)
+    projects = _parse(_PROJECT_LIST, ams.list_projects(account_id, session_jwt))
     if not projects:
         raise APIError(
             "Your account has no project to create an API key in.",
             suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
         )
     for entry in projects:
-        for token in _mapping_list(entry.get("tokens")):
-            if _is_reusable_cli_token(token):
-                return str(token["api_key"])
-    project_id = _require_int(
-        _require_mapping(projects[0], "project", "a project"), "id", "a project id"
-    )
-    created = ams.create_token(account_id, project_id, endpoints.CLI_TOKEN_NAME, session_jwt)
-    return str(_require(created, "api_key", "an API key"))
+        for token in entry.tokens:
+            if key := _reusable_cli_key(token):
+                return key
+    project = projects[0].project
+    if project is None:
+        raise APIError(
+            "Your account has no project to create an API key in.",
+            suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
+        )
+    created = ams.create_token(account_id, project.id, endpoints.CLI_TOKEN_NAME, session_jwt)
+    return _parse(_CREATED_TOKEN, created).api_key
 
 
 def run_login_flow() -> LoginResult:
@@ -139,39 +154,28 @@ def run_login_flow() -> LoginResult:
             suggestion="Run 'aai login' again.",
         )
 
-    disc = ams.discover(result.token)
-    organizations = _mapping_list(disc.get("organizations"))
-    if not organizations:
+    disc = _parse(_DISCOVERY, ams.discover(result.token))
+    if not disc.organizations:
         raise APIError(
             "Signed in, but this identity has no AssemblyAI account yet. "
             f"Create one at {endpoints.signup_url()}, then run 'aai login' again."
         )
-    if len(organizations) > 1:
-        chosen = str(
-            organizations[0].get("organization_name")
-            or organizations[0].get("organization_id", "the first")
-        )
+    org = disc.organizations[0]
+    if len(disc.organizations) > 1:
         output.error_console.print(
-            f"[aai.muted]Found {len(organizations)} organizations; signing in to "
-            f"'{chosen}'.[/aai.muted]"
+            f"[aai.muted]Found {len(disc.organizations)} organizations; signing in to "
+            f"'{org.organization_name or org.organization_id}'.[/aai.muted]"
         )
-    organization_id = str(_require(organizations[0], "organization_id", "an organization id"))
 
-    intermediate_session_token = str(
-        _require(disc, "intermediate_session_token", "a session token")
-    )
-    signed_in = ams.exchange(intermediate_session_token, organization_id)
-    session_jwt = str(_require(signed_in, "session_jwt", "a session token"))
-    session_token = str(_require(signed_in, "session_token", "a session token"))
     # `exchange` already returns the signed-in account, so read the id from it
     # rather than making a second GET /v1/auth round-trip.
-    account_id = _require_int(
-        _require_mapping(signed_in, "account", "an account"), "id", "an account id"
+    signed_in = _parse(
+        _SIGNED_IN, ams.exchange(disc.intermediate_session_token, org.organization_id)
     )
-    api_key = find_or_create_cli_key(account_id, session_jwt)
+    api_key = find_or_create_cli_key(signed_in.account.id, signed_in.session_jwt)
     return LoginResult(
         api_key=api_key,
-        session_jwt=session_jwt,
-        session_token=session_token,
-        account_id=account_id,
+        session_jwt=signed_in.session_jwt,
+        session_token=signed_in.session_token,
+        account_id=signed_in.account.id,
     )

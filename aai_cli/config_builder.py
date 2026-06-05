@@ -3,16 +3,14 @@ from __future__ import annotations
 import enum
 import json
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
-from pydantic import TypeAdapter, ValidationError
 
+from aai_cli import jsonshape
 from aai_cli.errors import UsageError
-
-_JSON_OBJECT: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
 
 # The curated set of user-settable config fields per command. This is the authoritative
 # allow-list (deliberately a subset of the SDK models — e.g. output-only and internal
@@ -240,10 +238,12 @@ def coerce_value(field: str, raw: str) -> object:
     return coercer(field, raw) if coercer is not None else raw
 
 
-def parse_config_overrides(fields: dict[str, str], pairs: list[str]) -> dict[str, object]:
+def parse_config_overrides(
+    fields: dict[str, str], pairs: Sequence[str] | None
+) -> dict[str, object]:
     """Parse repeated KEY=VALUE strings into a coerced, validated dict."""
     out: dict[str, object] = {}
-    for pair in pairs:
+    for pair in pairs or ():
         if "=" not in pair:
             raise UsageError(f"--config expects KEY=VALUE, got {pair!r}.")
         key, raw = pair.split("=", 1)
@@ -263,10 +263,9 @@ def load_config_file(path: str | Path, fields: dict[str, str]) -> dict[str, obje
         raise UsageError(f"Config file not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise UsageError(f"Config file is not valid JSON: {exc}") from exc
-    try:
-        config = _JSON_OBJECT.validate_python(data)
-    except ValidationError as exc:
-        raise UsageError("Config file must contain a JSON object.") from exc
+    config = jsonshape.as_mapping(data)
+    if config is None:
+        raise UsageError("Config file must contain a JSON object.")
     unknown = [key for key in config if key not in fields]
     if unknown:
         valid = ", ".join(sorted(fields))
@@ -277,7 +276,7 @@ def load_config_file(path: str | Path, fields: dict[str, str]) -> dict[str, obje
 def _merge(
     fields: dict[str, str],
     flags: dict[str, object],
-    overrides: list[str],
+    overrides: Sequence[str] | None,
     config_file: str | None,
 ) -> dict[str, object]:
     data: dict[str, object] = {}
@@ -289,7 +288,10 @@ def _merge(
 
 
 def merge_transcribe_config(
-    *, flags: dict[str, object], overrides: list[str], config_file: str | None
+    *,
+    flags: dict[str, object],
+    overrides: Sequence[str] | None = None,
+    config_file: str | None = None,
 ) -> dict[str, object]:
     """Merge config-file + --config overrides + curated flags into a kwargs dict."""
     return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
@@ -306,7 +308,10 @@ def construct_transcription_config(merged: dict[str, typing.Any]) -> aai.Transcr
 
 
 def merge_streaming_params(
-    *, flags: dict[str, object], overrides: list[str], config_file: str | None
+    *,
+    flags: dict[str, object],
+    overrides: Sequence[str] | None = None,
+    config_file: str | None = None,
 ) -> dict[str, object]:
     """Merge streaming config into a kwargs dict, coercing speech_model to a SpeechModel."""
     merged = _merge(STREAM_FIELDS, flags, overrides, config_file)
@@ -366,10 +371,10 @@ def load_custom_spelling(path: str) -> dict[str, object]:
         raise UsageError(f"Custom spelling file not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise UsageError(f"Custom spelling file is not valid JSON: {exc}") from exc
-    try:
-        return _JSON_OBJECT.validate_python(data)
-    except ValidationError as exc:
-        raise UsageError("Custom spelling file must contain a JSON object.") from exc
+    mapping = jsonshape.as_mapping(data)
+    if mapping is None:
+        raise UsageError("Custom spelling file must contain a JSON object.")
+    return mapping
 
 
 def translation_request(languages: list[str]) -> dict[str, object]:

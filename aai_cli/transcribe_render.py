@@ -32,34 +32,6 @@ def _mapping(value: object) -> dict[str, object]:
     return jsonshape.as_mapping(value) or {}
 
 
-def _int_value(value: object) -> int:
-    if isinstance(value, bool):
-        return 0
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return 0
-    return 0
-
-
-def _float_value(value: object) -> float:
-    if isinstance(value, bool):
-        return 0.0
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return 0.0
-    return 0.0
-
-
 def render_transcript_result(transcript: object, console: Console) -> None:
     """Print the transcript text, then a section per analysis feature present."""
     _render_text(transcript, console)
@@ -102,7 +74,7 @@ def _render_chapters(transcript: object, console: Console) -> None:
         return
     console.print("\n[bold]Chapters:[/bold]")
     for ch in chapters:
-        span = f"{_fmt_ms(_int_value(getattr(ch, 'start', 0)))}-{_fmt_ms(_int_value(getattr(ch, 'end', 0)))}"
+        span = f"{_fmt_ms(jsonshape.as_int(getattr(ch, 'start', 0)))}-{_fmt_ms(jsonshape.as_int(getattr(ch, 'end', 0)))}"
         console.print(f"  {span}  {getattr(ch, 'headline', '')}")
 
 
@@ -142,8 +114,10 @@ def _render_topics(transcript: object, console: Console) -> None:
         return
     console.print("\n[bold]Topics:[/bold]")
     items: Mapping[str, object] = summary
-    for label, relevance in sorted(items.items(), key=lambda kv: _float_value(kv[1]), reverse=True):
-        console.print(f"  {label} ({_float_value(relevance):.2f})")
+    for label, relevance in sorted(
+        items.items(), key=lambda kv: jsonshape.as_float(kv[1]), reverse=True
+    ):
+        console.print(f"  {label} ({jsonshape.as_float(relevance):.2f})")
 
 
 def _render_content_safety(transcript: object, console: Console) -> None:
@@ -153,6 +127,6 @@ def _render_content_safety(transcript: object, console: Console) -> None:
     console.print("\n[bold]Content Safety:[/bold]")
     items: Mapping[str, object] = summary
     for label, confidence in sorted(
-        items.items(), key=lambda kv: _float_value(kv[1]), reverse=True
+        items.items(), key=lambda kv: jsonshape.as_float(kv[1]), reverse=True
     ):
-        console.print(f"  {_enum_value(label)} ({_float_value(confidence):.2f})")
+        console.print(f"  {_enum_value(label)} ({jsonshape.as_float(confidence):.2f})")

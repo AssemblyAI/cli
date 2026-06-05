@@ -58,6 +58,10 @@ def test_parse_config_overrides_requires_equals():
         cb.parse_config_overrides(cb.TRANSCRIBE_FIELDS, ["speaker_labels"])
 
 
+def test_parse_config_overrides_accepts_none():
+    assert cb.parse_config_overrides(cb.TRANSCRIBE_FIELDS, None) == {}
+
+
 def test_transcribe_config_layer_precedence(tmp_path):
     cfg = tmp_path / "c.json"
     cfg.write_text(json.dumps({"speaker_labels": False, "speakers_expected": 5}))
@@ -74,7 +78,7 @@ def test_transcribe_config_layer_precedence(tmp_path):
 
 def test_transcribe_config_ignores_unset_flags():
     tc = cb.construct_transcription_config(
-        cb.merge_transcribe_config(flags={"speaker_labels": None}, overrides=[], config_file=None)
+        cb.merge_transcribe_config(flags={"speaker_labels": None})
     )
     assert tc.speaker_labels is None  # None means "not set", does not override
 

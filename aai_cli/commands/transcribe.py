@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import assemblyai as aai
 import typer
 
 from aai_cli import (
@@ -31,6 +32,33 @@ def _render_transform_steps(d: dict[str, Any]) -> str:
     if len(steps) == 1:
         return str(steps[0]["output"])
     return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
+
+
+def _transcribe_audio(
+    api_key: str,
+    source: str | None,
+    *,
+    sample: bool,
+    transcription_config: aai.TranscriptionConfig,
+) -> aai.Transcript:
+    if source == "-":
+        # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
+        # The SDK uploads a path, so buffer the bytes to a temp file first.
+        data = stdio.read_binary_stdin()
+        if not data:
+            raise UsageError("No audio received on stdin.")
+        with tempfile.TemporaryDirectory(prefix="aai-stdin-") as td:
+            local = Path(td) / "audio"
+            local.write_bytes(data)
+            return client.transcribe(api_key, str(local), config=transcription_config)
+
+    audio = client.resolve_audio_source(source, sample=sample)
+    if youtube.is_youtube_url(audio):
+        # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
+        with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
+            local = youtube.download_audio(audio, Path(td))
+            return client.transcribe(api_key, str(local), config=transcription_config)
+    return client.transcribe(api_key, audio, config=transcription_config)
 
 
 @app.command(
@@ -236,7 +264,7 @@ def transcribe(
         flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
         merged = config_builder.merge_transcribe_config(
-            flags=flags, overrides=list(config_kv or []), config_file=config_file
+            flags=flags, overrides=config_kv, config_file=config_file
         )
 
         if show_code:
@@ -251,25 +279,7 @@ def transcribe(
         tc = config_builder.construct_transcription_config(merged)
 
         api_key = config.resolve_api_key(profile=state.profile)
-        if source == "-":
-            # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
-            # The SDK uploads a path, so buffer the bytes to a temp file first.
-            data = stdio.read_binary_stdin()
-            if not data:
-                raise UsageError("No audio received on stdin.")
-            with tempfile.TemporaryDirectory(prefix="aai-stdin-") as td:
-                local = Path(td) / "audio"
-                local.write_bytes(data)
-                transcript = client.transcribe(api_key, str(local), config=tc)
-        else:
-            audio = client.resolve_audio_source(source, sample=sample)
-            if youtube.is_youtube_url(audio):
-                # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
-                with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-                    local = youtube.download_audio(audio, Path(td))
-                    transcript = client.transcribe(api_key, str(local), config=tc)
-            else:
-                transcript = client.transcribe(api_key, audio, config=tc)
+        transcript = _transcribe_audio(api_key, source, sample=sample, transcription_config=tc)
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).
@@ -279,19 +289,13 @@ def transcribe(
         if llm_prompt:
             # Chain the prompts: the first runs over the transcript (injected server-side
             # via transcript_id); each subsequent prompt runs over the prior response.
-            steps: list[dict[str, str]] = []
-            previous: str | None = None
-            for i, prompt_text in enumerate(llm_prompt):
-                # First prompt runs over the transcript (by id); each later one over
-                # the prior response.
-                target = (
-                    {"transcript_id": transcript.id} if i == 0 else {"transcript_text": previous}
-                )
-                out = llm.transform_transcript(
-                    api_key, prompt=prompt_text, model=model, max_tokens=max_tokens, **target
-                )
-                steps.append({"prompt": prompt_text, "output": out})
-                previous = out
+            steps = llm.run_chain_steps(
+                api_key,
+                llm_prompt,
+                transcript_id=transcript.id,
+                model=model,
+                max_tokens=max_tokens,
+            )
             output.emit(
                 {
                     **client.transcript_summary(transcript),
