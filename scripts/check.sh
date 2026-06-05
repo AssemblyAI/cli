@@ -20,6 +20,15 @@ uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
+echo "==> shellcheck (install.sh)"
+# Static-lint the public install script. CI's ubuntu runner ships shellcheck;
+# locally it's skipped with a notice if not installed.
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck install.sh
+else
+  echo "   shellcheck not found; skipping (CI runs it)"
+fi
+
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
 # a live API key + kokoro. Run them with: uv run pytest -m e2e
