@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 import assemblyai as aai
@@ -38,6 +39,26 @@ def _configure(api_key: str) -> None:
     aai.settings.base_url = environments.active().api_base
 
 
+@contextlib.contextmanager
+def _sdk_errors(message: str) -> Iterator[None]:
+    """Normalize SDK exceptions for one call: a rejected key becomes a single clean
+    auth_failure(); any other error becomes APIError(f"{message}: {exc}").
+
+    CLIErrors (including an APIError the SDK call raised itself) and a closed
+    downstream pipe pass through untouched; KeyboardInterrupt propagates as a
+    BaseException. This is the one shape every wrapper around the assemblyai SDK
+    shares — keeping it here means auth/error classification lives in one place.
+    """
+    try:
+        yield
+    except (CLIError, BrokenPipeError):
+        raise
+    except Exception as exc:
+        if is_auth_failure(exc):
+            raise auth_failure() from exc
+        raise APIError(f"{message}: {exc}") from exc
+
+
 def validate_key(api_key: str) -> bool:
     """True if the key authenticates, False on an auth failure. Raises APIError otherwise."""
     _configure(api_key)
@@ -61,27 +82,15 @@ def _item_to_dict(item: Any) -> dict[str, Any]:
 
 def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]]:
     _configure(api_key)
-    try:
+    with _sdk_errors("Could not list transcripts"):
         resp = aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=limit))
-    except aai.types.AssemblyAIError as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Could not list transcripts: {exc}") from exc
-    except Exception as exc:
-        raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
     return [_item_to_dict(item) for item in resp.transcripts]
 
 
 def transcribe(api_key: str, audio: str, *, config: aai.TranscriptionConfig) -> aai.Transcript:
     _configure(api_key)
-    try:
+    with _sdk_errors("Transcription request failed"):
         transcript = aai.Transcriber().transcribe(audio, config=config)
-    except APIError:
-        raise
-    except Exception as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Transcription request failed: {exc}") from exc
     if transcript.status == aai.TranscriptStatus.error:
         raise APIError(transcript.error or "Transcription failed.", transcript_id=transcript.id)
     return transcript
@@ -124,12 +133,8 @@ def select_transcript_field(transcript: Any, field: str) -> str:
         return str(getattr(transcript, "text", "") or "")
     if field == "srt":
         # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
-        try:
+        with _sdk_errors("Could not export SRT subtitles"):
             return str(transcript.export_subtitles_srt())
-        except Exception as exc:
-            if is_auth_failure(exc):
-                raise auth_failure() from exc
-            raise APIError(f"Could not export SRT subtitles: {exc}") from exc
     if field == "json":
         return json.dumps(transcript_json_payload(transcript), default=str)
     return str(getattr(transcript, "text", "") or "")  # "text" (and the validated default)
@@ -137,12 +142,8 @@ def select_transcript_field(transcript: Any, field: str) -> str:
 
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
     _configure(api_key)
-    try:
+    with _sdk_errors(f"Could not fetch transcript {transcript_id}"):
         return aai.Transcript.get_by_id(transcript_id)
-    except Exception as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Could not fetch transcript {transcript_id}: {exc}") from exc
 
 
 def stream_audio(
@@ -186,23 +187,12 @@ def stream_audio(
         sc.on(StreamingEvents.Termination, _guard(on_termination))
     sc.on(StreamingEvents.Error, lambda _client, error: errors.append(error))
 
-    try:
+    with _sdk_errors("Could not start streaming session"):
         sc.connect(params)
-    except CLIError:
-        raise
-    except Exception as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Could not start streaming session: {exc}") from exc
 
     try:
-        sc.stream(source)
-    except (CLIError, KeyboardInterrupt, BrokenPipeError):
-        raise  # clean CLI errors, user Ctrl-C, and closed-pipe are handled upstream
-    except Exception as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Streaming failed: {exc}") from exc
+        with _sdk_errors("Streaming failed"):
+            sc.stream(source)
     finally:
         sc.disconnect(terminate=True)
 
