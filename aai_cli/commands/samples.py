@@ -11,6 +11,7 @@ from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import DEFAULT_VOICE
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
+from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import TARGET_RATE
 
 app = typer.Typer(
@@ -36,7 +37,14 @@ def _generate(name: str) -> str:
     return code_gen.agent(DEFAULT_VOICE, DEFAULT_PROMPT, DEFAULT_GREETING)
 
 
-@app.command(name="list")
+@app.command(
+    name="list",
+    epilog=examples_epilog(
+        [
+            ("List available starter scripts", "aai samples list"),
+        ]
+    ),
+)
 def list_(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -53,7 +61,14 @@ def list_(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Scaffold a transcribe starter script", "aai samples create transcribe"),
+            ("Overwrite an existing script", "aai samples create transcribe --force"),
+        ]
+    )
+)
 def create(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Sample name."),

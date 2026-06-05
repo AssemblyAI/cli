@@ -10,6 +10,7 @@ from rich.markup import escape
 from aai_cli import client, config, output
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
@@ -187,7 +188,13 @@ def _render(data: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Check your environment is ready", "aai doctor"),
+        ]
+    )
+)
 def doctor(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
