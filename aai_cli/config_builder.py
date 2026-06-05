@@ -146,7 +146,7 @@ def _derive_kind(annotation: object) -> str:
 
 
 def _is_str_like(annotation: object) -> bool:
-    return isinstance(annotation, type) and issubclass(annotation, (str, enum.Enum))
+    return isinstance(annotation, type) and issubclass(annotation, str | enum.Enum)
 
 
 def _coerce_table(model_cls: type, names: tuple[str, ...]) -> dict[str, str]:
