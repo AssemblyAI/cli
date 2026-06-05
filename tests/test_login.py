@@ -113,3 +113,16 @@ def test_whoami_reports_env():
 def test_unknown_env_exits_2():
     result = runner.invoke(app, ["--env", "bogus", "whoami"])
     assert result.exit_code == 2
+
+
+import pytest
+
+
+@pytest.mark.parametrize("cmd", ["login", "logout", "whoami"])
+def test_auth_commands_help_has_examples(cmd):
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, [cmd, "--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.output
