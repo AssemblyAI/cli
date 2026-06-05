@@ -17,6 +17,7 @@ from aai_cli.commands import (
     claude,
     doctor,
     init,
+    keys,
     llm,
     login,
     samples,
@@ -104,6 +105,7 @@ app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples")
 app.add_typer(init.app)
 app.add_typer(claude.app, name="claude")
+app.add_typer(keys.app, name="keys")
 
 
 @app.command()
