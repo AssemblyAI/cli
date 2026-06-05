@@ -310,3 +310,100 @@ def test_transcribe_coerce_table_matches_frozen_mapping():
 
 def test_stream_coerce_table_matches_frozen_mapping():
     assert cb.STREAM_COERCE == _EXPECTED_STREAM_COERCE
+
+
+def test_coerce_bad_float_and_json_raise_usageerror():
+    with pytest.raises(UsageError) as exc:
+        cb.coerce_value("temperature", "hot")
+    assert "number" in str(exc.value)
+    with pytest.raises(UsageError) as exc:
+        cb.coerce_value("custom_spelling", "{not json")
+    assert "JSON" in str(exc.value)
+
+
+def test_load_config_file_missing_file_raises_usageerror(tmp_path):
+    with pytest.raises(UsageError) as exc:
+        cb.load_config_file(tmp_path / "nope.json", cb.TRANSCRIBE_FIELDS)
+    assert "not found" in str(exc.value)
+
+
+def test_load_config_file_invalid_json_raises_usageerror(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not valid")
+    with pytest.raises(UsageError) as exc:
+        cb.load_config_file(bad, cb.TRANSCRIBE_FIELDS)
+    assert "not valid JSON" in str(exc.value)
+
+
+def test_load_config_file_unknown_field_lists_valid(tmp_path):
+    cfg = tmp_path / "c.json"
+    cfg.write_text(json.dumps({"bogus_field": 1}))
+    with pytest.raises(UsageError) as exc:
+        cb.load_config_file(cfg, cb.TRANSCRIBE_FIELDS)
+    assert "bogus_field" in str(exc.value)
+    assert "speaker_labels" in str(exc.value)  # error lists valid fields
+
+
+def test_construct_transcription_config_wraps_sdk_error_as_usageerror():
+    # An unknown kwarg makes the SDK constructor raise; it must surface as a usage error.
+    with pytest.raises(UsageError) as exc:
+        cb.construct_transcription_config({"totally_unknown_kwarg": 1})
+    assert "Invalid transcription config" in str(exc.value)
+
+
+def test_merge_streaming_params_invalid_speech_model_raises_usageerror():
+    with pytest.raises(UsageError) as exc:
+        cb.merge_streaming_params(
+            flags={"speech_model": "not-a-real-model"}, overrides=[], config_file=None
+        )
+    assert "Invalid streaming config" in str(exc.value)
+
+
+def test_construct_streaming_params_wraps_sdk_error_as_usageerror():
+    with pytest.raises(UsageError) as exc:
+        cb.construct_streaming_params({"sample_rate": "not-an-int"})
+    assert "Invalid streaming config" in str(exc.value)
+
+
+def test_load_custom_spelling_missing_file_raises_usageerror(tmp_path):
+    with pytest.raises(UsageError) as exc:
+        cb.load_custom_spelling(str(tmp_path / "nope.json"))
+    assert "not found" in str(exc.value)
+
+
+def test_load_custom_spelling_invalid_json_raises_usageerror(tmp_path):
+    bad = tmp_path / "spell.json"
+    bad.write_text("{not json")
+    with pytest.raises(UsageError) as exc:
+        cb.load_custom_spelling(str(bad))
+    assert "not valid JSON" in str(exc.value)
+
+
+def test_load_custom_spelling_rejects_non_object(tmp_path):
+    p = tmp_path / "spell.json"
+    p.write_text('["assembly ai"]')
+    with pytest.raises(UsageError) as exc:
+        cb.load_custom_spelling(str(p))
+    assert "JSON object" in str(exc.value)
+
+
+def test_derive_kind_multi_type_union_without_str_falls_back_to_json():
+    import typing
+
+    # A genuine multi-type union with no str-like member -> a raw JSON value is accepted.
+    # typing.Union (not int|float) is required: the code matches `get_origin is typing.Union`.
+    assert cb._derive_kind(typing.Union[int, float]) == "json"  # noqa: UP007
+
+
+def test_derive_kind_dict_origin_is_json():
+    assert cb._derive_kind(dict[str, int]) == "json"
+
+
+def test_coerce_table_unknown_field_defaults_to_str():
+    # A curated name the SDK model doesn't expose passes through as a string
+    # rather than crashing at import time.
+    class Empty:  # no model_fields / __fields__ -> no known annotations
+        pass
+
+    table = cb._coerce_table(Empty, ("phantom_field",))
+    assert table == {"phantom_field": "str"}

@@ -429,10 +429,3 @@ def test_claude_no_subcommand_lists_commands():
     assert "install" in result.output
     assert "status" in result.output
     assert "remove" in result.output
-
-
-@pytest.mark.parametrize("sub", ["install", "status", "remove"])
-def test_claude_help_has_examples(sub):
-    result = CliRunner().invoke(app, ["claude", sub, "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

@@ -46,7 +46,9 @@ def test_emit_human_uses_renderer(capsys):
 def test_emit_error_escapes_markup(capsys):
     import types
 
-    err = types.SimpleNamespace(message="bad [tag] here", to_dict=lambda: {"error": {}})
+    err = types.SimpleNamespace(
+        message="bad [tag] here", suggestion=None, to_dict=lambda: {"error": {}}
+    )
     output.emit_error(cast(CLIError, err), json_mode=False)
     captured = capsys.readouterr()
     assert "[tag]" in captured.err  # error goes to stderr, not stripped as markup

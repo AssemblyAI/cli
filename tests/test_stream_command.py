@@ -520,9 +520,3 @@ def test_stream_show_code_with_llm_emits_follow_loop(monkeypatch):
     assert "from openai import OpenAI" in result.output
     assert "summarize" in result.output
     assert "run_chain" in result.output  # the live transcribe->LLM-per-turn loop
-
-
-def test_stream_help_has_examples():
-    result = CliRunner().invoke(app, ["stream", "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

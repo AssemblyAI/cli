@@ -277,16 +277,6 @@ def test_llm_passes_model_and_max_tokens(monkeypatch):
 
 
 def test_no_prompt_suggests_list_models():
-    from typer.testing import CliRunner
-
-    from aai_cli.main import app
-
-    result = CliRunner().invoke(app, ["llm", "--json"])
+    result = runner.invoke(app, ["llm", "--json"])
     assert result.exit_code == 2
     assert "--list-models" in result.output
-
-
-def test_llm_help_has_examples():
-    result = CliRunner().invoke(app, ["llm", "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

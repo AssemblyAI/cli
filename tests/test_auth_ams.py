@@ -69,3 +69,71 @@ def test_500_raises_api_error_with_detail(monkeypatch):
     with pytest.raises(APIError) as exc:
         ams.discover("x")
     assert "Something went wrong" in str(exc.value)
+
+
+def test_error_with_non_json_body_falls_back_to_text(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="upstream is down")
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError) as exc:
+        ams.discover("x")
+    assert "upstream is down" in str(exc.value)
+
+
+def test_error_with_empty_body_falls_back_to_status(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="")
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError) as exc:
+        ams.discover("x")
+    assert "HTTP 500" in str(exc.value)
+
+
+def test_exchange_posts_ist_and_org(monkeypatch):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = request.read().decode()
+        return httpx.Response(200, json={"session_jwt": "jwt_1", "session_token": "st_1"})
+
+    _patch_transport(monkeypatch, handler)
+    out = ams.exchange("ist_abc", "org_42")
+    assert out["session_jwt"] == "jwt_1"
+    assert "/v2/auth/exchange" in seen["url"]
+    assert "ist_abc" in seen["body"]
+    assert "org_42" in seen["body"]
+
+
+def test_list_projects_returns_list_and_sends_cookie(monkeypatch):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["cookie"] = request.headers.get("cookie", "")
+        return httpx.Response(200, json=[{"project": {"id": 1}, "tokens": []}])
+
+    _patch_transport(monkeypatch, handler)
+    out = ams.list_projects(7, "sess_jwt")
+    assert isinstance(out, list)
+    assert out[0]["project"]["id"] == 1
+    assert "/v1/users/accounts/7/projects" in seen["url"]
+    assert "stytch_session_jwt=sess_jwt" in seen["cookie"]
+
+
+def test_create_token_posts_project_and_name(monkeypatch):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = request.read().decode()
+        return httpx.Response(200, json={"api_key": "key_xyz"})
+
+    _patch_transport(monkeypatch, handler)
+    out = ams.create_token(7, 9, "my-cli-token", "sess_jwt")
+    assert out["api_key"] == "key_xyz"
+    assert "/v1/users/accounts/7/tokens" in seen["url"]
+    assert "my-cli-token" in seen["body"]
+    assert "9" in seen["body"]

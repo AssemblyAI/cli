@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from aai_cli.main import app
@@ -97,17 +96,6 @@ def test_samples_create_is_valid_python(tmp_path, monkeypatch):
 
 def test_unknown_sample_has_suggestion():
     # Drive the command body directly through the Typer app for a clean error.
-    from typer.testing import CliRunner
-
-    from aai_cli.main import app
-
-    result = CliRunner().invoke(app, ["samples", "create", "nope", "--json"])
+    result = runner.invoke(app, ["samples", "create", "nope", "--json"])
     assert result.exit_code == 1
     assert "Try one of" in result.output
-
-
-@pytest.mark.parametrize("argv", [["samples", "list"], ["samples", "create"]])
-def test_samples_help_has_examples(argv):
-    result = CliRunner().invoke(app, [*argv, "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

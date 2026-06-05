@@ -1,26 +1,12 @@
-# tests/test_help_examples_coverage.py
-import typer
-
-from aai_cli.main import app
+from tests._cli_tree import leaf_command_items
 
 # `version` is a trivial command with no flags; examples would be noise.
 _EXEMPT = {"version"}
 
 
-def _leaf_commands(click_cmd, prefix=()):
-    """Yield (path_tuple, command) for every non-group command in the tree."""
-    sub = getattr(click_cmd, "commands", None)
-    if not sub:
-        yield prefix, click_cmd
-        return
-    for name, child in sub.items():
-        yield from _leaf_commands(child, (*prefix, name))
-
-
 def test_every_leaf_command_has_examples_epilog():
-    root = typer.main.get_command(app)
     missing = []
-    for path, cmd in _leaf_commands(root):
+    for path, cmd in leaf_command_items():
         name = path[-1] if path else cmd.name
         if name in _EXEMPT:
             continue

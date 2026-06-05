@@ -184,3 +184,81 @@ def test_duplex_mic_ends_after_close():
     d.player.start()
     d.close()
     assert list(d.mic) == []  # capture loop returns on the close sentinel
+
+
+def test_duplex_start_is_idempotent():
+    calls = {"n": 0}
+
+    def factory(**k):
+        calls["n"] += 1
+        return FakeStream()
+
+    d = DuplexAudio(device_rate=16000, stream_factory=factory)
+    d.start()
+    d.start()  # second start must be a no-op
+    assert calls["n"] == 1
+
+
+def test_duplex_player_facade_flush_and_close():
+    fake = FakeStream()
+    d = DuplexAudio(target_rate=16000, device_rate=16000, stream_factory=lambda **k: fake)
+    d.player.start()
+    d.player.enqueue(b"\x01\x02" * 8)
+    assert d.player.pending() > 0
+    d.player.flush()
+    assert d.player.pending() == 0
+    d.player.close()
+    assert fake.stopped and fake.closed
+
+
+from aai_cli.agent.audio import NullPlayer, _default_duplex_stream  # noqa: E402
+
+
+def test_null_player_is_a_noop_player():
+    p = NullPlayer()
+    p.start()
+    p.enqueue(b"ignored")
+    p.flush()
+    assert p.pending() == 0
+    p.close()  # none of these raise or open a device
+
+
+def test_default_duplex_stream_opens_started_rawstream(monkeypatch):
+    created = {}
+
+    class FakeRaw:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.RawStream = lambda **kw: FakeRaw(**kw)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    stream = _default_duplex_stream(rate=48000, blocksize=4800, callback=lambda *a: None, device=2)
+    assert stream.started
+    assert created["samplerate"] == 48000
+    assert created["device"] == 2
+    assert created["channels"] == 1
+
+
+def test_default_duplex_stream_missing_sounddevice_raises_mic_missing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import -> ImportError
+    with pytest.raises(CLIError) as exc:
+        _default_duplex_stream(rate=24000, blocksize=2400, callback=lambda *a: None, device=None)
+    assert exc.value.error_type == "mic_missing"
+
+
+def test_default_duplex_stream_open_failure_raises_audio_output_error(monkeypatch):
+    def boom(**kw):
+        raise OSError("device busy")
+
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.RawStream = boom
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    with pytest.raises(CLIError) as exc:
+        _default_duplex_stream(rate=24000, blocksize=2400, callback=lambda *a: None, device=None)
+    assert exc.value.error_type == "audio_output_error"

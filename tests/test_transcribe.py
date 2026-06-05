@@ -389,10 +389,3 @@ def test_transcribe_renders_summary_human(monkeypatch):
     assert result.exit_code == 0
     assert "Summary:" in result.output
     assert "three bullet summary" in result.output
-
-
-def test_transcribe_help_has_examples():
-    result = CliRunner().invoke(app, ["transcribe", "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output
-    assert "aai transcribe" in result.output

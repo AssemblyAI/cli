@@ -16,6 +16,7 @@ gate. Run it with::
 
 from __future__ import annotations
 
+import functools
 import shutil
 import subprocess
 import sys
@@ -33,7 +34,9 @@ TEMPLATE_DIRS = sorted(
 )
 
 
+@functools.lru_cache(maxsize=1)
 def _pypi_reachable() -> bool:
+    # Cached: the parametrized cases all ask the same question, so probe the network once.
     try:
         urllib.request.urlopen("https://pypi.org/simple/", timeout=5)
         return True

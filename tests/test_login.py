@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -117,19 +116,9 @@ def test_unknown_env_exits_2():
 
 
 def test_rejected_api_key_has_suggestion(monkeypatch):
-    from typer.testing import CliRunner
-
     from aai_cli import client
-    from aai_cli.main import app
 
     monkeypatch.setattr(client, "validate_key", lambda key: False)
-    result = CliRunner().invoke(app, ["login", "--api-key", "sk_bad", "--json"])
+    result = runner.invoke(app, ["login", "--api-key", "sk_bad", "--json"])
     assert result.exit_code == 1
     assert "Check the key and retry" in result.output
-
-
-@pytest.mark.parametrize("cmd", ["login", "logout", "whoami"])
-def test_auth_commands_help_has_examples(cmd):
-    result = CliRunner().invoke(app, [cmd, "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

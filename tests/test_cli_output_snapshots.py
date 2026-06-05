@@ -17,12 +17,12 @@ automatically required to have a help snapshot (mirroring the coverage guard in
 from __future__ import annotations
 
 import pytest
-import typer
 from typer.testing import CliRunner
 
 from aai_cli import output
 from aai_cli.errors import APIError, CLIError, NotAuthenticated, UsageError, auth_failure
 from aai_cli.main import app
+from tests._cli_tree import leaf_command_argvs
 
 runner = CliRunner()
 
@@ -33,22 +33,7 @@ def _normalize(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
 
 
-def _leaf_paths(click_cmd, prefix=()):
-    """Yield the argv path of every non-group (leaf) command in the tree."""
-    sub = getattr(click_cmd, "commands", None)
-    if not sub:
-        yield prefix
-        return
-    for name, child in sub.items():
-        yield from _leaf_paths(child, (*prefix, name))
-
-
-def _all_help_argvs():
-    root = typer.main.get_command(app)
-    return sorted((list(p) for p in _leaf_paths(root) if p), key=lambda p: " ".join(p))
-
-
-HELP_ARGVS = _all_help_argvs()
+HELP_ARGVS = leaf_command_argvs()
 
 # Representative errors: each auth/usage/api shape, plus one with no suggestion so
 # the golden proves no stray "Suggestion:" line is emitted.

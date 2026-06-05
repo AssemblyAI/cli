@@ -175,9 +175,3 @@ def test_render_problem_payload_shows_fix_and_problem_banner():
     assert "fix:" in text
     assert "Run 'aai login'." in text
     assert "Problems found" in text
-
-
-def test_doctor_help_has_examples():
-    result = CliRunner().invoke(app, ["doctor", "--help"])
-    assert result.exit_code == 0
-    assert "Examples" in result.output

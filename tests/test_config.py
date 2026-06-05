@@ -1,7 +1,7 @@
 import pytest
 
 from aai_cli import config
-from aai_cli.errors import NotAuthenticated
+from aai_cli.errors import CLIError, NotAuthenticated
 
 
 def test_set_and_get_api_key_roundtrip():
@@ -71,11 +71,6 @@ def test_empty_api_key_flag_rejected():
 
 
 def test_invalid_profile_name_has_suggestion():
-    import pytest
-
-    from aai_cli import config
-    from aai_cli.errors import CLIError
-
     with pytest.raises(CLIError) as exc:
         config.set_active_profile("bad name!")
     assert exc.value.message.startswith("Invalid profile name")
