@@ -61,6 +61,41 @@ echo "==> xenon (cyclomatic complexity gate, src only)"
 # Tests are excluded (not shipped); only the aai_cli package is gated.
 uv run xenon --max-absolute B --max-modules B --max-average A aai_cli
 
+echo "==> swiftlint (macOS audio helper)"
+if command -v swiftlint >/dev/null 2>&1; then
+  swiftlint lint --no-cache --strict aai_cli/streaming/macos_system_audio.swift
+else
+  echo "   swiftlint not found; skipping (install with: brew install swiftlint)"
+fi
+
+echo "==> swift compile (macOS audio helper)"
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "   not macOS; skipping compile for macOS-only frameworks"
+elif command -v swiftc >/dev/null 2>&1; then
+  swift_module_cache="$(mktemp -d)"
+  swift_helper="$swift_module_cache/aai-macos-audio-check"
+  swift_error="$swift_module_cache/aai-macos-audio-check.err"
+  swiftc -parse-as-library aai_cli/streaming/macos_system_audio.swift \
+    -module-cache-path "$swift_module_cache" \
+    -O \
+    -framework ScreenCaptureKit \
+    -framework AVFoundation \
+    -framework CoreMedia \
+    -framework CoreGraphics \
+    -o "$swift_helper"
+  if "$swift_helper" --unknown-check-flag 2>"$swift_error"; then
+    echo "   expected Swift helper argument validation to fail"
+    exit 1
+  fi
+  if ! grep -q "Unknown argument: --unknown-check-flag" "$swift_error"; then
+    cat "$swift_error"
+    exit 1
+  fi
+  rm -rf "$swift_module_cache"
+else
+  echo "   swiftc not found; skipping (macOS system audio builds on first use)"
+fi
+
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 

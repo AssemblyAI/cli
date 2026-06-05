@@ -94,7 +94,7 @@ packages = ["aai_cli"]
 # Force-include the committed template files (incl. renamed dotfiles); the `**` glob
 # would otherwise also sweep in __pycache__/*.pyc left by importing a template during
 # tests, so exclude those from the wheel.
-artifacts = ["aai_cli/init/templates/**"]
+artifacts = ["aai_cli/init/templates/**", "aai_cli/streaming/macos_system_audio.swift"]
 exclude = ["**/__pycache__", "**/*.pyc"]
 
 [tool.pytest.ini_options]
@@ -114,6 +114,8 @@ markers = [
 [tool.mypy]
 python_version = "3.11"
 files = ["aai_cli", "tests"]
+# Init templates are packaged scaffold assets, not importable package modules.
+exclude = ["^aai_cli/init/templates/"]
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true

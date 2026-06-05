@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/agent")
+TEMPLATE_DIR = Path("aai_cli/init/templates/voice-agent")
 
 
 def _load_app(monkeypatch):

@@ -31,8 +31,8 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ## Scaffold a starter app
 
 ```sh
-aai init                   # pick a template, scaffold it, install deps, open the browser
-aai init transcribe myapp  # non-interactive: template + directory
+aai init                            # pick a template, scaffold it, install deps, open the browser
+aai init audio-transcription myapp  # non-interactive: template + directory
 ```
 
 `aai init` copies a small, self-contained FastAPI + HTML project you can run locally
@@ -183,6 +183,8 @@ aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
 aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
 aai stream https://…/clip.mp3  # a URL works too (decoded via ffmpeg)
 aai stream                     # from the microphone; Ctrl-C to stop
+aai stream --system-audio      # macOS: system/app audio + mic as separate sessions
+aai stream --system-audio-only # macOS: system/app audio without the mic
 ```
 
 `aai stream` exposes the full `StreamingParameters` surface as curated flags:
@@ -207,6 +209,14 @@ aai stream --sample \
   --keyterms-prompt "AssemblyAI" \
   --config vad_threshold=0.7
 ```
+
+On macOS, `--system-audio` uses ScreenCaptureKit to capture system/app audio
+without a loopback driver and streams it in a separate Streaming session from
+the microphone. The default terminal UI labels finalized turns as `You:` or
+`System:`. The first run may ask for Screen & System Audio Recording and
+Microphone permissions. The helper does not record screen frames, but macOS
+still uses that combined permission label for native system audio capture.
+`--system-audio-only` skips the microphone.
 
 ## Live transcript → live LLM
 

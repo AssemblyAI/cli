@@ -6,7 +6,7 @@ from aai_cli.init import scaffold
 
 def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     target = tmp_path / "app"
-    scaffold.scaffold("transcribe", target, api_key="sk-real-key")
+    scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
     assert (target / "api" / "index.py").exists()
     assert (target / "index.html").exists()
     assert (target / "vercel.json").exists()
@@ -20,7 +20,7 @@ def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
 
 def test_scaffold_writes_env_with_key(tmp_path):
     target = tmp_path / "app"
-    scaffold.scaffold("transcribe", target, api_key="sk-real-key")
+    scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
     env = (target / ".env").read_text()
     assert "ASSEMBLYAI_API_KEY=sk-real-key" in env
 
@@ -28,7 +28,7 @@ def test_scaffold_writes_env_with_key(tmp_path):
 def test_scaffold_writes_env_vars(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold(
-        "transcribe",
+        "audio-transcription",
         target,
         api_key="k",
         env_vars={
@@ -43,7 +43,7 @@ def test_scaffold_writes_env_vars(tmp_path):
 
 def test_scaffold_omits_env_vars_when_none(tmp_path):
     target = tmp_path / "app"
-    scaffold.scaffold("transcribe", target, api_key="k")
+    scaffold.scaffold("audio-transcription", target, api_key="k")
     env = (target / ".env").read_text()
     assert "ASSEMBLYAI_BASE_URL" not in env
     assert "ASSEMBLYAI_LLM_GATEWAY_URL" not in env
@@ -53,14 +53,14 @@ def test_scaffold_skips_pycache(tmp_path):
     # Importing a template's api/index.py during our own test run leaves a
     # __pycache__ next to it; the scaffolder must not copy that into the project.
     target = tmp_path / "app"
-    scaffold.scaffold("transcribe", target, api_key=None)
+    scaffold.scaffold("audio-transcription", target, api_key=None)
     assert not list(target.rglob("__pycache__"))
     assert not list(target.rglob("*.pyc"))
 
 
 def test_scaffold_writes_placeholder_when_no_key(tmp_path):
     target = tmp_path / "app"
-    scaffold.scaffold("transcribe", target, api_key=None)
+    scaffold.scaffold("audio-transcription", target, api_key=None)
     env = (target / ".env").read_text()
     assert scaffold.PLACEHOLDER_KEY in env
 

@@ -56,7 +56,7 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
         return Path.cwd()
     if directory:
         return Path(directory)
-    return Path.cwd() / f"{template}-app"
+    return Path.cwd() / template
 
 
 @app.command(
@@ -64,8 +64,11 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
     epilog=examples_epilog(
         [
             ("Scaffold a new app interactively", "aai init"),
-            ("Scaffold a transcribe app into ./my-app", "aai init transcribe my-app"),
-            ("Scaffold into the current directory", "aai init transcribe --here"),
+            (
+                "Scaffold an audio transcription app into ./my-app",
+                "aai init audio-transcription my-app",
+            ),
+            ("Scaffold into the current directory", "aai init audio-transcription --here"),
         ]
     ),
 )
@@ -74,9 +77,7 @@ def init(
     template: str | None = typer.Argument(
         None, help="Template to scaffold (omit to pick interactively)."
     ),
-    directory: str | None = typer.Argument(
-        None, help="Target directory (default: <template>-app)."
-    ),
+    directory: str | None = typer.Argument(None, help="Target directory (default: <template>)."),
     no_install: bool = typer.Option(
         False, "--no-install", help="Scaffold only; don't install or launch."
     ),

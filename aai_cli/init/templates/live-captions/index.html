@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live captions · AssemblyAI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="template-page live-captions-template">
+  <main class="app-shell">
+    <header class="page-header">
+      <h1 class="page-title">Live captions</h1>
+      <p class="page-subtitle">Click record and talk — your mic streams to AssemblyAI and transcribes in real time. Audio goes straight from the browser to AssemblyAI with a one-time token; your API key stays on the server.</p>
+    </header>
+
+    <div class="control-bar">
+      <button id="rec" class="button record-button" data-state="idle">● Record</button>
+      <span id="status" class="status-pill" aria-live="polite"></span>
+    </div>
+
+    <div class="caption-output" aria-live="polite">
+      <span id="final" class="caption-final"></span><span id="partial" class="caption-partial"></span>
+    </div>
+  </main>
+
+  <script src="/static/audio.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

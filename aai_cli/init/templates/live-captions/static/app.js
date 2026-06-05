@@ -19,7 +19,7 @@ recBtn.addEventListener("click", () => (recording ? stop() : start().catch(fail)
 
 function setStatus(message, state) {
   statusEl.textContent = message;
-  statusEl.className = state;
+  statusEl.dataset.state = state;
 }
 
 async function start() {
@@ -46,7 +46,7 @@ async function start() {
   ws.onopen = () => {
     recording = true;
     recBtn.textContent = "■ Stop";
-    recBtn.classList.add("rec");
+    recBtn.dataset.state = "recording";
     setStatus("● Live", "live");
     audioPipeline.connect((frame, sampleRate) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
@@ -74,7 +74,7 @@ function onMessage(message) {
 function stop() {
   recording = false;
   recBtn.textContent = "● Record";
-  recBtn.classList.remove("rec");
+  recBtn.dataset.state = "idle";
   setStatus("Stopped", "idle");
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "Terminate" }));
   if (audioPipeline) audioPipeline.close();
