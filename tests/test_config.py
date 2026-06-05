@@ -84,3 +84,30 @@ def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
     # profile names are validated; this checks tomli_w writes valid TOML for normal data
     config.set_api_key("staging", "sk_x")
     assert config.get_active_profile() == "staging"
+
+
+def test_dump_is_atomic_and_leaves_no_temp_files(tmp_config):
+    # Atomic write: config.toml is the only file in the dir after writes (no leftover
+    # .config-*.toml.tmp), and the data is intact valid TOML.
+    config.set_api_key("default", "sk_abc")
+    config.set_profile_env("default", "sandbox000")
+    names = sorted(p.name for p in tmp_config.iterdir())
+    assert names == ["config.toml"]
+    assert config.get_profile_env("default") == "sandbox000"
+
+
+def test_dump_cleans_up_temp_file_when_write_fails(tmp_config, monkeypatch):
+    # A failure mid-write must propagate AND leave no temp file behind, so the real
+    # config.toml is never clobbered by a partial write.
+    config.set_api_key("default", "sk_abc")  # establish a valid config.toml first
+
+    def boom(_data, _fh):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(config.tomli_w, "dump", boom)
+    with pytest.raises(RuntimeError):
+        config._dump({"profiles": {}})
+
+    names = sorted(p.name for p in tmp_config.iterdir())
+    assert names == ["config.toml"]  # no .config-*.toml.tmp left behind
+    assert config.get_api_key("default") == "sk_abc"  # original untouched

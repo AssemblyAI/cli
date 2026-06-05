@@ -40,6 +40,11 @@ class VoiceAgentSession:
         # to the spoken input, so the process exits instead of waiting forever.
         self.exit_after_reply = exit_after_reply
         self.ready_event = ready_event
+        # `ready`/`muted` are the duplex gate: written by dispatch() on the receive
+        # loop, read by should_send_audio() on the capture thread. The lock makes that
+        # cross-thread handoff explicit (and the reads consistent) instead of relying on
+        # the GIL. `finished`/`_saw_user` are touched only by dispatch (one thread).
+        self._lock = threading.Lock()
         self.ready = False
         self.muted = False
         self.finished = False
@@ -47,13 +52,15 @@ class VoiceAgentSession:
 
     def should_send_audio(self) -> bool:
         """True when captured mic frames should be forwarded to the server."""
-        return self.ready and not self.muted
+        with self._lock:
+            return self.ready and not self.muted
 
     def dispatch(self, event: dict) -> None:
         etype = event.get("type")
 
         if etype == "session.ready":
-            self.ready = True
+            with self._lock:
+                self.ready = True
             if self.ready_event is not None:
                 self.ready_event.set()
             self.renderer.connected()
@@ -69,7 +76,8 @@ class VoiceAgentSession:
             self.renderer.user_final(event.get("text", ""))
         elif etype == "reply.started":
             if not self.full_duplex:
-                self.muted = True
+                with self._lock:
+                    self.muted = True
             self.renderer.reply_started()
         elif etype == "reply.audio":
             data = event.get("data")
@@ -81,7 +89,8 @@ class VoiceAgentSession:
             )
         elif etype == "reply.done":
             if not self.full_duplex:
-                self.muted = False
+                with self._lock:
+                    self.muted = False
             interrupted = event.get("status") == "interrupted"
             if interrupted:
                 self.player.flush()
@@ -121,24 +130,6 @@ def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
             return
 
 
-def _is_auth_rejection(exc: BaseException) -> bool:
-    """True when a connect/session failure means the credentials were rejected.
-
-    Detected structurally where possible — the Voice Agent closes with WebSocket
-    code 1008 on a bad key, and a pre-upgrade HTTP 401/403 carries a status code —
-    then falls back to the shared text heuristic.
-    """
-    code = getattr(exc, "code", None)
-    if code is None:
-        code = getattr(getattr(exc, "rcvd", None), "code", None)
-    if code == 1008:
-        return True
-    response = getattr(exc, "response", None)
-    if getattr(response, "status_code", None) in (401, 403):
-        return True
-    return is_auth_failure(exc)
-
-
 def run_session(
     api_key: str,
     *,
@@ -174,13 +165,16 @@ def run_session(
     try:
         ws = connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
-        if _is_auth_rejection(exc):
+        if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Could not connect to the voice agent: {exc}") from exc
 
     # The mic opens lazily on first iteration, inside the capture thread; a failure
     # there (no device, sounddevice missing) must reach the user instead of vanishing
     # with the daemon thread. Capture it and close the socket to end the receive loop.
+    # The append below happens-before the main thread reads `capture_error`: the
+    # capture thread appends, then ws.close() ends the `for raw in ws` loop, so the
+    # error is always visible by the time we inspect it after the loop.
     capture_error: list[CLIError] = []
 
     def _capture() -> None:
@@ -217,7 +211,7 @@ def run_session(
     except Exception as exc:
         if capture_error:
             raise capture_error[0] from exc  # a mic-open failure is the real cause
-        if _is_auth_rejection(exc):
+        if is_auth_failure(exc):
             raise auth_failure() from exc
         raise APIError(f"Voice agent session failed: {exc}") from exc
     finally:
