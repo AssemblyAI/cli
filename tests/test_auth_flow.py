@@ -68,7 +68,6 @@ def test_run_login_flow_happy_path(monkeypatch):
         "exchange",
         lambda ist, org: {"account": {"id": 9}, "session_jwt": "jwt", "session_token": "t"},
     )
-    monkeypatch.setattr(flow.ams, "get_auth", lambda jwt: {"id": 9})
     monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
 
     assert flow.run_login_flow().api_key == "sk_final"
@@ -112,7 +111,9 @@ def test_find_or_create_creates_when_existing_token_has_no_api_key(monkeypatch):
     assert flow.find_or_create_cli_key(1, "jwt") == "sk_new"
 
 
-def test_run_login_flow_uses_exchange_account_without_get_auth(monkeypatch):
+def test_run_login_flow_uses_exchange_account(monkeypatch):
+    # The signed-in account comes from exchange()'s response; the flow must not make a
+    # second round-trip to fetch it.
     monkeypatch.setattr(flow, "_open_browser", lambda url: None)
     monkeypatch.setattr(
         flow,
@@ -131,9 +132,6 @@ def test_run_login_flow_uses_exchange_account_without_get_auth(monkeypatch):
         flow.ams,
         "exchange",
         lambda ist, org: {"account": {"id": 42}, "session_jwt": "jwt", "session_token": "t"},
-    )
-    monkeypatch.setattr(
-        flow.ams, "get_auth", lambda jwt: pytest.fail("get_auth is a redundant round-trip")
     )
     captured = {}
 

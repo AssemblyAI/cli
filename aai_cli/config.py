@@ -71,14 +71,6 @@ def get_active_profile() -> str:
     return str(_load().get("active_profile", DEFAULT_PROFILE))
 
 
-def set_active_profile(name: str) -> None:
-    _validate_profile(name)
-    data = _load()
-    data["active_profile"] = name
-    data.setdefault("profiles", {}).setdefault(name, {})
-    _dump(data)
-
-
 def set_api_key(profile: str, api_key: str) -> None:
     _validate_profile(profile)
     keyring.set_password(KEYRING_SERVICE, profile, api_key)
