@@ -63,9 +63,13 @@ def _resource_bytes() -> bytes:
     return resources.files("aai_cli.streaming").joinpath(_HELPER_RESOURCE).read_bytes()
 
 
+def _is_macos() -> bool:
+    return sys.platform == "darwin"
+
+
 def build_helper() -> Path:
     """Compile the bundled ScreenCaptureKit helper once and return its executable path."""
-    if sys.platform != "darwin":
+    if not _is_macos():
         raise _unsupported_platform()
     swiftc = shutil.which("swiftc")
     if swiftc is None:
