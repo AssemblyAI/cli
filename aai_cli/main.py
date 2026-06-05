@@ -22,6 +22,7 @@ from aai_cli.commands import (
     llm,
     login,
     samples,
+    sessions,
     stream,
     transcribe,
     transcripts,
@@ -99,6 +100,7 @@ def main(
 app.add_typer(transcribe.app)
 app.add_typer(stream.app)
 app.add_typer(transcripts.app, name="transcripts")
+app.add_typer(sessions.app, name="sessions")
 app.add_typer(agent.app)
 app.add_typer(llm.app)
 app.add_typer(account.app)  # balance, usage, limits
