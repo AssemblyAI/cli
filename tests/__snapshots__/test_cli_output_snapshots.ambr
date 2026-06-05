@@ -526,8 +526,7 @@
   │                                                         index.               │
   │ --speech-model                                 TEXT     Streaming speech     │
   │                                                         model.               │
-  │                                                         [default:            │
-  │                                                         universal-streaming… │
+  │                                                         [default: u3-rt-pro] │
   │ --encoding                                     TEXT     pcm_s16le or         │
   │                                                         pcm_mulaw.           │
   │ --language-detection                                    Auto-detect the      │

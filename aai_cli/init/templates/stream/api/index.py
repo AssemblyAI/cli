@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import httpx
+import httpx2
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -36,7 +36,7 @@ def token() -> dict[str, str]:
     """Mint a one-time streaming token. The browser uses it to open the WebSocket."""
     # NOTE: the streaming token uses the raw API key as Authorization (no 'Bearer').
     try:
-        resp = httpx.get(
+        resp = httpx2.get(
             f"https://{STREAMING_HOST}/v3/token",
             params={"expires_in_seconds": 60},
             headers={"Authorization": API_KEY},

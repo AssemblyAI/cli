@@ -30,7 +30,12 @@ dependencies = [
     "assemblyai>=0.64.4",
     "rich>=15.0.0",
     "keyring>=25.7.0",
-    "httpx>=0.28.1",
+    # httpx2 is Pydantic's maintained fork of httpx (github.com/pydantic/httpx2,
+    # forked from httpx 0.28.1, API-identical bar the package rename). The exact
+    # version is pinned in uv.lock; safe-chain's minimum-package-age check governs
+    # which releases the lock may adopt, so no manual version cap is needed here.
+    # (Plain httpx still arrives transitively via the assemblyai SDK.)
+    "httpx2>=2.0.0",
     "platformdirs>=4.10.0",
     "tomli-w>=1.2.0",
     "websockets>=16.0",
@@ -70,6 +75,10 @@ dev = [
     "python-multipart>=0.0.9",
     "syrupy>=4.0",
     "numpy>=2.0.0", # e2e tests resample kokoro audio (tests/e2e/test_cli_e2e.py)
+    # kokoro TTS synthesizes speech for the stream/agent e2e tests. It only supports
+    # Python <3.13, so it's marker-gated to keep the universal lock resolvable on
+    # 3.13 (the e2e tests skip via importorskip when it's absent there).
+    "kokoro>=0.9.4; python_version < '3.13'",
     "xenon>=0.9.3",
     "diff-cover>=9.0.0",
 ]
@@ -94,9 +103,6 @@ testpaths = ["tests"]
 # the targeted ignores below override the blanket `error`.
 filterwarnings = [
     "error",
-    # Starlette's TestClient warns that it rides on httpx (not the unreleased httpx2)
-    # when the `aai init` template apps are exercised; we don't control this.
-    "ignore:Using .httpx. with .starlette.testclient. is deprecated:",
 ]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY + kokoro; skip otherwise)",

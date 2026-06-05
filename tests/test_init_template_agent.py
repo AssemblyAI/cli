@@ -24,7 +24,7 @@ def _ok_response(token="tok-123"):
 
 def test_token_returns_token_and_agent_ws_url(monkeypatch):
     mod = _load_app()
-    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: _ok_response())
+    monkeypatch.setattr(mod.httpx2, "get", lambda *a, **k: _ok_response())
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 200
     body = resp.json()
@@ -42,7 +42,7 @@ def test_token_uses_bearer_authorization_header(monkeypatch):
         captured.update(url=url, headers=headers)
         return _ok_response()
 
-    monkeypatch.setattr(mod.httpx, "get", fake_get)
+    monkeypatch.setattr(mod.httpx2, "get", fake_get)
     TestClient(mod.app).post("/api/token")
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
     assert "/v1/token" in captured["url"]
@@ -61,6 +61,6 @@ def test_token_surfaces_error_as_502(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("network down")
 
-    monkeypatch.setattr(mod.httpx, "get", boom)
+    monkeypatch.setattr(mod.httpx2, "get", boom)
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 502

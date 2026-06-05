@@ -17,7 +17,7 @@ from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
 
-DEFAULT_SPEECH_MODEL = SpeechModel.universal_streaming_multilingual.value
+DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro.value
 
 
 @app.command(
