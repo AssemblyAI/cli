@@ -150,3 +150,28 @@ def test_rejected_api_key_has_suggestion(monkeypatch):
     result = runner.invoke(app, ["login", "--api-key", "sk_bad", "--json"])
     assert result.exit_code == 1
     assert "Check the key and retry" in result.output
+
+
+def test_whoami_reports_session_and_account():
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    config.set_session("default", session_jwt="j", session_token="t", account_id=77)
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["account_id"] == 77
+    assert data["session"] == "stored"
+
+
+def test_whoami_session_none_without_browser_login():
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["session"] == "none"
+    assert data["account_id"] is None

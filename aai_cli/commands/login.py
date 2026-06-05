@@ -109,11 +109,21 @@ def whoami(
         masked = f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
         env = environments.active().name
         reachable = client.validate_key(key)
+        session = config.get_session(profile)
+        account_id = config.get_account_id(profile)
         output.emit(
-            {"profile": profile, "env": env, "api_key": masked, "reachable": reachable},
+            {
+                "profile": profile,
+                "env": env,
+                "api_key": masked,
+                "reachable": reachable,
+                "account_id": account_id,
+                "session": "stored" if session else "none",
+            },
             lambda _d: (
                 f"profile={escape(profile)} env={escape(env)} "
-                f"key={escape(masked)} reachable={reachable}"
+                f"key={escape(masked)} reachable={reachable} "
+                f"account={account_id} session={'stored' if session else 'none'}"
             ),
             json_mode=json_mode,
         )
