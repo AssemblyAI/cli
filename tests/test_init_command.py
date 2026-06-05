@@ -20,6 +20,27 @@ def test_init_writes_key_from_env(tmp_path, monkeypatch):
     assert "ASSEMBLYAI_API_KEY=sk-from-env" in (tmp_path / "myapp" / ".env").read_text()
 
 
+def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypatch):
+    # Logged out + install: deps install, but the server can't start without a key —
+    # the report must say so (and must not launch) rather than exiting silently.
+    import subprocess
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "aai_cli.init.runner.run_setup",
+        lambda *a, **k: subprocess.CompletedProcess([], 0, "", ""),
+    )
+    launched = {"v": False}
+    monkeypatch.setattr(
+        "aai_cli.init.runner.launch_and_open",
+        lambda *a, **k: launched.__setitem__("v", True) or 0,
+    )
+    result = runner.invoke(app, ["init", "transcribe", "app"])  # no --no-install, logged out
+    assert result.exit_code == 0, result.output
+    assert launched["v"] is False
+    assert "aai login" in result.output
+
+
 def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
     # The generated .env pins the app to the CLI's active environment hosts.
     monkeypatch.chdir(tmp_path)

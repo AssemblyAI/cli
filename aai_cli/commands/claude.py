@@ -4,14 +4,13 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TypedDict
 
 import typer
-from rich.markup import escape
 
-from aai_cli import output, theme
+from aai_cli import output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
+from aai_cli.steps import Step, render_steps
 
 app = typer.Typer(
     help="Wire up Claude Code for AssemblyAI (docs MCP + skill).",
@@ -22,14 +21,7 @@ MCP_NAME = "assemblyai-docs"
 MCP_URL = "https://mcp.assemblyai.com/docs"
 SKILL_REPO = "AssemblyAI/assemblyai-skill"
 _VALID_SCOPES = ("user", "project", "local")
-
-
-class Step(TypedDict):
-    """One line of setup output: a named step, its status, and a human detail."""
-
-    name: str
-    status: str
-    detail: str
+_STEPS_HEADING = "AssemblyAI coding-agent setup:"
 
 
 def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess:
@@ -191,15 +183,8 @@ def _remove_skill() -> Step:
     return {"name": "skill", "status": "removed", "detail": str(_skill_dir())}
 
 
-def _render_steps(data: dict[str, list[Step]]) -> str:
-    lines = []
-    for s in data["steps"]:
-        style = theme.status_style(s["status"])
-        lines.append(
-            f"  {escape(s['name'])}: "
-            f"[{style}]{escape(s['status'])}[/{style}] — {escape(s['detail'])}"
-        )
-    return "[aai.heading]AssemblyAI coding-agent setup:[/aai.heading]\n" + "\n".join(lines)
+def _render(data: dict[str, list[Step]]) -> str:
+    return render_steps(data["steps"], heading=_STEPS_HEADING)
 
 
 @app.command()
@@ -224,7 +209,7 @@ def install(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
         steps = [_install_mcp(scope, force), _install_skill(force)]
-        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+        output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
 
@@ -240,7 +225,7 @@ def status(
 
     def body(_state: AppState, json_mode: bool) -> None:
         steps = [_mcp_status(), _skill_status()]
-        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+        output.emit({"steps": steps}, _render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
 
@@ -266,7 +251,7 @@ def remove(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
         steps = [_remove_mcp(scope), _remove_skill()]
-        output.emit({"steps": steps}, _render_steps, json_mode=json_mode)
+        output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
 

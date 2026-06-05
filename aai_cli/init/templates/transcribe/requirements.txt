@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-assemblyai
+assemblyai>=0.64,<1
 python-dotenv
 python-multipart
 openai

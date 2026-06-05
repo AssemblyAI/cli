@@ -164,10 +164,15 @@
       tabsEl.innerHTML = viewEl.innerHTML = answerEl.textContent = "";
       askPanel.hidden = true;
       currentId = null;
+      speakerSeen = {};
       setStatus("Uploading…", "working");
-      const res = await submit();
-      if (!res.ok) return fail(await res.text());
-      poll((await res.json()).id);
+      try {
+        const res = await submit();
+        if (!res.ok) return fail(await res.text());
+        await poll((await res.json()).id);
+      } catch (e) {
+        fail(e.message || String(e));  // network/parse errors don't leave the UI stuck
+      }
     }
 
     async function poll(id) {
@@ -175,7 +180,8 @@
       const res = await fetch("/api/status/" + id);
       if (!res.ok) return fail(await res.text());
       const data = await res.json();
-      if (data.status !== "completed") return void setTimeout(() => poll(id), 2000);
+      if (data.status !== "completed")
+        return void setTimeout(() => poll(id).catch((e) => fail(String(e))), 2000);
       setStatus("✓ Done", "done");
       busy(false);
       currentId = id;
@@ -200,12 +206,12 @@
       }
     }
 
-    // --- speaker colors --------------------------------------------------
+    // --- speaker colors (reset each transcription via start()) -----------
     const PALETTE = ["#4338ca", "#0d9488", "#b45309", "#be185d", "#15803d", "#7c3aed"];
-    const speakerColor = (() => {
-      const seen = {};
-      return (spk) => (seen[spk] ??= PALETTE[Object.keys(seen).length % PALETTE.length]);
-    })();
+    let speakerSeen = {};
+    function speakerColor(spk) {
+      return (speakerSeen[spk] ??= PALETTE[Object.keys(speakerSeen).length % PALETTE.length]);
+    }
 
     // --- build the tabbed explorer --------------------------------------
     function explore(t) {

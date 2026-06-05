@@ -67,7 +67,11 @@ aai = "aai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aai_cli"]
+# Force-include the committed template files (incl. renamed dotfiles); the `**` glob
+# would otherwise also sweep in __pycache__/*.pyc left by importing a template during
+# tests, so exclude those from the wheel.
 artifacts = ["aai_cli/init/templates/**"]
+exclude = ["**/__pycache__", "**/*.pyc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

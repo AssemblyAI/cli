@@ -7,10 +7,10 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import environments, output
+from aai_cli import environments, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
-from aai_cli.init import keys, runner, scaffold, steps, templates
+from aai_cli.init import keys, runner, scaffold, templates
 
 # Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
@@ -127,11 +127,11 @@ def init(
                 }
             )
 
+        use_uv = runner.has_uv()
         will_launch = not no_install and api_key is not None
         if no_install:
             report.append({"name": "install", "status": "skipped", "detail": "--no-install"})
         else:
-            use_uv = runner.has_uv()
             setup = runner.run_setup(target, use_uv=use_uv)
             if setup.returncode != 0:
                 report.append(
@@ -151,7 +151,20 @@ def init(
                     }
                 )
 
-        output.emit(report, lambda d: steps.render_steps(d), json_mode=json_mode)
+        # Deps are installed but there's no key, so the server can't start — say so
+        # rather than exiting silently.
+        if not no_install and api_key is None:
+            report.append(
+                {
+                    "name": "launch",
+                    "status": "skipped",
+                    "detail": f"no API key; run `aai login`, then: cd {target} && uv run uvicorn api.index:app",
+                }
+            )
+
+        output.emit(
+            report, lambda d: steps.render_steps(d, heading="aai init:"), json_mode=json_mode
+        )
         if any(s["status"] == "failed" for s in report):
             raise typer.Exit(code=1)
 
@@ -163,7 +176,7 @@ def init(
                     f"[aai.heading]Starting[/aai.heading] {escape(url)}  (Ctrl-C to stop)"
                 )
             code = runner.launch_and_open(
-                target, port=chosen_port, use_uv=runner.has_uv(), open_browser=not no_open
+                target, port=chosen_port, use_uv=use_uv, open_browser=not no_open
             )
             if code:
                 raise typer.Exit(code=code)

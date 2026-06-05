@@ -163,3 +163,21 @@ def test_status_returns_502_on_error(monkeypatch):
     client = TestClient(app)
     resp = client.get("/api/status/t-bad")
     assert resp.status_code == 502
+
+
+def test_submit_surfaces_sdk_exception_as_502_not_500(monkeypatch):
+    # A missing/invalid key makes the SDK raise; the endpoint must return a clean 502,
+    # not let the exception bubble into a 500 traceback.
+    app, fake, _api = _load_app(monkeypatch)
+    fake.Transcriber.return_value.submit.side_effect = ValueError("Please provide an API key")
+    client = TestClient(app)
+    resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
+    assert resp.status_code == 502
+
+
+def test_status_surfaces_sdk_exception_as_502_not_500(monkeypatch):
+    app, _aai, fake_api = _load_app(monkeypatch)
+    fake_api.get_transcript.side_effect = RuntimeError("network down")
+    client = TestClient(app)
+    resp = client.get("/api/status/t-x")
+    assert resp.status_code == 502

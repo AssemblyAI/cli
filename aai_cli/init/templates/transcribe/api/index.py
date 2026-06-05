@@ -60,7 +60,12 @@ def index() -> FileResponse:
 
 def _submit(audio: str) -> dict[str, str]:
     """Submit an audio reference (local file path or public URL); return its id."""
-    transcript = aai.Transcriber().submit(audio, config=CONFIG)
+    try:
+        transcript = aai.Transcriber().submit(audio, config=CONFIG)
+    except Exception as exc:  # missing/invalid key, network, etc. -> clean error, not a 500
+        raise HTTPException(
+            status_code=502, detail=f"Could not start transcription: {exc}"
+        ) from exc
     return {"id": transcript.id}
 
 
@@ -69,7 +74,10 @@ async def transcribe(file: UploadFile) -> dict[str, str]:
     suffix = Path(file.filename or "audio").suffix
     tmp = Path(tempfile.gettempdir()) / f"aai-{uuid.uuid4().hex}{suffix}"
     tmp.write_bytes(await file.read())
-    return _submit(str(tmp))
+    try:
+        return _submit(str(tmp))
+    finally:
+        tmp.unlink(missing_ok=True)  # the upload is sent during submit; don't leave it on disk
 
 
 @app.post("/api/transcribe-url")
@@ -104,7 +112,10 @@ def status(transcript_id: str) -> dict[str, object]:
     # finishes (it calls wait_for_completion) — wrong for a poll endpoint, and it
     # would time out on serverless. api.get_transcript does a single request and
     # uses the SDK's configured client (auth + region from aai.settings).
-    t = get_transcript(Client.get_default().http_client, transcript_id)
+    try:
+        t = get_transcript(Client.get_default().http_client, transcript_id)
+    except Exception as exc:  # missing key (ValueError), HTTP/network error -> clean 502
+        raise HTTPException(status_code=502, detail=f"Could not fetch transcript: {exc}") from exc
     if t.status == aai.TranscriptStatus.error:
         raise HTTPException(status_code=502, detail=t.error or "Transcription failed")
     if t.status == aai.TranscriptStatus.completed:

@@ -25,6 +25,17 @@ def test_every_registered_template_has_a_directory():
         )
 
 
+def test_every_shipped_directory_is_registered():
+    # The other direction: a template dir that ships but isn't registered is invisible
+    # in the picker and unreachable via `aai init <id>`. Together with the test above
+    # this enforces registry == shipped directories.
+    for path in _TEMPLATES_ROOT.iterdir():
+        if path.is_dir() and not path.name.startswith("__"):
+            assert path.name in templates.TEMPLATES, (
+                f"aai_cli/init/templates/{path.name}/ ships but isn't registered in TEMPLATES"
+            )
+
+
 def test_title_for_known_and_unknown():
     assert "Transcribe" in templates.title_for("transcribe")
     assert templates.title_for("nope") == "nope"  # falls back to the raw id
