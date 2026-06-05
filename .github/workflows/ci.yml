@@ -94,3 +94,39 @@ jobs:
           python -m pip install -e . pip-audit
           # Append `--ignore-vuln <ID>` to accept an unfixable transitive advisory.
           python -m pip_audit
+
+  install-smoke:
+    name: install.sh real install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            kfilter: ""             # both branches: pipx + pip --user
+          - os: macos-latest
+            kfilter: "-k pipx"      # pipx only — PEP 668 makes pip --user flaky on macOS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # `aai version` imports the package, which pulls in sounddevice (needs
+      # PortAudio) and ffmpeg-backed sources. Match the other jobs' system deps.
+      - name: System deps (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+      - name: System deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install portaudio ffmpeg
+
+      # Use the system interpreter (no virtualenv) so install.sh's `pip --user`
+      # branch is allowed. Editable install makes `aai_cli` importable for the
+      # test's __version__ check; uv builds the wheel; pipx drives the pipx branch.
+      - name: Tooling
+        run: python -m pip install -e ".[dev]" uv pipx
+
+      - name: Real install smoke
+        run: python -m pytest -q -m install_script ${{ matrix.kfilter }}
