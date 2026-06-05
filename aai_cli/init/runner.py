@@ -71,11 +71,11 @@ def wait_for_port(port: int, *, timeout: float = 30.0) -> bool:
     return False
 
 
-def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess:
+def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]:
     """Run env-setup commands in order; return the first failure or the last success."""
-    last = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    last = subprocess.CompletedProcess[str](args=[], returncode=0, stdout="", stderr="")
     for cmd in env_setup_commands(target, use_uv=use_uv):
-        last = subprocess.run(cmd, cwd=target, capture_output=True, text=True)
+        last = subprocess.run(cmd, cwd=target, capture_output=True, check=False, text=True)
         if last.returncode != 0:
             return last
     return last

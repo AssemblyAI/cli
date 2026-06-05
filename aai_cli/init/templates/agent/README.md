@@ -3,7 +3,8 @@
 Click connect and talk to a voice agent: speech in → LLM → speech out, with built-in
 turn detection, TTS, and barge-in. The browser connects **directly** to AssemblyAI's
 Voice Agent WebSocket using a one-time token minted by the backend, so your API key
-never reaches the client and no audio is proxied through your server.
+never reaches the client and no audio is proxied through your server. The app uses
+static HTML/CSS/JS with no frontend build step.
 
 ## Run locally
 
@@ -24,6 +25,6 @@ is needed.
 
 ## Ideas to extend
 
-- Change the `greeting`, `system_prompt`, or `voice` in `index.html`'s `session.update`.
+- Change the `greeting`, `systemPrompt`, or `voice` in `SESSION_CONFIG` (`static/app.js`).
 - Add tools (function calling) so the agent can look things up or take actions.
-- Tune `input.turn_detection` (`min_silence`/`max_silence`) for your use case.
+- Tune `input.turn_detection` (`min_silence`/`max_silence`) inside `SESSION_CONFIG`.

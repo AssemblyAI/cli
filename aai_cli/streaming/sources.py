@@ -13,14 +13,17 @@ from typing import Any
 from aai_cli.errors import APIError, CLIError
 
 TARGET_RATE = 16000
-CHUNK_BYTES = TARGET_RATE * 2 // 10  # 100 ms of 16-bit mono PCM
+PCM16_SAMPLE_WIDTH_BYTES = 2
+CHUNK_BYTES = TARGET_RATE * PCM16_SAMPLE_WIDTH_BYTES // 10  # 100 ms of 16-bit mono PCM
 
 
 def _is_streamable_wav(path: Path) -> bool:
     try:
         with wave.open(str(path), "rb") as w:
             return (
-                w.getnchannels() == 1 and w.getsampwidth() == 2 and w.getframerate() == TARGET_RATE
+                w.getnchannels() == 1
+                and w.getsampwidth() == PCM16_SAMPLE_WIDTH_BYTES
+                and w.getframerate() == TARGET_RATE
             )
     except (wave.Error, EOFError, OSError):
         return False

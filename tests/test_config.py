@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from aai_cli import config
@@ -24,6 +26,15 @@ def test_resolve_prefers_env_over_keyring(monkeypatch):
 def test_resolve_falls_back_to_keyring():
     config.set_api_key("default", "from_keyring")
     assert config.resolve_api_key() == "from_keyring"
+
+
+def test_get_session_rejects_non_string_jwt():
+    config.keyring.set_password(
+        config.KEYRING_SERVICE,
+        config._session_username("default"),
+        json.dumps({"jwt": 123, "token": "tok"}),
+    )
+    assert config.get_session("default") is None
 
 
 def test_resolve_raises_when_missing():

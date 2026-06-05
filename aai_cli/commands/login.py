@@ -24,7 +24,7 @@ app = typer.Typer()
 )
 def login(
     ctx: typer.Context,
-    api_key: str = typer.Option(None, "--api-key", help="Provide key non-interactively."),
+    api_key: str | None = typer.Option(None, "--api-key", help="Provide key non-interactively."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
     """Authenticate via your browser; stores a CLI API key."""

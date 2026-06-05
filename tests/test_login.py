@@ -47,9 +47,14 @@ def test_whoami_reports_authenticated():
     assert data["api_key"].startswith("sk_") and "…" in data["api_key"]
 
 
-def test_whoami_unauthenticated_exits_2():
-    result = runner.invoke(app, ["whoami"])
+def test_whoami_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True) as validate:
+        result = runner.invoke(app, ["whoami", "--json"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    validate.assert_not_called()
+    assert "Run the same command again" in result.output
 
 
 def test_logout_clears_key():

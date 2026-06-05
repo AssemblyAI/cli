@@ -4,13 +4,35 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import output
+from aai_cli import jsonshape, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
+
+
+def _mapping(value: object) -> dict[str, object] | None:
+    return jsonshape.as_mapping(value)
+
+
+def _mapping_list(value: object) -> list[dict[str, object]]:
+    return jsonshape.mapping_list(value)
+
+
+def _project_id(project: dict[str, object]) -> int | None:
+    value = project.get("id")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 @app.command(
@@ -33,17 +55,18 @@ def list_(
         projects = ams.list_projects(account_id, jwt)
         rows: list[dict[str, object]] = []
         for entry in projects:
-            project_name = entry["project"]["name"]
-            for token in entry.get("tokens", []):
-                rows.append(
-                    {
-                        "id": token["id"],
-                        "name": token["name"],
-                        "project": project_name,
-                        "key": output.mask_secret(str(token["api_key"])),
-                        "disabled": token["is_disabled"],
-                    }
-                )
+            project = _mapping(entry.get("project")) or {}
+            project_name = project.get("name", "")
+            rows.extend(
+                {
+                    "id": token.get("id", ""),
+                    "name": token.get("name") or token.get("token_name", ""),
+                    "project": project_name,
+                    "key": output.mask_secret(str(token.get("api_key", ""))),
+                    "disabled": bool(token.get("is_disabled")),
+                }
+                for token in _mapping_list(entry.get("tokens"))
+            )
 
         def render(data: list[dict[str, object]]) -> Table:
             table = Table("id", "name", "project", "key", "disabled", header_style="aai.heading")
@@ -73,7 +96,7 @@ def list_(
 def create(
     ctx: typer.Context,
     name: str = typer.Option(..., "--name", help="A label for the new key."),
-    project_id: int = typer.Option(
+    project_id: int | None = typer.Option(
         None, "--project", help="Project id to create the key in (defaults to your first)."
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -87,7 +110,12 @@ def create(
             projects = ams.list_projects(account_id, jwt)
             if not projects:
                 raise APIError("Your account has no project to create a key in.")
-            pid = projects[0]["project"]["id"]
+            project = _mapping(projects[0].get("project"))
+            if project is None:
+                raise APIError("Your account has no project to create a key in.")
+            pid = _project_id(project)
+            if pid is None:
+                raise APIError("Your account has no project to create a key in.")
         created = ams.create_token(account_id, pid, name, jwt)
         output.emit(
             created,

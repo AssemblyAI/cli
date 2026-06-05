@@ -3,11 +3,10 @@ from __future__ import annotations
 import webbrowser
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from rich.markup import escape
 
-from aai_cli import output
+from aai_cli import jsonshape, output
 from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
 
@@ -23,18 +22,41 @@ class LoginResult:
     account_id: int
 
 
-def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
+def _as_mapping(value: object) -> dict[str, object] | None:
+    return jsonshape.as_mapping(value)
+
+
+def _mapping_list(value: object) -> list[dict[str, object]]:
+    return jsonshape.mapping_list(value)
+
+
+def _require_int(mapping: Mapping[str, object], key: str, what: str) -> int:
+    value = _require(mapping, key, what)
+    if isinstance(value, bool):
+        raise APIError(
+            f"Login failed: the server response was missing {what}. Run 'aai login' again."
+        )
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise APIError(
+                f"Login failed: the server response was missing {what}. Run 'aai login' again."
+            ) from exc
+    raise APIError(f"Login failed: the server response was missing {what}. Run 'aai login' again.")
+
+
+def _require(mapping: Mapping[str, object], key: str, what: str) -> object:
     """Pull a required field out of an AMS response, or raise a clean APIError.
 
     AMS only returns HTTP errors for outright failures; a 200 with an unexpected
     shape would otherwise KeyError into an ugly traceback, so map that to the same
-    "run login again" message the rest of the flow uses. The return stays `Any`
-    because AMS JSON leaves are untyped and callers coerce them (int()/str()).
+    "run login again" message the rest of the flow uses. The return stays `object`
+    because AMS JSON leaves are narrowed by callers with int()/str().
     """
-    # Nested calls pass an `Any`-typed value that the type checker accepts as a
-    # Mapping but which may be a non-mapping at runtime (e.g. a malformed 200),
-    # so still guard with isinstance before calling .get.
-    value = mapping.get(key) if isinstance(mapping, dict) else None
+    value = mapping.get(key)
     if value is None:
         raise APIError(
             f"Login failed: the server response was missing {what}. Run 'aai login' again."
@@ -42,13 +64,25 @@ def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
     return value
 
 
+def _require_mapping(mapping: Mapping[str, object], key: str, what: str) -> dict[str, object]:
+    value = _require(mapping, key, what)
+    mapped = _as_mapping(value)
+    if mapped is None:
+        raise APIError(
+            f"Login failed: the server response was missing {what}. Run 'aai login' again."
+        )
+    return mapped
+
+
 def _open_browser(url: str) -> None:
     """Open the system browser, falling back to printing the URL."""
-    output.console.print(f"Opening your browser to sign in:\n  [aai.url]{escape(url)}[/aai.url]")
+    output.error_console.print(
+        f"Opening your browser to sign in:\n  [aai.url]{escape(url)}[/aai.url]"
+    )
     try:
         webbrowser.open(url)
     except Exception:  # noqa: BLE001 - opening a browser is best-effort
-        output.console.print(
+        output.error_console.print(
             "[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]"
         )
 
@@ -57,7 +91,7 @@ def _capture() -> loopback.CallbackResult:
     return loopback.capture_callback()
 
 
-def _is_reusable_cli_token(token: dict[str, Any]) -> bool:
+def _is_reusable_cli_token(token: dict[str, object]) -> bool:
     """A live 'AssemblyAI CLI' token whose key the list actually exposes."""
     # List endpoints may key the display name as either "name" or "token_name"
     # (the latter matches the create payload); accept either so we don't mint a
@@ -79,10 +113,12 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
             suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
         )
     for entry in projects:
-        for token in entry.get("tokens", []):
+        for token in _mapping_list(entry.get("tokens")):
             if _is_reusable_cli_token(token):
                 return str(token["api_key"])
-    project_id = _require(_require(projects[0], "project", "a project"), "id", "a project id")
+    project_id = _require_int(
+        _require_mapping(projects[0], "project", "a project"), "id", "a project id"
+    )
     created = ams.create_token(account_id, project_id, endpoints.CLI_TOKEN_NAME, session_jwt)
     return str(_require(created, "api_key", "an API key"))
 
@@ -104,29 +140,34 @@ def run_login_flow() -> LoginResult:
         )
 
     disc = ams.discover(result.token)
-    organizations = disc.get("organizations") or []
+    organizations = _mapping_list(disc.get("organizations"))
     if not organizations:
         raise APIError(
             "Signed in, but this identity has no AssemblyAI account yet. "
             f"Create one at {endpoints.signup_url()}, then run 'aai login' again."
         )
     if len(organizations) > 1:
-        chosen = organizations[0].get("organization_name") or organizations[0].get(
-            "organization_id", "the first"
+        chosen = str(
+            organizations[0].get("organization_name")
+            or organizations[0].get("organization_id", "the first")
         )
-        output.console.print(
+        output.error_console.print(
             f"[aai.muted]Found {len(organizations)} organizations; signing in to "
             f"'{chosen}'.[/aai.muted]"
         )
-    organization_id = _require(organizations[0], "organization_id", "an organization id")
+    organization_id = str(_require(organizations[0], "organization_id", "an organization id"))
 
-    intermediate_session_token = _require(disc, "intermediate_session_token", "a session token")
+    intermediate_session_token = str(
+        _require(disc, "intermediate_session_token", "a session token")
+    )
     signed_in = ams.exchange(intermediate_session_token, organization_id)
-    session_jwt = _require(signed_in, "session_jwt", "a session token")
-    session_token = _require(signed_in, "session_token", "a session token")
+    session_jwt = str(_require(signed_in, "session_jwt", "a session token"))
+    session_token = str(_require(signed_in, "session_token", "a session token"))
     # `exchange` already returns the signed-in account, so read the id from it
     # rather than making a second GET /v1/auth round-trip.
-    account_id = int(_require(_require(signed_in, "account", "an account"), "id", "an account id"))
+    account_id = _require_int(
+        _require_mapping(signed_in, "account", "an account"), "id", "an account id"
+    )
     api_key = find_or_create_cli_key(account_id, session_jwt)
     return LoginResult(
         api_key=api_key,

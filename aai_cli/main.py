@@ -98,8 +98,10 @@ app = typer.Typer(
 )
 def main(
     ctx: typer.Context,
-    profile: str = typer.Option(None, "--profile", "-p", help="Named credential profile."),
-    env: str = typer.Option(None, "--env", help="Backend environment (production, sandbox000)."),
+    profile: str | None = typer.Option(None, "--profile", "-p", help="Named credential profile."),
+    env: str | None = typer.Option(
+        None, "--env", help="Backend environment (production, sandbox000)."
+    ),
     sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
 ) -> None:
     if sandbox and env is None:

@@ -25,13 +25,13 @@ app = typer.Typer()
 )
 def llm(
     ctx: typer.Context,
-    prompt: str = typer.Argument(None, help="The prompt to send to the model."),
+    prompt: str | None = typer.Argument(None, help="The prompt to send to the model."),
     # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | aai llm "summarize"`).
     model: str = typer.Option(gateway.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
-    transcript_id: str = typer.Option(
+    transcript_id: str | None = typer.Option(
         None, "--transcript-id", help="Inject this transcript's text into the prompt."
     ),
-    system: str = typer.Option(None, "--system", help="Optional system prompt."),
+    system: str | None = typer.Option(None, "--system", help="Optional system prompt."),
     follow: bool = typer.Option(
         False,
         "--follow",
@@ -40,7 +40,7 @@ def llm(
         "the answer in place on every finalized turn (e.g. aai stream -o text | aai "
         'llm -f "summarize action items as I talk"). Ctrl-C to stop.',
     ),
-    output_field: str = typer.Option(
+    output_field: str | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -67,6 +67,7 @@ def llm(
     def follow_body(state: AppState, json_mode: bool) -> None:
         if not prompt:
             raise UsageError("Provide a prompt to run over the streamed transcript.")
+        prompt_text = prompt
         if output_field is not None:
             raise UsageError(
                 "--output applies to one-shot mode; --follow renders a live panel "
@@ -86,7 +87,7 @@ def llm(
 
         def ask(transcript_text: str) -> str:
             messages = gateway.build_messages(
-                prompt, system=system, transcript_text=transcript_text
+                prompt_text, system=system, transcript_text=transcript_text
             )
             response = gateway.complete(
                 api_key, model=model, messages=messages, max_tokens=max_tokens
@@ -109,13 +110,14 @@ def llm(
                 "Provide a prompt.",
                 suggestion="Or pass --list-models to see available models.",
             )
+        prompt_text = prompt
         output.validate_output_field(output_field, ("text", "json"))
         api_key = config.resolve_api_key(profile=state.profile)
         # Text piped on stdin becomes the content the prompt operates on, unless an
         # explicit --transcript-id is given (that injects server-side and takes priority).
         stdin_text = stdio.piped_stdin_text() if not transcript_id else None
         messages = gateway.build_messages(
-            prompt, system=system, transcript_id=transcript_id, transcript_text=stdin_text
+            prompt_text, system=system, transcript_id=transcript_id, transcript_text=stdin_text
         )
         response = gateway.complete(
             api_key,
@@ -127,7 +129,7 @@ def llm(
         content = gateway.content_of(response)
         if output_field == "text":
             # Just the answer, raw — so `… | aai llm -o text "…" | next` composes cleanly.
-            print(content)
+            output.emit_text(content)
             return
         output.emit(
             {"model": model, "output": content, "usage": gateway.usage_of(response)},

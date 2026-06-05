@@ -12,6 +12,22 @@ cd "$(dirname "$0")/.."
 # default (see [tool.uv] default-groups), so `uv run` already has pytest,
 # hypothesis, fastapi, etc. — no `--extra`/`--group` flag needed here.
 
+cleanup_generated_code_dir() {
+  if [[ -n "${generated_code_dir:-}" ]]; then
+    rm -rf "$generated_code_dir"
+  fi
+}
+
+cleanup_mutants_dir() {
+  rm -rf mutants
+}
+
+# Make reruns deterministic after an interrupted mutation run.
+cleanup_mutants_dir
+
+echo "==> uv lock freshness"
+uv lock --check
+
 echo "==> ruff check (src + tests)"
 uv run ruff check .
 
@@ -21,8 +37,20 @@ uv run ruff format --check .
 echo "==> mypy (src + tests)"
 uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
 
-echo "==> pyright (src + tests)"
-uv run pyright  # include = ["aai_cli", "tests"] in [tool.pyright]
+echo "==> pyright (src strict)"
+uv run pyright  # include = ["aai_cli"] in [tool.pyright]
+
+echo "==> pyright (tests standard)"
+uv run pyright -p pyrightconfig.tests.json
+
+echo "==> vulture (dead-code gate, src + tests)"
+uv run vulture
+
+echo "==> deptry (dependency hygiene)"
+uv run deptry .
+
+echo "==> import-linter (architecture contracts)"
+uv run lint-imports
 
 echo "==> xenon (cyclomatic complexity gate, src only)"
 # Fail the build if any function gets too branchy. Grades map to cyclomatic
@@ -37,13 +65,24 @@ echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
 echo "==> shellcheck (install.sh)"
-# Static-lint the public install script. CI's ubuntu runner ships shellcheck;
+# Static-lint the public install script and this gate script. CI's ubuntu runner ships shellcheck;
 # locally it's skipped with a notice if not installed.
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck install.sh
+  shellcheck install.sh scripts/check.sh
 else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi
+
+echo "==> generated --show-code compile gate"
+generated_code_dir="$(mktemp -d)"
+trap cleanup_generated_code_dir EXIT
+uv run python scripts/generated_code_compile_gate.py "$generated_code_dir"
+uv run python -m compileall -q "$generated_code_dir"
+cleanup_generated_code_dir
+trap - EXIT
+
+echo "==> init template contract/import gate"
+uv run python scripts/template_contract_gate.py
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
@@ -53,7 +92,7 @@ echo "==> pytest (with branch-coverage gate)"
 #   uv run pytest -m e2e
 #   uv run pytest -m install
 #   uv run pytest -m install_script
-uv run pytest -q -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and
@@ -66,6 +105,44 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
 else
   echo "   origin/main not found; skipping patch-coverage gate (CI provides it)"
 fi
+
+echo "==> no new static-analysis escape hatches"
+# Existing escape hatches are tolerated for now; new ones must be refactored away or
+# justified by changing this gate deliberately. Broad noqa/type-ignore/no-cover are
+# checked by added diff lines. `Any` and `cast(` are count-gated against origin/main
+# so mechanical edits to existing uses don't fail, but net-new uses do.
+if git rev-parse --verify --quiet origin/main >/dev/null; then
+  escape_hatches="$(git diff -U0 origin/main -- aai_cli tests \
+    | rg '^\+.*(# type: ignore|# noqa|pragma: no cover)' || true)"
+  if [[ -n "$escape_hatches" ]]; then
+    printf '%s\n' "$escape_hatches"
+    echo "New static-analysis ignore/no-cover escape hatch found; refactor it or update the gate explicitly."
+    exit 1
+  fi
+
+  base_any_count="$({ git grep -n "Any" origin/main -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  work_any_count="$({ rg -n "Any" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  if (( work_any_count > base_any_count )); then
+    echo "New Any usage found: ${work_any_count} current vs ${base_any_count} on origin/main."
+    exit 1
+  fi
+
+  base_cast_count="$({ git grep -n "cast(" origin/main -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  work_cast_count="$({ rg -n "cast\\(" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  if (( work_cast_count > base_cast_count )); then
+    echo "New cast() usage found: ${work_cast_count} current vs ${base_cast_count} on origin/main."
+    exit 1
+  fi
+else
+  echo "   origin/main not found; skipping escape-hatch diff gate (CI provides it)"
+fi
+
+echo "==> mutation testing (focused core modules)"
+cleanup_mutants_dir
+trap cleanup_mutants_dir EXIT
+uv run python scripts/mutation_gate.py
+cleanup_mutants_dir
+trap - EXIT
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render

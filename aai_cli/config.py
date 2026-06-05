@@ -13,12 +13,14 @@ import keyring
 import keyring.errors  # keyring.errors is not re-exported by keyring/__init__
 import platformdirs
 import tomli_w
+from pydantic import TypeAdapter, ValidationError
 
 from aai_cli.errors import NotAuthenticated
 
 KEYRING_SERVICE = "assemblyai-cli"
 ENV_API_KEY = "ASSEMBLYAI_API_KEY"
 DEFAULT_PROFILE = "default"
+_JSON_OBJECT: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
 
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -146,12 +148,17 @@ def get_session(profile: str) -> dict[str, str] | None:
     if not raw:
         return None
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
+        data: object = json.loads(raw)
+        mapping = _JSON_OBJECT.validate_python(data)
+    except (json.JSONDecodeError, ValidationError):
         return None
-    if not isinstance(data, dict) or "jwt" not in data:
+    if "jwt" not in mapping:
         return None
-    return data
+    jwt = mapping.get("jwt")
+    if not isinstance(jwt, str):
+        return None
+    token = mapping.get("token")
+    return {"jwt": jwt, "token": str(token or "")}
 
 
 def get_account_id(profile: str) -> int | None:

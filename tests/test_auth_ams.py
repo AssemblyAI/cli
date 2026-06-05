@@ -78,6 +78,16 @@ def test_error_with_empty_body_falls_back_to_status(monkeypatch):
     assert "HTTP 500" in str(exc.value)
 
 
+def test_error_json_without_detail_falls_back_to_body_text(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"message": "not the detail field"})
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError) as exc:
+        ams.discover("x")
+    assert "not the detail field" in str(exc.value)
+
+
 def test_exchange_posts_ist_and_org(monkeypatch):
     seen = {}
 
@@ -105,9 +115,27 @@ def test_list_projects_returns_list_and_sends_cookie(monkeypatch):
     _patch_transport(monkeypatch, handler)
     out = ams.list_projects(7, "sess_jwt")
     assert isinstance(out, list)
-    assert out[0]["project"]["id"] == 1
+    assert out[0]["project"] == {"id": 1}
     assert "/v1/users/accounts/7/projects" in seen["url"]
     assert "stytch_session_jwt=sess_jwt" in seen["cookie"]
+
+
+def test_discover_rejects_non_object_json(monkeypatch):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=["bad"])
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError):
+        ams.discover("token")
+
+
+def test_list_projects_rejects_non_object_items(monkeypatch):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"project": {"id": 1}}, "bad"])
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError):
+        ams.list_projects(7, "sess_jwt")
 
 
 def test_create_token_posts_project_and_name(monkeypatch):

@@ -25,7 +25,7 @@ _VALID_SCOPES = ("user", "project", "local")
 _STEPS_HEADING = "AssemblyAI coding-agent setup:"
 
 
-def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess:
+def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
     # stdin=DEVNULL so a child that would otherwise prompt (npx's "Ok to proceed?",
     # a `claude` confirmation) gets EOF and fails fast instead of hanging forever on
     # input the user can't see (its stdout is captured). timeout is a final backstop.
@@ -33,6 +33,7 @@ def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess
         return subprocess.run(
             cmd,
             capture_output=True,
+            check=False,
             text=True,
             stdin=subprocess.DEVNULL,
             timeout=timeout,

@@ -32,6 +32,12 @@ def test_resolve_json_false_for_human(monkeypatch):
     assert output.resolve_json(explicit=False) is False
 
 
+def test_mask_secret_preserves_only_short_edges():
+    assert output.mask_secret("sk_1234567890") == "sk_…7890"
+    assert output.mask_secret("12345678") == "123…5678"
+    assert output.mask_secret("short") == "***"
+
+
 def test_emit_json_serializes(capsys):
     output.emit({"a": 1}, lambda d: "human", json_mode=True)
     out = capsys.readouterr().out

@@ -260,16 +260,18 @@ class _Stub:
     """A transcript-shaped stub exposing every attribute the snippets read."""
 
     text: ClassVar[str] = "hello world"
-    utterances: ClassVar[list] = [type("U", (), {"speaker": "A", "text": "hi"})()]
+    utterances: ClassVar[list[object]] = [type("U", (), {"speaker": "A", "text": "hi"})()]
     summary: ClassVar[str] = "a summary"
-    chapters: ClassVar[list] = [type("C", (), {"headline": "intro"})()]
+    chapters: ClassVar[list[object]] = [type("C", (), {"headline": "intro"})()]
     auto_highlights: ClassVar[object] = type(
         "H", (), {"results": [type("R", (), {"count": 2, "text": "k"})()]}
     )()
-    sentiment_analysis: ClassVar[list] = [
+    sentiment_analysis: ClassVar[list[object]] = [
         type("S", (), {"sentiment": "POSITIVE", "text": "good"})()
     ]
-    entities: ClassVar[list] = [type("E", (), {"entity_type": "person_name", "text": "Ada"})()]
+    entities: ClassVar[list[object]] = [
+        type("E", (), {"entity_type": "person_name", "text": "Ada"})()
+    ]
     iab_categories: ClassVar[object] = type("I", (), {"summary": {"Tech": 0.9}})()
     content_safety: ClassVar[object] = type("CS", (), {"summary": {"profanity": 0.1}})()
 

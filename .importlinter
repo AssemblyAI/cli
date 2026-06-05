@@ -1,0 +1,64 @@
+[importlinter]
+root_package = aai_cli
+include_external_packages = True
+
+[importlinter:contract:1]
+name = Core modules do not import command modules
+type = forbidden
+source_modules =
+    aai_cli.agent
+    aai_cli.auth
+    aai_cli.client
+    aai_cli.code_gen
+    aai_cli.config
+    aai_cli.config_builder
+    aai_cli.context
+    aai_cli.environments
+    aai_cli.errors
+    aai_cli.follow
+    aai_cli.help_panels
+    aai_cli.help_text
+    aai_cli.init
+    aai_cli.llm
+    aai_cli.microphone
+    aai_cli.output
+    aai_cli.render
+    aai_cli.stdio
+    aai_cli.streaming
+    aai_cli.theme
+    aai_cli.transcribe_render
+    aai_cli.youtube
+forbidden_modules =
+    aai_cli.commands
+
+[importlinter:contract:2]
+name = Command modules are independent
+type = independence
+modules =
+    aai_cli.commands.account
+    aai_cli.commands.agent
+    aai_cli.commands.audit
+    aai_cli.commands.claude
+    aai_cli.commands.doctor
+    aai_cli.commands.init
+    aai_cli.commands.keys
+    aai_cli.commands.llm
+    aai_cli.commands.login
+    aai_cli.commands.samples
+    aai_cli.commands.sessions
+    aai_cli.commands.stream
+    aai_cli.commands.transcribe
+    aai_cli.commands.transcripts
+
+[importlinter:contract:3]
+name = Library layers do not depend on Rich rendering
+type = forbidden
+source_modules =
+    aai_cli.client
+    aai_cli.config
+    aai_cli.config_builder
+    aai_cli.environments
+    aai_cli.errors
+    aai_cli.llm
+forbidden_modules =
+    rich

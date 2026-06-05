@@ -8,8 +8,11 @@ from pathlib import Path
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
+from pydantic import TypeAdapter, ValidationError
 
 from aai_cli.errors import UsageError
+
+_JSON_OBJECT: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
 
 # The curated set of user-settable config fields per command. This is the authoritative
 # allow-list (deliberately a subset of the SDK models — e.g. output-only and internal
@@ -255,18 +258,20 @@ def parse_config_overrides(fields: dict[str, str], pairs: list[str]) -> dict[str
 def load_config_file(path: str | Path, fields: dict[str, str]) -> dict[str, object]:
     """Load a JSON config file and validate its keys against `fields`."""
     try:
-        data = json.loads(Path(path).read_text())
+        data: object = json.loads(Path(path).read_text())
     except FileNotFoundError as exc:
         raise UsageError(f"Config file not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise UsageError(f"Config file is not valid JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise UsageError("Config file must contain a JSON object.")
-    unknown = [k for k in data if k not in fields]
+    try:
+        config = _JSON_OBJECT.validate_python(data)
+    except ValidationError as exc:
+        raise UsageError("Config file must contain a JSON object.") from exc
+    unknown = [key for key in config if key not in fields]
     if unknown:
         valid = ", ".join(sorted(fields))
         raise UsageError(f"Unknown config field(s) {unknown}. Valid fields: {valid}.")
-    return data
+    return config
 
 
 def _merge(
@@ -356,14 +361,15 @@ def auth_header_flags(value: str | None) -> dict[str, object]:
 def load_custom_spelling(path: str) -> dict[str, object]:
     """Load a custom-spelling JSON map (e.g. {"AssemblyAI": ["assembly ai"]})."""
     try:
-        data = json.loads(Path(path).read_text())
+        data: object = json.loads(Path(path).read_text())
     except FileNotFoundError as exc:
         raise UsageError(f"Custom spelling file not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise UsageError(f"Custom spelling file is not valid JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise UsageError("Custom spelling file must contain a JSON object.")
-    return data
+    try:
+        return _JSON_OBJECT.validate_python(data)
+    except ValidationError as exc:
+        raise UsageError("Custom spelling file must contain a JSON object.") from exc
 
 
 def translation_request(languages: list[str]) -> dict[str, object]:

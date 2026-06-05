@@ -32,7 +32,7 @@ app = typer.Typer()
 )
 def agent(
     ctx: typer.Context,
-    source: str = typer.Argument(
+    source: str | None = typer.Argument(
         None, help="Audio file path or URL to speak to the agent. Omit to use the microphone."
     ),
     sample: bool = typer.Option(
@@ -42,7 +42,7 @@ def agent(
     system_prompt: str = typer.Option(
         DEFAULT_PROMPT, "--system-prompt", help="System prompt (the agent's persona)."
     ),
-    system_prompt_file: Path = typer.Option(
+    system_prompt_file: Path | None = typer.Option(
         None,
         "--system-prompt-file",
         help="Read the system prompt from a file (overrides --system-prompt).",
@@ -51,7 +51,7 @@ def agent(
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
-    output_field: str = typer.Option(
+    output_field: str | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -74,7 +74,7 @@ def agent(
         raise typer.Exit(code=0)
 
     def body(state: AppState, json_mode: bool) -> None:
-        text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
+        text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
         if voice not in VOICES:
             raise UsageError(
                 f"Unknown voice {voice!r}.",

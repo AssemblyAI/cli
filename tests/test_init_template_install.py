@@ -67,19 +67,18 @@ def test_template_installs_and_app_imports(template_dir: Path, tmp_path: Path) -
         f"{install.stderr}"
     )
 
-    # Import api/index.py with ONLY its declared deps present — no key needed, the
+    # Import api.index with ONLY its declared deps present — no key needed, the
     # module reads ASSEMBLYAI_API_KEY at import but defaults to "". A clean exit
     # proves the app boots from exactly what `aai init` ships to the user.
     boot = tmp_path / "boot.py"
     boot.write_text(
-        "import importlib.util, sys\n"
-        "spec = importlib.util.spec_from_file_location('tmpl', sys.argv[1])\n"
-        "mod = importlib.util.module_from_spec(spec)\n"
-        "spec.loader.exec_module(mod)\n"
+        "import importlib, sys\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "mod = importlib.import_module('api.index')\n"
         "assert hasattr(mod, 'app'), 'template api/index.py does not export `app`'\n"
     )
     run = subprocess.run(
-        [str(py), str(boot), str(template_dir / "api" / "index.py")],
+        [str(py), str(boot), str(template_dir)],
         capture_output=True,
         text=True,
     )

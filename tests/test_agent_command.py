@@ -3,9 +3,16 @@ import json
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+def _login_result():
+    return LoginResult(
+        api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
+    )
 
 
 def test_agent_help_lists_command():
@@ -27,9 +34,18 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
     assert called["ran"] is False
 
 
-def test_agent_unauthenticated_exits_2():
-    result = runner.invoke(app, ["agent"])
+def test_agent_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
+
+    def fake_run_session(api_key, **_kwargs):
+        raise AssertionError(f"agent session should not run after auto-login: {api_key}")
+
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent", "--sample", "--json"])
     assert result.exit_code == 2
+    assert config.get_api_key("default") == "sk_from_oauth"
+    assert "Run the same command again" in result.output
 
 
 def test_agent_drives_renderer_json(monkeypatch):

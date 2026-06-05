@@ -1,4 +1,5 @@
-import importlib.util
+import importlib
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -7,12 +8,11 @@ from fastapi.testclient import TestClient
 TEMPLATE_DIR = Path("aai_cli/init/templates/stream")
 
 
-def _load_app():
-    spec = importlib.util.spec_from_file_location("_tmpl_stream", TEMPLATE_DIR / "api" / "index.py")
-    assert spec and spec.loader  # spec_from_file_location is typed Optional
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _load_app(monkeypatch):
+    for name in ("api.index", "api.settings", "api"):
+        sys.modules.pop(name, None)
+    monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
+    return importlib.import_module("api.index")
 
 
 def _ok_response(token="tok-123"):
@@ -23,7 +23,7 @@ def _ok_response(token="tok-123"):
 
 
 def test_token_returns_token_and_streaming_ws_url(monkeypatch):
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
     monkeypatch.setattr(mod.httpx2, "get", lambda *a, **k: _ok_response())
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 200
@@ -35,7 +35,7 @@ def test_token_returns_token_and_streaming_ws_url(monkeypatch):
 def test_token_uses_raw_authorization_header(monkeypatch):
     # The streaming token uses the raw key as Authorization (NOT Bearer).
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-test")
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
     captured = {}
 
     def fake_get(url, params=None, headers=None):
@@ -49,7 +49,7 @@ def test_token_uses_raw_authorization_header(monkeypatch):
 
 
 def test_token_surfaces_error_as_502(monkeypatch):
-    mod = _load_app()
+    mod = _load_app(monkeypatch)
 
     def boom(*a, **k):
         raise RuntimeError("network down")

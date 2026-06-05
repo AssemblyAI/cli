@@ -63,16 +63,19 @@
    List recent audit-log entries for your account.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit           INTEGER  How many entries to show. [default: 20]           │
-  │ --action          TEXT     Filter by action_taken.                           │
-  │ --resource        TEXT     Filter by resource_type.                          │
-  │ --json                     Output raw JSON.                                  │
-  │ --help                     Show this message and exit.                       │
+  │ --limit                 INTEGER  How many entries to show. [default: 20]     │
+  │ --action                TEXT     Filter by raw action name.                  │
+  │ --resource              TEXT     Filter by raw resource type.                │
+  │ --include-logins                 Show successful login events.               │
+  │ --json                           Output raw JSON.                            │
+  │ --help                           Show this message and exit.                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Recent audit-log entries
    $ aai audit --limit 20
+   Include login events
+   $ aai audit --include-logins
    Filter by action
    $ aai audit --action token.create
   
@@ -802,6 +805,7 @@
   │ --start         TEXT  Start date (YYYY-MM-DD). Default: 30d ago.             │
   │ --end           TEXT  End date (YYYY-MM-DD). Default: today.                 │
   │ --window        TEXT  Window size, e.g. 'day' or 'month'.                    │
+  │ --all                 Include zero-usage windows.                            │
   │ --json                Output raw JSON.                                       │
   │ --help                Show this message and exit.                            │
   ╰──────────────────────────────────────────────────────────────────────────────╯

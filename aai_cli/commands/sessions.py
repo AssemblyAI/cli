@@ -5,7 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from aai_cli import output, theme
+from aai_cli import jsonshape, output, theme
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.help_text import examples_epilog
@@ -27,6 +27,10 @@ _DETAIL_FIELDS = (
 )
 
 
+def _session_rows(value: object) -> list[dict[str, object]]:
+    return jsonshape.mapping_list(value)
+
+
 @app.command(
     name="list",
     epilog=examples_epilog(
@@ -39,7 +43,9 @@ _DETAIL_FIELDS = (
 def list_(
     ctx: typer.Context,
     limit: int = typer.Option(10, "--limit", help="How many sessions to show."),
-    status: str = typer.Option(None, "--status", help="Filter: created, completed, or error."),
+    status: str | None = typer.Option(
+        None, "--status", help="Filter: created, completed, or error."
+    ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
     """List recent streaming sessions."""
@@ -47,7 +53,7 @@ def list_(
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = resolve_session(state)
         payload = ams.list_streaming(jwt, limit=limit, status=status)
-        rows = payload.get("data", [])
+        rows = _session_rows(payload.get("data"))
 
         def render(data: list[dict[str, object]]) -> Table:
             table = Table(

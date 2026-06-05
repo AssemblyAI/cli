@@ -3,7 +3,8 @@
 Click record and speak — your microphone streams to AssemblyAI's Streaming v3 API and
 transcribes in real time. The browser captures audio and connects **directly** to
 AssemblyAI using a one-time token minted by the backend, so your API key never reaches
-the client (and no audio is proxied through your server).
+the client (and no audio is proxied through your server). The app uses static
+HTML/CSS/JS with no frontend build step.
 
 ## Run locally
 
@@ -23,6 +24,6 @@ is needed. `vercel.json` routes the page and the function.
 
 ## Ideas to extend
 
-- Add `keyterms_prompt` or a `prompt` for domain vocabulary (the demo uses `u3-rt-pro`).
-- Add `format_turns`/punctuation toggles, or speaker labels (`speaker_labels=true`).
+- Add `keyterms_prompt` or a `prompt` for domain vocabulary in `STREAMING_CONFIG`.
+- Add `format_turns`/punctuation toggles, or speaker labels (`speaker_labels=true`) in `STREAMING_CONFIG`.
 - Persist the final transcript, or pipe each finalized turn into the LLM Gateway.

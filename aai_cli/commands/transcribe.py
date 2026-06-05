@@ -50,84 +50,118 @@ def _render_transform_steps(d: dict[str, Any]) -> str:
 )
 def transcribe(
     ctx: typer.Context,
-    source: str = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
+    source: str | None = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # model & language
-    speech_model: str = typer.Option(None, "--speech-model", help="best, nano, slam-1, universal."),
-    language_code: str = typer.Option(
+    speech_model: str | None = typer.Option(
+        None, "--speech-model", help="best, nano, slam-1, universal."
+    ),
+    language_code: str | None = typer.Option(
         None, "--language-code", help="Force a language (e.g. en_us)."
     ),
-    language_detection: bool = typer.Option(
+    language_detection: bool | None = typer.Option(
         None, "--language-detection", help="Auto-detect the spoken language."
     ),
-    keyterms_prompt: list[str] = typer.Option(
+    keyterms_prompt: list[str] | None = typer.Option(
         None, "--keyterms-prompt", help="Boost a key term (repeatable)."
     ),
-    temperature: float = typer.Option(None, "--temperature", help="Speech model temperature."),
-    prompt: str = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
+    temperature: float | None = typer.Option(
+        None, "--temperature", help="Speech model temperature."
+    ),
+    prompt: str | None = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
     # formatting
-    punctuate: bool = typer.Option(None, "--punctuate/--no-punctuate", help="Add punctuation."),
-    format_text: bool = typer.Option(None, "--format-text/--no-format-text", help="Format text."),
-    disfluencies: bool = typer.Option(None, "--disfluencies", help="Keep filler words."),
+    punctuate: bool | None = typer.Option(
+        None, "--punctuate/--no-punctuate", help="Add punctuation."
+    ),
+    format_text: bool | None = typer.Option(
+        None, "--format-text/--no-format-text", help="Format text."
+    ),
+    disfluencies: bool | None = typer.Option(None, "--disfluencies", help="Keep filler words."),
     # speakers & channels
     speaker_labels: bool = typer.Option(False, "--speaker-labels", help="Enable diarization."),
-    speakers_expected: int = typer.Option(None, "--speakers-expected", help="Hint speaker count."),
-    multichannel: bool = typer.Option(None, "--multichannel", help="Transcribe each channel."),
+    speakers_expected: int | None = typer.Option(
+        None, "--speakers-expected", help="Hint speaker count."
+    ),
+    multichannel: bool | None = typer.Option(
+        None, "--multichannel", help="Transcribe each channel."
+    ),
     # guardrails
-    redact_pii: bool = typer.Option(None, "--redact-pii", help="Redact PII from the transcript."),
-    redact_pii_policy: str = typer.Option(
+    redact_pii: bool | None = typer.Option(
+        None, "--redact-pii", help="Redact PII from the transcript."
+    ),
+    redact_pii_policy: str | None = typer.Option(
         None, "--redact-pii-policy", help="Comma-separated PII policies (e.g. person_name,...)."
     ),
-    redact_pii_sub: str = typer.Option(
+    redact_pii_sub: str | None = typer.Option(
         None, "--redact-pii-sub", help="Substitution: hash or entity_name."
     ),
-    redact_pii_audio: bool = typer.Option(None, "--redact-pii-audio", help="Also redact audio."),
-    filter_profanity: bool = typer.Option(None, "--filter-profanity", help="Mask profanity."),
-    content_safety: bool = typer.Option(None, "--content-safety", help="Detect sensitive content."),
-    content_safety_confidence: int = typer.Option(
+    redact_pii_audio: bool | None = typer.Option(
+        None, "--redact-pii-audio", help="Also redact audio."
+    ),
+    filter_profanity: bool | None = typer.Option(
+        None, "--filter-profanity", help="Mask profanity."
+    ),
+    content_safety: bool | None = typer.Option(
+        None, "--content-safety", help="Detect sensitive content."
+    ),
+    content_safety_confidence: int | None = typer.Option(
         None, "--content-safety-confidence", help="Confidence threshold 25-100."
     ),
-    speech_threshold: float = typer.Option(
+    speech_threshold: float | None = typer.Option(
         None, "--speech-threshold", help="Minimum speech proportion 0-1."
     ),
     # analysis
-    summarization: bool = typer.Option(None, "--summarization", help="Summarize the transcript."),
-    summary_model: str = typer.Option(
+    summarization: bool | None = typer.Option(
+        None, "--summarization", help="Summarize the transcript."
+    ),
+    summary_model: str | None = typer.Option(
         None, "--summary-model", help="informative/conversational/catchy."
     ),
-    summary_type: str = typer.Option(
+    summary_type: str | None = typer.Option(
         None, "--summary-type", help="bullets/gist/headline/paragraph."
     ),
-    auto_chapters: bool = typer.Option(None, "--auto-chapters", help="Generate chapters."),
-    sentiment_analysis: bool = typer.Option(
+    auto_chapters: bool | None = typer.Option(None, "--auto-chapters", help="Generate chapters."),
+    sentiment_analysis: bool | None = typer.Option(
         None, "--sentiment-analysis", help="Analyze sentiment."
     ),
-    entity_detection: bool = typer.Option(None, "--entity-detection", help="Detect entities."),
-    auto_highlights: bool = typer.Option(None, "--auto-highlights", help="Detect key phrases."),
-    topic_detection: bool = typer.Option(None, "--topic-detection", help="Detect IAB topics."),
+    entity_detection: bool | None = typer.Option(
+        None, "--entity-detection", help="Detect entities."
+    ),
+    auto_highlights: bool | None = typer.Option(
+        None, "--auto-highlights", help="Detect key phrases."
+    ),
+    topic_detection: bool | None = typer.Option(
+        None, "--topic-detection", help="Detect IAB topics."
+    ),
     # customization
-    word_boost: list[str] = typer.Option(None, "--word-boost", help="Boost a word (repeatable)."),
-    custom_spelling_file: str = typer.Option(
+    word_boost: list[str] | None = typer.Option(
+        None, "--word-boost", help="Boost a word (repeatable)."
+    ),
+    custom_spelling_file: str | None = typer.Option(
         None, "--custom-spelling-file", help="JSON map of custom spellings."
     ),
-    audio_start: int = typer.Option(None, "--audio-start", help="Start offset in ms."),
-    audio_end: int = typer.Option(None, "--audio-end", help="End offset in ms."),
+    audio_start: int | None = typer.Option(None, "--audio-start", help="Start offset in ms."),
+    audio_end: int | None = typer.Option(None, "--audio-end", help="End offset in ms."),
     # webhooks
-    webhook_url: str = typer.Option(None, "--webhook-url", help="Webhook URL for completion."),
-    webhook_auth_header: str = typer.Option(
+    webhook_url: str | None = typer.Option(
+        None, "--webhook-url", help="Webhook URL for completion."
+    ),
+    webhook_auth_header: str | None = typer.Option(
         None, "--webhook-auth-header", help="Webhook auth header as NAME:VALUE."
     ),
     # speech understanding
-    translate_to: list[str] = typer.Option(
+    translate_to: list[str] | None = typer.Option(
         None, "--translate-to", help="Translate transcript to a language (repeatable)."
     ),
     # escape hatch
-    config_kv: list[str] = typer.Option(
+    config_kv: list[str] | None = typer.Option(
         None, "--config", help="Set any TranscriptionConfig field as KEY=VALUE (repeatable)."
     ),
-    config_file: str = typer.Option(None, "--config-file", help="JSON file of config fields."),
+    config_file: str | None = typer.Option(
+        None, "--config-file", help="JSON file of config fields."
+    ),
     # llm gateway transform
-    llm_prompt: list[str] = typer.Option(
+    llm_prompt: list[str] | None = typer.Option(
         None,
         "--llm",
         help="Transform the finished transcript through LLM Gateway. Repeatable: each "
@@ -136,7 +170,7 @@ def transcribe(
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
     max_tokens: int = typer.Option(llm.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
-    output_field: str = typer.Option(
+    output_field: str | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -210,7 +244,7 @@ def transcribe(
             # transcribing or authenticating. Raw stdout so `--show-code > script.py`
             # yields a runnable file.
             audio = client.resolve_audio_source(source, sample=sample)
-            gateway = code_gen.gateway_options(llm_prompt, model, max_tokens)
+            gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
             output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
             return
 
@@ -239,7 +273,7 @@ def transcribe(
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).
-            print(client.select_transcript_field(transcript, output_field))
+            output.emit_text(client.select_transcript_field(transcript, output_field))
             return
 
         if llm_prompt:

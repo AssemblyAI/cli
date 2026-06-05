@@ -36,6 +36,7 @@ dependencies = [
     # which releases the lock may adopt, so no manual version cap is needed here.
     # (Plain httpx still arrives transitively via the assemblyai SDK.)
     "httpx2>=2.0.0",
+    "pydantic>=2.13.4",
     "platformdirs>=4.10.0",
     "tomli-w>=1.2.0",
     "websockets>=16.0",
@@ -74,8 +75,13 @@ dev = [
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
     "syrupy>=4.0",
+    "httpx>=0.28.1",
     "xenon>=0.9.3",
     "diff-cover>=9.0.0",
+    "vulture>=2.14",
+    "deptry>=0.23.0",
+    "import-linter>=2.3",
+    "mutmut>=3.5.0",
 ]
 
 [tool.uv]
@@ -114,6 +120,12 @@ disallow_untyped_defs = true
 warn_unused_ignores = true
 warn_return_any = true
 no_implicit_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unreachable = true
+disallow_any_generics = true
+no_implicit_reexport = true
+extra_checks = true
 
 [[tool.mypy.overrides]]
 # Tests are type-checked too, but pytest functions don't need return annotations.
@@ -121,11 +133,14 @@ module = "tests.*"
 disallow_untyped_defs = false
 
 [tool.pyright]
-# Second type checker alongside mypy: pyright catches a different (and often
-# stricter) class of issues. Same source scope as mypy (files above).
-include = ["aai_cli", "tests"]
+# Second type checker alongside mypy: pyright catches a different class of
+# issues. Production code runs strict here; tests are checked in standard mode by
+# pyrightconfig.tests.json from scripts/check.sh so pytest fixtures/mocks don't
+# create thousands of low-value strict diagnostics.
+include = ["aai_cli"]
+exclude = ["aai_cli/init/templates/**"]
 pythonVersion = "3.11"
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 reportMissingTypeStubs = false
 # Resolve imports against the uv-managed environment so the CLI and editors
@@ -142,16 +157,84 @@ target-version = "py311"
 # PGH/ERA/TRY/TD/FIX close the "make the error go away" escape hatches a coding agent
 # reaches for: blanket `# noqa`/`# type: ignore` (PGH), commented-out code (ERA),
 # exception anti-patterns (TRY), and untracked TODO/FIXME markers (TD/FIX).
+# A/N/FBT/PL/T20/PT/PIE/PERF/TCH add maintainability pressure: naming/shadowing,
+# boolean traps, pylint-style design issues, centralized raw output, pytest style,
+# small simplifications, performance footguns, and type-only import hygiene.
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF",
-          "PGH", "ERA", "TRY", "TD", "FIX"]
+          "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "T20", "PT", "PIE",
+          "PERF", "TCH"]
 # E501: line length is owned by the formatter.
 # B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
 # S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
 # TRY003: the CLIError hierarchy is built around descriptive messages passed at the
 #   raise site, so long messages there are deliberate, not an anti-pattern.
-ignore = ["E501", "B008", "S603", "S607", "TRY003"]
+# N818: NotAuthenticated is an established domain exception name.
+# PLC0415: optional/heavy runtime deps are imported lazily to keep startup fast.
+# TC001-TC003: the project intentionally keeps readable top-level type imports; TC006
+#   still enforces quoted runtime casts.
+ignore = ["E501", "B008", "S603", "S607", "TRY003", "N818", "PLC0415",
+          "TC001", "TC002", "TC003"]
+
+[tool.ruff.lint.pylint]
+max-args = 10
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
 # TRY300: test helpers commonly `return` inside a try while asserting on the except path.
-"tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117", "TRY300"]
+# Tests also keep literal exit codes, local imports, composite assertions, and fake
+# call signatures where those make the intent clearer than production-style indirection.
+"tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005",
+              "PTH123", "SIM117", "TRY300", "FBT", "PLR2004", "PLC0415", "PLR0913",
+              "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH"]
+# Typer command functions naturally have many boolean options and broad signatures.
+"aai_cli/commands/**" = ["FBT001", "FBT003", "PLR0912", "PLR0913", "PLR0915"]
+# The root callback is also a Typer command signature.
+"aai_cli/main.py" = ["FBT001", "FBT003"]
+# Raw stdout/stderr writes are centralized here; command modules call output helpers.
+"aai_cli/output.py" = ["T201"]
+# The active environment is process-global startup state by design.
+"aai_cli/environments.py" = ["PLW0603"]
+# BaseHTTPRequestHandler.log_message requires a parameter named `format`.
+"aai_cli/auth/loopback.py" = ["A002"]
+# Template constants include URL path names such as TOKEN_PATH, not credentials.
+"aai_cli/init/templates/**" = ["S105"]
+
+[tool.vulture]
+paths = ["aai_cli", "tests"]
+min_confidence = 90
+ignore_decorators = ["@app.command", "@app.callback"]
+ignore_names = ["app", "capture_output", "download", "healthy", "ist", "memory_keyring", "org",
+                "refresh"]
+
+[tool.deptry]
+exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]
+
+[tool.deptry.package_module_name_map]
+audioop-lts = "audioop"
+
+[tool.deptry.per_rule_ignores]
+# The CLI templates carry their own requirements and are dependency-checked by
+# dedicated install tests, not by the root package metadata.
+DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
+DEP004 = ["fastapi", "httpx", "hypothesis", "pytest"]
+
+[tool.mutmut]
+paths_to_mutate = [
+    "aai_cli/auth/ams.py",
+    "aai_cli/config_builder.py",
+    "aai_cli/context.py",
+    "aai_cli/errors.py",
+    "aai_cli/output.py",
+]
+also_copy = ["aai_cli"]
+pytest_add_cli_args = ["--strict-config", "--strict-markers"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_auth_ams.py",
+    "tests/test_ams_account.py",
+    "tests/test_config_builder.py",
+    "tests/test_context.py",
+    "tests/test_errors.py",
+    "tests/test_login.py",
+    "tests/test_output.py",
+]
+mutate_only_covered_lines = true

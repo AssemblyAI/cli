@@ -21,7 +21,7 @@ def render_steps(items: list[Step], *, heading: str) -> str:
     Shared by the multi-step commands (`aai init`, `aai claude`); each passes its
     own heading.
     """
-    lines = []
+    lines: list[str] = []
     for s in items:
         style = theme.status_style(s["status"])
         lines.append(

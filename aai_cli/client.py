@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Callable, Iterable, Iterator
-from typing import Any
+from collections.abc import Callable, Generator, Iterable
+from typing import Any, Literal, Protocol
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
@@ -13,10 +13,28 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
-from aai_cli import environments, stdio
+from aai_cli import environments, jsonshape, stdio
 from aai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
+_StreamHandler = Callable[[Any, Any], object]
+
+
+class _StreamingClientLike(Protocol):
+    def on(self, event: StreamingEvents, handler: _StreamHandler) -> None: ...
+
+    def connect(self, params: StreamingParameters) -> None: ...
+
+    def stream(self, data: bytes | Generator[bytes, None, None] | Iterable[bytes]) -> None: ...
+
+    def disconnect(self, *, terminate: Literal[False, True] = False) -> None: ...
+
+
+def _make_streaming_client(api_key: str) -> _StreamingClientLike:
+    client: _StreamingClientLike = StreamingClient(
+        StreamingClientOptions(api_key=api_key, api_host=environments.active().streaming_host)
+    )
+    return client
 
 
 def resolve_audio_source(source: str | None, *, sample: bool) -> str:
@@ -40,7 +58,7 @@ def _configure(api_key: str) -> None:
 
 
 @contextlib.contextmanager
-def _sdk_errors(message: str) -> Iterator[None]:
+def _sdk_errors(message: str) -> Generator[None]:
     """Normalize SDK exceptions for one call: a rejected key becomes a single clean
     auth_failure(); any other error becomes APIError(f"{message}: {exc}").
 
@@ -124,11 +142,18 @@ def _transcript_text(transcript: Any) -> str:
     return str(getattr(transcript, "text", "") or "")
 
 
+def _objects(value: object) -> list[object]:
+    return jsonshape.object_list(value)
+
+
 def _render_utterances(transcript: Any) -> str:
-    utterances = getattr(transcript, "utterances", None) or []
+    utterances = _objects(getattr(transcript, "utterances", None))
     if not utterances:
         return _transcript_text(transcript)
-    return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
+    return "\n".join(
+        f"Speaker {getattr(utterance, 'speaker', '')}: {getattr(utterance, 'text', '')}"
+        for utterance in utterances
+    )
 
 
 def _export_srt(transcript: Any) -> str:
@@ -172,11 +197,9 @@ def stream_audio(
     Forwards Begin/Turn/Termination events to the callbacks; raises APIError on a stream error.
     `params` is a fully-built StreamingParameters (sample_rate/speech_model/etc).
     """
-    sc = StreamingClient(
-        StreamingClientOptions(api_key=api_key, api_host=environments.active().streaming_host)
-    )
+    sc = _make_streaming_client(api_key)
 
-    def _guard(cb: Callable[[Any], Any]) -> Callable[[Any, Any], None]:
+    def _guard(cb: Callable[[Any], Any]) -> _StreamHandler:
         # Event callbacks run on the SDK's reader thread. If the downstream pipe is
         # gone (e.g. a Ctrl-C'd `| aai llm`, or `| head`), writing a turn raises
         # BrokenPipeError there with no handler -> an ugly thread traceback. Swallow
@@ -191,13 +214,17 @@ def stream_audio(
         return handler
 
     errors: list[object] = []
+
+    def _record_error(_client: object, error: object) -> None:
+        errors.append(error)
+
     if on_begin is not None:
         sc.on(StreamingEvents.Begin, _guard(on_begin))
     if on_turn is not None:
         sc.on(StreamingEvents.Turn, _guard(on_turn))
     if on_termination is not None:
         sc.on(StreamingEvents.Termination, _guard(on_termination))
-    sc.on(StreamingEvents.Error, lambda _client, error: errors.append(error))
+    sc.on(StreamingEvents.Error, _record_error)
 
     with _sdk_errors("Could not start streaming session"):
         sc.connect(params)
