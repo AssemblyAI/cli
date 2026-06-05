@@ -392,10 +392,6 @@ def test_transcribe_renders_summary_human(monkeypatch):
 
 
 def test_transcribe_help_has_examples():
-    from typer.testing import CliRunner
-
-    from aai_cli.main import app
-
     result = CliRunner().invoke(app, ["transcribe", "--help"])
     assert result.exit_code == 0
     assert "Examples" in result.output

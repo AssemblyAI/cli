@@ -178,10 +178,6 @@ def test_render_problem_payload_shows_fix_and_problem_banner():
 
 
 def test_doctor_help_has_examples():
-    from typer.testing import CliRunner
-
-    from aai_cli.main import app
-
     result = CliRunner().invoke(app, ["doctor", "--help"])
     assert result.exit_code == 0
     assert "Examples" in result.output

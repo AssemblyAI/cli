@@ -95,13 +95,8 @@ def test_samples_create_is_valid_python(tmp_path, monkeypatch):
         ast.parse(Path(tmp_path, name, f"{name}.py").read_text())  # generated code parses
 
 
-
 @pytest.mark.parametrize("argv", [["samples", "list"], ["samples", "create"]])
 def test_samples_help_has_examples(argv):
-    from typer.testing import CliRunner
-
-    from aai_cli.main import app
-
     result = CliRunner().invoke(app, [*argv, "--help"])
     assert result.exit_code == 0
     assert "Examples" in result.output
