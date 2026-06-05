@@ -55,7 +55,10 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     """Return the existing 'AssemblyAI CLI' key, or create one in the first project."""
     projects = ams.list_projects(account_id, session_jwt)
     if not projects:
-        raise APIError("Your account has no project to create an API key in.")
+        raise APIError(
+            "Your account has no project to create an API key in.",
+            suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
+        )
     for entry in projects:
         for token in entry.get("tokens", []):
             if _is_reusable_cli_token(token):
@@ -71,9 +74,15 @@ def run_login_flow() -> str:
     result = _capture()
 
     if result.error == "timeout":
-        raise APIError("Login timed out waiting for the browser. Run 'aai login' again.")
+        raise APIError(
+            "Login timed out waiting for the browser.",
+            suggestion="Run 'aai login' again.",
+        )
     if result.token_type != "discovery_oauth" or not result.token:  # noqa: S105
-        raise APIError("Login did not return a valid OAuth token. Run 'aai login' again.")
+        raise APIError(
+            "Login did not return a valid OAuth token.",
+            suggestion="Run 'aai login' again.",
+        )
 
     disc = ams.discover(result.token)
     organizations = disc.get("organizations") or []

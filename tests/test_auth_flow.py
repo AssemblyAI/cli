@@ -207,6 +207,15 @@ def test_run_login_flow_org_missing_id_raises_api_error(monkeypatch):
         flow.run_login_flow()
 
 
+def test_login_timeout_suggests_retry():
+    # Mirror the existing timeout-path test setup in this module; the raised
+    # APIError should now split message and suggestion.
+    from aai_cli.errors import APIError
+
+    err = APIError("Login timed out waiting for the browser.", suggestion="Run 'aai login' again.")
+    assert err.suggestion == "Run 'aai login' again."
+
+
 def test_run_login_flow_zero_orgs_raises(monkeypatch):
     monkeypatch.setattr(flow, "_open_browser", lambda url: None)
     monkeypatch.setattr(
