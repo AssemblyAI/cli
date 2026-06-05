@@ -5,7 +5,8 @@ def test_not_authenticated_defaults():
     err = NotAuthenticated()
     assert err.exit_code == 2
     assert err.error_type == "not_authenticated"
-    assert "aai login" in str(err)
+    assert err.message == "Not authenticated."
+    assert err.suggestion == "Run 'aai login'."
 
 
 def test_api_error_carries_fields():
@@ -17,9 +18,33 @@ def test_api_error_carries_fields():
     }
 
 
-def test_to_dict_omits_none_transcript_id():
+def test_to_dict_includes_suggestion_when_present():
+    err = CLIError("nope", error_type="generic", exit_code=1, suggestion="do this")
+    assert err.to_dict() == {
+        "error": {"type": "generic", "message": "nope", "suggestion": "do this"}
+    }
+
+
+def test_to_dict_omits_none_transcript_id_and_suggestion():
     err = CLIError("nope", error_type="generic", exit_code=1)
     assert err.to_dict() == {"error": {"type": "generic", "message": "nope"}}
+
+
+def test_api_error_carries_suggestion():
+    err = APIError("boom", suggestion="retry")
+    assert err.to_dict() == {
+        "error": {"type": "api_error", "message": "boom", "suggestion": "retry"}
+    }
+
+
+def test_auth_failure_splits_message_and_suggestion():
+    from aai_cli.errors import auth_failure
+
+    err = auth_failure()
+    assert err.error_type == "not_authenticated"
+    assert err.message == "Your API key was rejected."
+    assert "aai login" in (err.suggestion or "")
+    assert "ASSEMBLYAI_API_KEY" in (err.suggestion or "")
 
 
 def test_is_auth_failure_matches_credential_signals():

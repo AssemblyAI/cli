@@ -1,6 +1,8 @@
 import json
+from typing import cast
 
 from aai_cli import output
+from aai_cli.errors import CLIError
 
 
 def test_resolve_json_true_when_explicit(monkeypatch):
@@ -44,8 +46,10 @@ def test_emit_human_uses_renderer(capsys):
 def test_emit_error_escapes_markup(capsys):
     import types
 
-    err = types.SimpleNamespace(message="bad [tag] here", to_dict=lambda: {"error": {}})
-    output.emit_error(err, json_mode=False)
+    err = types.SimpleNamespace(
+        message="bad [tag] here", suggestion=None, to_dict=lambda: {"error": {}}
+    )
+    output.emit_error(cast(CLIError, err), json_mode=False)
     captured = capsys.readouterr()
     assert "[tag]" in captured.err  # error goes to stderr, not stripped as markup
     assert captured.out == ""  # stdout stays clean for pipelines
@@ -55,10 +59,36 @@ def test_emit_error_json_goes_to_stderr(capsys):
     import types
 
     err = types.SimpleNamespace(message="boom", to_dict=lambda: {"error": {"message": "boom"}})
-    output.emit_error(err, json_mode=True)
+    output.emit_error(cast(CLIError, err), json_mode=True)
     captured = capsys.readouterr()
     assert json.loads(captured.err) == {"error": {"message": "boom"}}
     assert captured.out == ""
+
+
+def test_emit_error_renders_suggestion_line(capsys):
+    import types
+
+    err = types.SimpleNamespace(
+        message="bad thing",
+        suggestion="try this instead",
+        to_dict=lambda: {"error": {}},
+    )
+    output.emit_error(cast(CLIError, err), json_mode=False)
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err
+    assert "bad thing" in captured.err
+    assert "Suggestion:" in captured.err
+    assert "try this instead" in captured.err
+    assert captured.out == ""
+
+
+def test_emit_error_no_suggestion_line_when_absent(capsys):
+    import types
+
+    err = types.SimpleNamespace(message="bad thing", suggestion=None, to_dict=lambda: {"error": {}})
+    output.emit_error(cast(CLIError, err), json_mode=False)
+    captured = capsys.readouterr()
+    assert "Suggestion:" not in captured.err
 
 
 def test_print_code_plain_when_piped(monkeypatch, capsys):

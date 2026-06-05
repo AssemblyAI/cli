@@ -7,11 +7,19 @@ from aai_cli import client, config, environments, output
 from aai_cli.auth import run_login_flow
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Log in with your browser", "aai login"),
+            ("Log in non-interactively (CI)", "aai login --api-key sk_..."),
+        ]
+    )
+)
 def login(
     ctx: typer.Context,
     api_key: str = typer.Option(None, "--api-key", help="Provide key non-interactively."),
@@ -24,7 +32,10 @@ def login(
         if api_key:
             # Non-interactive escape hatch for CI/automation.
             if not client.validate_key(api_key):
-                raise APIError("That API key was rejected (HTTP 401). Check it and retry.")
+                raise APIError(
+                    "That API key was rejected (HTTP 401).",
+                    suggestion="Check the key and retry.",
+                )
             key = api_key
         else:
             key = run_login_flow()
@@ -43,7 +54,13 @@ def login(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Clear stored credentials for the active profile", "aai logout"),
+        ]
+    )
+)
 def logout(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -62,7 +79,13 @@ def logout(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Show the active profile and whether its key works", "aai whoami"),
+        ]
+    )
+)
 def whoami(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),

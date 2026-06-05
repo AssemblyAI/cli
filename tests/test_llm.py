@@ -1,8 +1,10 @@
 import types
+from typing import cast
 
 import httpx
 import openai
 import pytest
+from openai.types.chat import ChatCompletion
 
 from aai_cli import llm
 from aai_cli.errors import APIError
@@ -10,10 +12,10 @@ from aai_cli.errors import APIError
 _REQUEST = httpx.Request("POST", f"{llm.GATEWAY_BASE_URL}/chat/completions")
 
 
-def _response(content: "str | None" = "hi there", usage=None):
+def _response(content: "str | None" = "hi there", usage=None) -> ChatCompletion:
     message = types.SimpleNamespace(role="assistant", content=content)
     choice = types.SimpleNamespace(message=message, finish_reason="stop")
-    return types.SimpleNamespace(choices=[choice], usage=usage)
+    return cast(ChatCompletion, types.SimpleNamespace(choices=[choice], usage=usage))
 
 
 class FakeCompletions:
@@ -90,7 +92,7 @@ def test_complete_connection_error_maps_to_api_error(monkeypatch):
 
 def test_content_of_missing_raises():
     with pytest.raises(APIError):
-        llm.content_of(types.SimpleNamespace(choices=[]))
+        llm.content_of(cast(ChatCompletion, types.SimpleNamespace(choices=[])))
 
 
 def test_content_of_none_returns_empty():
@@ -98,8 +100,9 @@ def test_content_of_none_returns_empty():
 
 
 def test_usage_of_variants():
+    # The OpenAI SDK always deserializes `usage` into a CompletionUsage (a
+    # pydantic model with model_dump) or None — never a raw dict.
     assert llm.usage_of(_response(usage=None)) is None
-    assert llm.usage_of(_response(usage={"total_tokens": 5})) == {"total_tokens": 5}
     model = types.SimpleNamespace(model_dump=lambda: {"total_tokens": 9})
     assert llm.usage_of(_response(usage=model)) == {"total_tokens": 9}
 

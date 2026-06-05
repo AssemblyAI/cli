@@ -10,6 +10,7 @@ from aai_cli import client, code_gen, config, config_builder, llm, output, youtu
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
+from aai_cli.help_text import examples_epilog
 from aai_cli.microphone import MicrophoneSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
@@ -19,7 +20,19 @@ app = typer.Typer()
 DEFAULT_SPEECH_MODEL = SpeechModel.universal_streaming_multilingual.value
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Stream from your microphone", "aai stream"),
+            ("Stream the hosted sample", "aai stream --sample"),
+            (
+                "Summarize action items live as you talk",
+                'aai stream --llm "summarize action items"',
+            ),
+            ("Print equivalent Python instead of running", "aai stream --show-code"),
+        ]
+    )
+)
 def stream(
     ctx: typer.Context,
     source: str = typer.Argument(

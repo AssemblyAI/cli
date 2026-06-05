@@ -1,6 +1,7 @@
 import io
 import json
 import types
+from typing import TextIO, cast
 
 import pytest
 
@@ -109,7 +110,7 @@ def test_json_emit_propagates_broken_pipe():
         def flush(self):
             pass
 
-    r = StreamRenderer(json_mode=True, out=BrokenOut())
+    r = StreamRenderer(json_mode=True, out=cast(TextIO, BrokenOut()))
     # BrokenPipe must propagate so the command can stop cleanly (`| head`).
     with pytest.raises(BrokenPipeError):
         r.turn(_turn("hi", True))
@@ -123,7 +124,7 @@ def test_json_emit_swallows_non_pipe_errors():
         def flush(self):
             pass
 
-    r = StreamRenderer(json_mode=True, out=FlakyOut())
+    r = StreamRenderer(json_mode=True, out=cast(TextIO, FlakyOut()))
     r.turn(_turn("hi", True))  # non-pipe write errors are non-fatal
 
 

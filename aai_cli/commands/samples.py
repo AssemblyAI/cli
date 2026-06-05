@@ -11,6 +11,7 @@ from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import DEFAULT_VOICE
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
+from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import TARGET_RATE
 
 app = typer.Typer(
@@ -36,7 +37,14 @@ def _generate(name: str) -> str:
     return code_gen.agent(DEFAULT_VOICE, DEFAULT_PROMPT, DEFAULT_GREETING)
 
 
-@app.command(name="list")
+@app.command(
+    name="list",
+    epilog=examples_epilog(
+        [
+            ("List available starter scripts", "aai samples list"),
+        ]
+    ),
+)
 def list_(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -53,7 +61,14 @@ def list_(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Scaffold a transcribe starter script", "aai samples create transcribe"),
+            ("Overwrite an existing script", "aai samples create transcribe --force"),
+        ]
+    )
+)
 def create(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Sample name."),
@@ -65,18 +80,20 @@ def create(
     def body(_state: AppState, json_mode: bool) -> None:
         if name not in SAMPLES:
             raise CLIError(
-                f"Unknown sample '{name}'. Try: {', '.join(SAMPLES)}.",
+                f"Unknown sample '{name}'.",
                 error_type="unknown_sample",
                 exit_code=1,
+                suggestion=f"Try one of: {', '.join(SAMPLES)}.",
             )
         target_dir = Path.cwd() / name
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{name}.py"
         if target.exists() and not force:
             raise CLIError(
-                f"{target} already exists. Delete it or pass --force to overwrite.",
+                f"{target} already exists.",
                 error_type="file_exists",
                 exit_code=1,
+                suggestion="Delete it or pass --force to overwrite.",
             )
         target.write_text(_generate(name))
 

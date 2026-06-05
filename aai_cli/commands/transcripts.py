@@ -8,11 +8,19 @@ from rich.text import Text
 from aai_cli import client, config, output, theme
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=True)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Fetch a transcript's text by id", "aai transcripts get 5551234-abcd"),
+            ("Get the raw JSON", "aai transcripts get 5551234-abcd --json"),
+        ]
+    )
+)
 def get(
     ctx: typer.Context,
     transcript_id: str = typer.Argument(..., help="Transcript id."),
@@ -48,7 +56,14 @@ def get(
     run_command(ctx, body, json=json_out)
 
 
-@app.command(name="list")
+@app.command(
+    name="list",
+    epilog=examples_epilog(
+        [
+            ("List your recent transcripts", "aai transcripts list"),
+        ]
+    ),
+)
 def list_(
     ctx: typer.Context,
     limit: int = typer.Option(10, "--limit", help="How many transcripts to show."),

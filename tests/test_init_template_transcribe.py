@@ -35,6 +35,7 @@ def _load_app(monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "_tmpl_transcribe", TEMPLATE_DIR / "api" / "index.py"
     )
+    assert spec and spec.loader  # spec_from_file_location is typed Optional
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.app, fake_aai, fake_api

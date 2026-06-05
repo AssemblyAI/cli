@@ -11,7 +11,9 @@ from aai_cli.init import templates
 if TYPE_CHECKING:
     # Annotations only (PEP 563 strings), so no runtime import — `Traversable`'s
     # module location differs across 3.10/3.11 but that never matters at runtime.
-    from importlib.resources.abc import Traversable
+    # Import from importlib.abc (not importlib.resources.abc): that is the protocol
+    # variant `resources.files()` is typed to return, so the annotation matches.
+    from importlib.abc import Traversable
 
 PLACEHOLDER_KEY = "your_assemblyai_api_key_here"
 

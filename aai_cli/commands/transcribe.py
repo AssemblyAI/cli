@@ -18,6 +18,7 @@ from aai_cli import (
 )
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
@@ -30,7 +31,20 @@ def _render_transform_steps(d: dict) -> str:
     return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Transcribe a local file", "aai transcribe call.mp3"),
+            ("Try it with the hosted sample", "aai transcribe --sample"),
+            (
+                "Diarize two speakers and redact PII",
+                "aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii",
+            ),
+            ("Get just the text for a pipeline", "aai transcribe call.mp3 -o text"),
+            ("Print equivalent Python instead of running", "aai transcribe call.mp3 --show-code"),
+        ]
+    )
+)
 def transcribe(
     ctx: typer.Context,
     source: str = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),

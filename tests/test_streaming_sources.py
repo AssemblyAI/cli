@@ -1,5 +1,7 @@
 import io
 import wave
+from collections.abc import Generator
+from typing import cast
 
 import pytest
 
@@ -90,7 +92,7 @@ def test_filesource_ffmpeg_cleanup_on_early_stop(tmp_path, monkeypatch):
             calls["waited"] = True
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FakeProc())
-    gen = iter(FileSource(str(p), sleep=lambda _s: None))
+    gen = cast(Generator[bytes, None, None], iter(FileSource(str(p), sleep=lambda _s: None)))
     next(gen)  # pull one chunk
     gen.close()  # stop early -> generator cleanup runs the finally
     assert calls["terminated"] and calls["waited"] and calls["closed"]
@@ -126,7 +128,7 @@ def test_filesource_ffmpeg_wait_keyboardinterrupt_is_silenced(tmp_path, monkeypa
             calls["killed"] = True
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FakeProc())
-    gen = iter(FileSource(str(p), sleep=lambda _s: None))
+    gen = cast(Generator[bytes, None, None], iter(FileSource(str(p), sleep=lambda _s: None)))
     next(gen)  # pull one chunk
     gen.close()  # must return cleanly despite wait() raising KeyboardInterrupt
     assert calls["killed"] is True
@@ -200,3 +202,15 @@ def test_filesource_url_without_ffmpeg_raises(monkeypatch):
     with pytest.raises(CLIError) as exc:
         FileSource("https://example.com/clip.mp3")
     assert exc.value.error_type == "ffmpeg_missing"
+
+
+def test_missing_ffmpeg_suggests_install(monkeypatch, tmp_path):
+    # A non-WAV file with ffmpeg absent must raise with an actionable suggestion.
+    f = tmp_path / "audio.mp3"
+    f.write_bytes(b"not really audio")
+    monkeypatch.setattr(sources.shutil, "which", lambda name: None)
+    with pytest.raises(CLIError) as exc:
+        sources.FileSource(str(f))
+    assert "ffmpeg" in exc.value.message
+    assert exc.value.suggestion is not None
+    assert "WAV" in exc.value.suggestion or "ffmpeg" in exc.value.suggestion

@@ -26,7 +26,10 @@ def resolve_audio_source(source: str | None, *, sample: bool) -> str:
     if sample:
         return SAMPLE_AUDIO_URL
     if not source:
-        raise UsageError("Provide an audio path/URL or use --sample.")
+        raise UsageError(
+            "Provide an audio path or URL.",
+            suggestion="Or pass --sample to use the hosted demo file.",
+        )
     return source
 
 

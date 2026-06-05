@@ -113,3 +113,12 @@ def test_whoami_reports_env():
 def test_unknown_env_exits_2():
     result = runner.invoke(app, ["--env", "bogus", "whoami"])
     assert result.exit_code == 2
+
+
+def test_rejected_api_key_has_suggestion(monkeypatch):
+    from aai_cli import client
+
+    monkeypatch.setattr(client, "validate_key", lambda key: False)
+    result = runner.invoke(app, ["login", "--api-key", "sk_bad", "--json"])
+    assert result.exit_code == 1
+    assert "Check the key and retry" in result.output

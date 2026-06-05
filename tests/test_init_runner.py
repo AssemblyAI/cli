@@ -1,7 +1,11 @@
 import socket
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from aai_cli.errors import CLIError
 from aai_cli.init import runner
 
 
@@ -71,3 +75,111 @@ def test_find_free_port_skips_taken_port():
         assert chosen != taken
     finally:
         s.close()
+
+
+def test_find_free_port_raises_when_all_taken(monkeypatch):
+    monkeypatch.setattr(runner, "_port_open", lambda port: True)  # every port "in use"
+    with pytest.raises(CLIError) as exc:
+        runner.find_free_port(5000, tries=3)
+    assert exc.value.error_type == "port_unavailable"
+    assert "5000" in str(exc.value)
+
+
+def test_wait_for_port_returns_true_when_port_opens(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_open(port):
+        calls["n"] += 1
+        return calls["n"] >= 2  # closed on first poll, open on the second
+
+    monkeypatch.setattr(runner, "_port_open", fake_open)
+    monkeypatch.setattr(runner.time, "sleep", lambda _s: None)
+    assert runner.wait_for_port(3000, timeout=5.0) is True
+    assert calls["n"] >= 2
+
+
+def test_wait_for_port_returns_false_on_timeout(monkeypatch):
+    monkeypatch.setattr(runner, "_port_open", lambda port: False)
+    monkeypatch.setattr(runner.time, "sleep", lambda _s: None)
+    # monotonic jumps past the deadline so the loop exits without the port opening.
+    ticks = iter([0.0, 100.0])
+    monkeypatch.setattr(runner.time, "monotonic", lambda: next(ticks))
+    assert runner.wait_for_port(3000, timeout=1.0) is False
+
+
+def test_run_setup_returns_last_success(monkeypatch):
+    ran = []
+
+    def fake_run(cmd, cwd, capture_output, text):
+        ran.append(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    result = runner.run_setup(Path("/proj"), use_uv=True)
+    assert result.returncode == 0
+    assert len(ran) == 2  # both env-setup commands ran
+
+
+def test_run_setup_stops_at_first_failure(monkeypatch):
+    ran = []
+
+    def fake_run(cmd, cwd, capture_output, text):
+        ran.append(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="boom")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    result = runner.run_setup(Path("/proj"), use_uv=True)
+    assert result.returncode == 1
+    assert result.stderr == "boom"
+    assert len(ran) == 1  # short-circuits after the first failing command
+
+
+class _FakeProc:
+    def __init__(self, *, returncode=0, wait_raises=None):
+        self.returncode = returncode
+        self._wait_raises = wait_raises
+        self.waited = 0
+        self.terminated = False
+
+    def wait(self):
+        self.waited += 1
+        if self._wait_raises and self.waited == 1:
+            raise self._wait_raises
+        return self.returncode
+
+    def terminate(self):
+        self.terminated = True
+
+
+def test_launch_and_open_opens_browser_and_returns_exit_code(monkeypatch):
+    proc = _FakeProc(returncode=0)
+    opened = {}
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: opened.setdefault("url", url))
+    rc = runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=True)
+    assert rc == 0
+    assert opened["url"] == "http://localhost:3000"
+
+
+def test_launch_and_open_skips_browser_when_disabled(monkeypatch):
+    proc = _FakeProc(returncode=2)
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+
+    def boom(url):
+        raise AssertionError("browser should not open")
+
+    monkeypatch.setattr(runner.webbrowser, "open", boom)
+    rc = runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
+    assert rc == 2
+
+
+def test_launch_and_open_handles_keyboard_interrupt(monkeypatch):
+    proc = _FakeProc(wait_raises=KeyboardInterrupt())
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: None)
+    rc = runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
+    assert rc == 0  # clean Ctrl-C shutdown
+    assert proc.terminated is True

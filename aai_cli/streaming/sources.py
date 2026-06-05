@@ -43,16 +43,20 @@ class FileSource:
         if self._path is not None:
             if not self._path.is_file():
                 raise CLIError(
-                    f"No such file: {self._path}", error_type="file_not_found", exit_code=2
+                    f"No such file: {self._path}",
+                    error_type="file_not_found",
+                    exit_code=2,
+                    suggestion="Check the path, or pass a URL or YouTube link instead.",
                 )
             self._wav = _is_streamable_wav(self._path)
         else:
             self._wav = False
         if not self._wav and shutil.which("ffmpeg") is None:
             raise CLIError(
-                "This audio source needs ffmpeg. Install ffmpeg, or pass a 16 kHz mono 16-bit WAV.",
+                "This audio source needs ffmpeg.",
                 error_type="ffmpeg_missing",
                 exit_code=2,
+                suggestion="Install ffmpeg, or pass a 16 kHz mono 16-bit WAV.",
             )
 
     def __iter__(self) -> Iterator[bytes]:
@@ -64,7 +68,10 @@ class FileSource:
             self._sleep(len(chunk) / (TARGET_RATE * 2))  # ~real-time pacing
         if produced == 0:
             raise CLIError(
-                f"No audio data in {self.source}.", error_type="empty_audio", exit_code=2
+                f"No audio data in {self.source}.",
+                error_type="empty_audio",
+                exit_code=2,
+                suggestion="Check the file isn't empty or silent.",
             )
 
     def _wav_chunks(self) -> Iterator[bytes]:
