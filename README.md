@@ -94,6 +94,10 @@ and `aai whoami` / `aai doctor` confirm which source is active without printing 
 | `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
 | `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
 | `aai samples create <name>` | Scaffold a runnable starter script (reads your key from `ASSEMBLYAI_API_KEY`). |
+| `aai keys list` / `create` / `rename` | Manage your API keys (browser login). |
+| `aai balance` / `usage` / `limits` | Account billing, usage, and rate limits (browser login). |
+| `aai sessions list` / `get <id>` | Browse past streaming (real-time) sessions (browser login). |
+| `aai audit` | View your account's audit log (browser login). |
 
 Add `--json` to any command for machine-readable output (it's also the default when
 output is piped or run by an agent). Errors always go to **stderr**, so stdout stays
@@ -107,6 +111,31 @@ across every command.
 > ```sh
 > aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 > ```
+
+## Account self-service
+
+These commands use your browser login session (run `aai login` without
+`--api-key`), not your API key:
+
+```sh
+aai keys list                       # list API keys (masked) across projects
+aai keys create --name ci-pipeline  # mint a new key (printed once)
+aai keys rename 123 "prod"          # relabel a key
+
+aai balance                         # remaining account balance
+aai usage --start 2026-05-01 --end 2026-06-01
+aai limits                          # rate limits per service
+
+aai sessions list --status completed
+aai sessions get <session-id>       # one streaming session's details
+
+aai audit --limit 20                # recent account audit-log entries
+aai audit --action token.create     # filter by action
+```
+
+If a command reports it needs a browser login, your session has expired — run
+`aai login` again. (AMS sessions are short-lived and cannot be refreshed
+silently.)
 
 ## Transcribe options
 
