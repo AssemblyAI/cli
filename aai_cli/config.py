@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import tomllib
@@ -109,6 +110,60 @@ def set_profile_env(profile: str, env: str) -> None:
 def clear_api_key(profile: str) -> None:
     with contextlib.suppress(keyring.errors.PasswordDeleteError):
         keyring.delete_password(KEYRING_SERVICE, profile)
+
+
+SESSION_KEYRING_PREFIX = "session"  # keyring username: f"{prefix}:{profile}"
+
+
+def _session_username(profile: str) -> str:
+    return f"{SESSION_KEYRING_PREFIX}:{profile}"
+
+
+def set_session(profile: str, *, session_jwt: str, session_token: str, account_id: int) -> None:
+    """Persist the browser-login Stytch session (secret) + account id (non-secret).
+
+    AMS self-service endpoints authenticate with this session cookie, not the API
+    key. The JWT is short-lived; an expired session surfaces as NotAuthenticated.
+    """
+    _validate_profile(profile)
+    keyring.set_password(
+        KEYRING_SERVICE,
+        _session_username(profile),
+        json.dumps({"jwt": session_jwt, "token": session_token}),
+    )
+    data = _load()
+    data.setdefault("profiles", {}).setdefault(profile, {})["account_id"] = account_id
+    _dump(data)
+
+
+def get_session(profile: str) -> dict[str, str] | None:
+    """The stored {'jwt', 'token'} for a profile, or None if absent/corrupt."""
+    raw = keyring.get_password(KEYRING_SERVICE, _session_username(profile))
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or "jwt" not in data:
+        return None
+    return data
+
+
+def get_account_id(profile: str) -> int | None:
+    """The AMS account id recorded at login for a profile, if any."""
+    value = _load().get("profiles", {}).get(profile, {}).get("account_id")
+    return int(value) if value is not None else None
+
+
+def clear_session(profile: str) -> None:
+    with contextlib.suppress(keyring.errors.PasswordDeleteError):
+        keyring.delete_password(KEYRING_SERVICE, _session_username(profile))
+    data = _load()
+    prof = data.get("profiles", {}).get(profile)
+    if prof and "account_id" in prof:
+        del prof["account_id"]
+        _dump(data)
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:
