@@ -10,8 +10,9 @@ build/
 .coverage
 htmlcov/
 
-# Editor/agent local artifacts
-.claude/
+# Editor/agent local artifacts: keep personal settings local, but track the
+# team-shared bits (.claude/settings.json, agents/, skills/).
+.claude/settings.local.json
 
 # Local scratch scripts (often contain live keys)
 transcribe/
