@@ -29,9 +29,10 @@ def download_audio(url: str, dest_dir: Path) -> Path:
         import yt_dlp
     except ImportError as exc:
         raise CLIError(
-            "YouTube support needs yt-dlp. Install it with: pip install yt-dlp",
+            "YouTube support needs yt-dlp.",
             error_type="ytdlp_missing",
             exit_code=2,
+            suggestion="Install it: pip install yt-dlp",
         ) from exc
 
     options = {

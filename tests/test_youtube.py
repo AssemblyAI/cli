@@ -103,3 +103,11 @@ def test_download_audio_missing_ytdlp_raises(tmp_path, monkeypatch):
         youtube.download_audio("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "ytdlp_missing"
     assert exc.value.exit_code == 2
+
+
+def test_missing_ytdlp_suggests_install(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "yt_dlp", None)  # force ImportError on `import yt_dlp`
+    with pytest.raises(CLIError) as exc:
+        youtube.download_audio("https://youtu.be/x", tmp_path)
+    assert "yt-dlp" in exc.value.message
+    assert "pip install yt-dlp" in (exc.value.suggestion or "")

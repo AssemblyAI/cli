@@ -200,3 +200,17 @@ def test_filesource_url_without_ffmpeg_raises(monkeypatch):
     with pytest.raises(CLIError) as exc:
         FileSource("https://example.com/clip.mp3")
     assert exc.value.error_type == "ffmpeg_missing"
+
+
+def test_missing_ffmpeg_suggests_install(monkeypatch, tmp_path):
+    import shutil
+
+    # A non-WAV file with ffmpeg absent must raise with an actionable suggestion.
+    f = tmp_path / "audio.mp3"
+    f.write_bytes(b"not really audio")
+    monkeypatch.setattr(sources.shutil, "which", lambda name: None)
+    with pytest.raises(CLIError) as exc:
+        sources.FileSource(str(f))
+    assert "ffmpeg" in exc.value.message
+    assert exc.value.suggestion is not None
+    assert "WAV" in exc.value.suggestion or "ffmpeg" in exc.value.suggestion

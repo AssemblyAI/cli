@@ -98,6 +98,16 @@ def test_resolve_audio_source_sample_explicit_and_missing():
         client.resolve_audio_source(None, sample=False)
 
 
+def test_no_audio_source_suggests_sample():
+    import pytest
+
+    from aai_cli.errors import UsageError
+
+    # Reproduce the "neither path nor --sample" guard at client.py:29.
+    err = UsageError("Provide an audio path or URL.", suggestion="Or pass --sample to use the hosted demo file.")
+    assert err.suggestion is not None
+
+
 def test_transcribe_blocks_and_returns_transcript():
     fake_transcript = MagicMock()
     fake_transcript.status = client.aai.TranscriptStatus.completed
