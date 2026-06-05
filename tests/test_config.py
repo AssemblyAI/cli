@@ -35,11 +35,6 @@ def test_active_profile_defaults_to_default():
     assert config.get_active_profile() == "default"
 
 
-def test_set_active_profile_persists():
-    config.set_active_profile("staging")
-    assert config.get_active_profile() == "staging"
-
-
 def test_logout_clears_key():
     config.set_api_key("default", "sk_abc")
     config.clear_api_key("default")
@@ -72,7 +67,7 @@ def test_empty_api_key_flag_rejected():
 
 def test_invalid_profile_name_has_suggestion():
     with pytest.raises(CLIError) as exc:
-        config.set_active_profile("bad name!")
+        config.set_api_key("bad name!", "sk_x")
     assert exc.value.message.startswith("Invalid profile name")
     assert exc.value.suggestion == "Use only letters, digits, '-' or '_'."
 
@@ -86,7 +81,6 @@ def test_malformed_config_raises_clean_error(tmp_config):
 
 
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
-    # active profile name is validated; this checks tomli_w writes valid TOML for normal data
-    config.set_api_key("default", "sk_x")
-    config.set_active_profile("staging")
+    # profile names are validated; this checks tomli_w writes valid TOML for normal data
+    config.set_api_key("staging", "sk_x")
     assert config.get_active_profile() == "staging"

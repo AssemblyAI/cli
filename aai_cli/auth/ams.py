@@ -57,13 +57,6 @@ def exchange(intermediate_session_token: str, organization_id: str) -> dict[str,
     return cast(dict[str, Any], _json_or_raise(resp))
 
 
-def get_auth(session_jwt: str) -> dict[str, Any]:
-    """GET /v1/auth (session cookie) -> account incl. `id`."""
-    with _client(session_jwt) as client:
-        resp = client.get("/v1/auth")
-    return cast(dict[str, Any], _json_or_raise(resp))
-
-
 def list_projects(account_id: int, session_jwt: str) -> list[dict[str, Any]]:
     """GET /v1/users/accounts/{id}/projects -> [{project, tokens[]}]."""
     with _client(session_jwt) as client:

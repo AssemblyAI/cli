@@ -272,14 +272,6 @@ def construct_transcription_config(merged: dict[str, typing.Any]) -> aai.Transcr
         raise UsageError(f"Invalid transcription config: {exc}") from exc
 
 
-def build_transcription_config(
-    *, flags: dict[str, object], overrides: list[str], config_file: str | None
-) -> aai.TranscriptionConfig:
-    return construct_transcription_config(
-        merge_transcribe_config(flags=flags, overrides=overrides, config_file=config_file)
-    )
-
-
 def merge_streaming_params(
     *, flags: dict[str, object], overrides: list[str], config_file: str | None
 ) -> dict[str, object]:
@@ -305,14 +297,6 @@ def construct_streaming_params(merged: dict[str, typing.Any]) -> StreamingParame
         raise
     except Exception as exc:
         raise UsageError(f"Invalid streaming config: {exc}") from exc
-
-
-def build_streaming_params(
-    *, flags: dict[str, object], overrides: list[str], config_file: str | None
-) -> StreamingParameters:
-    return construct_streaming_params(
-        merge_streaming_params(flags=flags, overrides=overrides, config_file=config_file)
-    )
 
 
 def split_csv(value: str | None) -> list[str] | None:
