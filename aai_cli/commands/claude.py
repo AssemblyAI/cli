@@ -10,6 +10,7 @@ import typer
 from aai_cli import output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
+from aai_cli.help_text import examples_epilog
 from aai_cli.steps import Step, render_steps
 
 app = typer.Typer(
@@ -187,7 +188,14 @@ def _render(data: dict[str, list[Step]]) -> str:
     return render_steps(data["steps"], heading=_STEPS_HEADING)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Wire AssemblyAI docs + skill into Claude Code", "aai claude install"),
+            ("Install for the current project only", "aai claude install --scope project"),
+        ]
+    )
+)
 def install(
     ctx: typer.Context,
     scope: str = typer.Option(
@@ -216,7 +224,13 @@ def install(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Show whether Claude Code is wired up", "aai claude status"),
+        ]
+    )
+)
 def status(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -230,7 +244,13 @@ def status(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Remove the AssemblyAI MCP server and skill", "aai claude remove"),
+        ]
+    )
+)
 def remove(
     ctx: typer.Context,
     scope: str | None = typer.Option(
