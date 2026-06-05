@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from aai_cli import __version__, environments, stdio
 from aai_cli.commands import (
+    account,
     agent,
     claude,
     doctor,
@@ -100,6 +101,7 @@ app.add_typer(stream.app)
 app.add_typer(transcripts.app, name="transcripts")
 app.add_typer(agent.app)
 app.add_typer(llm.app)
+app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples")
