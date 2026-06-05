@@ -107,13 +107,14 @@ def init(
         # Pin the app to the active environment's hosts so a sandbox key (minted by
         # `aai login` against a non-prod env) isn't rejected by the production defaults.
         env = environments.active()
-        scaffold.scaffold(
-            chosen,
-            target,
-            api_key=api_key,
-            base_url=env.api_base,
-            llm_gateway_url=env.llm_gateway_base,
-        )
+        env_vars = {
+            "ASSEMBLYAI_BASE_URL": env.api_base,
+            "ASSEMBLYAI_LLM_GATEWAY_URL": env.llm_gateway_base,
+            "ASSEMBLYAI_STREAMING_HOST": env.streaming_host,
+            # Voice Agent host mirrors the streaming host's naming across environments.
+            "ASSEMBLYAI_AGENTS_HOST": env.streaming_host.replace("streaming", "agents", 1),
+        }
+        scaffold.scaffold(chosen, target, api_key=api_key, env_vars=env_vars)
 
         report: list[steps.Step] = [
             {"name": "scaffold", "status": "created", "detail": str(target)}

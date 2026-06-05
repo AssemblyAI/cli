@@ -124,10 +124,10 @@ def test_init_json_output_is_machine_readable(tmp_path, monkeypatch):
     assert any(step["name"] == "scaffold" and step["status"] == "created" for step in payload)
 
 
-def test_init_unshipped_template_errors_cleanly(tmp_path, monkeypatch):
-    # `stream` is in the design but its template doesn't ship yet, so it must not be
-    # registered — and picking it must give a clean error, not a FileNotFoundError.
+def test_init_unregistered_template_errors_cleanly(tmp_path, monkeypatch):
+    # `llm` isn't a separate template (it's folded into transcribe), so picking it must
+    # give a clean error, not a FileNotFoundError.
     monkeypatch.chdir(tmp_path)
-    result = runner.invoke(app, ["init", "stream", "s", "--no-install"])
+    result = runner.invoke(app, ["init", "llm", "x", "--no-install"])
     assert result.exit_code == 1
-    assert "stream" in result.output
+    assert "llm" in result.output

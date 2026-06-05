@@ -2,17 +2,16 @@ from __future__ import annotations
 
 # id -> human-facing title shown in the picker. Ids mirror the CLI's commands.
 #
-# Only list templates whose directory actually ships under templates/<id>/ — the
-# picker must never advertise a template that would crash on scaffold. The design
-# covers four (transcribe, stream, agent, llm); the latter three are added here as
-# their template directories land in follow-on PRs. A test enforces registry ==
-# shipped directories.
+# Every id here MUST have a directory under templates/<id>/ (a test enforces both
+# directions) — the picker must never advertise a template that would crash on scaffold.
 TEMPLATES: dict[str, str] = {
-    "transcribe": "Transcribe a pre-recorded file",
+    "transcribe": "Transcribe a pre-recorded file (+ chat with it via LLM Gateway)",
+    "stream": "Live captions (mic → browser)",
+    "agent": "Talk to a voice agent",
 }
 
-# Display order for the picker and `--help`.
-TEMPLATE_ORDER: tuple[str, ...] = ("transcribe",)
+# Display order for the picker and `--help`, matching the CLI's command order.
+TEMPLATE_ORDER: tuple[str, ...] = ("transcribe", "stream", "agent")
 
 
 def is_template(name: str) -> bool:

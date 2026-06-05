@@ -107,4 +107,4 @@ ignore = ["E501", "B008", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
-"tests/**" = ["S101", "S105", "S106", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]
+"tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]
