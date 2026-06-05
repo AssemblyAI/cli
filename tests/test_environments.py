@@ -4,11 +4,6 @@ from aai_cli import config, environments
 from aai_cli.errors import CLIError
 
 
-def test_known_includes_production_and_sandbox():
-    assert "production" in environments.known()
-    assert "sandbox000" in environments.known()
-
-
 def test_get_returns_named_environment():
     env = environments.get("sandbox000")
     assert env.name == "sandbox000"

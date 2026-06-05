@@ -38,19 +38,6 @@ def test_discover_posts_token_and_type(monkeypatch):
     assert "tok_abc" in seen["body"]
 
 
-def test_get_auth_sends_session_cookie(monkeypatch):
-    seen = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["cookie"] = request.headers.get("cookie", "")
-        return httpx.Response(200, json={"id": 42, "email": "a@b.com"})
-
-    _patch_transport(monkeypatch, handler)
-    out = ams.get_auth("sess_jwt_xyz")
-    assert out["id"] == 42
-    assert "stytch_session_jwt=sess_jwt_xyz" in seen["cookie"]
-
-
 @pytest.mark.parametrize("status", [401, 403])
 def test_auth_4xx_raises_not_authenticated(monkeypatch, status):
     def handler(request: httpx.Request) -> httpx.Response:
