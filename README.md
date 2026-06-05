@@ -1,169 +1,83 @@
-# AssemblyAI CLI (`aai`)
+<p align="center">
+  <a href="https://www.assemblyai.com">
+    <h2 align="center">AssemblyAI CLI</h2>
+  </a>
+</p>
 
-A command-line interface for [AssemblyAI](https://www.assemblyai.com): transcribe
-files, stream live audio, and have two-way voice conversations — all from your terminal.
+<p align="center">
+  Transcribe. Stream. Converse. — speech AI from your terminal.
+</p>
 
-## Install
+<p align="center">
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#commands"><strong>Commands</strong></a> ·
+  <a href="#pipelines"><strong>Pipelines</strong></a> ·
+  <a href="https://www.assemblyai.com/docs"><strong>Docs</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/AssemblyAI/cli"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-D6402E?style=flat-square"></a>
+  <a href="https://github.com/AssemblyAI/cli/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/AssemblyAI/cli?style=flat-square&color=D6402E"></a>
+  <a href="https://www.assemblyai.com/docs"><img alt="Docs" src="https://img.shields.io/badge/docs-assemblyai-D6402E?style=flat-square"></a>
+</p>
+
+---
+
+`aai` brings [AssemblyAI](https://www.assemblyai.com) to your terminal: transcribe files, stream live audio, run a two-way voice agent, prompt the LLM Gateway, and scaffold ready-to-deploy starter apps — all pipeline-friendly, with your key kept in the OS keyring.
+
+## Installation
 
 ```sh
+# YOLO
 curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+
+# pipx (recommended) or pip
+pipx install "git+https://github.com/AssemblyAI/cli.git"
+pip install --user "git+https://github.com/AssemblyAI/cli.git"
 ```
 
-The installer uses [`pipx`](https://pipx.pypa.io) when available (falling back to
-`pip --user`) and requires Python 3.11+. Prefer to do it yourself:
+Requires Python 3.11+. The installer prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`.
 
-```sh
-pipx install "git+https://github.com/AssemblyAI/cli.git"   # or: pip install --user ...
-```
-
-Microphone and speaker support (for `stream` and `agent`) is **included by default** —
-no extra install step. Audio runs on [`sounddevice`](https://python-sounddevice.readthedocs.io),
-whose macOS and Windows wheels bundle PortAudio, so there's nothing else to install. On Linux,
-install the PortAudio runtime once (`sudo apt-get install libportaudio2`).
-
-## Quick start
+## Quick Start
 
 ```sh
 aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
 
-## Scaffold a starter app
+## Scaffold A Starter App
+
+Copy a small, self-contained FastAPI + HTML project you can run locally and deploy to Vercel as-is:
 
 ```sh
-aai init                            # pick a template, scaffold it, install deps, open the browser
+aai init                            # pick a template, scaffold, install deps, open the browser
 aai init audio-transcription myapp  # non-interactive: template + directory
 ```
 
-`aai init` copies a small, self-contained FastAPI + HTML project you can run locally
-and deploy to Vercel as-is. Your key is written to a git-ignored `.env` (and is never
-sent to the browser). Use `--no-install` to scaffold only.
-
-## API key & security
-
-`aai` resolves your key in this order:
-
-1. The `ASSEMBLYAI_API_KEY` environment variable.
-2. The OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret
-   Service), written only when you run `aai login`.
-
-Two things worth knowing: the key is **never stored in a plaintext dotfile** —
-`aai login` puts it in the OS keyring, and the only on-disk config (`config.toml`)
-holds just profile names. And there is **no `--api-key` flag on run commands**
-(`transcribe`, `stream`, …), so a key can't leak into `ps` output or shell history
-via a command's arguments.
-
-**Prefer not to persist the key at all?** Skip `aai login` and set the environment
-variable instead — it's checked *before* the keyring, so nothing is ever written to
-disk:
-
-```sh
-ASSEMBLYAI_API_KEY=sk_... aai transcribe call.mp3
-```
-
-Prefixing it on a single command (rather than `export`-ing it) scopes the secret to
-that one process. To also keep it out of your shell history, inject it from a secret
-manager at call time:
-
-```sh
-# 1Password CLI
-ASSEMBLYAI_API_KEY=$(op read "op://Private/AssemblyAI/api key") aai transcribe call.mp3
-op run -- aai transcribe call.mp3                          # …or wrap the whole command
-
-# HashiCorp Vault
-ASSEMBLYAI_API_KEY=$(vault kv get -field=key secret/assemblyai) aai stream
-
-# macOS Keychain (a generic-password item you manage)
-ASSEMBLYAI_API_KEY=$(security find-generic-password -w -s assemblyai -a "$USER") aai transcribe call.mp3
-```
-
-In CI, set `ASSEMBLYAI_API_KEY` as a masked secret — nothing is stored. The env var
-also overrides a stored key for one-off use; `aai logout` purges the keyring entry,
-and `aai whoami` / `aai doctor` confirm which source is active without printing the key.
+Your key is written to a git-ignored `.env` (never sent to the browser). Use `--no-install` to scaffold only.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `aai login` / `logout` / `whoami` | Manage the stored API key. |
-| `aai doctor` | Check your environment is ready (API key, network, ffmpeg, microphone, agent tooling). |
-| `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm` to transform the result through LLM Gateway, `--show-code` to print the equivalent Python). |
+| `aai doctor` | Check your environment (API key, network, ffmpeg, microphone, agent tooling). |
+| `aai transcribe <file\|url>` | Transcribe a file, URL, or YouTube URL (`--sample`, `--llm`, `--show-code`). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | Live two-way voice conversation with a voice agent. |
-| `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
+| `aai llm <prompt>` | Prompt the LLM Gateway (`--transcript-id`, or `--follow` for a live stream). |
 | `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
-| `aai samples create <name>` | Scaffold a runnable starter script (reads your key from `ASSEMBLYAI_API_KEY`). |
-| `aai keys list` / `create` / `rename` | Manage your API keys (browser login). |
-| `aai balance` / `usage` / `limits` | Account billing, usage, and rate limits (browser login). |
-| `aai sessions list` / `get <id>` | Browse past streaming (real-time) sessions (browser login). |
-| `aai audit` | View your account's audit log (browser login). |
+| `aai samples create <name>` | Scaffold a runnable starter script. |
+| `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
-Add `--json` to any command for machine-readable output (it's also the default when
-output is piped or run by an agent). Errors always go to **stderr**, so stdout stays
-clean for pipelines. Auth problems surface as a clean "not authenticated" error
-across every command.
+Add `--json` to any command for machine-readable output (the default when output is piped or run by an agent). Errors go to **stderr**, so stdout stays clean for pipelines.
 
-> **Tip:** Quote URLs that contain `?` (most YouTube links do). In zsh the `?` is a
-> glob character, so an unquoted URL fails with `zsh: no matches found` before the
-> command runs:
->
-> ```sh
-> aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
-> ```
+> **Tip:** Quote URLs that contain `?` (most YouTube links do) — in zsh the `?` is a glob character: `aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"`.
 
-## Account self-service
+## Transcribe A File
 
-These commands use your browser login session (run `aai login` without
-`--api-key`), not your API key:
-
-```sh
-aai keys list                       # list API keys (masked) across projects
-aai keys create --name ci-pipeline  # mint a new key (printed once)
-aai keys rename 123 "prod"          # relabel a key
-
-aai balance                         # remaining account balance
-aai usage --start 2026-05-01 --end 2026-06-01
-aai limits                          # rate limits per service
-
-aai sessions list --status completed
-aai sessions get <session-id>       # one streaming session's details
-
-aai audit --limit 20                # recent account audit-log entries
-aai audit --action token.create     # filter by action
-```
-
-If a command reports it needs a browser login, your session has expired — run
-`aai login` again. (AMS sessions are short-lived and cannot be refreshed
-silently.)
-
-## Transcribe options
-
-`aai transcribe` exposes the full `TranscriptionConfig` surface as curated flags,
-grouped by purpose:
-
-- **Model & language:** `--speech-model`, `--language-code`, `--language-detection`,
-  `--keyterms-prompt`, `--prompt`, `--temperature`.
-- **Formatting:** `--punctuate` / `--no-punctuate`, `--format-text` /
-  `--no-format-text`, `--disfluencies`.
-- **Speakers & channels:** `--speaker-labels`, `--speakers-expected`,
-  `--multichannel`.
-- **Guardrails:** `--redact-pii`, `--redact-pii-policy`, `--redact-pii-sub`,
-  `--redact-pii-audio`, `--filter-profanity`, `--content-safety`,
-  `--content-safety-confidence`, `--speech-threshold`.
-- **Analysis:** `--summarization` (`--summary-type`, `--summary-model`),
-  `--auto-chapters`, `--sentiment-analysis`, `--entity-detection`,
-  `--auto-highlights`, `--topic-detection`. Analysis results render automatically
-  in human mode (summary, chapters, sentiment, entities, topics, content safety,
-  highlights).
-- **Customization:** `--word-boost`, `--custom-spelling-file`, `--audio-start`,
-  `--audio-end`, `--translate-to`.
-- **Webhooks:** `--webhook-url`, `--webhook-auth-header` (`NAME:VALUE`).
-
-Anything without a curated flag is reachable through the escape hatch:
-`--config KEY=VALUE` (repeatable) and `--config-file FILE` (a JSON object) accept
-any SDK field by its exact name. Precedence is config file < `--config` < explicit
-flags.
+`aai transcribe` exposes the full `TranscriptionConfig` surface as curated, grouped flags — model & language, formatting, speakers & channels, PII/safety guardrails, analysis (summary, chapters, sentiment, entities, topics, highlights), customization, and webhooks:
 
 ```sh
 aai transcribe call.mp3 \
@@ -175,101 +89,57 @@ aai transcribe call.mp3 \
   --config-file extra.json
 ```
 
-## Streaming
+Anything without a curated flag is reachable via the escape hatch: `--config KEY=VALUE` (repeatable) and `--config-file FILE` (a JSON object) accept any SDK field by name. Precedence: config file < `--config` < explicit flags. Run `aai transcribe --help` for the full flag list.
+
+## Stream Live Audio
 
 ```sh
-aai stream --sample            # stream the hosted wildfires.mp3 sample (same clip as transcribe)
-aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly
-aai stream path/to/audio.mp3   # other formats need ffmpeg on PATH
+aai stream --sample            # stream the hosted wildfires.mp3 sample
+aai stream path/to/audio.wav   # 16 kHz mono WAV streams directly (other formats need ffmpeg)
 aai stream https://…/clip.mp3  # a URL works too (decoded via ffmpeg)
 aai stream                     # from the microphone; Ctrl-C to stop
 aai stream --system-audio      # macOS: system/app audio + mic as separate sessions
 aai stream --system-audio-only # macOS: system/app audio without the mic
 ```
 
-`aai stream` exposes the full `StreamingParameters` surface as curated flags:
-
-- **Model & input:** `--speech-model`, `--encoding`, `--language-detection`,
-  `--domain`.
-- **Turn detection:** `--end-of-turn-confidence-threshold`, `--min-turn-silence`,
-  `--max-turn-silence`, `--vad-threshold`, `--format-turns` / `--no-format-turns`,
-  `--include-partial-turns`.
-- **Features:** `--keyterms-prompt`, `--filter-profanity`, `--speaker-labels`,
-  `--max-speakers`, `--voice-focus`, `--voice-focus-threshold`, `--redact-pii`,
-  `--redact-pii-policy`, `--redact-pii-sub`, `--inactivity-timeout`,
-  `--webhook-url`, `--webhook-auth-header`.
-
-The same escape hatch applies — `--config KEY=VALUE` (repeatable) and
-`--config-file FILE` (JSON object) reach any other `StreamingParameters` field,
-with precedence config file < `--config` < explicit flags:
+`aai stream` exposes the full `StreamingParameters` surface (model & input, turn detection, features) as curated flags, with the same `--config` / `--config-file` escape hatch:
 
 ```sh
-aai stream --sample \
-  --max-turn-silence 400 --format-turns \
-  --keyterms-prompt "AssemblyAI" \
-  --config vad_threshold=0.7
+aai stream --sample --max-turn-silence 400 --format-turns \
+  --keyterms-prompt "AssemblyAI" --config vad_threshold=0.7
 ```
 
-On macOS, `--system-audio` uses ScreenCaptureKit to capture system/app audio
-without a loopback driver and streams it in a separate Streaming session from
-the microphone. The default terminal UI labels finalized turns as `You:` or
-`System:`. The first run may ask for Screen & System Audio Recording and
-Microphone permissions. The helper does not record screen frames, but macOS
-still uses that combined permission label for native system audio capture.
-`--system-audio-only` skips the microphone.
+On macOS, `--system-audio` uses ScreenCaptureKit to capture system/app audio without a loopback driver and labels finalized turns `You:` or `System:`. The first run may prompt for Screen & System Audio Recording and Microphone permissions.
 
-## Live transcript → live LLM
+## Live Transcript → Live LLM
 
-`aai stream --llm "PROMPT"` runs a prompt over the live transcript through LLM Gateway,
-refreshing the answer on every finalized turn — one command, no pipe to wire up:
+Run a prompt over the live transcript through the LLM Gateway, refreshing on every finalized turn — one command, no pipe to wire up:
 
 ```sh
 aai stream --llm "summarize action items as I talk"
+aai stream --llm "extract action items" --llm "rewrite them as a checklist"  # chains
 ```
 
-It's repeatable, so prompts chain — each runs on the previous one's response:
+On a terminal you watch one evolving panel; piped onward it emits one JSON object per refresh. Prefer the pipe? Compose the primitives — `aai stream -o text` writes one finalized turn per line and `aai llm -f` re-runs your prompt over the growing transcript:
 
 ```sh
-aai stream --llm "extract action items" --llm "rewrite them as a checklist"
+aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items"
 ```
 
-On a terminal you watch one evolving panel; piped onward it emits one JSON object per
-refresh (`{"turns": N, "output": "…"}`). Ctrl-C to stop.
+## Voice Agent
 
-**Prefer the pipe?** The same thing composes from the primitives: `aai stream -o text`
-writes one finalized turn per line, and `aai llm -f` (`--follow`) re-runs your prompt
-over the *growing* transcript. Reach for this when you want a `--system` prompt or other
-tools in the pipeline:
+Have a live, two-way voice conversation — full-duplex, so you can interrupt mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself:
 
 ```sh
-aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items as I talk"
-```
-
-Without `--follow`, `aai llm` stays one-shot — it reads stdin to EOF and answers once
-(`cat notes | aai llm "summarize"`).
-
-## Voice agent
-
-Have a live, two-way voice conversation:
-
-```sh
-aai agent                                 # talk; the agent talks back. Ctrl-C to stop.
+aai agent                                    # talk; the agent talks back. Ctrl-C to stop.
 aai agent --voice james --greeting "Hi"
 aai agent --system-prompt-file persona.txt   # load the system prompt from a file
-aai agent --list-voices                       # see available voices
+aai agent --list-voices                      # see available voices
 ```
 
-The agent is full-duplex — your mic stays open while it speaks, so you can interrupt it
-mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself on your
-speakers.
+## Show The Code
 
-## Show the code
-
-Add `--show-code` to `transcribe`, `stream`, or `agent` to print the equivalent Python
-SDK code **instead of running** the command — a ready-to-edit starting point for your
-own app. It builds the script from exactly the flags you passed, needs no API key
-(the generated code reads `ASSEMBLYAI_API_KEY` from the environment), and writes plain
-Python to stdout, so you can redirect it straight into a file:
+Add `--show-code` to `transcribe`, `stream`, or `agent` to print the equivalent Python SDK script **instead of running** — a ready-to-edit starting point built from exactly the flags you passed. It needs no API key (generated code reads `ASSEMBLYAI_API_KEY`) and writes plain Python to stdout:
 
 ```sh
 aai transcribe --sample --speaker-labels --show-code        # print the equivalent script
@@ -278,149 +148,67 @@ aai stream --show-code                                      # the microphone-str
 aai agent --voice ivy --show-code                           # the full-duplex agent loop
 ```
 
-The generated transcribe code includes result handling for the analysis features you
-enabled. With `--llm` (repeatable — each prompt runs on the previous response), it emits
-the chained LLM Gateway calls too:
-
-```sh
-aai transcribe call.mp3 \
-  --llm "summarize" \
-  --llm "translate the summary to Spanish" \
-  --show-code > summarize_then_translate.py
-```
-
-`aai stream --llm "…" --show-code` likewise emits the live transcribe→LLM-per-turn loop.
+With `--llm` (repeatable), it emits the chained LLM Gateway calls too.
 
 ## Pipelines
 
-`aai` is built to compose with the rest of your shell. Output is machine-clean
-(errors go to stderr), commands read `-` from stdin, and `-o`/`--output` prints a
-single field so you rarely need `jq`.
-
-**Pick one field with `-o`:**
+`aai` composes with the rest of your shell. Output is machine-clean (errors → stderr), commands read `-` from stdin, and `-o`/`--output` prints a single field so you rarely need `jq`.
 
 ```sh
-aai transcribe call.mp3 -o text        # just the transcript text
-aai transcribe call.mp3 -o id          # just the transcript id
-aai transcribe call.mp3 -o utterances  # speaker-labeled lines
-aai transcribe video.mp4 -o srt        # SubRip (.srt) captions
+# Pick one field with -o
+aai transcribe call.mp3 -o text         # just the transcript text
+aai transcribe video.mp4 -o srt         # SubRip (.srt) captions
 aai transcribe call.mp3 -o json | jq .  # full JSON when you do want jq
-```
 
-**Read audio from stdin (`-`):**
-
-```sh
-ffmpeg -i talk.mp4 -f wav - | aai transcribe -        # transcribe any video
+# Read audio from stdin
+ffmpeg -i talk.mp4 -f wav - | aai transcribe -          # transcribe any video
 curl -sL https://example.com/ep.mp3 | aai transcribe -  # no temp file
-ffmpeg -i in.mp4 -f s16le -ac 1 -ar 16000 - | aai stream -   # live, from a pipe
-```
 
-**Feed text into the LLM Gateway** (`aai llm` reads piped stdin). For a transcript,
-`aai transcribe --llm "…"` does it in one step — the pipe is for any *other* text:
-
-```sh
-cat notes.txt | aai llm "turn these into a changelog"
-```
-
-**Pipe a live stream into other tools.** For live LLM summaries use `aai stream --llm`
-(above) — one process, clean Ctrl-C. To pipe the live transcript into a *different* tool,
-note that a Ctrl-C in a pipe hits both sides, so to stop the producer and let the
-consumer finish, signal only the producer — or end the stream on its own:
-
-```sh
-# end after 30s by signaling just the producer (macOS: brew install coreutils, use gtimeout)
-timeout -s INT 30s aai stream -o text | grep -i "action item"
-
-# or end on a natural pause (server-side inactivity timeout, in seconds)
-aai stream -o text --inactivity-timeout 5 > call.txt
-
-# capture then process (most robust)
-aai stream -o text > call.txt        # Ctrl-C to stop
-aai llm "summarize" < call.txt
-```
-
-## Recipes
-
-A cookbook of `aai` composed with common Unix tools. macOS shown; on Linux swap
-`pbcopy`/`pbpaste` → `xclip -sel clip`/`xclip -o` and `say` → `spd-say`.
-
-**Chain `aai llm` into other tools** with `-o text` — it prints just the answer, so it
-pipes onward cleanly (no `jq` needed):
-
-```sh
-aai transcribe call.mp3 -o text | aai llm -o text "list action items" | pbcopy
-```
-
-**`aai llm` is a general text filter** — it reads stdin, audio optional:
-
-```sh
+# aai llm is a general text filter — it reads stdin, audio optional
 git log --oneline -30 | aai llm "write release notes grouped by feature/fix"
-cat error.log         | aai llm "what's the root cause and the one-line fix?"
-```
 
-**Translate a sample, then port the generated code** — `--show-code` prints the Python
-for the pipeline you described, and `aai llm` rewrites it in another language:
-
-```sh
-aai transcribe --sample --llm "translate to french" --show-code | aai llm "rewrite in rust"
-```
-
-**Mine the analysis JSON with `jq`** — enable a feature, then slice `-o json`:
-
-```sh
-aai transcribe call.mp3 --sentiment-analysis -o json | jq -r '.sentiment_analysis_results[] | "\(.sentiment)\t\(.text)"'
-aai transcribe call.mp3 --entity-detection  -o json | jq -r '.entities[] | "\(.entity_type): \(.text)"' | sort -u
-```
-
-**Pick a past transcript with `fzf`, then summarize it:**
-
-```sh
-aai transcripts list --json \
-  | jq -r '.[] | "\(.id)\t\(.status)\t\(.created)"' \
-  | fzf | cut -f1 \
-  | xargs -I{} aai llm "summarize the key decisions" --transcript-id {}
-```
-
-**Who talked the most** (speaker-labeled utterances + `awk`):
-
-```sh
-aai transcribe call.mp3 --speaker-labels -o utterances | awk -F: '{print $1}' | sort | uniq -c | sort -rn
-```
-
-**Redact PII before it leaves your machine:**
-
-```sh
-aai transcribe call.mp3 --redact-pii --redact-pii-policy person_name,phone_number,email_address -o text | pbcopy
-```
-
-**Caption a YouTube video (sing-along subtitles)** — download the video, transcribe it
-to SubRip with `-o srt`, then burn the captions in with ffmpeg. These steps pass *files*
-to each other (not stdin/stdout), and ffmpeg's `subtitles` filter needs a seekable file,
-so chain them with `&&` rather than `|` — each step runs only if the previous succeeds:
-
-```sh
-URL="https://www.youtube.com/watch?v=6YzGOq42zLk&list=RD6YzGOq42zLk&start_radio=1"
-
-yt-dlp --no-playlist -f 'bv*+ba/b' --merge-output-format mp4 -o video.mp4 "$URL" && aai transcribe video.mp4 -o srt > captions.srt && ffmpeg -i video.mp4 -vf "subtitles=captions.srt" -c:a copy out.mp4
-```
-
-`--no-playlist` matters for music links: the `&list=RD…` suffix is an autoplay radio, so
-without it yt-dlp downloads an endless mix instead of the one video. This burns in
-**static per-line captions** — for true word-by-word karaoke highlighting you'd render an
-ASS subtitle file from the transcript's word timings (`-o json` → `words[]`) instead.
-
-**DIY voice assistant** — speak a question, hear the answer (use headphones):
-
-```sh
+# DIY voice assistant — speak a question, hear the answer (use headphones)
 aai stream -o text | while IFS= read -r line; do
   echo "$line" | aai llm -o text "answer in one short sentence" | say
 done
 ```
 
-## AI coding agents
+A Ctrl-C in a pipe hits both sides; to stop just the producer and let the consumer finish, signal the producer (`timeout -s INT 30s aai stream …`) or end on a natural pause (`aai stream --inactivity-timeout 5`).
 
-Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so
-your agent writes current, correct integration code:
+## API Key & Security
+
+`aai` resolves your key in order: the `ASSEMBLYAI_API_KEY` environment variable, then the OS keyring (written only by `aai login`). Two things worth knowing:
+
+- The key is **never stored in a plaintext dotfile** — `aai login` puts it in the OS keyring (Keychain / Credential Manager / Secret Service); the only on-disk config holds just profile names.
+- There is **no `--api-key` flag on run commands**, so a key can't leak into `ps` output or shell history.
+
+Prefer not to persist it? Set the env var instead — it's checked *before* the keyring, so nothing is written to disk. Scope it to one command (and keep it out of history) by injecting from a secret manager at call time:
+
+```sh
+ASSEMBLYAI_API_KEY=$(op read "op://Private/AssemblyAI/api key") aai transcribe call.mp3
+op run -- aai transcribe call.mp3                    # …or wrap the whole command
+```
+
+In CI, set `ASSEMBLYAI_API_KEY` as a masked secret. `aai logout` purges the keyring entry; `aai whoami` / `aai doctor` confirm the active source without printing the key.
+
+## Account Self-Service
+
+These commands use your browser login session (run `aai login`), not your API key:
+
+```sh
+aai keys list                       # list API keys (masked) across projects
+aai keys create --name ci-pipeline  # mint a new key (printed once)
+aai balance                         # remaining account balance
+aai usage --start 2026-05-01 --end 2026-06-01
+aai sessions list --status completed
+aai audit --action token.create     # account audit log, filterable
+```
+
+AMS sessions are short-lived — if a command reports it needs a browser login, run `aai login` again.
+
+## AI Coding Agents
+
+Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so your agent writes current, correct integration code:
 
 ```sh
 aai claude install        # installs the docs MCP server + skill (user scope)
@@ -428,18 +216,34 @@ aai claude status         # show what's wired up
 aai claude remove         # unwind both
 ```
 
-`install` shells out to `claude mcp add` and `npx skills add`. Pass `--scope project` to
-scope the MCP server to the current project. A missing `claude` or `npx` is reported and
-skipped (with the manual command to run), not treated as an error.
+`install` shells out to `claude mcp add` and `npx skills add`. Pass `--scope project` to scope the MCP server to the current project. A missing `claude` or `npx` is reported and skipped, not treated as an error.
+
+## Reference
+
+Use `--help` on any command to explore flags and examples:
+
+```sh
+aai --help
+aai transcribe --help
+aai stream --help
+```
+
+- [AssemblyAI docs](https://www.assemblyai.com/docs)
+- [API reference](https://www.assemblyai.com/docs/api-reference)
 
 ## Development
 
-This project uses [uv](https://docs.astral.sh/uv/). Run tools through `uv run` so they
-use the locked environment (`pyproject.toml` + `uv.lock`):
+This project uses [uv](https://docs.astral.sh/uv/). Run tools through `uv run` so they use the locked environment (`pyproject.toml` + `uv.lock`):
 
 ```sh
-uv sync --extra dev        # create/refresh the project venv with dev dependencies
+uv sync --extra dev        # create/refresh the venv with dev dependencies
 uv run aai --help          # run the CLI from the locked environment
 uv run pytest              # run the test suite (uv run mypy / ruff likewise)
-./scripts/check.sh         # ruff + mypy + pytest (the same checks CI runs on every PR)
+./scripts/check.sh         # ruff + mypy + pytest — the same checks CI runs on every PR
 ```
+
+## License
+
+Released under the [MIT license](LICENSE).
+</content>
+</invoke>
