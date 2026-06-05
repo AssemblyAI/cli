@@ -94,6 +94,22 @@ def test_get_streaming_by_id(monkeypatch):
     assert out["session_id"] == "s_1"
 
 
+def test_list_audit_logs_passes_filters(monkeypatch):
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["cookie"] = request.headers.get("cookie", "")
+        return httpx.Response(200, json={"page_details": {}, "data": []})
+
+    _patch_transport(monkeypatch, handler)
+    ams.list_audit_logs("jwt", limit=5, action_taken="token.create")
+    assert "/v2/user/audit-logs" in seen["url"]
+    assert "limit=5" in seen["url"]
+    assert "action_taken=token.create" in seen["url"]
+    assert "stytch_session_jwt=jwt" in seen["cookie"]
+
+
 def test_account_4xx_raises_not_authenticated(monkeypatch):
     def handler(request):
         return httpx.Response(401, json={"detail": "expired"})

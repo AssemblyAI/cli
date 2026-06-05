@@ -139,3 +139,11 @@ def get_streaming(session_id: str, session_jwt: str) -> dict[str, Any]:
     with _client(session_jwt) as client:
         resp = client.get(f"/v1/users/streaming/{session_id}")
     return cast(dict[str, Any], _json_or_raise(resp))
+
+
+def list_audit_logs(session_jwt: str, **filters: Any) -> dict[str, Any]:
+    """GET /v2/user/audit-logs -> {page_details, data: [AuditLogResponse]}."""
+    params = {k: v for k, v in filters.items() if v is not None}
+    with _client(session_jwt) as client:
+        resp = client.get("/v2/user/audit-logs", params=params)
+    return cast(dict[str, Any], _json_or_raise(resp))
