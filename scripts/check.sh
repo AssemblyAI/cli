@@ -22,8 +22,11 @@ markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cach
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
-# a live API key + kokoro. Run them with: uv run pytest -m e2e
-uv run pytest -q -m "not e2e" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+# a live API key + kokoro. And exclude install (real per-template dep install,
+# slow + network), also uncounted by coverage. Run them with:
+#   uv run pytest -m e2e
+#   uv run pytest -m install
+uv run pytest -q -m "not e2e and not install" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render
