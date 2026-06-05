@@ -4,6 +4,7 @@ Each call stays short, so it's serverless-friendly:
   POST /api/transcribe       -> submit an uploaded file, return {"id": ...}
   POST /api/transcribe-url   -> submit a public URL (defaults to the sample), {"id": ...}
   GET  /api/status/{id}      -> poll; returns the full transcript JSON when complete
+  POST /api/ask              -> ask a question about a transcript via the LLM Gateway
 
 The browser (index.html) submits a URL or file, then polls status until done.
 Your API key stays on the server — the browser never sees it.
@@ -22,13 +23,19 @@ from assemblyai.client import Client
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from openai import OpenAI  # the LLM Gateway is OpenAI-compatible
 
 load_dotenv()
-aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY", "")
+API_KEY = os.environ.get("ASSEMBLYAI_API_KEY", "")
+aai.settings.api_key = API_KEY
 # Target the same AssemblyAI environment the key was minted for. `aai init` writes
-# this for you; leave it unset to use the production default.
+# these for you; leave them unset to use the production defaults.
 if base_url := os.environ.get("ASSEMBLYAI_BASE_URL"):
     aai.settings.base_url = base_url
+LLM_GATEWAY_URL = os.environ.get(
+    "ASSEMBLYAI_LLM_GATEWAY_URL", "https://llm-gateway.assemblyai.com/v1"
+)
+LLM_MODEL = "claude-haiku-4-5-20251001"
 
 # A public sample so you can try it instantly without uploading anything.
 SAMPLE_URL = "https://assembly.ai/wildfires.mp3"
@@ -69,6 +76,26 @@ async def transcribe(file: UploadFile) -> dict[str, str]:
 def transcribe_url(url: str = Body(default=SAMPLE_URL, embed=True)) -> dict[str, str]:
     # AssemblyAI transcribes a public URL directly — no upload step needed.
     return _submit(url.strip() or SAMPLE_URL)
+
+
+@app.post("/api/ask")
+def ask(transcript_id: str = Body(...), question: str = Body(...)) -> dict[str, str]:
+    """Answer a question about a transcript via the LLM Gateway.
+
+    The gateway is OpenAI-compatible: pass `transcript_id` in `extra_body` and it
+    substitutes the `{{ transcript }}` tag with the transcript text server-side.
+    """
+    client = OpenAI(api_key=API_KEY, base_url=LLM_GATEWAY_URL)
+    try:
+        resp = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": f"{question}\n\n{{{{ transcript }}}}"}],
+            max_tokens=1000,
+            extra_body={"transcript_id": transcript_id},
+        )
+    except Exception as exc:  # surface the gateway's own error (e.g. plan access)
+        raise HTTPException(status_code=502, detail=f"LLM Gateway error: {exc}") from exc
+    return {"answer": resp.choices[0].message.content or ""}
 
 
 @app.get("/api/status/{transcript_id}")

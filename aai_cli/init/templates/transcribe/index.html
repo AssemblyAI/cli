@@ -42,6 +42,16 @@
     #status.done { background: #dcfce7; color: #166534; }
     #status.error { background: #fee2e2; color: #991b1b; }
 
+    /* Ask the transcript (LLM Gateway) */
+    #ask { margin: 0 0 18px; }
+    #ask .q { display: flex; gap: 8px; }
+    #ask input { flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--line);
+                 border-radius: 9px; font-size: 14px; }
+    #ask input:focus { outline: none; border-color: var(--accent); }
+    .answer { margin-top: 12px; padding: 12px 14px; background: #f5f3ff; border-radius: 10px;
+              white-space: pre-wrap; color: #1e1b4b; }
+    .answer:empty { display: none; }
+
     /* Tabs */
     .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
     .tabs button {
@@ -99,6 +109,15 @@
     </div>
 
     <p id="status"></p>
+
+    <div id="ask" class="card" hidden>
+      <div class="q">
+        <input id="q" type="text" placeholder="Ask a question about this transcript…" />
+        <button id="askBtn">Ask</button>
+      </div>
+      <div id="answer" class="answer"></div>
+    </div>
+
     <div id="tabs" class="tabs"></div>
     <div id="view"></div>
   </main>
@@ -110,10 +129,18 @@
     const statusEl = document.getElementById("status");
     const tabsEl = document.getElementById("tabs");
     const viewEl = document.getElementById("view");
+    const askPanel = document.getElementById("ask");
+    const qInput = document.getElementById("q");
+    const askBtn = document.getElementById("askBtn");
+    const answerEl = document.getElementById("answer");
+
+    let currentId = null;  // transcript the Ask panel questions against
 
     goBtn.addEventListener("click", () => transcribeUrl(urlInput.value.trim()));
     urlInput.addEventListener("keydown", (e) => e.key === "Enter" && goBtn.click());
     fileInput.addEventListener("change", () => fileInput.files[0] && transcribeFile(fileInput.files[0]));
+    askBtn.addEventListener("click", () => ask(qInput.value.trim()));
+    qInput.addEventListener("keydown", (e) => e.key === "Enter" && askBtn.click());
 
     async function transcribeUrl(url) {
       if (!url) return;
@@ -134,7 +161,9 @@
 
     async function start(submit) {
       busy(true);
-      tabsEl.innerHTML = viewEl.innerHTML = "";
+      tabsEl.innerHTML = viewEl.innerHTML = answerEl.textContent = "";
+      askPanel.hidden = true;
+      currentId = null;
       setStatus("Uploading…", "working");
       const res = await submit();
       if (!res.ok) return fail(await res.text());
@@ -149,7 +178,26 @@
       if (data.status !== "completed") return void setTimeout(() => poll(id), 2000);
       setStatus("✓ Done", "done");
       busy(false);
+      currentId = id;
+      askPanel.hidden = false;  // transcript stays visible below; ask alongside it
       explore(data.transcript);
+    }
+
+    async function ask(question) {
+      if (!question || !currentId) return;
+      askBtn.disabled = true;
+      answerEl.textContent = "Thinking…";
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript_id: currentId, question }),
+        });
+        const data = await res.json();
+        answerEl.textContent = res.ok ? data.answer : "Error: " + (data.detail || res.statusText);
+      } finally {
+        askBtn.disabled = false;
+      }
     }
 
     // --- speaker colors --------------------------------------------------

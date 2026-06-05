@@ -21,10 +21,12 @@ def test_init_writes_key_from_env(tmp_path, monkeypatch):
 
 
 def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
-    # The generated .env pins the app to the CLI's active environment host.
+    # The generated .env pins the app to the CLI's active environment hosts.
     monkeypatch.chdir(tmp_path)
     runner.invoke(app, ["init", "transcribe", "myapp", "--no-install"])
-    assert "ASSEMBLYAI_BASE_URL=https://" in (tmp_path / "myapp" / ".env").read_text()
+    env = (tmp_path / "myapp" / ".env").read_text()
+    assert "ASSEMBLYAI_BASE_URL=https://" in env
+    assert "ASSEMBLYAI_LLM_GATEWAY_URL=https://" in env
 
 
 def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):

@@ -34,7 +34,17 @@ def test_scaffold_writes_base_url_when_given(tmp_path):
 def test_scaffold_omits_base_url_when_none(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold("transcribe", target, api_key="k")
-    assert "ASSEMBLYAI_BASE_URL" not in (target / ".env").read_text()
+    env = (target / ".env").read_text()
+    assert "ASSEMBLYAI_BASE_URL" not in env
+    assert "ASSEMBLYAI_LLM_GATEWAY_URL" not in env
+
+
+def test_scaffold_writes_llm_gateway_url_when_given(tmp_path):
+    target = tmp_path / "app"
+    scaffold.scaffold(
+        "transcribe", target, api_key="k", llm_gateway_url="https://llm.sb.example/v1"
+    )
+    assert "ASSEMBLYAI_LLM_GATEWAY_URL=https://llm.sb.example/v1" in (target / ".env").read_text()
 
 
 def test_scaffold_skips_pycache(tmp_path):

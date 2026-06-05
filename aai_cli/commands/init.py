@@ -104,9 +104,16 @@ def init(
             )
 
         api_key = keys.resolve_optional_api_key(profile=state.profile)
-        # Pin the app to the active environment's API host so a sandbox key (minted by
-        # `aai login` against a non-prod env) isn't rejected by the production default.
-        scaffold.scaffold(chosen, target, api_key=api_key, base_url=environments.active().api_base)
+        # Pin the app to the active environment's hosts so a sandbox key (minted by
+        # `aai login` against a non-prod env) isn't rejected by the production defaults.
+        env = environments.active()
+        scaffold.scaffold(
+            chosen,
+            target,
+            api_key=api_key,
+            base_url=env.api_base,
+            llm_gateway_url=env.llm_gateway_base,
+        )
 
         report: list[steps.Step] = [
             {"name": "scaffold", "status": "created", "detail": str(target)}

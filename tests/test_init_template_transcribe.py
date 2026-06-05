@@ -74,8 +74,29 @@ def test_page_explores_all_features_and_speakers():
         "entities",
         "auto_highlights_result",
         "speakerColor",
+        "/api/ask",  # the LLM Gateway Q&A panel
     ):
         assert token in html, token
+
+
+def test_ask_calls_llm_gateway_with_transcript_id(monkeypatch):
+    # Stub the OpenAI SDK before the template module imports it.
+    fake_openai = MagicMock()
+    msg = MagicMock()
+    msg.content = "It's about wildfires."
+    fake_openai.OpenAI.return_value.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=msg)]
+    )
+    monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+    app, _aai, _api = _load_app(monkeypatch)
+    client = TestClient(app)
+    resp = client.post("/api/ask", json={"transcript_id": "t-1", "question": "What is this about?"})
+    assert resp.status_code == 200
+    assert "wildfires" in resp.json()["answer"]
+    # The gateway injects the transcript server-side via extra_body, not inline.
+    kwargs = fake_openai.OpenAI.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {"transcript_id": "t-1"}
 
 
 def test_index_route_serves_page(monkeypatch):

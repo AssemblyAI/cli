@@ -65,13 +65,18 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
 
 
 def scaffold(
-    template: str, target: Path, *, api_key: str | None, base_url: str | None = None
+    template: str,
+    target: Path,
+    *,
+    api_key: str | None,
+    base_url: str | None = None,
+    llm_gateway_url: str | None = None,
 ) -> Path:
     """Copy the template into `target` and write `.env`. Returns `target`.
 
-    `base_url`, when given, pins the generated app to the same AssemblyAI environment
-    the key was minted for (e.g. a sandbox) — otherwise a sandbox key would be rejected
-    by the production default.
+    `base_url`/`llm_gateway_url`, when given, pin the generated app to the same
+    AssemblyAI environment the key was minted for (e.g. a sandbox) — otherwise a
+    sandbox key would be rejected by the production defaults.
     """
     root = _template_root(template)
     target.mkdir(parents=True, exist_ok=True)
@@ -79,5 +84,7 @@ def scaffold(
     lines = [f"ASSEMBLYAI_API_KEY={api_key or PLACEHOLDER_KEY}"]
     if base_url:
         lines.append(f"ASSEMBLYAI_BASE_URL={base_url}")
+    if llm_gateway_url:
+        lines.append(f"ASSEMBLYAI_LLM_GATEWAY_URL={llm_gateway_url}")
     (target / ".env").write_text("\n".join(lines) + "\n")
     return target

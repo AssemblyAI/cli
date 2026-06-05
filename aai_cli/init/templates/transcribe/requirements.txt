@@ -3,3 +3,4 @@ uvicorn
 assemblyai
 python-dotenv
 python-multipart
+openai
