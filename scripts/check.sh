@@ -27,13 +27,24 @@ uv run pyright  # include = ["aai_cli", "tests"] in [tool.pyright]
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
+echo "==> shellcheck (install.sh)"
+# Static-lint the public install script. CI's ubuntu runner ships shellcheck;
+# locally it's skipped with a notice if not installed.
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck install.sh
+else
+  echo "   shellcheck not found; skipping (CI runs it)"
+fi
+
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
-# a live API key + kokoro. And exclude install (real per-template dep install,
-# slow + network), also uncounted by coverage. Run them with:
+# a live API key + kokoro. Exclude install (real per-template dep install, slow +
+# network) and install_script (builds a wheel and runs install.sh for real; slow,
+# needs network + uv/pipx). All are uncounted by coverage. Run them with:
 #   uv run pytest -m e2e
 #   uv run pytest -m install
-uv run pytest -q -m "not e2e and not install" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
+#   uv run pytest -m install_script
+uv run pytest -q -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-fail-under=90
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render
