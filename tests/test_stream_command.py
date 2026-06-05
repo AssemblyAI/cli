@@ -524,6 +524,7 @@ def test_stream_show_code_with_llm_emits_follow_loop(monkeypatch):
 
 def test_stream_help_has_examples():
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["stream", "--help"])

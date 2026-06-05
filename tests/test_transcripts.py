@@ -112,6 +112,7 @@ def test_list_table_colors_status(monkeypatch):
 
 def test_transcripts_get_help_has_examples():
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["transcripts", "get", "--help"])
@@ -121,6 +122,7 @@ def test_transcripts_get_help_has_examples():
 
 def test_transcripts_list_help_has_examples():
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["transcripts", "list", "--help"])

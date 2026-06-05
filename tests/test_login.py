@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -115,12 +116,11 @@ def test_unknown_env_exits_2():
     assert result.exit_code == 2
 
 
-import pytest
-
 
 @pytest.mark.parametrize("cmd", ["login", "logout", "whoami"])
 def test_auth_commands_help_has_examples(cmd):
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, [cmd, "--help"])

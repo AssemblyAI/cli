@@ -10,6 +10,7 @@ from rich.markup import escape
 from aai_cli import __version__, environments, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
+from aai_cli.help_text import examples_epilog
 from aai_cli.init import keys, runner, scaffold, templates
 
 # Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
@@ -58,7 +59,15 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
     return Path.cwd() / f"{template}-app"
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Scaffold a new app interactively", "aai init"),
+            ("Scaffold a transcribe app into ./my-app", "aai init transcribe my-app"),
+            ("Scaffold into the current directory", "aai init transcribe --here"),
+        ]
+    )
+)
 def init(
     ctx: typer.Context,
     template: str = typer.Argument(None, help="Template to scaffold (omit to pick interactively)."),

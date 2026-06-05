@@ -431,12 +431,11 @@ def test_claude_no_subcommand_lists_commands():
     assert "remove" in result.output
 
 
-import pytest
-
 
 @pytest.mark.parametrize("sub", ["install", "status", "remove"])
 def test_claude_help_has_examples(sub):
     from typer.testing import CliRunner
+
     from aai_cli.main import app
 
     result = CliRunner().invoke(app, ["claude", sub, "--help"])
