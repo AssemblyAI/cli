@@ -7,11 +7,19 @@ from rich.table import Table
 from aai_cli import output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="View your account's audit log.")
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Recent audit-log entries", "aai audit --limit 20"),
+            ("Filter by action", "aai audit --action token.create"),
+        ]
+    )
+)
 def audit(
     ctx: typer.Context,
     limit: int = typer.Option(20, "--limit", help="How many entries to show."),

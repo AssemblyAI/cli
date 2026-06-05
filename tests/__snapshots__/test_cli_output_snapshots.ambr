@@ -55,6 +55,51 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[audit]
+  '''
+  
+   Usage: aai audit [OPTIONS]
+  
+   List recent audit-log entries for your account.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --limit           INTEGER  How many entries to show. [default: 20]           │
+  │ --action          TEXT     Filter by action_taken.                           │
+  │ --resource        TEXT     Filter by resource_type.                          │
+  │ --json                     Output raw JSON.                                  │
+  │ --help                     Show this message and exit.                       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Recent audit-log entries
+   $ aai audit --limit 20
+   Filter by action
+   $ aai audit --action token.create
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[balance]
+  '''
+  
+   Usage: aai balance [OPTIONS]
+  
+   Show your remaining account balance.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show your remaining balance
+   $ aai balance
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[claude_install]
   '''
   
@@ -174,6 +219,97 @@
    $ aai init transcribe my-app
    Scaffold into the current directory
    $ aai init transcribe --here
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_create]
+  '''
+  
+   Usage: aai keys create [OPTIONS]
+  
+   Create a new API key. Prints the key value once — copy it now.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ *  --name           TEXT     A label for the new key. [required]             │
+  │    --project        INTEGER  Project id to create the key in (defaults to    │
+  │                              your first).                                    │
+  │    --json                    Output raw JSON.                                │
+  │    --help                    Show this message and exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Create a key in your default project
+   $ aai keys create --name ci-pipeline
+   Create a key in a specific project
+   $ aai keys create --name prod --project 7
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_list]
+  '''
+  
+   Usage: aai keys list [OPTIONS]
+  
+   List API keys across your projects (keys shown masked).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   List your API keys (masked)
+   $ aai keys list
+   As JSON for scripting
+   $ aai keys list --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_rename]
+  '''
+  
+   Usage: aai keys rename [OPTIONS] TOKEN_ID NEW_NAME
+  
+   Rename an existing API key.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    token_id      INTEGER  The key id (see `aai keys list`). [required]     │
+  │ *    new_name      TEXT     The new label. [required]                        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Relabel a key (id from `aai keys list`)
+   $ aai keys rename 123 "prod"
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[limits]
+  '''
+  
+   Usage: aai limits [OPTIONS]
+  
+   Show your account's rate limits per service.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show rate limits per service
+   $ aai limits
   
   
   
@@ -311,6 +447,53 @@
    Examples
    List available starter scripts
    $ aai samples list
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[sessions_get]
+  '''
+  
+   Usage: aai sessions get [OPTIONS] SESSION_ID
+  
+   Show details for one streaming session.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    session_id      TEXT  Streaming session id. [required]                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show one session's details
+   $ aai sessions get <session-id>
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[sessions_list]
+  '''
+  
+   Usage: aai sessions list [OPTIONS]
+  
+   List recent streaming sessions.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --limit         INTEGER  How many sessions to show. [default: 10]            │
+  │ --status        TEXT     Filter: created, completed, or error.               │
+  │ --json                   Output raw JSON.                                    │
+  │ --help                   Show this message and exit.                         │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   List recent streaming sessions
+   $ aai sessions list
+   Only completed sessions
+   $ aai sessions list --status completed
   
   
   
@@ -605,6 +788,31 @@
    Examples
    List your recent transcripts
    $ aai transcripts list
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[usage]
+  '''
+  
+   Usage: aai usage [OPTIONS]
+  
+   Show usage over a date range (defaults to the last 30 days).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --start         TEXT  Start date (YYYY-MM-DD). Default: 30d ago.             │
+  │ --end           TEXT  End date (YYYY-MM-DD). Default: today.                 │
+  │ --window        TEXT  Window size, e.g. 'day' or 'month'.                    │
+  │ --json                Output raw JSON.                                       │
+  │ --help                Show this message and exit.                            │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Usage over the last 30 days
+   $ aai usage
+   A specific date range
+   $ aai usage --start 2026-05-01 --end 2026-06-01
   
   
   

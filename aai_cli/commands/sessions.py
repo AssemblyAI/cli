@@ -8,6 +8,7 @@ from rich.text import Text
 from aai_cli import output, theme
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Browse your past streaming (real-time) sessions.", no_args_is_help=True)
 
@@ -26,7 +27,15 @@ _DETAIL_FIELDS = (
 )
 
 
-@app.command(name="list")
+@app.command(
+    name="list",
+    epilog=examples_epilog(
+        [
+            ("List recent streaming sessions", "aai sessions list"),
+            ("Only completed sessions", "aai sessions list --status completed"),
+        ]
+    ),
+)
 def list_(
     ctx: typer.Context,
     limit: int = typer.Option(10, "--limit", help="How many sessions to show."),
@@ -65,7 +74,13 @@ def list_(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Show one session's details", "aai sessions get <session-id>"),
+        ]
+    )
+)
 def get(
     ctx: typer.Context,
     session_id: str = typer.Argument(..., help="Streaming session id."),

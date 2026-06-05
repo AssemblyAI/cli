@@ -8,6 +8,7 @@ from aai_cli import output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.errors import APIError
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
 
@@ -16,7 +17,15 @@ def _mask(key: str) -> str:
     return f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
 
 
-@app.command(name="list")
+@app.command(
+    name="list",
+    epilog=examples_epilog(
+        [
+            ("List your API keys (masked)", "aai keys list"),
+            ("As JSON for scripting", "aai keys list --json"),
+        ]
+    ),
+)
 def list_(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -57,7 +66,14 @@ def list_(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Create a key in your default project", "aai keys create --name ci-pipeline"),
+            ("Create a key in a specific project", "aai keys create --name prod --project 7"),
+        ]
+    )
+)
 def create(
     ctx: typer.Context,
     name: str = typer.Option(..., "--name", help="A label for the new key."),
@@ -89,7 +105,13 @@ def create(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Relabel a key (id from `aai keys list`)", 'aai keys rename 123 "prod"'),
+        ]
+    )
+)
 def rename(
     ctx: typer.Context,
     token_id: int = typer.Argument(..., help="The key id (see `aai keys list`)."),

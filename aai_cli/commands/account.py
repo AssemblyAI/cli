@@ -9,11 +9,18 @@ from rich.table import Table
 from aai_cli import output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Account billing, usage, and limits.")
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Show your remaining balance", "aai balance"),
+        ]
+    )
+)
 def balance(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -33,7 +40,14 @@ def balance(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Usage over the last 30 days", "aai usage"),
+            ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
+        ]
+    )
+)
 def usage(
     ctx: typer.Context,
     start: str = typer.Option(None, "--start", help="Start date (YYYY-MM-DD). Default: 30d ago."),
@@ -65,7 +79,13 @@ def usage(
     run_command(ctx, body, json=json_out)
 
 
-@app.command()
+@app.command(
+    epilog=examples_epilog(
+        [
+            ("Show rate limits per service", "aai limits"),
+        ]
+    )
+)
 def limits(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
