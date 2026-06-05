@@ -291,6 +291,18 @@ def test_agent_output_text_emits_plain_transcript(monkeypatch):
     assert '"type"' not in result.output  # not NDJSON
 
 
+def test_unknown_voice_suggests_list_voices():
+    import pytest
+
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["agent", "--voice", "not-a-voice", "--json"])
+    assert result.exit_code == 2
+    # JSON error on stderr carries the structured suggestion.
+    assert "--list-voices" in result.output
+
+
 def test_agent_help_has_examples():
     result = CliRunner().invoke(app, ["agent", "--help"])
     assert result.exit_code == 0

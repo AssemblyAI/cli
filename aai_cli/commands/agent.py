@@ -75,7 +75,10 @@ def agent(
     def body(state: AppState, json_mode: bool) -> None:
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode)
         if voice not in VOICES:
-            raise UsageError(f"Unknown voice {voice!r}. Run 'aai agent --list-voices'.")
+            raise UsageError(
+                f"Unknown voice {voice!r}.",
+                suggestion="Run 'aai agent --list-voices' to see the options.",
+            )
         if system_prompt_file is not None:
             try:
                 system_prompt_text = system_prompt_file.read_text(encoding="utf-8")
@@ -84,6 +87,7 @@ def agent(
                     f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
                     error_type="file_not_found",
                     exit_code=2,
+                    suggestion="Check the path and that the file is readable.",
                 ) from exc
         else:
             system_prompt_text = system_prompt
