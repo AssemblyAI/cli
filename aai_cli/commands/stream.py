@@ -11,7 +11,7 @@ from assemblyai.streaming.v3 import SpeechModel
 
 from aai_cli import client, code_gen, config, config_builder, help_panels, llm, output, youtube
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
+from aai_cli.errors import CLIError, UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
 from aai_cli.microphone import MicrophoneSource
@@ -328,7 +328,7 @@ def stream(
             def worker(source_label: str, audio: Iterable[bytes], rate: int) -> None:
                 try:
                     stream_one(audio, rate, source_label=source_label)
-                except Exception as exc:  # noqa: BLE001 - propagate worker failures on main thread
+                except (CLIError, BrokenPipeError) as exc:
                     errors.put(exc)
 
             def drive() -> None:

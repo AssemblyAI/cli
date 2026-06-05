@@ -114,6 +114,8 @@ markers = [
 [tool.mypy]
 python_version = "3.11"
 files = ["aai_cli", "tests"]
+# Init templates are packaged scaffold assets, not importable package modules.
+exclude = ["^aai_cli/init/templates/"]
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true

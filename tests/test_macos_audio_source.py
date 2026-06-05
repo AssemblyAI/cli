@@ -164,6 +164,7 @@ def test_raise_helper_exit_handles_clean_eof():
 
 def test_returncode_detail_names_signals():
     assert macos._returncode_detail(-5) == "SIGTRAP (-5)"
+    assert macos._returncode_detail(-99999) == "signal 99999 (-99999)"
     assert macos._returncode_detail(2) == "exit 2"
     assert macos._returncode_detail(None) == "unknown exit"
 

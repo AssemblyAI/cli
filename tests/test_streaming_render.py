@@ -51,6 +51,18 @@ def test_human_turn_labels_parallel_sources():
     assert "\x1b[" in out
 
 
+def test_text_mode_labels_sources_and_statuses_to_stderr():
+    out = io.StringIO()
+    err = io.StringIO()
+    r = StreamRenderer(json_mode=False, text_mode=True, out=out, err=err)
+    r.listening()
+    r.turn(_turn("hello from me", True), source="you")
+    r.stopped()
+    assert out.getvalue() == "You: hello from me\n"
+    assert "Listening" in err.getvalue()
+    assert "Stopped." in err.getvalue()
+
+
 def test_human_begin_is_silent_until_mic_opens():
     # The session opening (Begin) no longer prints "Listening…"; that waits for
     # the mic to actually open and start recording (renderer.listening()).
