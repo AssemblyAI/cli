@@ -253,7 +253,6 @@ def test_run_login_flow_returns_session_material(monkeypatch):
             "account": {"id": 99},
         },
     )
-    monkeypatch.setattr(flow.ams, "get_auth", lambda jwt: {"id": 99})
     monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_key")
 
     result = flow.run_login_flow()
