@@ -110,10 +110,10 @@ def whoami(
         key = config.get_api_key(profile)
         if not key:
             raise NotAuthenticated()
-        masked = f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
+        masked = output.mask_secret(key)
         env = environments.active().name
         reachable = client.validate_key(key)
-        session = config.get_session(profile)
+        session_label = "stored" if config.get_session(profile) else "none"
         account_id = config.get_account_id(profile)
         output.emit(
             {
@@ -122,12 +122,12 @@ def whoami(
                 "api_key": masked,
                 "reachable": reachable,
                 "account_id": account_id,
-                "session": "stored" if session else "none",
+                "session": session_label,
             },
             lambda _d: (
                 f"profile={escape(profile)} env={escape(env)} "
                 f"key={escape(masked)} reachable={reachable} "
-                f"account={account_id} session={'stored' if session else 'none'}"
+                f"account={account_id} session={session_label}"
             ),
             json_mode=json_mode,
         )

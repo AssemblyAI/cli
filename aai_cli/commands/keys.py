@@ -13,10 +13,6 @@ from aai_cli.help_text import examples_epilog
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
 
 
-def _mask(key: str) -> str:
-    return f"{key[:3]}…{key[-4:]}" if len(key) > 7 else "***"
-
-
 @app.command(
     name="list",
     epilog=examples_epilog(
@@ -44,7 +40,7 @@ def list_(
                         "id": token["id"],
                         "name": token["name"],
                         "project": project_name,
-                        "key": _mask(str(token["api_key"])),
+                        "key": output.mask_secret(str(token["api_key"])),
                         "disabled": token["is_disabled"],
                     }
                 )

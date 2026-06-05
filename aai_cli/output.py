@@ -56,6 +56,11 @@ def stream_output_modes(field: str | None, json_mode: bool) -> tuple[bool, bool]
     return text_mode, (field == "json") or (json_mode and not text_mode)
 
 
+def mask_secret(value: str) -> str:
+    """Render a secret (API key, token) for display: first 3 + last 4 chars, else ``***``."""
+    return f"{value[:3]}…{value[-4:]}" if len(value) > 7 else "***"
+
+
 def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(data, default=str))
