@@ -78,9 +78,8 @@ _AUTH_FAILURE_HINTS = (
     "invalid key",
 )
 
-REJECTED_KEY_MESSAGE = (
-    "Your API key was rejected. Run 'aai login' with a valid key (or set ASSEMBLYAI_API_KEY)."
-)
+REJECTED_KEY_MESSAGE = "Your API key was rejected."
+REJECTED_KEY_SUGGESTION = "Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY."
 
 
 def is_auth_failure(exc: object) -> bool:
@@ -91,4 +90,4 @@ def is_auth_failure(exc: object) -> bool:
 
 def auth_failure() -> NotAuthenticated:
     """A NotAuthenticated for the 'key present but rejected by the server' case."""
-    return NotAuthenticated(REJECTED_KEY_MESSAGE)
+    return NotAuthenticated(REJECTED_KEY_MESSAGE, suggestion=REJECTED_KEY_SUGGESTION)

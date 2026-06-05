@@ -34,6 +34,15 @@ class _FakeRawStream:
         self.closed = True
 
 
+def test_audio_missing_error_has_reinstall_suggestion():
+    from aai_cli.microphone import audio_missing_error
+
+    err = audio_missing_error()
+    assert "sounddevice" in err.message
+    assert err.suggestion is not None
+    assert "pip install" in err.suggestion
+
+
 def test_yields_chunks_at_capture_rate():
     seen = {}
 

@@ -20,9 +20,10 @@ _FALLBACK_RATE = 48000
 def audio_missing_error() -> CLIError:
     """The shared 'sounddevice can't be imported' error for mic and speaker paths."""
     return CLIError(
-        "Audio support (sounddevice) is unavailable. Try: pip install --force-reinstall sounddevice",
+        "Audio support (sounddevice) is unavailable.",
         error_type="mic_missing",
         exit_code=2,
+        suggestion="Reinstall it: pip install --force-reinstall sounddevice",
     )
 
 

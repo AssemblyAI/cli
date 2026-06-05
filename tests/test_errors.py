@@ -37,6 +37,16 @@ def test_api_error_carries_suggestion():
     }
 
 
+def test_auth_failure_splits_message_and_suggestion():
+    from aai_cli.errors import auth_failure
+
+    err = auth_failure()
+    assert err.error_type == "not_authenticated"
+    assert err.message == "Your API key was rejected."
+    assert "aai login" in (err.suggestion or "")
+    assert "ASSEMBLYAI_API_KEY" in (err.suggestion or "")
+
+
 def test_is_auth_failure_matches_credential_signals():
     assert is_auth_failure(Exception("HTTP 401 Unauthorized"))
     assert is_auth_failure(Exception("Forbidden"))
