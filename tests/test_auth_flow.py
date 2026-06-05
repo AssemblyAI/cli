@@ -78,8 +78,10 @@ def test_run_login_flow_happy_path(monkeypatch):
 def test_run_login_flow_timeout_raises(monkeypatch):
     monkeypatch.setattr(flow, "_open_browser", lambda url: None)
     monkeypatch.setattr(flow, "_capture", lambda: loopback.CallbackResult(error="timeout"))
-    with pytest.raises(APIError, match="timed out"):
+    with pytest.raises(APIError) as exc:
         flow.run_login_flow()
+    assert exc.value.message == "Login timed out waiting for the browser."
+    assert exc.value.suggestion == "Run 'aai login' again."
 
 
 def test_find_or_create_reuses_token_with_token_name_field(monkeypatch):
@@ -205,15 +207,6 @@ def test_run_login_flow_org_missing_id_raises_api_error(monkeypatch):
     )
     with pytest.raises(APIError):
         flow.run_login_flow()
-
-
-def test_login_timeout_suggests_retry():
-    # Mirror the existing timeout-path test setup in this module; the raised
-    # APIError should now split message and suggestion.
-    from aai_cli.errors import APIError
-
-    err = APIError("Login timed out waiting for the browser.", suggestion="Run 'aai login' again.")
-    assert err.suggestion == "Run 'aai login' again."
 
 
 def test_run_login_flow_zero_orgs_raises(monkeypatch):

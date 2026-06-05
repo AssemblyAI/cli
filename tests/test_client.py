@@ -94,19 +94,10 @@ def test_resolve_audio_source_sample_explicit_and_missing():
 
     assert client.resolve_audio_source(None, sample=True) == client.SAMPLE_AUDIO_URL
     assert client.resolve_audio_source("clip.mp3", sample=False) == "clip.mp3"
-    with pytest.raises(UsageError):
+    with pytest.raises(UsageError) as exc:
         client.resolve_audio_source(None, sample=False)
-
-
-def test_no_audio_source_suggests_sample():
-    from aai_cli.errors import UsageError
-
-    # Reproduce the "neither path nor --sample" guard at client.py:29.
-    err = UsageError(
-        "Provide an audio path or URL.",
-        suggestion="Or pass --sample to use the hosted demo file.",
-    )
-    assert err.suggestion is not None
+    assert exc.value.message == "Provide an audio path or URL."
+    assert "--sample" in (exc.value.suggestion or "")
 
 
 def test_transcribe_blocks_and_returns_transcript():
