@@ -81,6 +81,18 @@ def test_login_api_key_flag_does_not_persist_session():
     assert config.get_session("default") is None
 
 
+def test_login_api_key_flag_clears_prior_browser_session():
+    # A profile previously authenticated via browser becomes api-key-only on
+    # re-login; the stale session must not linger and silently authenticate
+    # account self-service commands as the previous identity.
+    config.set_session("default", session_jwt="old_j", session_token="old_t", account_id=5)
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
+    assert result.exit_code == 0
+    assert config.get_session("default") is None
+    assert config.get_account_id("default") is None
+
+
 def test_logout_clears_session():
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=7)

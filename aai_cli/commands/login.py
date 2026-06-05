@@ -40,6 +40,10 @@ def login(
                 )
             config.set_api_key(profile, api_key)
             config.set_profile_env(profile, env)
+            # Clear any session from a prior browser login: this profile is now
+            # api-key-only, so account self-service must report it needs a browser
+            # login rather than silently reusing the old (possibly different) identity.
+            config.clear_session(profile)
         else:
             result = run_login_flow()
             config.set_api_key(profile, result.api_key)
