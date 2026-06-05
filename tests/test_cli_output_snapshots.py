@@ -16,6 +16,8 @@ automatically required to have a help snapshot (mirroring the coverage guard in
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -27,7 +29,15 @@ from tests._cli_tree import leaf_command_argvs
 runner = CliRunner()
 
 
+# Matches SGR (color/style) ANSI escape sequences.
+_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _normalize(text: str) -> str:
+    # Strip ANSI color codes first: CI runners set FORCE_COLOR (which overrides
+    # NO_COLOR in Rich), so --help renders with escape sequences locally-absent.
+    # The goldens pin plain text, so compare on the color-free render.
+    text = _ANSI_SGR.sub("", text)
     # Rich right-pads every line to the console width; strip trailing spaces so the
     # goldens stay readable and survive whitespace-trimming tooling.
     return "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
