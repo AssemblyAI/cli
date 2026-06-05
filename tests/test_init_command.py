@@ -97,6 +97,15 @@ def test_init_appears_in_help():
     assert "init" in result.output
 
 
+def test_init_prints_cli_banner_in_human_mode(tmp_path, monkeypatch):
+    # Vercel-style header at the top of an interactive run (human output only).
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)
+    result = runner.invoke(app, ["init", "transcribe", "x", "--no-install"])
+    assert result.exit_code == 0, result.output
+    assert "AssemblyAI CLI" in result.output
+
+
 def test_init_here_scaffolds_into_cwd(tmp_path, monkeypatch):
     work = tmp_path / "work"  # a fresh empty dir (tmp_path itself holds the test config/)
     work.mkdir()

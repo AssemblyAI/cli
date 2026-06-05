@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import environments, output, steps
+from aai_cli import __version__, environments, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.init import keys, runner, scaffold, templates
@@ -77,6 +77,11 @@ def init(
     """Pick a template, scaffold it, install deps, launch the server, open the browser."""
 
     def body(state: AppState, json_mode: bool) -> None:
+        if not json_mode:
+            # Vercel-style banner at the top of the run.
+            output.console.print(
+                f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
+            )
         chosen = template
         if chosen is None:
             chosen = _pick_template()
