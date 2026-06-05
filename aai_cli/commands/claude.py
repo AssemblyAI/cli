@@ -89,6 +89,22 @@ _SKILL_ADD = ["npx", "-y", "skills", "add", SKILL_REPO, "--global", "--yes"]
 _SKILL_REMOVE = ["npx", "-y", "skills", "remove", "assemblyai", "--global"]
 _SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
 
+CLI_SKILL_REPO = "AssemblyAI/cli"
+_CLI_SKILL_NAME = "aai-cli"
+_CLI_SKILL_ADD = [
+    "npx",
+    "-y",
+    "skills",
+    "add",
+    CLI_SKILL_REPO,
+    "--skill",
+    _CLI_SKILL_NAME,
+    "--global",
+    "--yes",
+]
+_CLI_SKILL_REMOVE = ["npx", "-y", "skills", "remove", _CLI_SKILL_NAME, "--global", "--yes"]
+_CLI_SKILL_ADD_HINT = f"npx skills add {CLI_SKILL_REPO} --skill {_CLI_SKILL_NAME} --global"
+
 
 def _install_skill(force: bool) -> Step:
     if shutil.which("npx") is None:
@@ -189,6 +205,68 @@ def _remove_skill() -> Step:
     return {"name": "skill", "status": "removed", "detail": str(_skill_dir())}
 
 
+def _cli_skill_dir() -> Path:
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    root = Path(config_dir) if config_dir else Path.home() / ".claude"
+    return root / "skills" / _CLI_SKILL_NAME
+
+
+def _cli_skill_installed() -> bool:
+    return (_cli_skill_dir() / "SKILL.md").exists()
+
+
+def _install_cli_skill(force: bool) -> Step:
+    if shutil.which("npx") is None:
+        return {
+            "name": "aai-cli skill",
+            "status": "skipped",
+            "detail": f"Node.js/npx not found. Install Node.js, then run: {_CLI_SKILL_ADD_HINT}",
+        }
+    if _cli_skill_installed() and not force:
+        return {
+            "name": "aai-cli skill",
+            "status": "already",
+            "detail": f"aai-cli skill at {_cli_skill_dir()}",
+        }
+    proc = _run(_CLI_SKILL_ADD, timeout=300)
+    if proc.returncode != 0:
+        return {"name": "aai-cli skill", "status": "failed", "detail": _proc_detail(proc)}
+    if not _cli_skill_installed():
+        return {
+            "name": "aai-cli skill",
+            "status": "failed",
+            "detail": (
+                f"'{' '.join(_CLI_SKILL_ADD[3:])}' reported success but no skill was found at "
+                f"{_cli_skill_dir()}. Install it manually: {_CLI_SKILL_ADD_HINT}"
+            ),
+        }
+    return {"name": "aai-cli skill", "status": "installed", "detail": str(_cli_skill_dir())}
+
+
+def _cli_skill_status() -> Step:
+    return {
+        "name": "aai-cli skill",
+        "status": "installed" if _cli_skill_installed() else "not_installed",
+        "detail": str(_cli_skill_dir()),
+    }
+
+
+def _remove_cli_skill() -> Step:
+    if not _cli_skill_installed():
+        return {"name": "aai-cli skill", "status": "not_installed", "detail": str(_cli_skill_dir())}
+    if shutil.which("npx") is None:
+        return {
+            "name": "aai-cli skill",
+            "status": "skipped",
+            "detail": f"Node.js/npx not found. Remove manually: {' '.join(_CLI_SKILL_REMOVE)}",
+        }
+    proc = _run(_CLI_SKILL_REMOVE, timeout=120)
+    if proc.returncode != 0 or _cli_skill_installed():
+        detail = _proc_detail(proc) or "skill still present after removal"
+        return {"name": "aai-cli skill", "status": "failed", "detail": detail}
+    return {"name": "aai-cli skill", "status": "removed", "detail": str(_cli_skill_dir())}
+
+
 def _render(data: dict[str, list[Step]]) -> str:
     return render_steps(data["steps"], heading=_STEPS_HEADING)
 
@@ -221,7 +299,7 @@ def install(
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
-        steps = [_install_mcp(scope, force), _install_skill(force)]
+        steps = [_install_mcp(scope, force), _install_skill(force), _install_cli_skill(force)]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
@@ -243,7 +321,7 @@ def status(
     """Show whether the AssemblyAI MCP server and skill are wired into Claude Code."""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        steps = [_mcp_status(), _skill_status()]
+        steps = [_mcp_status(), _skill_status(), _cli_skill_status()]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
@@ -275,7 +353,7 @@ def remove(
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
-        steps = [_remove_mcp(scope), _remove_skill()]
+        steps = [_remove_mcp(scope), _remove_skill(), _remove_cli_skill()]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
