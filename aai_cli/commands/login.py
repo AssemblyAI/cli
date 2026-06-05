@@ -29,19 +29,27 @@ def login(
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
+        env = environments.active().name
         if api_key:
-            # Non-interactive escape hatch for CI/automation.
+            # Non-interactive escape hatch for CI/automation: no AMS session is
+            # obtained, so account self-service commands won't work for this profile.
             if not client.validate_key(api_key):
                 raise APIError(
                     "That API key was rejected (HTTP 401).",
                     suggestion="Check the key and retry.",
                 )
-            key = api_key
+            config.set_api_key(profile, api_key)
+            config.set_profile_env(profile, env)
         else:
-            key = run_login_flow()
-        env = environments.active().name
-        config.set_api_key(profile, key)
-        config.set_profile_env(profile, env)
+            result = run_login_flow()
+            config.set_api_key(profile, result.api_key)
+            config.set_profile_env(profile, env)
+            config.set_session(
+                profile,
+                session_jwt=result.session_jwt,
+                session_token=result.session_token,
+                account_id=result.account_id,
+            )
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
             lambda _d: (
@@ -70,6 +78,7 @@ def logout(
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         config.clear_api_key(profile)
+        config.clear_session(profile)
         output.emit(
             {"logged_out": True, "profile": profile},
             lambda _d: f"Logged out of profile '{escape(profile)}'.",
