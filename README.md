@@ -1,7 +1,6 @@
-# AssemblyAI CLI (`aai`)
+# AssemblyAI CLI
 
-A command-line interface for [AssemblyAI](https://www.assemblyai.com): transcribe
-files, stream live audio, and have two-way voice conversations — all from your terminal.
+Transcribe. Stream. Converse. — speech AI from your terminal.
 
 ## Install
 
@@ -443,3 +442,7 @@ uv run aai --help          # run the CLI from the locked environment
 uv run pytest              # run the test suite (uv run mypy / ruff likewise)
 ./scripts/check.sh         # ruff + mypy + pytest (the same checks CI runs on every PR)
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
