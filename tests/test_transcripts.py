@@ -108,3 +108,21 @@ def test_list_table_colors_status(monkeypatch):
     assert "error" in result.output
     assert "\x1b[32m" in result.output  # aai.success (green) → "completed" cell
     assert "\x1b[1;31m" in result.output  # aai.error (bold red) → "error" cell
+
+
+def test_transcripts_get_help_has_examples():
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["transcripts", "get", "--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.output
+
+
+def test_transcripts_list_help_has_examples():
+    from typer.testing import CliRunner
+    from aai_cli.main import app
+
+    result = CliRunner().invoke(app, ["transcripts", "list", "--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.output
