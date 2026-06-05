@@ -24,3 +24,6 @@ poetry.lock
 
 # Brainstorming visual-companion scratch
 .superpowers/
+
+# Playwright MCP scratch
+.playwright-mcp/

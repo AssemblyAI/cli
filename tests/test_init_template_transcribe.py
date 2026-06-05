@@ -65,6 +65,19 @@ def test_base_url_env_is_applied(monkeypatch):
     assert fake.settings.base_url == "https://api.sb.example"
 
 
+def test_page_explores_all_features_and_speakers():
+    # Guard the UI surface: each audio-intelligence view + per-speaker coloring stay wired.
+    html = (TEMPLATE_DIR / "index.html").read_text()
+    for token in (
+        "chapters",
+        "sentiment_analysis_results",
+        "entities",
+        "auto_highlights_result",
+        "speakerColor",
+    ):
+        assert token in html, token
+
+
 def test_index_route_serves_page(monkeypatch):
     app, _aai, _api = _load_app(monkeypatch)
     client = TestClient(app)
