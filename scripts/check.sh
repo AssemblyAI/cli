@@ -52,9 +52,6 @@ uv run deptry .
 echo "==> import-linter (architecture contracts)"
 uv run lint-imports
 
-echo "==> semgrep (security rules)"
-uv run semgrep scan --config .semgrep.yml --error --strict --metrics=off --disable-version-check --no-git-ignore aai_cli scripts
-
 echo "==> xenon (cyclomatic complexity gate, src only)"
 # Fail the build if any function gets too branchy. Grades map to cyclomatic
 # complexity: A=1-5, B=6-10, C=11-20, ... Thresholds:

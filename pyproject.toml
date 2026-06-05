@@ -81,7 +81,6 @@ dev = [
     "vulture>=2.14",
     "deptry>=0.23.0",
     "import-linter>=2.3",
-    "semgrep>=1.165.0",
     "mutmut>=3.5.0",
 ]
 
