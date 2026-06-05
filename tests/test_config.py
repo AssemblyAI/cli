@@ -91,6 +91,15 @@ def test_malformed_config_raises_clean_error(tmp_config):
         config.get_active_profile()
 
 
+def test_unexpected_config_shape_raises_clean_error(tmp_config):
+    # Valid TOML but the wrong shape (profiles must be a table, not a string) is
+    # surfaced as a clean invalid_config CLIError, not a pydantic traceback.
+    (tmp_config / "config.toml").write_text('profiles = "oops"\n')
+    with pytest.raises(CLIError) as exc:
+        config.get_active_profile()
+    assert exc.value.error_type == "invalid_config"
+
+
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
     # profile names are validated; this checks tomli_w writes valid TOML for normal data
     config.set_api_key("staging", "sk_x")
@@ -117,7 +126,7 @@ def test_dump_cleans_up_temp_file_when_write_fails(tmp_config, monkeypatch):
 
     monkeypatch.setattr(config.tomli_w, "dump", boom)
     with pytest.raises(RuntimeError):
-        config._dump({"profiles": {}})
+        config._dump(config.Config())
 
     names = sorted(p.name for p in tmp_config.iterdir())
     assert names == ["config.toml"]  # no .config-*.toml.tmp left behind

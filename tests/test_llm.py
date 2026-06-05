@@ -40,6 +40,13 @@ def _fake_client(monkeypatch, *, result=None, error=None):
     return seen
 
 
+def test_client_targets_active_gateway_base():
+    from aai_cli import environments
+
+    client = llm._client("sk_live")
+    assert str(client.base_url).rstrip("/") == environments.active().llm_gateway_base.rstrip("/")
+
+
 def test_complete_sends_model_and_messages(monkeypatch):
     seen = _fake_client(monkeypatch, result=_response("hi there"))
     resp = llm.complete(
@@ -175,3 +182,37 @@ def test_run_chain_threads_output_through_prompts(monkeypatch):
     assert "summarize" in calls[0] and "hola mundo" in calls[0]
     # Second prompt runs over the FIRST step's output, not the transcript.
     assert "translate to french" in calls[1] and "out1" in calls[1]
+
+
+def test_run_chain_empty_prompts_do_not_call_gateway(monkeypatch):
+    def fail_complete(*args, **kwargs):
+        raise AssertionError("gateway should not be called")
+
+    monkeypatch.setattr(llm, "complete", fail_complete)
+    assert llm.run_chain_steps("sk", []) == []
+    assert llm.run_chain("sk", [], transcript_text="hola mundo") == ""
+
+
+def test_run_chain_steps_uses_transcript_id_then_prior_output(monkeypatch):
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append({"content": messages[-1]["content"], "transcript_id": transcript_id})
+        return _response(f"out{len(calls)}")
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    steps = llm.run_chain_steps(
+        "sk",
+        ["summarize", "translate"],
+        transcript_id="t_1",
+        model="m",
+        max_tokens=50,
+    )
+    assert steps == [
+        {"prompt": "summarize", "output": "out1"},
+        {"prompt": "translate", "output": "out2"},
+    ]
+    assert calls[0]["transcript_id"] == "t_1"
+    assert llm.TRANSCRIPT_TAG in calls[0]["content"]
+    assert calls[1]["transcript_id"] is None
+    assert "out1" in calls[1]["content"]

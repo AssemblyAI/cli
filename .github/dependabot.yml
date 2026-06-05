@@ -5,6 +5,11 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # Wait before proposing a freshly published release, mirroring the safe-chain
+    # minimum-package-age posture: a compromised version is usually yanked within
+    # days, so a cooldown keeps it out of an auto-opened PR in the first place.
+    cooldown:
+      default-days: 7
     groups:
       python-deps:
         patterns: ["*"]
@@ -14,6 +19,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]

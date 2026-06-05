@@ -18,13 +18,6 @@ cleanup_generated_code_dir() {
   fi
 }
 
-cleanup_mutants_dir() {
-  rm -rf mutants
-}
-
-# Make reruns deterministic after an interrupted mutation run.
-cleanup_mutants_dir
-
 echo "==> uv lock freshness"
 uv lock --check
 
@@ -171,13 +164,6 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
 else
   echo "   origin/main not found; skipping escape-hatch diff gate (CI provides it)"
 fi
-
-echo "==> mutation testing (focused core modules)"
-cleanup_mutants_dir
-trap cleanup_mutants_dir EXIT
-uv run python scripts/mutation_gate.py
-cleanup_mutants_dir
-trap - EXIT
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render

@@ -197,7 +197,7 @@ def stream(
                 raise UsageError("--show-code does not support macOS system audio capture yet.")
             merged = config_builder.merge_streaming_params(
                 flags=make_flags(TARGET_RATE),
-                overrides=list(config_kv or []),
+                overrides=config_kv,
                 config_file=config_file,
             )
             gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
@@ -281,7 +281,7 @@ def stream(
             source_label: str | None = None,
         ) -> None:
             merged = config_builder.merge_streaming_params(
-                flags=make_flags(rate), overrides=list(config_kv or []), config_file=config_file
+                flags=make_flags(rate), overrides=config_kv, config_file=config_file
             )
             params = config_builder.construct_streaming_params(merged)
             client.stream_audio(

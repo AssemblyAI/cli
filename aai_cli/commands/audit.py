@@ -90,12 +90,8 @@ def _resource_label(entry: Mapping[str, object]) -> str:
     return label if not resource_id else f"{label} #{resource_id}"
 
 
-def _mapping_list(value: object) -> list[dict[str, object]]:
-    return jsonshape.mapping_list(value)
-
-
 def _audit_rows(payload: Mapping[str, object]) -> list[dict[str, object]]:
-    return _mapping_list(payload.get("data"))
+    return jsonshape.mapping_list(payload.get("data"))
 
 
 @app.command(

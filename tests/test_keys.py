@@ -38,9 +38,6 @@ def test_keys_list_flattens_tokens():
 
 
 def test_keys_shape_helpers_filter_invalid_values():
-    assert keys._mapping("bad") is None
-    assert keys._mapping_list("bad") == []
-    assert keys._mapping_list([{"id": 1}, "bad"]) == [{"id": 1}]
     assert keys._project_id({"id": True}) is None
     assert keys._project_id({"id": 7}) == 7
     assert keys._project_id({"id": "8"}) == 8

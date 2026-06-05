@@ -10,7 +10,6 @@ build/
 .coverage
 coverage.xml
 htmlcov/
-mutants/
 
 # Editor/agent local artifacts: keep personal settings local, but track the
 # team-shared bits (.claude/settings.json, agents/, skills/).

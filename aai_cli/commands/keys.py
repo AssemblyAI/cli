@@ -13,14 +13,6 @@ from aai_cli.help_text import examples_epilog
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
 
 
-def _mapping(value: object) -> dict[str, object] | None:
-    return jsonshape.as_mapping(value)
-
-
-def _mapping_list(value: object) -> list[dict[str, object]]:
-    return jsonshape.mapping_list(value)
-
-
 def _project_id(project: dict[str, object]) -> int | None:
     value = project.get("id")
     if isinstance(value, bool):
@@ -55,7 +47,7 @@ def list_(
         projects = ams.list_projects(account_id, jwt)
         rows: list[dict[str, object]] = []
         for entry in projects:
-            project = _mapping(entry.get("project")) or {}
+            project = jsonshape.as_mapping(entry.get("project")) or {}
             project_name = project.get("name", "")
             rows.extend(
                 {
@@ -65,7 +57,7 @@ def list_(
                     "key": output.mask_secret(str(token.get("api_key", ""))),
                     "disabled": bool(token.get("is_disabled")),
                 }
-                for token in _mapping_list(entry.get("tokens"))
+                for token in jsonshape.mapping_list(entry.get("tokens"))
             )
 
         def render(data: list[dict[str, object]]) -> Table:
@@ -110,7 +102,7 @@ def create(
             projects = ams.list_projects(account_id, jwt)
             if not projects:
                 raise APIError("Your account has no project to create a key in.")
-            project = _mapping(projects[0].get("project"))
+            project = jsonshape.as_mapping(projects[0].get("project"))
             if project is None:
                 raise APIError("Your account has no project to create a key in.")
             pid = _project_id(project)

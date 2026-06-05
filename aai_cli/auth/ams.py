@@ -1,26 +1,24 @@
 from __future__ import annotations
 
 import httpx2 as httpx
-from pydantic import TypeAdapter, ValidationError
 
+from aai_cli import jsonshape
 from aai_cli.auth import endpoints
 from aai_cli.errors import APIError, NotAuthenticated
 
 _TIMEOUT = 30.0
 _HTTP_ERROR_MIN_STATUS = 400
-_JSON_OBJECT: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
-_JSON_OBJECTS: TypeAdapter[list[dict[str, object]]] = TypeAdapter(list[dict[str, object]])
 
 
 def _detail(resp: httpx.Response) -> str:
     fallback = resp.text or f"HTTP {resp.status_code}"
     try:
         body: object = resp.json()
-        mapping = _JSON_OBJECT.validate_python(body)
-        if "detail" in mapping:
-            return str(mapping["detail"])
-    except (TypeError, ValueError, ValidationError):
+    except ValueError:
         return fallback
+    mapping = jsonshape.as_mapping(body)
+    if mapping is not None and "detail" in mapping:
+        return str(mapping["detail"])
     return fallback
 
 
@@ -39,22 +37,22 @@ def _json_or_raise(resp: httpx.Response) -> object:
 
 def _json_object_or_raise(resp: httpx.Response) -> dict[str, object]:
     data = _json_or_raise(resp)
-    try:
-        return _JSON_OBJECT.validate_python(data)
-    except ValidationError as exc:
+    mapping = jsonshape.as_mapping(data)
+    if mapping is None:
         raise APIError(
             f"AMS request returned unexpected JSON: expected object, got {type(data).__name__}."
-        ) from exc
+        )
+    return mapping
 
 
 def _json_object_list_or_raise(resp: httpx.Response) -> list[dict[str, object]]:
     data = _json_or_raise(resp)
-    try:
-        return _JSON_OBJECTS.validate_python(data)
-    except ValidationError as exc:
+    objects = jsonshape.as_object_list(data)
+    if objects is None:
         raise APIError(
             f"AMS request returned unexpected JSON: expected list of objects, got {type(data).__name__}."
-        ) from exc
+        )
+    return objects
 
 
 def _client(session_jwt: str | None = None) -> httpx.Client:

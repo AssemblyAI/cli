@@ -19,21 +19,12 @@ def test_find_or_create_reuses_existing_cli_key(monkeypatch):
     assert flow.find_or_create_cli_key(1, "jwt") == "sk_cli"
 
 
-def test_json_shape_helpers_filter_invalid_values():
-    assert flow._as_mapping("bad") is None
-    assert flow._mapping_list("bad") == []
-    assert flow._mapping_list([{"ok": 1}, "bad"]) == [{"ok": 1}]
-
-
-@pytest.mark.parametrize("value", [True, "bad", object()])
-def test_require_int_rejects_invalid_values(value):
+def test_find_or_create_rejects_malformed_project_list(monkeypatch):
+    # A 200 with an unexpected shape (here: a project id that isn't an int) becomes a
+    # clean "run login again" APIError rather than a traceback.
+    monkeypatch.setattr(flow.ams, "list_projects", lambda acct, jwt: [{"project": {"id": "x"}}])
     with pytest.raises(APIError):
-        flow._require_int({"id": value}, "id", "an id")
-
-
-def test_require_mapping_rejects_non_object_value():
-    with pytest.raises(APIError):
-        flow._require_mapping({"project": "bad"}, "project", "a project")
+        flow.find_or_create_cli_key(1, "jwt")
 
 
 def test_find_or_create_creates_when_absent(monkeypatch):
@@ -49,6 +40,15 @@ def test_find_or_create_creates_when_absent(monkeypatch):
     monkeypatch.setattr(flow.ams, "create_token", fake_create)
     assert flow.find_or_create_cli_key(1, "jwt") == "sk_new"
     assert created == {"project_id": 7, "token_name": "AssemblyAI CLI"}
+
+
+def test_find_or_create_raises_when_first_project_has_no_project(monkeypatch):
+    # A project entry that omits its "project" object can't be created into; surface a
+    # clean APIError instead of crashing when reaching for the project id.
+    monkeypatch.setattr(flow.ams, "list_projects", lambda acct, jwt: [{"tokens": []}])
+    monkeypatch.setattr(flow.ams, "create_token", lambda *a, **k: pytest.fail("should not create"))
+    with pytest.raises(APIError):
+        flow.find_or_create_cli_key(1, "jwt")
 
 
 def test_find_or_create_creates_when_existing_cli_token_disabled(monkeypatch):

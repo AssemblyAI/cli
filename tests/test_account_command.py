@@ -102,10 +102,6 @@ def test_usage_helpers_handle_unparseable_values():
     assert account._parse_usage_timestamp("") is None
     assert account._parse_usage_timestamp("not-a-date") is None
     assert account._format_usage_day(None) == ""
-    assert account._usage_number(True) == 0.0
-    assert account._usage_number("12.5") == 12.5
-    assert account._usage_number("bad") == 0.0
-    assert account._usage_number(object()) == 0.0
 
 
 def test_usage_helpers_format_windows_and_line_items():

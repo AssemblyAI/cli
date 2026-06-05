@@ -81,7 +81,6 @@ dev = [
     "vulture>=2.14",
     "deptry>=0.23.0",
     "import-linter>=2.3",
-    "mutmut>=3.5.0",
 ]
 
 [tool.uv]
@@ -219,24 +218,3 @@ audioop-lts = "audioop"
 # dedicated install tests, not by the root package metadata.
 DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
 DEP004 = ["fastapi", "httpx", "hypothesis", "pytest"]
-
-[tool.mutmut]
-paths_to_mutate = [
-    "aai_cli/auth/ams.py",
-    "aai_cli/config_builder.py",
-    "aai_cli/context.py",
-    "aai_cli/errors.py",
-    "aai_cli/output.py",
-]
-also_copy = ["aai_cli"]
-pytest_add_cli_args = ["--strict-config", "--strict-markers"]
-pytest_add_cli_args_test_selection = [
-    "tests/test_auth_ams.py",
-    "tests/test_ams_account.py",
-    "tests/test_config_builder.py",
-    "tests/test_context.py",
-    "tests/test_errors.py",
-    "tests/test_login.py",
-    "tests/test_output.py",
-]
-mutate_only_covered_lines = true

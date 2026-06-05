@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-
-import openai
-from openai import OpenAI
-from openai.types.chat import ChatCompletion
+from typing import TYPE_CHECKING, Any
 
 from aai_cli import environments
 from aai_cli.errors import APIError
+
+if TYPE_CHECKING:
+    from openai import OpenAI
+    from openai.types.chat import ChatCompletion
 
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
 # pointed at this base URL. This is the production host used in generated code
@@ -61,6 +61,8 @@ def build_messages(
 
 
 def _client(api_key: str) -> OpenAI:
+    from openai import OpenAI
+
     return OpenAI(api_key=api_key, base_url=environments.active().llm_gateway_base)
 
 
@@ -78,6 +80,8 @@ def complete(
     inject the transcript text server-side. Access/permission and other gateway
     errors surface the gateway's own message as APIError.
     """
+    import openai
+
     client = _client(api_key)
     extra_body = {"transcript_id": transcript_id} if transcript_id is not None else None
     try:
@@ -150,11 +154,60 @@ def run_chain(
     previous prompt's response. Used by live streaming (`stream --llm`), where there is
     no transcript id to inject server-side, so the text is always inlined.
     """
-    output = ""
-    text = transcript_text
-    for prompt in prompts:
+    steps = run_chain_steps(
+        api_key,
+        prompts,
+        transcript_text=transcript_text,
+        model=model,
+        max_tokens=max_tokens,
+    )
+    return steps[-1]["output"] if steps else ""
+
+
+def run_chain_steps(
+    api_key: str,
+    prompts: list[str],
+    *,
+    transcript_id: str | None = None,
+    transcript_text: str | None = None,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> list[dict[str, str]]:
+    """Run a prompt chain and return each step's prompt/output pair.
+
+    The first step runs over a server-injected transcript when `transcript_id` is
+    provided, otherwise over inline `transcript_text`. Later steps run over the
+    previous step's output.
+    """
+    if not prompts:
+        return []
+
+    if transcript_id is not None:
         output = transform_transcript(
-            api_key, prompt=prompt, model=model, max_tokens=max_tokens, transcript_text=text
+            api_key,
+            prompt=prompts[0],
+            model=model,
+            max_tokens=max_tokens,
+            transcript_id=transcript_id,
         )
-        text = output
-    return output
+    else:
+        output = transform_transcript(
+            api_key,
+            prompt=prompts[0],
+            model=model,
+            max_tokens=max_tokens,
+            transcript_text=transcript_text,
+        )
+    steps = [{"prompt": prompts[0], "output": output}]
+
+    for prompt in prompts[1:]:
+        output = transform_transcript(
+            api_key,
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            transcript_text=output,
+        )
+        steps.append({"prompt": prompt, "output": output})
+
+    return steps

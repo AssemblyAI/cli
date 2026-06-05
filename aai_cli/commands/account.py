@@ -41,32 +41,15 @@ def _format_usage_day(value: object) -> str:
     return parsed.date().isoformat()
 
 
-def _usage_number(value: object) -> float:
-    if isinstance(value, bool):
-        return 0.0
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return 0.0
-    return 0.0
-
-
 def _format_usage_number(value: object) -> str:
-    number = _usage_number(value)
+    number = jsonshape.as_float(value)
     if number.is_integer():
         return f"{int(number):,}"
     return f"{number:,.6f}".rstrip("0").rstrip(".")
 
 
-def _mapping_list(value: object) -> list[dict[str, object]]:
-    return jsonshape.mapping_list(value)
-
-
 def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
-    return _mapping_list(data.get("usage_items"))
+    return jsonshape.mapping_list(data.get("usage_items"))
 
 
 def _window_label(item: Mapping[str, object]) -> str:
@@ -108,7 +91,7 @@ def _line_item_label(line_item: Mapping[str, object]) -> str:
 def _line_items_summary(item: Mapping[str, object]) -> str:
     labels = [
         label
-        for line_item in _mapping_list(item.get("line_items"))
+        for line_item in jsonshape.mapping_list(item.get("line_items"))
         if (label := _line_item_label(line_item))
     ]
     return ", ".join(labels)
@@ -134,7 +117,7 @@ def balance(
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = resolve_session(state)
         data = ams.get_balance(jwt)
-        cents = _usage_number(data.get("balance_in_cents"))
+        cents = jsonshape.as_float(data.get("balance_in_cents"))
         output.emit(
             data,
             lambda _d: f"Balance: [aai.success]${cents / 100:,.2f}[/aai.success]",
@@ -177,9 +160,9 @@ def usage(
             shown = (
                 items
                 if include_zero
-                else [item for item in items if _usage_number(item.get("total"))]
+                else [item for item in items if jsonshape.as_float(item.get("total"))]
             )
-            total = sum(_usage_number(item.get("total")) for item in items)
+            total = sum(jsonshape.as_float(item.get("total")) for item in items)
             range_label = f"{_format_usage_day(start_date)} to {_format_usage_day(end_date)} (UTC)"
             summary = Text(
                 f"Usage total: {_format_usage_number(total)} for {range_label}",
@@ -248,7 +231,7 @@ def limits(
 
         def render(d: dict[str, object]) -> Table:
             table = Table("service", "limit", header_style="aai.heading")
-            for limit in _mapping_list(d.get("rate_limits")):
+            for limit in jsonshape.mapping_list(d.get("rate_limits")):
                 table.add_row(
                     escape(str(limit.get("service", ""))),
                     _format_usage_number(limit.get("magnitude")),
