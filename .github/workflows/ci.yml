@@ -94,6 +94,10 @@ jobs:
 
       - name: Audit runtime dependencies for known CVEs
         run: |
+          # Keep build tooling current first: pip-audit scans the whole environment,
+          # so a pip/setuptools advisory that a one-line upgrade fixes would otherwise
+          # fail the gate on something that isn't one of our runtime dependencies.
+          python -m pip install --upgrade pip setuptools
           python -m pip install -e . pip-audit
           # Append `--ignore-vuln <ID>` to accept an unfixable transitive advisory.
           python -m pip_audit

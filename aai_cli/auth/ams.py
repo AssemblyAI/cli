@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-import httpx
+import httpx2 as httpx
 
 from aai_cli.auth import endpoints
 from aai_cli.errors import APIError, NotAuthenticated

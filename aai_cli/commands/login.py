@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import typer
 from rich.markup import escape
+from rich.table import Table
 
-from aai_cli import client, config, environments, output
+from aai_cli import client, config, environments, help_panels, output
 from aai_cli.auth import run_login_flow
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import APIError, NotAuthenticated
@@ -13,12 +14,13 @@ app = typer.Typer()
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Log in with your browser", "aai login"),
             ("Log in non-interactively (CI)", "aai login --api-key sk_..."),
         ]
-    )
+    ),
 )
 def login(
     ctx: typer.Context,
@@ -57,8 +59,9 @@ def login(
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
             lambda _d: (
-                f"[aai.success]Authenticated[/aai.success] on profile "
-                f"'{escape(profile)}' (env: {escape(env)})."
+                output.success(f"Signed in as {escape(profile)} ({escape(env)}).")
+                + "\n"
+                + output.hint("Run `aai transcribe <file>` to make your first transcript.")
             ),
             json_mode=json_mode,
         )
@@ -67,11 +70,12 @@ def login(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Clear stored credentials for the active profile", "aai logout"),
         ]
-    )
+    ),
 )
 def logout(
     ctx: typer.Context,
@@ -85,7 +89,11 @@ def logout(
         config.clear_session(profile)
         output.emit(
             {"logged_out": True, "profile": profile},
-            lambda _d: f"Logged out of profile '{escape(profile)}'.",
+            lambda _d: (
+                output.success(f"Signed out of {escape(profile)}.")
+                + "\n"
+                + output.hint("Run `aai login` to sign back in.")
+            ),
             json_mode=json_mode,
         )
 
@@ -93,11 +101,12 @@ def logout(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Show the active profile and whether its key works", "aai whoami"),
         ]
-    )
+    ),
 )
 def whoami(
     ctx: typer.Context,
@@ -115,21 +124,30 @@ def whoami(
         reachable = client.validate_key(key)
         session_label = "stored" if config.get_session(profile) else "none"
         account_id = config.get_account_id(profile)
-        output.emit(
-            {
-                "profile": profile,
-                "env": env,
-                "api_key": masked,
-                "reachable": reachable,
-                "account_id": account_id,
-                "session": session_label,
-            },
-            lambda _d: (
-                f"profile={escape(profile)} env={escape(env)} "
-                f"key={escape(masked)} reachable={reachable} "
-                f"account={account_id} session={session_label}"
-            ),
-            json_mode=json_mode,
-        )
+
+        def render(_d: dict[str, object]) -> Table:
+            table = Table.grid(padding=(0, 3))
+            table.add_column(style="aai.muted")
+            table.add_column()
+            table.add_row("Profile", escape(profile))
+            table.add_row("Env", escape(env))
+            table.add_row("API key", escape(masked))
+            table.add_row(
+                "Status",
+                output.success("reachable") if reachable else output.fail("key rejected"),
+            )
+            table.add_row("Account", escape(str(account_id)) if account_id else "—")
+            table.add_row("Session", escape(session_label))
+            return table
+
+        data: dict[str, object] = {
+            "profile": profile,
+            "env": env,
+            "api_key": masked,
+            "reachable": reachable,
+            "account_id": account_id,
+            "session": session_label,
+        }
+        output.emit(data, render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)

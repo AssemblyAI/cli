@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import SpeechModel
 
-from aai_cli import client, code_gen, config, config_builder, llm, output, youtube
+from aai_cli import client, code_gen, config, config_builder, help_panels, llm, output, youtube
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
@@ -17,10 +17,11 @@ from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
 
-DEFAULT_SPEECH_MODEL = SpeechModel.universal_streaming_multilingual.value
+DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro.value
 
 
 @app.command(
+    rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
             ("Stream from your microphone", "aai stream"),
@@ -31,7 +32,7 @@ DEFAULT_SPEECH_MODEL = SpeechModel.universal_streaming_multilingual.value
             ),
             ("Print equivalent Python instead of running", "aai stream --show-code"),
         ]
-    )
+    ),
 )
 def stream(
     ctx: typer.Context,
@@ -120,7 +121,7 @@ def stream(
         help="Print the equivalent Python SDK code and exit (does not stream).",
     ),
 ) -> None:
-    """Transcribe live audio in real time with the full StreamingParameters surface.
+    """Transcribe live audio in real time — from your mic, a file, or a URL.
 
     --prompt biases the speech model. --llm-gateway-prompt transforms the full
     transcript through LLM Gateway once the stream ends (e.g. "summarize the call").

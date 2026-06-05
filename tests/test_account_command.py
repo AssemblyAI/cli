@@ -54,8 +54,10 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
     with patch("aai_cli.commands.account.ams.get_usage", side_effect=fake_usage):
         result = runner.invoke(app, ["usage", "--json"])
     assert result.exit_code == 0
-    # both bounds are ISO dates (YYYY-MM-DD), defaulted when not passed
-    assert len(captured["start"]) == 10 and len(captured["end"]) == 10
+    # both bounds are tz-aware UTC ISO-8601 timestamps, defaulted when not passed
+    # (AMS rejects naive datetimes with a 400).
+    for bound in (captured["start"], captured["end"]):
+        assert bound.endswith("+00:00") and "T" in bound, bound
     data = json.loads(result.output)
     assert data["usage_items"][0]["total"] == 12.5
 
@@ -86,7 +88,19 @@ def test_usage_passes_explicit_dates():
     ) as get_usage:
         result = runner.invoke(app, ["usage", "--start", "2026-01-01", "--end", "2026-02-01"])
     assert result.exit_code == 0
-    get_usage.assert_called_once_with("jwt", "2026-01-01", "2026-02-01", None)
+    # Dates are normalized to tz-aware UTC timestamps before hitting AMS.
+    get_usage.assert_called_once_with(
+        "jwt", "2026-01-01T00:00:00+00:00", "2026-02-01T00:00:00+00:00", None
+    )
+
+
+def test_usage_rejects_invalid_date():
+    _auth()
+    with patch("aai_cli.commands.account.ams.get_usage") as get_usage:
+        result = runner.invoke(app, ["usage", "--start", "not-a-date"])
+    assert result.exit_code == 2
+    assert "Invalid date" in result.output
+    get_usage.assert_not_called()
 
 
 def test_limits_renders_services(monkeypatch):

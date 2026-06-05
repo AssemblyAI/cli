@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import __version__, environments, output, steps
+from aai_cli import __version__, environments, help_panels, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
@@ -60,13 +60,14 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
 
 
 @app.command(
+    rich_help_panel=help_panels.QUICK_START,
     epilog=examples_epilog(
         [
             ("Scaffold a new app interactively", "aai init"),
             ("Scaffold a transcribe app into ./my-app", "aai init transcribe my-app"),
             ("Scaffold into the current directory", "aai init transcribe --here"),
         ]
-    )
+    ),
 )
 def init(
     ctx: typer.Context,
@@ -177,9 +178,7 @@ def init(
                 }
             )
 
-        output.emit(
-            report, lambda d: steps.render_steps(d, heading="aai init:"), json_mode=json_mode
-        )
+        output.emit(report, lambda d: steps.render_steps(d, heading="Setup"), json_mode=json_mode)
         if any(s["status"] == "failed" for s in report):
             raise typer.Exit(code=1)
 
@@ -188,12 +187,19 @@ def init(
             url = f"http://localhost:{chosen_port}"
             if not json_mode:
                 output.console.print(
-                    f"[aai.heading]Starting[/aai.heading] {escape(url)}  (Ctrl-C to stop)"
+                    f"[aai.heading]Starting[/aai.heading] [aai.url]{escape(url)}[/aai.url]"
+                    "  [aai.muted](Ctrl-C to stop)[/aai.muted]"
                 )
             code = runner.launch_and_open(
                 target, port=chosen_port, use_uv=use_uv, open_browser=not no_open
             )
             if code:
                 raise typer.Exit(code=code)
+        elif not json_mode:
+            # Scaffolded but not launched (no key, or --no-install): leave the user with
+            # the one command that starts their app, the way `vercel`/`supabase` sign off.
+            output.console.print(
+                output.hint(f"Run `cd {escape(str(target))} && uv run uvicorn api.index:app`.")
+            )
 
     run_command(ctx, body, json=json_out)

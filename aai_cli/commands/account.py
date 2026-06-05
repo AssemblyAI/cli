@@ -1,26 +1,43 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import output
+from aai_cli import help_panels, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
+
+
+def _utc_day_start(day: str) -> str:
+    """Render a ``YYYY-MM-DD`` date as a tz-aware UTC ISO-8601 timestamp.
+
+    The AMS billing endpoint compares the bounds against tz-aware datetimes and
+    rejects naive ones ("can't compare offset-naive and offset-aware datetimes"),
+    so the wire value always carries an explicit ``+00:00`` offset.
+    """
+    try:
+        parsed = date.fromisoformat(day)
+    except ValueError as exc:
+        raise UsageError(f"Invalid date {day!r}; expected YYYY-MM-DD.") from exc
+    return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC).isoformat()
+
 
 app = typer.Typer(help="Account billing, usage, and limits.")
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Show your remaining balance", "aai balance"),
         ]
-    )
+    ),
 )
 def balance(
     ctx: typer.Context,
@@ -42,12 +59,13 @@ def balance(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Usage over the last 30 days", "aai usage"),
             ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
         ]
-    )
+    ),
 )
 def usage(
     ctx: typer.Context,
@@ -61,8 +79,8 @@ def usage(
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = resolve_session(state)
         today = datetime.now(UTC).date()
-        end_date = end or today.isoformat()
-        start_date = start or (today - timedelta(days=30)).isoformat()
+        start_date = _utc_day_start(start or (today - timedelta(days=30)).isoformat())
+        end_date = _utc_day_start(end or today.isoformat())
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, Any]) -> Table:
@@ -81,11 +99,12 @@ def usage(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Show rate limits per service", "aai limits"),
         ]
-    )
+    ),
 )
 def limits(
     ctx: typer.Context,

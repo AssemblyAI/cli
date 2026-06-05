@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import httpx
+import httpx2
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -36,7 +36,7 @@ def token() -> dict[str, str]:
     """Mint a one-time Voice Agent token. The browser uses it to open the WebSocket."""
     # NOTE: the Voice Agent token uses Bearer auth (unlike the streaming token).
     try:
-        resp = httpx.get(
+        resp = httpx2.get(
             f"https://{AGENTS_HOST}/v1/token",
             params={"expires_in_seconds": 60},
             headers={"Authorization": f"Bearer {API_KEY}"},

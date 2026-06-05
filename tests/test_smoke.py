@@ -39,25 +39,31 @@ def test_help_lists_commands_in_workflow_order():
     assert isinstance(cmd, TyperGroup)
     ctx = cmd.make_context("aai", [], resilient_parsing=True)
     names = cmd.list_commands(ctx)  # the order shown under --help
-    # Core transcription first, then voice/LLM, account, tooling, version last.
+    # Grouped into Rich help panels (see help_panels.py): Quick Start,
+    # Setup & Tools, Transcription & AI, History, then Account.
     assert names == [
+        # Quick Start
+        "init",
+        # Setup & Tools
+        "samples",
+        "doctor",
+        "claude",
+        "version",
+        # Transcription & AI
         "transcribe",
         "stream",
-        "transcripts",
-        "sessions",
         "agent",
         "llm",
+        # History
+        "transcripts",
+        "sessions",
+        # Account
+        "login",
+        "logout",
+        "whoami",
         "balance",
         "usage",
         "limits",
         "keys",
         "audit",
-        "login",
-        "logout",
-        "whoami",
-        "doctor",
-        "samples",
-        "init",
-        "claude",
-        "version",
     ]

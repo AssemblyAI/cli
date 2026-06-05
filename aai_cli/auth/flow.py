@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from rich.markup import escape
+
 from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
@@ -42,7 +44,7 @@ def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
 
 def _open_browser(url: str) -> None:
     """Open the system browser, falling back to printing the URL."""
-    output.console.print(f"Opening your browser to sign in:\n  {url}")
+    output.console.print(f"Opening your browser to sign in:\n  [aai.url]{escape(url)}[/aai.url]")
     try:
         webbrowser.open(url)
     except Exception:  # noqa: BLE001 - opening a browser is best-effort

@@ -405,3 +405,34 @@ def test_run_session_file_driven_stops_after_reply():
     finals = [c for c in renderer.calls if c[0] == "user_final"]
     assert ("user_final", "what time is it") in finals
     assert ("user_final", "SHOULD NOT BE SEEN") not in finals  # stopped after the reply
+
+
+def test_run_session_ws_url_follows_active_environment():
+    # The Voice Agent socket must target the active environment's host, not a
+    # hardcoded production URL. Capture the URL connect() is handed, short-
+    # circuiting with a benign close once we've seen it.
+    from aai_cli import environments
+
+    seen: dict[str, str] = {}
+
+    def capture(url, **kwargs):
+        seen["url"] = url
+        raise _CloseError(1008)
+
+    for env_name, expected in (
+        ("sandbox000", "wss://agents.sandbox000.assemblyai-labs.com/v1/ws"),
+        ("production", "wss://agents.assemblyai.com/v1/ws"),
+    ):
+        environments.set_active(environments.get(env_name))
+        with pytest.raises(NotAuthenticated):
+            run_session(
+                "sk",
+                renderer=FakeRenderer(),
+                player=FakePlayer(),
+                mic=[],
+                voice="ivy",
+                system_prompt="x",
+                greeting="hi",
+                connect=capture,
+            )
+        assert seen["url"] == expected

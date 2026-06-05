@@ -8,6 +8,15 @@ from rich.theme import Theme
 # AssemblyAI brand accent. Defined once so the whole CLI can be re-tinted here.
 BRAND = "#2545D3"
 
+# A fixed affordance vocabulary used across all human-facing output, mirroring the
+# Vercel/Supabase convention of a small, consistent status alphabet: one glyph per
+# meaning so a user learns it once. Unicode (the CLI already prints …/—); Rich
+# re-encodes for terminals that can't render it.
+SYMBOL_SUCCESS = "✓"
+SYMBOL_ERROR = "✗"
+SYMBOL_WARN = "!"
+SYMBOL_HINT = "›"  # noqa: RUF001 — deliberate angle-quote glyph, not a '>' typo
+
 # Per-speaker label colors, rotated deterministically by speaker_style().
 SPEAKER_STYLES: tuple[str, ...] = (
     "aai.speaker.0",
@@ -26,7 +35,13 @@ THEME = Theme(
         # distinct hue so "you:" and "agent:" are easy to tell apart at a glance.
         "aai.you": BRAND,
         "aai.agent": "cyan",
-        "aai.success": "green",
+        # Links/URLs in cyan, the convention both the Vercel and Supabase CLIs use so
+        # a clickable target stands out from prose without shouting.
+        "aai.url": "cyan",
+        # Semantic status colors. Success is bold so the ✓ reads as a confident "done"
+        # (Supabase-style); error/warn follow the universal red/yellow; muted secondary
+        # text stays dim so it recedes (the Vercel "quiet by default" look).
+        "aai.success": "bold green",
         "aai.error": "bold red",
         "aai.warn": "yellow",
         "aai.muted": "dim",

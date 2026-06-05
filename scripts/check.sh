@@ -47,9 +47,9 @@ fi
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
-# a live API key + kokoro. Exclude install (real per-template dep install, slow +
-# network) and install_script (builds a wheel and runs install.sh for real; slow,
-# needs network + uv/pipx). All are uncounted by coverage. Run them with:
+# a live API key. Exclude install (real per-template dep install, slow + network)
+# and install_script (builds a wheel and runs install.sh for real; slow, needs
+# network + uv/pipx). All are uncounted by coverage. Run them with:
 #   uv run pytest -m e2e
 #   uv run pytest -m install
 #   uv run pytest -m install_script

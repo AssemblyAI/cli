@@ -92,8 +92,9 @@ def create(
         output.emit(
             created,
             lambda d: (
-                f"Created key '[aai.success]{escape(name)}[/aai.success]': "
-                f"{escape(str(d['api_key']))}"
+                output.success(f"Created API key '{escape(name)}'.")
+                + f"\n  {escape(str(d['api_key']))}\n"
+                + output.warn("Shown once — copy it now.")
             ),
             json_mode=json_mode,
         )

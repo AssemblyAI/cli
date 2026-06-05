@@ -24,5 +24,5 @@ def test_render_steps_colors_status():
     out = buf.getvalue()
     assert "installed" in out
     assert "failed" in out
-    assert "\x1b[32m" in out  # aai.success (green) → "installed"
+    assert "\x1b[1;32m" in out  # aai.success (bold green) → "installed"
     assert "\x1b[1;31m" in out  # aai.error (bold red) → "failed"

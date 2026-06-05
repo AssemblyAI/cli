@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, environments, stdio
+from aai_cli import __version__, environments, help_panels, stdio
 from aai_cli.commands import (
     account,
     agent,
@@ -30,30 +30,37 @@ from aai_cli.commands import (
 )
 from aai_cli.context import AppState, env_override_warning, resolve_environment
 from aai_cli.errors import CLIError
+from aai_cli.help_text import examples_epilog
 
-# The order commands appear under `aai --help`: core transcription first, then
-# voice/LLM, then account, then tooling, with `version` last. Names not listed
-# fall to the end, sorted alphabetically.
+# The order commands appear under `aai --help`. Commands are grouped into named
+# Rich panels (see `help_panels.py`); panels render in the order their first
+# command appears here, so keep each panel's commands contiguous and ordered
+# most-common-first. Names not listed fall to the end, sorted alphabetically.
 _COMMAND_ORDER = (
+    # Quick Start — zero-to-running onboarding
+    "init",
+    # Setup & Tools — get set up & maintain; `version` last
+    "samples",
+    "doctor",
+    "claude",
+    "version",
+    # Transcription & AI — the verbs you run
     "transcribe",
     "stream",
-    "transcripts",
-    "sessions",
     "agent",
     "llm",
+    # History — browse past work
+    "transcripts",
+    "sessions",
+    # Account — auth, then billing, then keys
+    "login",
+    "logout",
+    "whoami",
     "balance",
     "usage",
     "limits",
     "keys",
     "audit",
-    "login",
-    "logout",
-    "whoami",
-    "doctor",
-    "samples",
-    "init",
-    "claude",
-    "version",
 )
 
 
@@ -73,14 +80,22 @@ class _OrderedGroup(TyperGroup):
 
 app = typer.Typer(
     name="aai",
-    help="Command-line interface for AssemblyAI.",
+    help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
     no_args_is_help=True,
     add_completion=False,
     cls=_OrderedGroup,
 )
 
 
-@app.callback()
+@app.callback(
+    epilog=examples_epilog(
+        [
+            ("Sign in with your browser", "aai login"),
+            ("Transcribe a file", "aai transcribe call.mp3"),
+            ("Scaffold a starter app", "aai init"),
+        ]
+    )
+)
 def main(
     ctx: typer.Context,
     profile: str = typer.Option(None, "--profile", "-p", help="Named credential profile."),
@@ -101,26 +116,27 @@ def main(
         typer.echo(warning, err=True)
 
 
-# Commands are registered in the order they should appear in `aai --help`:
-# core transcription first, then voice/LLM, then account, then tooling. `version`
-# is defined last so it sorts to the bottom (registration order is preserved).
+# Help-panel grouping: named sub-typers carry their panel on `add_typer`; merged
+# (nameless) sub-typers don't propagate it, so those commands set `rich_help_panel`
+# on their own `@app.command()` (see each command module). Final ordering within a
+# panel is controlled by `_COMMAND_ORDER` via `_OrderedGroup`, not registration order.
 app.add_typer(transcribe.app)
 app.add_typer(stream.app)
-app.add_typer(transcripts.app, name="transcripts")
-app.add_typer(sessions.app, name="sessions")
+app.add_typer(transcripts.app, name="transcripts", rich_help_panel=help_panels.HISTORY)
+app.add_typer(sessions.app, name="sessions", rich_help_panel=help_panels.HISTORY)
 app.add_typer(audit.app)  # audit
 app.add_typer(agent.app)
 app.add_typer(llm.app)
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
-app.add_typer(samples.app, name="samples")
+app.add_typer(samples.app, name="samples", rich_help_panel=help_panels.SETUP)
 app.add_typer(init.app)
-app.add_typer(claude.app, name="claude")
-app.add_typer(keys.app, name="keys")
+app.add_typer(claude.app, name="claude", rich_help_panel=help_panels.SETUP)
+app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 
 
-@app.command()
+@app.command(rich_help_panel=help_panels.SETUP)
 def version() -> None:
     """Show the CLI version."""
     typer.echo(__version__)

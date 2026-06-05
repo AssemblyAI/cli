@@ -10,6 +10,7 @@ def test_make_console_resolves_named_styles():
         "aai.brand",
         "aai.heading",
         "aai.label",
+        "aai.url",
         "aai.success",
         "aai.error",
         "aai.warn",

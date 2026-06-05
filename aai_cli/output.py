@@ -61,6 +61,36 @@ def mask_secret(value: str) -> str:
     return f"{value[:3]}…{value[-4:]}" if len(value) > 7 else "***"
 
 
+def success(text: str) -> str:
+    """A success line — green ``✓`` + message — as a Rich-markup string.
+
+    Helpers here return markup for a human renderer to print; they do NOT escape
+    interpolated values, so callers escape any dynamic text (matching the inline
+    ``escape(...)`` convention used throughout the command layer).
+    """
+    return f"[aai.success]{theme.SYMBOL_SUCCESS}[/aai.success] {text}"
+
+
+def fail(text: str) -> str:
+    """A failure line: red ``✗`` + message (for inline status, not the error path)."""
+    return f"[aai.error]{theme.SYMBOL_ERROR}[/aai.error] {text}"
+
+
+def warn(text: str) -> str:
+    """A warning line: yellow ``!`` + message."""
+    return f"[aai.warn]{theme.SYMBOL_WARN}[/aai.warn] {text}"
+
+
+def hint(text: str) -> str:
+    """A dim next-step hint, prefixed with the hint glyph to point at what's next."""
+    return f"[aai.muted]{theme.SYMBOL_HINT} {text}[/aai.muted]"
+
+
+def heading(text: str) -> str:
+    """A section heading in the brand accent — the one voice for multi-line output."""
+    return f"[aai.heading]{text}[/aai.heading]"
+
+
 def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(data, default=str))
