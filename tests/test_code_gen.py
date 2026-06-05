@@ -276,7 +276,7 @@ class _Stub:
 
 def test_every_snippet_execs_against_a_realistic_transcript():
     # Enable every feature so result_handling emits all snippets, then exec them.
-    all_on = {
+    all_on: dict[str, object] = {
         "speaker_labels": True,
         "summarization": True,
         "auto_chapters": True,

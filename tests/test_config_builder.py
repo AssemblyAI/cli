@@ -212,3 +212,101 @@ def test_build_transcription_config_still_works():
         flags={"speaker_labels": True}, overrides=[], config_file=None
     )
     assert isinstance(tc, aai.TranscriptionConfig)
+
+
+# The full field -> coercion-kind mapping is frozen here. Kinds are derived from the
+# SDK model annotations, but the curated field set and every resulting kind must stay
+# exactly as below; this guards the whole table, not just the fields sampled above.
+_EXPECTED_TRANSCRIBE_COERCE = {
+    "language_code": "str",
+    "language_codes": "list",
+    "punctuate": "bool",
+    "format_text": "bool",
+    "dual_channel": "bool",
+    "multichannel": "bool",
+    "webhook_url": "str",
+    "webhook_auth_header_name": "str",
+    "webhook_auth_header_value": "str",
+    "audio_start_from": "int",
+    "audio_end_at": "int",
+    "word_boost": "list",
+    "boost_param": "str",
+    "filter_profanity": "bool",
+    "redact_pii": "bool",
+    "redact_pii_audio": "bool",
+    "redact_pii_audio_quality": "str",
+    "redact_pii_audio_options": "json",
+    "redact_pii_policies": "list",
+    "redact_pii_sub": "str",
+    "redact_pii_return_unredacted": "bool",
+    "speaker_labels": "bool",
+    "speakers_expected": "int",
+    "speaker_options": "json",
+    "content_safety": "bool",
+    "content_safety_confidence": "int",
+    "iab_categories": "bool",
+    "custom_spelling": "json",
+    "disfluencies": "bool",
+    "sentiment_analysis": "bool",
+    "auto_chapters": "bool",
+    "entity_detection": "bool",
+    "summarization": "bool",
+    "summary_model": "str",
+    "summary_type": "str",
+    "auto_highlights": "bool",
+    "language_detection": "bool",
+    "language_confidence_threshold": "float",
+    "language_detection_options": "json",
+    "speech_threshold": "float",
+    "speech_model": "str",
+    "speech_models": "list",
+    "prompt": "str",
+    "temperature": "float",
+    "remove_audio_tags": "str",
+    "keyterms_prompt": "list",
+    "keyterms_prompt_options": "json",
+    "speech_understanding": "json",
+    "domain": "str",
+}
+
+_EXPECTED_STREAM_COERCE = {
+    "end_of_turn_confidence_threshold": "float",
+    "min_end_of_turn_silence_when_confident": "int",
+    "min_turn_silence": "int",
+    "max_turn_silence": "int",
+    "vad_threshold": "float",
+    "format_turns": "bool",
+    "keyterms_prompt": "list",
+    "filter_profanity": "bool",
+    "prompt": "str",
+    "sample_rate": "int",
+    "encoding": "str",
+    "speech_model": "str",
+    "language_detection": "bool",
+    "domain": "str",
+    "inactivity_timeout": "int",
+    "webhook_url": "str",
+    "webhook_auth_header_name": "str",
+    "webhook_auth_header_value": "str",
+    "llm_gateway": "json",
+    "speaker_labels": "bool",
+    "max_speakers": "int",
+    "voice_focus": "str",
+    "voice_focus_threshold": "float",
+    "noise_suppression_model": "str",
+    "noise_suppression_threshold": "float",
+    "continuous_partials": "bool",
+    "customer_support_audio_capture": "bool",
+    "include_partial_turns": "bool",
+    "redact_pii": "bool",
+    "redact_pii_policies": "list",
+    "redact_pii_sub": "str",
+}
+
+
+def test_transcribe_coerce_table_matches_frozen_mapping():
+    assert cb.TRANSCRIBE_COERCE == _EXPECTED_TRANSCRIBE_COERCE
+
+
+def test_stream_coerce_table_matches_frozen_mapping():
+    assert cb.STREAM_COERCE == _EXPECTED_STREAM_COERCE

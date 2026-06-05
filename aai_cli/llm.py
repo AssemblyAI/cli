@@ -4,6 +4,7 @@ from typing import Any
 
 import openai
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
 
 from aai_cli import environments
 from aai_cli.errors import APIError
@@ -70,7 +71,7 @@ def complete(
     messages: list[dict[str, str]],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     transcript_id: str | None = None,
-) -> Any:
+) -> ChatCompletion:
     """Create a chat completion via the gateway and return the OpenAI response.
 
     `transcript_id` is passed through as an extra body field so the gateway can
@@ -96,7 +97,7 @@ def complete(
         raise APIError(f"LLM Gateway request failed: {exc}") from exc
 
 
-def content_of(response: Any) -> str:
+def content_of(response: ChatCompletion) -> str:
     """Pull the assistant's text out of a chat-completions response."""
     try:
         content = response.choices[0].message.content
@@ -105,17 +106,13 @@ def content_of(response: Any) -> str:
     return content or ""
 
 
-def usage_of(response: Any) -> dict[str, Any] | None:
+def usage_of(response: ChatCompletion) -> dict[str, Any] | None:
     """Return the token-usage block as a plain dict, if present."""
-    usage = getattr(response, "usage", None)
+    usage = response.usage
     if usage is None:
         return None
-    if hasattr(usage, "model_dump"):
-        dumped: dict[str, Any] = usage.model_dump()
-        return dumped
-    if isinstance(usage, dict):
-        return usage
-    return None
+    dumped: dict[str, Any] = usage.model_dump()
+    return dumped
 
 
 def transform_transcript(

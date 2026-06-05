@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import enum
 import json
+import typing
 from pathlib import Path
 
 import assemblyai as aai
@@ -8,93 +10,167 @@ from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
 
 from aai_cli.errors import UsageError
 
-# field name -> coercion kind for --config/--config-file string values.
-# The KEYS are the authoritative set of valid config fields per command.
-TRANSCRIBE_COERCE: dict[str, str] = {
-    "language_code": "str",
-    "language_codes": "list",
-    "punctuate": "bool",
-    "format_text": "bool",
-    "dual_channel": "bool",
-    "multichannel": "bool",
-    "webhook_url": "str",
-    "webhook_auth_header_name": "str",
-    "webhook_auth_header_value": "str",
-    "audio_start_from": "int",
-    "audio_end_at": "int",
-    "word_boost": "list",
-    "boost_param": "str",
-    "filter_profanity": "bool",
-    "redact_pii": "bool",
-    "redact_pii_audio": "bool",
-    "redact_pii_audio_quality": "str",
-    "redact_pii_audio_options": "json",
-    "redact_pii_policies": "list",
-    "redact_pii_sub": "str",
-    "redact_pii_return_unredacted": "bool",
-    "speaker_labels": "bool",
-    "speakers_expected": "int",
-    "speaker_options": "json",
-    "content_safety": "bool",
-    "content_safety_confidence": "int",
-    "iab_categories": "bool",
-    "custom_spelling": "json",
-    "disfluencies": "bool",
-    "sentiment_analysis": "bool",
-    "auto_chapters": "bool",
-    "entity_detection": "bool",
-    "summarization": "bool",
-    "summary_model": "str",
-    "summary_type": "str",
-    "auto_highlights": "bool",
-    "language_detection": "bool",
-    "language_confidence_threshold": "float",
-    "language_detection_options": "json",
-    "speech_threshold": "float",
-    "speech_model": "str",
-    "speech_models": "list",
-    "prompt": "str",
-    "temperature": "float",
-    "remove_audio_tags": "str",
-    "keyterms_prompt": "list",
-    "keyterms_prompt_options": "json",
-    "speech_understanding": "json",
-    "domain": "str",
-}
+# The curated set of user-settable config fields per command. This is the authoritative
+# allow-list (deliberately a subset of the SDK models — e.g. output-only and internal
+# fields are excluded). The coercion KIND for each field is derived from the SDK model
+# annotation in `_coerce_table`, so only the names are maintained here, not their types.
+TRANSCRIBE_FIELD_NAMES: tuple[str, ...] = (
+    "language_code",
+    "language_codes",
+    "punctuate",
+    "format_text",
+    "dual_channel",
+    "multichannel",
+    "webhook_url",
+    "webhook_auth_header_name",
+    "webhook_auth_header_value",
+    "audio_start_from",
+    "audio_end_at",
+    "word_boost",
+    "boost_param",
+    "filter_profanity",
+    "redact_pii",
+    "redact_pii_audio",
+    "redact_pii_audio_quality",
+    "redact_pii_audio_options",
+    "redact_pii_policies",
+    "redact_pii_sub",
+    "redact_pii_return_unredacted",
+    "speaker_labels",
+    "speakers_expected",
+    "speaker_options",
+    "content_safety",
+    "content_safety_confidence",
+    "iab_categories",
+    "custom_spelling",
+    "disfluencies",
+    "sentiment_analysis",
+    "auto_chapters",
+    "entity_detection",
+    "summarization",
+    "summary_model",
+    "summary_type",
+    "auto_highlights",
+    "language_detection",
+    "language_confidence_threshold",
+    "language_detection_options",
+    "speech_threshold",
+    "speech_model",
+    "speech_models",
+    "prompt",
+    "temperature",
+    "remove_audio_tags",
+    "keyterms_prompt",
+    "keyterms_prompt_options",
+    "speech_understanding",
+    "domain",
+)
 
-STREAM_COERCE: dict[str, str] = {
-    "end_of_turn_confidence_threshold": "float",
-    "min_end_of_turn_silence_when_confident": "int",
-    "min_turn_silence": "int",
-    "max_turn_silence": "int",
-    "vad_threshold": "float",
-    "format_turns": "bool",
-    "keyterms_prompt": "list",
-    "filter_profanity": "bool",
-    "prompt": "str",
-    "sample_rate": "int",
-    "encoding": "str",
-    "speech_model": "str",
-    "language_detection": "bool",
-    "domain": "str",
-    "inactivity_timeout": "int",
-    "webhook_url": "str",
-    "webhook_auth_header_name": "str",
-    "webhook_auth_header_value": "str",
-    "llm_gateway": "json",
-    "speaker_labels": "bool",
-    "max_speakers": "int",
-    "voice_focus": "str",
-    "voice_focus_threshold": "float",
-    "noise_suppression_model": "str",
-    "noise_suppression_threshold": "float",
-    "continuous_partials": "bool",
-    "customer_support_audio_capture": "bool",
-    "include_partial_turns": "bool",
-    "redact_pii": "bool",
-    "redact_pii_policies": "list",
-    "redact_pii_sub": "str",
-}
+STREAM_FIELD_NAMES: tuple[str, ...] = (
+    "end_of_turn_confidence_threshold",
+    "min_end_of_turn_silence_when_confident",
+    "min_turn_silence",
+    "max_turn_silence",
+    "vad_threshold",
+    "format_turns",
+    "keyterms_prompt",
+    "filter_profanity",
+    "prompt",
+    "sample_rate",
+    "encoding",
+    "speech_model",
+    "language_detection",
+    "domain",
+    "inactivity_timeout",
+    "webhook_url",
+    "webhook_auth_header_name",
+    "webhook_auth_header_value",
+    "llm_gateway",
+    "speaker_labels",
+    "max_speakers",
+    "voice_focus",
+    "voice_focus_threshold",
+    "noise_suppression_model",
+    "noise_suppression_threshold",
+    "continuous_partials",
+    "customer_support_audio_capture",
+    "include_partial_turns",
+    "redact_pii",
+    "redact_pii_policies",
+    "redact_pii_sub",
+)
+
+# Fields whose CLI input differs from the SDK annotation. `custom_spelling` is typed as a
+# list-of-dicts on the model, but the CLI accepts the JSON object form directly.
+_KIND_OVERRIDES: dict[str, str] = {"custom_spelling": "json"}
+
+
+def _field_annotations(model_cls: type) -> dict[str, object]:
+    """Map field name -> type annotation for a pydantic model (v2 or v1)."""
+    model_fields = getattr(model_cls, "model_fields", None)
+    if model_fields:  # pydantic v2
+        return {name: field.annotation for name, field in model_fields.items()}
+    legacy_fields = getattr(model_cls, "__fields__", {})  # pydantic v1
+    return {name: field.outer_type_ for name, field in legacy_fields.items()}
+
+
+def _derive_kind(annotation: object) -> str:
+    """Map an SDK field annotation to a coercion kind for `coerce_value`."""
+    if typing.get_origin(annotation) is typing.Union:
+        non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
+        if len(non_none) == 1:
+            annotation = non_none[0]  # unwrap Optional[X]
+        # A genuine multi-type union (e.g. Union[str, LanguageCode]): a string is
+        # always an acceptable input, otherwise fall back to a raw JSON value.
+        elif any(_is_str_like(a) for a in non_none):
+            return "str"
+        else:
+            return "json"
+    origin = typing.get_origin(annotation)
+    if origin in (list, set, tuple):
+        return "list"
+    if origin is dict:
+        return "json"
+    if isinstance(annotation, type):
+        if issubclass(annotation, bool):  # before int: bool is an int subclass
+            return "bool"
+        if issubclass(annotation, enum.Enum):
+            return "str"
+        if issubclass(annotation, int):
+            return "int"
+        if issubclass(annotation, float):
+            return "float"
+        if issubclass(annotation, str):
+            return "str"
+    return "json"  # pydantic submodels and anything else: accept a raw JSON value
+
+
+def _is_str_like(annotation: object) -> bool:
+    return isinstance(annotation, type) and issubclass(annotation, (str, enum.Enum))
+
+
+def _coerce_table(model_cls: type, names: tuple[str, ...]) -> dict[str, str]:
+    """Build a field -> coercion-kind table for `names`, deriving kinds from the model."""
+    annotations = _field_annotations(model_cls)
+    table: dict[str, str] = {}
+    for name in names:
+        if name in _KIND_OVERRIDES:
+            table[name] = _KIND_OVERRIDES[name]
+        elif name in annotations:
+            table[name] = _derive_kind(annotations[name])
+        else:
+            # A curated name the SDK no longer exposes: pass through as a string and let
+            # the model constructor reject it, rather than crashing at import.
+            table[name] = "str"
+    return table
+
+
+# field name -> coercion kind for --config/--config-file string values. The transcribe
+# fields live on the request model behind TranscriptionConfig.raw.
+TRANSCRIBE_COERCE: dict[str, str] = _coerce_table(
+    type(aai.TranscriptionConfig().raw), TRANSCRIBE_FIELD_NAMES
+)
+STREAM_COERCE: dict[str, str] = _coerce_table(StreamingParameters, STREAM_FIELD_NAMES)
 
 TRANSCRIBE_FIELDS = TRANSCRIBE_COERCE
 STREAM_FIELDS = STREAM_COERCE
@@ -186,7 +262,7 @@ def merge_transcribe_config(
     return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
 
 
-def construct_transcription_config(merged: dict[str, object]) -> aai.TranscriptionConfig:
+def construct_transcription_config(merged: dict[str, typing.Any]) -> aai.TranscriptionConfig:
     """Build a TranscriptionConfig from a merged kwargs dict, surfacing errors as usage."""
     try:
         return aai.TranscriptionConfig(**merged)
@@ -221,7 +297,7 @@ def merge_streaming_params(
     return merged
 
 
-def construct_streaming_params(merged: dict[str, object]) -> StreamingParameters:
+def construct_streaming_params(merged: dict[str, typing.Any]) -> StreamingParameters:
     """Build StreamingParameters from a merged kwargs dict, surfacing errors as usage."""
     try:
         return StreamingParameters(**merged)

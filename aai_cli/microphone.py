@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 from aai_cli.errors import CLIError
@@ -109,7 +109,7 @@ class MicrophoneSource:
         target_rate: int | None = None,
         device: int | None = None,
         capture_rate: int | None = None,
-        stream_factory: Callable[..., Iterator[bytes]] | None = None,
+        stream_factory: Callable[..., Iterable[bytes]] | None = None,
         rate_query: Callable[[int | None], int] | None = None,
         on_open: Callable[[], None] | None = None,
     ) -> None:

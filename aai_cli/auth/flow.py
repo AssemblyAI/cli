@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Mapping
 from typing import Any
 
 from aai_cli import output
@@ -8,13 +9,17 @@ from aai_cli.auth import ams, discovery, endpoints, loopback
 from aai_cli.errors import APIError
 
 
-def _require(mapping: Any, key: str, what: str) -> Any:
+def _require(mapping: Mapping[str, Any], key: str, what: str) -> Any:
     """Pull a required field out of an AMS response, or raise a clean APIError.
 
     AMS only returns HTTP errors for outright failures; a 200 with an unexpected
     shape would otherwise KeyError into an ugly traceback, so map that to the same
-    "run login again" message the rest of the flow uses.
+    "run login again" message the rest of the flow uses. The return stays `Any`
+    because AMS JSON leaves are untyped and callers coerce them (int()/str()).
     """
+    # Nested calls pass an `Any`-typed value that the type checker accepts as a
+    # Mapping but which may be a non-mapping at runtime (e.g. a malformed 200),
+    # so still guard with isinstance before calling .get.
     value = mapping.get(key) if isinstance(mapping, dict) else None
     if value is None:
         raise APIError(

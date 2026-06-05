@@ -196,7 +196,7 @@ def test_transcribe_auth_error_becomes_not_authenticated():
 
 
 class _FakeStreamingClient:
-    last = None
+    last: "_FakeStreamingClient | None" = None
 
     def __init__(self, options):
         self.handlers = {}
@@ -230,11 +230,13 @@ def test_stream_audio_wires_handlers_and_streams(monkeypatch):
         "sk", [b"\x00"], params=_stream_params(), on_turn=lambda e: turns.append(e.transcript)
     )
     assert turns == ["hi"]
-    assert _FakeStreamingClient.last.connected
-    assert _FakeStreamingClient.last.disconnected  # disconnected in finally
-    assert _FakeStreamingClient.last.params.sample_rate == 16000
-    assert _FakeStreamingClient.last.params.format_turns is True
-    assert _FakeStreamingClient.last.terminate is True  # graceful flush requested
+    last = _FakeStreamingClient.last
+    assert last is not None
+    assert last.connected
+    assert last.disconnected  # disconnected in finally
+    assert last.params.sample_rate == 16000
+    assert last.params.format_turns is True
+    assert last.terminate is True  # graceful flush requested
 
 
 def test_stream_audio_raises_on_error_event(monkeypatch):
@@ -313,7 +315,9 @@ def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):
     monkeypatch.setattr(client, "StreamingClient", StreamFails)
     with pytest.raises(APIError):
         client.stream_audio("sk", [b"\x00"], params=_stream_params())
-    assert StreamFails.last.disconnected  # still disconnected in finally
+    last = StreamFails.last
+    assert last is not None
+    assert last.disconnected  # still disconnected in finally
 
 
 def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):

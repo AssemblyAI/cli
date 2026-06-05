@@ -25,7 +25,10 @@ DEFAULT_SPEECH_MODEL = SpeechModel.universal_streaming_multilingual.value
         [
             ("Stream from your microphone", "aai stream"),
             ("Stream the hosted sample", "aai stream --sample"),
-            ("Summarize action items live as you talk", 'aai stream --llm "summarize action items"'),
+            (
+                "Summarize action items live as you talk",
+                'aai stream --llm "summarize action items"',
+            ),
             ("Print equivalent Python instead of running", "aai stream --show-code"),
         ]
     )

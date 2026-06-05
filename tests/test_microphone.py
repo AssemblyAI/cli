@@ -1,5 +1,6 @@
 import sys
 import types
+from typing import Any
 
 import pytest
 
@@ -162,14 +163,14 @@ def test_rate_query_resolves_capture_rate_when_not_given():
 
 
 def test_device_default_rate_reads_device(monkeypatch):
-    fake_sd = types.ModuleType("sounddevice")
+    fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.query_devices = lambda device, kind: {"default_samplerate": 44100.0}
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
     assert _device_default_rate(2) == 44100
 
 
 def test_device_default_rate_falls_back_on_query_error(monkeypatch):
-    fake_sd = types.ModuleType("sounddevice")
+    fake_sd: Any = types.ModuleType("sounddevice")
 
     def boom(*a, **k):
         raise RuntimeError("no input device")
@@ -196,7 +197,7 @@ def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch):
         created.update(kwargs)
         return _FakeRawStream(**kwargs)
 
-    fake_sd = types.ModuleType("sounddevice")
+    fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.RawInputStream = raw_input_stream
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
 

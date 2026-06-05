@@ -17,6 +17,9 @@ uv run ruff format --check .
 echo "==> mypy (src + tests)"
 uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
 
+echo "==> pyright (src + tests)"
+uv run pyright  # include = ["aai_cli", "tests"] in [tool.pyright]
+
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 

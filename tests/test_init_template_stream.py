@@ -9,6 +9,7 @@ TEMPLATE_DIR = Path("aai_cli/init/templates/stream")
 
 def _load_app():
     spec = importlib.util.spec_from_file_location("_tmpl_stream", TEMPLATE_DIR / "api" / "index.py")
+    assert spec and spec.loader  # spec_from_file_location is typed Optional
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

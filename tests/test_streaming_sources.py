@@ -1,5 +1,7 @@
 import io
 import wave
+from collections.abc import Generator
+from typing import cast
 
 import pytest
 
@@ -90,7 +92,7 @@ def test_filesource_ffmpeg_cleanup_on_early_stop(tmp_path, monkeypatch):
             calls["waited"] = True
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FakeProc())
-    gen = iter(FileSource(str(p), sleep=lambda _s: None))
+    gen = cast(Generator[bytes, None, None], iter(FileSource(str(p), sleep=lambda _s: None)))
     next(gen)  # pull one chunk
     gen.close()  # stop early -> generator cleanup runs the finally
     assert calls["terminated"] and calls["waited"] and calls["closed"]
@@ -126,7 +128,7 @@ def test_filesource_ffmpeg_wait_keyboardinterrupt_is_silenced(tmp_path, monkeypa
             calls["killed"] = True
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FakeProc())
-    gen = iter(FileSource(str(p), sleep=lambda _s: None))
+    gen = cast(Generator[bytes, None, None], iter(FileSource(str(p), sleep=lambda _s: None)))
     next(gen)  # pull one chunk
     gen.close()  # must return cleanly despite wait() raising KeyboardInterrupt
     assert calls["killed"] is True

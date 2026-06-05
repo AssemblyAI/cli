@@ -15,9 +15,11 @@ def _auth():
 
 def _payload(content="four"):
     # Mimics the OpenAI SDK response object the command reads via content_of/usage_of.
+    # `usage` is a CompletionUsage-like model (model_dump), not a raw dict.
     message = types.SimpleNamespace(role="assistant", content=content)
     choice = types.SimpleNamespace(message=message, finish_reason="stop")
-    return types.SimpleNamespace(choices=[choice], usage={"total_tokens": 3})
+    usage = types.SimpleNamespace(model_dump=lambda: {"total_tokens": 3})
+    return types.SimpleNamespace(choices=[choice], usage=usage)
 
 
 def test_llm_help_lists_command():

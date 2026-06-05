@@ -55,11 +55,14 @@ dev = [
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
     "mypy>=2.1.0",
+    "pyright>=1.1.409",
     "pre-commit>=4.6.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
+    "syrupy>=4.0",
+    "numpy>=2.0.0",  # e2e tests resample kokoro audio (tests/e2e/test_cli_e2e.py)
 ]
 
 [project.scripts]
@@ -94,6 +97,15 @@ no_implicit_optional = true
 # Tests are type-checked too, but pytest functions don't need return annotations.
 module = "tests.*"
 disallow_untyped_defs = false
+
+[tool.pyright]
+# Second type checker alongside mypy: pyright catches a different (and often
+# stricter) class of issues. Same source scope as mypy (files above).
+include = ["aai_cli", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+# Third-party deps (assemblyai, sounddevice) ship no type stubs.
+reportMissingTypeStubs = false
 
 [tool.ruff]
 line-length = 100

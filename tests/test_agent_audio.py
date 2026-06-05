@@ -1,5 +1,6 @@
 import sys
 import types
+from typing import Any
 
 import pytest
 
@@ -69,7 +70,7 @@ def test_default_output_stream_opens_started_sounddevice_stream(monkeypatch):
         def start(self):
             self.started = True
 
-    fake_sd = types.ModuleType("sounddevice")
+    fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.RawOutputStream = lambda **kw: FakeOut(**kw)
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
 
@@ -90,7 +91,7 @@ def test_default_output_stream_open_failure_raises_audio_output_error(monkeypatc
     def boom(**kw):
         raise OSError("no output device")
 
-    fake_sd = types.ModuleType("sounddevice")
+    fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.RawOutputStream = boom
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
     with pytest.raises(CLIError) as exc:
