@@ -70,6 +70,18 @@ def test_empty_api_key_flag_rejected():
         config.resolve_api_key(api_key_flag="")
 
 
+def test_invalid_profile_name_has_suggestion():
+    import pytest
+
+    from aai_cli import config
+    from aai_cli.errors import CLIError
+
+    with pytest.raises(CLIError) as exc:
+        config.set_active_profile("bad name!")
+    assert exc.value.message.startswith("Invalid profile name")
+    assert exc.value.suggestion == "Use only letters, digits, '-' or '_'."
+
+
 def test_malformed_config_raises_clean_error(tmp_config):
     from aai_cli.errors import CLIError
 

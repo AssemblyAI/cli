@@ -26,9 +26,10 @@ def _validate_profile(name: str) -> None:
         from aai_cli.errors import CLIError
 
         raise CLIError(
-            f"Invalid profile name {name!r}: use letters, digits, '-' or '_' only.",
+            f"Invalid profile name {name!r}.",
             error_type="invalid_profile",
             exit_code=2,
+            suggestion="Use only letters, digits, '-' or '_'.",
         )
 
 
@@ -115,7 +116,12 @@ def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = No
         if not api_key_flag:
             from aai_cli.errors import CLIError
 
-            raise CLIError("Empty --api-key provided.", error_type="invalid_key", exit_code=2)
+            raise CLIError(
+                "Empty --api-key provided.",
+                error_type="invalid_key",
+                exit_code=2,
+                suggestion="Pass a non-empty key, e.g. --api-key sk_...",
+            )
         return api_key_flag
     env_key = os.environ.get(ENV_API_KEY)
     if env_key:
