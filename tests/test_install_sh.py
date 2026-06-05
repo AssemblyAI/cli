@@ -30,8 +30,8 @@ def _shim(path: Path, body: str) -> None:
 
 def _python_shim(bindir: Path, *, version: str = "3.12.0", gate_ok: bool = True) -> None:
     # Fakes the three ways install.sh calls python:
-    #   -V          → print a version (used in the <3.10 error message)
-    #   -c '<gate>' → exit 0/1 to pass/fail the 3.10+ gate
+    #   -V          → print a version (used in the <3.11 error message)
+    #   -c '<gate>' → exit 0/1 to pass/fail the 3.11+ gate
     #   -m pip ...  → record argv to pip.args (the pip --user fallback)
     rec = bindir / "pip.args"
     _shim(
@@ -61,14 +61,14 @@ def test_errors_when_no_python(tmp_path):
     # Empty bindir: no python3/python on PATH at all.
     result = _run(tmp_path)
     assert result.returncode == 1
-    assert "Python 3.10+ is required" in result.stderr
+    assert "Python 3.11+ is required" in result.stderr
 
 
 def test_errors_when_python_too_old(tmp_path):
     _python_shim(tmp_path, version="3.9.18", gate_ok=False)
     result = _run(tmp_path)
     assert result.returncode == 1
-    assert "Python 3.10+ is required" in result.stderr
+    assert "Python 3.11+ is required" in result.stderr
     assert "3.9.18" in result.stderr
 
 
