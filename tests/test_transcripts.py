@@ -106,5 +106,5 @@ def test_list_table_colors_status(monkeypatch):
     assert result.exit_code == 0
     assert "completed" in result.output
     assert "error" in result.output
-    assert "\x1b[32m" in result.output  # aai.success (green) → "completed" cell
+    assert "\x1b[1;32m" in result.output  # aai.success (bold green) → "completed" cell
     assert "\x1b[1;31m" in result.output  # aai.error (bold red) → "error" cell

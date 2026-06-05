@@ -7,7 +7,7 @@ from typing import TypedDict
 import typer
 from rich.markup import escape
 
-from aai_cli import client, config, output
+from aai_cli import client, config, help_panels, output, theme
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
@@ -25,8 +25,13 @@ class Check(TypedDict):
     fix: str | None
 
 
-# Status -> render style. "fail" is a blocker; "warn" is degraded-but-usable.
-_STYLE = {"ok": "aai.success", "warn": "aai.warn", "fail": "aai.error"}
+# Status -> (affordance symbol, render style). "fail" is a blocker; "warn" is
+# degraded-but-usable. Drives the per-check glyph in `_render`.
+_SYMBOL = {
+    "ok": (theme.SYMBOL_SUCCESS, "aai.success"),
+    "warn": (theme.SYMBOL_WARN, "aai.warn"),
+    "fail": (theme.SYMBOL_ERROR, "aai.error"),
+}
 
 
 def _check_python() -> Check:
@@ -172,28 +177,30 @@ def _check_coding_agent() -> Check:
 
 def _render(data: dict[str, object]) -> str:
     checks: list[Check] = data["checks"]  # type: ignore[assignment]
-    lines = ["[aai.heading]AssemblyAI environment check:[/aai.heading]"]
+    lines = [output.heading("Environment check")]
     for c in checks:
-        style = _STYLE.get(c["status"], "aai.muted")
+        symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
         lines.append(
-            f"  {escape(c['name'])}: "
-            f"[{style}]{escape(c['status'])}[/{style}] — {escape(c['detail'])}"
+            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
         )
         if c["fix"]:
-            lines.append(f"      [aai.muted]fix:[/aai.muted] {escape(c['fix'])}")
+            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
     if data["ok"]:
-        lines.append("  [aai.success]Ready.[/aai.success]")
+        lines.append("  " + output.success("Everything looks good."))
     else:
-        lines.append("  [aai.error]Problems found — see fixes above.[/aai.error]")
+        failed = sum(1 for c in checks if c["status"] == "fail")
+        noun = "problem" if failed == 1 else "problems"
+        lines.append("  " + output.fail(f"{failed} {noun} found — see fixes above."))
     return "\n".join(lines)
 
 
 @app.command(
+    rich_help_panel=help_panels.SETUP,
     epilog=examples_epilog(
         [
             ("Check your environment is ready", "aai doctor"),
         ]
-    )
+    ),
 )
 def doctor(
     ctx: typer.Context,

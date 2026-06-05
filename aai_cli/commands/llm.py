@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import config, output, stdio
+from aai_cli import config, help_panels, output, stdio
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -14,13 +14,14 @@ app = typer.Typer()
 
 
 @app.command(
+    rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
             ("Summarize a past transcript", 'aai llm "summarize" --transcript-id 5551234-abcd'),
             ("Pipe any text in", 'echo "meeting notes" | aai llm "turn into action items"'),
             ("See available models", "aai llm --list-models"),
         ]
-    )
+    ),
 )
 def llm(
     ctx: typer.Context,

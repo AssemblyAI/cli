@@ -11,6 +11,7 @@ from aai_cli import (
     code_gen,
     config,
     config_builder,
+    help_panels,
     llm,
     output,
     stdio,
@@ -33,6 +34,7 @@ def _render_transform_steps(d: dict[str, Any]) -> str:
 
 
 @app.command(
+    rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
             ("Transcribe a local file", "aai transcribe call.mp3"),
@@ -44,7 +46,7 @@ def _render_transform_steps(d: dict[str, Any]) -> str:
             ("Get just the text for a pipeline", "aai transcribe call.mp3 -o text"),
             ("Print equivalent Python instead of running", "aai transcribe call.mp3 --show-code"),
         ]
-    )
+    ),
 )
 def transcribe(
     ctx: typer.Context,
@@ -146,7 +148,7 @@ def transcribe(
         help="Print the equivalent Python SDK code and exit (does not transcribe).",
     ),
 ) -> None:
-    """Transcribe an audio file, URL, or YouTube URL with the full TranscriptionConfig surface.
+    """Transcribe an audio file, URL, or YouTube link.
 
     A YouTube URL is downloaded first, then transcribed. Curated flags cover common
     features; --config KEY=VALUE and --config-file reach every other field. Analysis

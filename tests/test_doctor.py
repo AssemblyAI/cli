@@ -155,7 +155,7 @@ def test_render_ok_payload_shows_ready():
     }
     text = doctor._render(payload)
     assert "python" in text
-    assert "Ready." in text
+    assert "Everything looks good." in text
 
 
 def test_render_problem_payload_shows_fix_and_problem_banner():
@@ -174,4 +174,4 @@ def test_render_problem_payload_shows_fix_and_problem_banner():
     text = doctor._render(payload)
     assert "fix:" in text
     assert "Run 'aai login'." in text
-    assert "Problems found" in text
+    assert "1 problem found" in text

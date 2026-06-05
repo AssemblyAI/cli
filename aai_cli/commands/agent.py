@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from aai_cli import client, code_gen, config, output
+from aai_cli import client, code_gen, config, help_panels, output
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
@@ -20,6 +20,7 @@ app = typer.Typer()
 
 
 @app.command(
+    rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
             ("Start a live voice conversation", "aai agent"),
@@ -27,7 +28,7 @@ app = typer.Typer()
             ("See available voices", "aai agent --list-voices"),
             ("Print equivalent Python instead of running", "aai agent --show-code"),
         ]
-    )
+    ),
 )
 def agent(
     ctx: typer.Context,

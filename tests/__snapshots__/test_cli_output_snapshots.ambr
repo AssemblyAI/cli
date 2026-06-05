@@ -504,7 +504,7 @@
   
    Usage: aai stream [OPTIONS] [SOURCE]
   
-   Transcribe live audio in real time with the full StreamingParameters surface.
+   Transcribe live audio in real time — from your mic, a file, or a URL.
   
    --prompt biases the speech model. --llm-gateway-prompt transforms the full
    transcript through LLM Gateway once the stream ends (e.g. "summarize the
@@ -621,8 +621,7 @@
   
    Usage: aai transcribe [OPTIONS] [SOURCE]
   
-   Transcribe an audio file, URL, or YouTube URL with the full
-   TranscriptionConfig surface.
+   Transcribe an audio file, URL, or YouTube link.
   
    A YouTube URL is downloaded first, then transcribed. Curated flags cover
    common

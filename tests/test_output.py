@@ -91,6 +91,35 @@ def test_emit_error_no_suggestion_line_when_absent(capsys):
     assert "Suggestion:" not in captured.err
 
 
+def test_affordance_helpers_carry_their_symbol():
+    from aai_cli import theme
+
+    assert theme.SYMBOL_SUCCESS in output.success("done")
+    assert theme.SYMBOL_WARN in output.warn("careful")
+    assert theme.SYMBOL_HINT in output.hint("do this next")
+    # heading has no glyph, just the brand style wrapper
+    assert "aai.heading" in output.heading("Section")
+
+
+def test_affordance_helpers_use_resolvable_styles(capsys):
+    from aai_cli import theme
+
+    # Rendering through the themed console proves the markup parses and the
+    # aai.* style names resolve (a bad name would raise MissingStyle).
+    console = theme.make_console(force_terminal=True, color_system="truecolor")
+    for line in (
+        output.success("ok"),
+        output.warn("hmm"),
+        output.hint("next"),
+        output.heading("H"),
+    ):
+        console.print(line)
+    out = capsys.readouterr().out
+    assert theme.SYMBOL_SUCCESS in out
+    assert theme.SYMBOL_HINT in out
+    assert "\x1b[" in out  # themed -> ANSI present
+
+
 def test_print_code_plain_when_piped(monkeypatch, capsys):
     monkeypatch.setattr(output, "_is_agentic", lambda: True)
     output.print_code("import os\nprint(os.getcwd())\n")

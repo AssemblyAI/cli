@@ -7,7 +7,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import output
+from aai_cli import help_panels, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.errors import UsageError
@@ -32,11 +32,12 @@ app = typer.Typer(help="Account billing, usage, and limits.")
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Show your remaining balance", "aai balance"),
         ]
-    )
+    ),
 )
 def balance(
     ctx: typer.Context,
@@ -58,12 +59,13 @@ def balance(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Usage over the last 30 days", "aai usage"),
             ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
         ]
-    )
+    ),
 )
 def usage(
     ctx: typer.Context,
@@ -97,11 +99,12 @@ def usage(
 
 
 @app.command(
+    rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
             ("Show rate limits per service", "aai limits"),
         ]
-    )
+    ),
 )
 def limits(
     ctx: typer.Context,
