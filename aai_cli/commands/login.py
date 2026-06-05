@@ -32,7 +32,10 @@ def login(
         if api_key:
             # Non-interactive escape hatch for CI/automation.
             if not client.validate_key(api_key):
-                raise APIError("That API key was rejected (HTTP 401). Check it and retry.")
+                raise APIError(
+                    "That API key was rejected (HTTP 401).",
+                    suggestion="Check the key and retry.",
+                )
             key = api_key
         else:
             key = run_login_flow()

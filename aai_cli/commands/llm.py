@@ -104,7 +104,10 @@ def llm(
 
     def body(state: AppState, json_mode: bool) -> None:
         if not prompt:
-            raise UsageError("Provide a prompt, or use --list-models.")
+            raise UsageError(
+                "Provide a prompt.",
+                suggestion="Or pass --list-models to see available models.",
+            )
         output.validate_output_field(output_field, ("text", "json"))
         api_key = config.resolve_api_key(profile=state.profile)
         # Text piped on stdin becomes the content the prompt operates on, unless an
