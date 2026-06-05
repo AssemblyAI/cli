@@ -24,6 +24,15 @@ uv run mypy  # files = ["aai_cli", "tests"] in pyproject.toml
 echo "==> pyright (src + tests)"
 uv run pyright  # include = ["aai_cli", "tests"] in [tool.pyright]
 
+echo "==> xenon (cyclomatic complexity gate, src only)"
+# Fail the build if any function gets too branchy. Grades map to cyclomatic
+# complexity: A=1-5, B=6-10, C=11-20, ... Thresholds:
+#   --max-absolute B : no single function may exceed CC 10 (grade B).
+#   --max-modules  B : no file's average may exceed grade B.
+#   --max-average  A : the project-wide average must stay grade A (CC <= 5).
+# Tests are excluded (not shipped); only the aai_cli package is gated.
+uv run xenon --max-absolute B --max-modules B --max-average A aai_cli
+
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 

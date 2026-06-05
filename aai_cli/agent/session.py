@@ -155,6 +155,22 @@ def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
             return
 
 
+def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
+    """Map a connect/session exception to the right CLIError: a rejected key becomes
+    auth_failure(), anything else becomes APIError(f"{message}: {exc}")."""
+    if is_auth_failure(exc):
+        return auth_failure()
+    return APIError(f"{message}: {exc}")
+
+
+def _open_ws(connect: Any, api_key: str) -> Any:
+    """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
+    try:
+        return connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
+    except Exception as exc:
+        raise _auth_or_api_error(exc, "Could not connect to the voice agent") from exc
+
+
 def run_session(
     api_key: str,
     *,
@@ -187,12 +203,7 @@ def run_session(
         ready_event=ready_event,
     )
 
-    try:
-        ws = connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
-    except Exception as exc:
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Could not connect to the voice agent: {exc}") from exc
+    ws = _open_ws(connect, api_key)
 
     # The mic opens lazily on first iteration, inside the capture thread; a failure
     # there (no device, sounddevice missing) must reach the user instead of vanishing
@@ -236,9 +247,7 @@ def run_session(
     except Exception as exc:
         if capture_error:
             raise capture_error[0] from exc  # a mic-open failure is the real cause
-        if is_auth_failure(exc):
-            raise auth_failure() from exc
-        raise APIError(f"Voice agent session failed: {exc}") from exc
+        raise _auth_or_api_error(exc, "Voice agent session failed") from exc
     finally:
         with contextlib.suppress(Exception):
             ws.close()

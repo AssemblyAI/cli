@@ -69,7 +69,8 @@ dev = [
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
     "syrupy>=4.0",
-    "numpy>=2.0.0",  # e2e tests resample kokoro audio (tests/e2e/test_cli_e2e.py)
+    "numpy>=2.0.0", # e2e tests resample kokoro audio (tests/e2e/test_cli_e2e.py)
+    "xenon>=0.9.3",
 ]
 
 [tool.uv]
