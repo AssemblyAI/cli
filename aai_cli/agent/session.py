@@ -7,9 +7,14 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from aai_cli import environments
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
-WS_URL = "wss://agents.assemblyai.com/v1/ws"
+
+def _ws_url() -> str:
+    """Voice Agent socket URL for the active environment (set at CLI startup)."""
+    return f"wss://{environments.active().agents_host}/v1/ws"
+
 
 DEFAULT_PROMPT = (
     "You are a friendly voice assistant having a casual conversation. Keep replies "
@@ -166,7 +171,7 @@ def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
 def _open_ws(connect: Any, api_key: str) -> Any:
     """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
     try:
-        return connect(WS_URL, additional_headers={"Authorization": f"Bearer {api_key}"})
+        return connect(_ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
         raise _auth_or_api_error(exc, "Could not connect to the voice agent") from exc
 

@@ -17,6 +17,7 @@ class Environment:
     name: str
     api_base: str  # SDK base_url for /v2/upload + /v2/transcript
     streaming_host: str  # StreamingClientOptions.api_host (SDK builds wss://host/v3/ws)
+    agents_host: str  # Voice Agent host; the agent client builds wss://host/v1/ws
     llm_gateway_base: str  # OpenAI base_url for the LLM Gateway (…/v1)
     ams_base: str  # Accounts Management Service
     stytch_domain: str  # Stytch API domain for B2B OAuth discovery
@@ -29,6 +30,7 @@ ENVIRONMENTS: dict[str, Environment] = {
         name="production",
         api_base="https://api.assemblyai.com",
         streaming_host="streaming.assemblyai.com",
+        agents_host="agents.assemblyai.com",
         llm_gateway_base="https://llm-gateway.assemblyai.com/v1",
         # NOTE: production AMS + Stytch are not provisioned yet — the values below are
         # placeholders (see the REPLACE_ME token), which is why DEFAULT_ENV stays
@@ -42,6 +44,7 @@ ENVIRONMENTS: dict[str, Environment] = {
         name="sandbox000",
         api_base="https://api.sandbox000.assemblyai-labs.com",
         streaming_host="streaming.sandbox000.assemblyai-labs.com",
+        agents_host="agents.sandbox000.assemblyai-labs.com",
         llm_gateway_base="https://llm-gateway.sandbox000.assemblyai-labs.com/v1",
         ams_base="https://ams.sandbox000.assemblyai-labs.com",
         stytch_domain="https://test.stytch.com",

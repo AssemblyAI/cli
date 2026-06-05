@@ -208,11 +208,6 @@ def test_agent_file_gets_reply(real_api_key, kokoro_pipeline, tmp_path):
     wav = _synthesize_wav(kokoro_pipeline, spoken, tmp_path / "hello.wav")
 
     proc = _run_cli(["agent", str(wav), "--json"], real_api_key)
-    if proc.returncode != 0 and "unauthorized" in proc.stderr.lower():
-        # The voice agent WS URL (agent/session.py) is currently hardcoded to the
-        # production host and does not yet honor non-prod environments, so a sandbox
-        # key is rejected there. Skip rather than fail until that URL is env-aware.
-        pytest.skip(f"voice agent endpoint rejected the key for this env: {proc.stderr.strip()}")
     assert proc.returncode == 0, f"stderr:\n{proc.stderr}"
 
     events = _ndjson(proc.stdout)
