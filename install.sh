@@ -8,7 +8,10 @@ set -eu
 
 REPO="${AAI_REPO:-AssemblyAI/cli}"
 REF="${AAI_REF:-main}"
-SPEC="git+https://github.com/${REPO}.git@${REF}"
+# AAI_SPEC (test-only) installs an arbitrary pip spec verbatim — e.g. a locally
+# built wheel — instead of the public git URL, so tests can exercise this script
+# against the current checkout without pushing. Unset for normal installs.
+SPEC="${AAI_SPEC:-git+https://github.com/${REPO}.git@${REF}}"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 err() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; }
