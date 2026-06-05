@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transcribe a pre-recorded file · AssemblyAI</title>
+  <style>
+    :root { --accent: #4338ca; --line: #e5e7eb; --muted: #6b7280; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body {
+      font: 15px/1.6 -apple-system, system-ui, sans-serif; color: #111827;
+      background: var(--bg); margin: 0; padding: 48px 16px;
+    }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+    .row { display: flex; gap: 8px; }
+    input[type=url] {
+      flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--line);
+      border-radius: 9px; font-size: 14px;
+    }
+    input[type=url]:focus { outline: none; border-color: var(--accent); }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 9px;
+      padding: 0 18px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    .or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 16px 0; }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .upload {
+      display: block; text-align: center; padding: 16px; border: 1.5px dashed var(--line);
+      border-radius: 10px; color: var(--muted); cursor: pointer; font-size: 14px;
+    }
+    .upload:hover { border-color: var(--accent); color: var(--accent); }
+    #status {
+      display: inline-block; margin: 18px 0; padding: 6px 13px; border-radius: 999px;
+      font-size: 13px; font-weight: 600;
+    }
+    #status:empty { display: none; }
+    #status.working { background: #eef2ff; color: var(--accent); }
+    #status.done { background: #dcfce7; color: #166534; }
+    #status.error { background: #fee2e2; color: #991b1b; }
+
+    /* Ask the transcript (LLM Gateway) */
+    #ask { margin: 0 0 18px; }
+    #ask .q { display: flex; gap: 8px; }
+    #ask input { flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--line);
+                 border-radius: 9px; font-size: 14px; }
+    #ask input:focus { outline: none; border-color: var(--accent); }
+    .answer { margin-top: 12px; padding: 12px 14px; background: #f5f3ff; border-radius: 10px;
+              white-space: pre-wrap; color: #1e1b4b; }
+    .answer:empty { display: none; }
+
+    /* Tabs */
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .tabs button {
+      background: #fff; color: #374151; border: 1px solid var(--line); border-radius: 999px;
+      padding: 6px 14px; font-size: 13px; font-weight: 600;
+    }
+    .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+    /* Transcript / sentiment turns */
+    .turn { padding: 8px 0 8px 12px; border-left: 3px solid var(--line); margin: 8px 0; }
+    .spk { font-weight: 700; }
+    .turn .t { color: #374151; }
+
+    /* Chapters */
+    .chapter { padding: 12px 0; border-top: 1px solid var(--line); }
+    .chapter h4 { margin: 0 0 2px; font-size: 15px; }
+    .chapter p { margin: 4px 0 0; color: #374151; }
+
+    /* Entities */
+    .egroup { padding: 10px 0; border-top: 1px solid var(--line); }
+    .elabel { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .etag { display: inline-block; background: #eef2ff; color: var(--accent); border-radius: 999px;
+            padding: 2px 10px; margin: 4px 4px 0 0; font-size: 13px; }
+
+    /* Highlights */
+    .hl { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .hl .count { background: #eef2ff; color: var(--accent); border-radius: 999px; padding: 2px 9px;
+                 font-size: 12px; font-weight: 700; }
+
+    /* Sentiment pills */
+    .sent { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-left: 8px; }
+    .POSITIVE { background: #dcfce7; color: #166534; }
+    .NEGATIVE { background: #fee2e2; color: #991b1b; }
+    .NEUTRAL { background: #f3f4f6; color: #4b5563; }
+    pre { white-space: pre-wrap; margin: 0; font: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🎧 Transcribe a pre-recorded file</h1>
+    <p class="sub">Transcribe an audio or video URL (or upload a file), then explore speakers, chapters, sentiment, entities, and highlights.</p>
+
+    <div class="card">
+      <div class="row">
+        <input id="url" type="url" value="https://assembly.ai/wildfires.mp3"
+               placeholder="https://example.com/audio.mp3" />
+        <button id="go">Transcribe</button>
+      </div>
+      <div class="or">or</div>
+      <label class="upload">
+        <input id="file" type="file" accept="audio/*,video/*" hidden />
+        Upload an audio or video file
+      </label>
+    </div>
+
+    <p id="status"></p>
+
+    <div id="ask" class="card" hidden>
+      <div class="q">
+        <input id="q" type="text" placeholder="Ask a question about this transcript…" />
+        <button id="askBtn">Ask</button>
+      </div>
+      <div id="answer" class="answer"></div>
+    </div>
+
+    <div id="tabs" class="tabs"></div>
+    <div id="view"></div>
+  </main>
+
+  <script>
+    const urlInput = document.getElementById("url");
+    const goBtn = document.getElementById("go");
+    const fileInput = document.getElementById("file");
+    const statusEl = document.getElementById("status");
+    const tabsEl = document.getElementById("tabs");
+    const viewEl = document.getElementById("view");
+    const askPanel = document.getElementById("ask");
+    const qInput = document.getElementById("q");
+    const askBtn = document.getElementById("askBtn");
+    const answerEl = document.getElementById("answer");
+
+    let currentId = null;  // transcript the Ask panel questions against
+
+    goBtn.addEventListener("click", () => transcribeUrl(urlInput.value.trim()));
+    urlInput.addEventListener("keydown", (e) => e.key === "Enter" && goBtn.click());
+    fileInput.addEventListener("change", () => fileInput.files[0] && transcribeFile(fileInput.files[0]));
+    askBtn.addEventListener("click", () => ask(qInput.value.trim()));
+    qInput.addEventListener("keydown", (e) => e.key === "Enter" && askBtn.click());
+
+    async function transcribeUrl(url) {
+      if (!url) return;
+      await start(() =>
+        fetch("/api/transcribe-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+      );
+    }
+
+    async function transcribeFile(file) {
+      const body = new FormData();
+      body.append("file", file);
+      await start(() => fetch("/api/transcribe", { method: "POST", body }));
+    }
+
+    async function start(submit) {
+      busy(true);
+      tabsEl.innerHTML = viewEl.innerHTML = answerEl.textContent = "";
+      askPanel.hidden = true;
+      currentId = null;
+      speakerSeen = {};
+      setStatus("Uploading…", "working");
+      try {
+        const res = await submit();
+        if (!res.ok) return fail(await res.text());
+        await poll((await res.json()).id);
+      } catch (e) {
+        fail(e.message || String(e));  // network/parse errors don't leave the UI stuck
+      }
+    }
+
+    async function poll(id) {
+      setStatus("Transcribing…", "working");
+      const res = await fetch("/api/status/" + id);
+      if (!res.ok) return fail(await res.text());
+      const data = await res.json();
+      if (data.status !== "completed")
+        return void setTimeout(() => poll(id).catch((e) => fail(String(e))), 2000);
+      setStatus("✓ Done", "done");
+      busy(false);
+      currentId = id;
+      askPanel.hidden = false;  // transcript stays visible below; ask alongside it
+      explore(data.transcript);
+    }
+
+    async function ask(question) {
+      if (!question || !currentId) return;
+      askBtn.disabled = true;
+      answerEl.textContent = "Thinking…";
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript_id: currentId, question }),
+        });
+        const data = await res.json();
+        answerEl.textContent = res.ok ? data.answer : "Error: " + (data.detail || res.statusText);
+      } finally {
+        askBtn.disabled = false;
+      }
+    }
+
+    // --- speaker colors (reset each transcription via start()) -----------
+    const PALETTE = ["#4338ca", "#0d9488", "#b45309", "#be185d", "#15803d", "#7c3aed"];
+    let speakerSeen = {};
+    function speakerColor(spk) {
+      return (speakerSeen[spk] ??= PALETTE[Object.keys(speakerSeen).length % PALETTE.length]);
+    }
+
+    // --- build the tabbed explorer --------------------------------------
+    function explore(t) {
+      const views = {};
+      const turns = t.utterances || [];
+      views.Transcript = turns.length
+        ? turns.map((u) => turnHtml(u.speaker, u.text)).join("")
+        : `<pre>${esc(t.text || "")}</pre>`;
+
+      if (t.chapters?.length) views[`Chapters · ${t.chapters.length}`] = chaptersHtml(t.chapters);
+      if (t.sentiment_analysis_results?.length)
+        views.Sentiment = t.sentiment_analysis_results.map(sentimentHtml).join("");
+      if (t.entities?.length) views[`Entities · ${t.entities.length}`] = entitiesHtml(t.entities);
+      const hl = t.auto_highlights_result?.results || [];
+      if (hl.length) views.Highlights = highlightsHtml(hl);
+
+      tabsEl.innerHTML = "";
+      Object.keys(views).forEach((name, i) => {
+        const b = document.createElement("button");
+        b.textContent = name;
+        b.onclick = () => {
+          viewEl.innerHTML = views[name];
+          [...tabsEl.children].forEach((c) => c.classList.toggle("active", c === b));
+        };
+        tabsEl.appendChild(b);
+        if (i === 0) b.click();
+      });
+    }
+
+    function turnHtml(speaker, text, extra = "") {
+      const c = speakerColor(speaker);
+      return `<div class="turn" style="border-left-color:${c}">
+        <span class="spk" style="color:${c}">Speaker ${esc(speaker)}</span>${extra}
+        <div class="t">${esc(text)}</div></div>`;
+    }
+
+    function sentimentHtml(s) {
+      const pill = `<span class="sent ${s.sentiment}">${esc(s.sentiment)}</span>`;
+      return turnHtml(s.speaker || "?", s.text, pill);
+    }
+
+    function chaptersHtml(chapters) {
+      return chapters
+        .map(
+          (c) => `<div class="chapter">
+            <h4>${esc(c.headline || c.gist || "Chapter")}</h4>
+            <span class="time">${fmt(c.start)} – ${fmt(c.end)}</span>
+            <p>${esc(c.summary || c.gist || "")}</p></div>`
+        )
+        .join("");
+    }
+
+    function entitiesHtml(entities) {
+      const groups = {};
+      for (const e of entities) (groups[e.entity_type] ??= []).push(e.text);
+      return Object.entries(groups)
+        .map(
+          ([type, items]) => `<div class="egroup"><div class="elabel">${esc(type)}</div>
+            ${[...new Set(items)].map((x) => `<span class="etag">${esc(x)}</span>`).join("")}</div>`
+        )
+        .join("");
+    }
+
+    function highlightsHtml(results) {
+      return results
+        .sort((a, b) => b.rank - a.rank)
+        .map((h) => `<div class="hl"><span class="count">${h.count}×</span> ${esc(h.text)}</div>`)
+        .join("");
+    }
+
+    // --- helpers ---------------------------------------------------------
+    function fmt(ms) {
+      const s = Math.round((ms || 0) / 1000);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }
+    function busy(on) { goBtn.disabled = on; }
+    function setStatus(msg, state) { statusEl.textContent = msg; statusEl.className = state; }
+    function fail(msg) { busy(false); setStatus("⚠ " + msg, "error"); }
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+  </script>
+</body>
+</html>

@@ -39,7 +39,7 @@ THEME = Theme(
 )
 
 # Status strings grouped by the semantic style they render in.
-_SUCCESS = {"completed", "installed", "removed", "ok", "present", "authenticated"}
+_SUCCESS = {"completed", "installed", "removed", "ok", "present", "authenticated", "created"}
 _ERROR = {"error", "failed"}
 _WARN = {"queued", "processing", "in_progress", "running"}
 

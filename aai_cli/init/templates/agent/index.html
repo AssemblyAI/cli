@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Talk to a voice agent · AssemblyAI</title>
+  <style>
+    :root { --accent: #4338ca; --line: #e5e7eb; --muted: #6b7280; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { font: 15px/1.6 -apple-system, system-ui, sans-serif; color: #111827;
+           background: var(--bg); margin: 0; padding: 48px 16px; }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    button { background: var(--accent); color: #fff; border: 0; border-radius: 9px;
+             padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    button.live { background: #dc2626; }
+    #status { display: inline-block; margin-left: 12px; font-size: 13px; font-weight: 600;
+              padding: 5px 12px; border-radius: 999px; }
+    #status:empty { display: none; }
+    #status.live { background: #dcfce7; color: #166534; }
+    #status.idle { background: #f3f4f6; color: #4b5563; }
+    #status.error { background: #fee2e2; color: #991b1b; }
+    #log { margin-top: 24px; }
+    .turn { padding: 8px 0 8px 12px; border-left: 3px solid var(--line); margin: 8px 0; }
+    .turn.you { border-left-color: #0d9488; }
+    .turn.agent { border-left-color: var(--accent); }
+    .who { font-weight: 700; }
+    .turn.you .who { color: #0d9488; }
+    .turn.agent .who { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🗣️ Talk to a voice agent</h1>
+    <p class="sub">Click connect and just talk — speech in, LLM reply, speech out, with built-in turn detection and barge-in. The browser connects straight to AssemblyAI's Voice Agent API with a one-time token; your API key stays on the server. (Use headphones for the cleanest result.)</p>
+
+    <button id="conn">● Connect</button>
+    <span id="status"></span>
+
+    <div id="log"></div>
+  </main>
+
+  <script>
+    const connBtn = document.getElementById("conn");
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+
+    let ws = null, micStream = null, micCtx = null, micProc = null;
+    let playCtx = null, playHead = 0, sources = [];
+    let connected = false;
+
+    connBtn.addEventListener("click", () => (connected ? hangup() : connect().catch(fail)));
+    function setStatus(msg, state) { statusEl.textContent = msg; statusEl.className = state; }
+
+    async function connect() {
+      setStatus("Connecting…", "idle");
+      const res = await fetch("/api/token", { method: "POST" });
+      if (!res.ok) return fail(await res.text());
+      const { token, ws_url } = await res.json();
+
+      ws = new WebSocket(`${ws_url}?token=${encodeURIComponent(token)}`);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            system_prompt: "You are a friendly, concise voice assistant. Keep replies short and conversational.",
+            greeting: "Hi! I'm your AssemblyAI voice agent. What can I help you with?",
+            input: { format: { encoding: "audio/pcm" } },
+            output: { voice: "ivy", format: { encoding: "audio/pcm" } },
+          },
+        }));
+        startMic().catch(fail);
+      };
+      ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+      ws.onerror = () => fail("WebSocket error");
+      ws.onclose = () => { if (connected) hangup(); };
+    }
+
+    async function startMic() {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: false },  // server runs its own voice focus
+      });
+      micCtx = new (window.AudioContext || window.webkitAudioContext)();
+      playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      // Contexts can start suspended after the await above; resume so audio flows.
+      micCtx.resume();
+      playCtx.resume();
+      const source = micCtx.createMediaStreamSource(micStream);
+      micProc = micCtx.createScriptProcessor(4096, 1, 1);
+      source.connect(micProc);
+      micProc.connect(micCtx.destination);
+      micProc.onaudioprocess = (e) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const pcm = downsampleToPCM(e.inputBuffer.getChannelData(0), micCtx.sampleRate, 24000);
+        ws.send(JSON.stringify({ type: "input.audio", audio: bytesToB64(pcm) }));
+      };
+      connected = true;
+      connBtn.textContent = "■ Hang up";
+      connBtn.classList.add("live");
+      setStatus("● Connected — just talk", "live");
+    }
+
+    function onEvent(ev) {
+      switch (ev.type) {
+        case "transcript.user": return addTurn("you", "You", ev.text);
+        case "transcript.agent": return addTurn("agent", "Agent", ev.text);
+        case "reply.audio": return playChunk(ev.data);  // base64 PCM16 lives in `data`
+        case "input.speech.started": return bargeIn();  // user interrupted — drop queued agent audio
+        case "reply.done": if (ev.status === "interrupted") bargeIn(); return;
+        case "session.error": return fail(ev.message || "session error");
+      }
+    }
+
+    // --- agent audio playback (24 kHz PCM) -------------------------------
+    function playChunk(b64) {
+      const int16 = b64ToInt16(b64);
+      const buf = playCtx.createBuffer(1, int16.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < int16.length; i++) ch[i] = int16[i] / 0x8000;
+      const src = playCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(playCtx.destination);
+      const startAt = Math.max(playCtx.currentTime, playHead);
+      src.start(startAt);
+      playHead = startAt + buf.duration;
+      sources.push(src);
+      src.onended = () => (sources = sources.filter((s) => s !== src));
+    }
+
+    function bargeIn() {
+      sources.forEach((s) => { try { s.stop(); } catch (_) {} });
+      sources = [];
+      playHead = 0;
+    }
+
+    function addTurn(cls, who, text) {
+      if (!text) return;
+      const div = document.createElement("div");
+      div.className = "turn " + cls;
+      div.innerHTML = `<span class="who">${who}:</span> `;
+      div.appendChild(document.createTextNode(text));
+      logEl.appendChild(div);
+      div.scrollIntoView({ block: "end" });
+    }
+
+    function hangup() {
+      connected = false;
+      connBtn.textContent = "● Connect";
+      connBtn.classList.remove("live");
+      setStatus("Disconnected", "idle");
+      bargeIn();
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+      if (micProc) micProc.disconnect();
+      if (micStream) micStream.getTracks().forEach((t) => t.stop());
+      if (micCtx) micCtx.close();
+      if (playCtx) playCtx.close();
+      ws = micProc = micStream = micCtx = playCtx = null;
+    }
+
+    function fail(msg) {
+      setStatus("Error: " + msg, "error");
+      if (connected) hangup();
+    }
+
+    // --- audio helpers ---------------------------------------------------
+    function downsampleToPCM(input, inRate, outRate) {
+      const ratio = inRate / outRate;
+      const outLen = Math.floor(input.length / ratio);
+      const out = new Int16Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const s = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out.buffer;
+    }
+    function bytesToB64(buf) {
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+    function b64ToInt16(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Int16Array(bytes.buffer);
+    }
+  </script>
+</body>
+</html>

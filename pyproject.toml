@@ -38,6 +38,7 @@ dependencies = [
     "sounddevice>=0.5.5",
     "openai>=2.41.0",
     "yt-dlp>=2026.3.17",
+    "questionary>=2.0.1",
     # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
     "audioop-lts>=0.2; python_version >= '3.13'",
 ]
@@ -55,6 +56,10 @@ dev = [
     "ruff>=0.15.15",
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]
@@ -62,6 +67,11 @@ aai = "aai_cli.main:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aai_cli"]
+# Force-include the committed template files (incl. renamed dotfiles); the `**` glob
+# would otherwise also sweep in __pycache__/*.pyc left by importing a template during
+# tests, so exclude those from the wheel.
+artifacts = ["aai_cli/init/templates/**"]
+exclude = ["**/__pycache__", "**/*.pyc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -97,4 +107,4 @@ ignore = ["E501", "B008", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
-"tests/**" = ["S101", "S105", "S106", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]
+"tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005", "PTH123", "SIM117"]

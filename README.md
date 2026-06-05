@@ -28,6 +28,17 @@ aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
 
+## Scaffold a starter app
+
+```sh
+aai init                   # pick a template, scaffold it, install deps, open the browser
+aai init transcribe myapp  # non-interactive: template + directory
+```
+
+`aai init` copies a small, self-contained FastAPI + HTML project you can run locally
+and deploy to Vercel as-is. Your key is written to a git-ignored `.env` (and is never
+sent to the browser). Use `--no-install` to scaffold only.
+
 ## API key & security
 
 `aai` resolves your key in this order:

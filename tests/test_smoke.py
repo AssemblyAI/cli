@@ -51,6 +51,7 @@ def test_help_lists_commands_in_workflow_order():
         "whoami",
         "doctor",
         "samples",
+        "init",
         "claude",
         "version",
     ]

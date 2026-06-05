@@ -16,6 +16,7 @@ from aai_cli.commands import (
     agent,
     claude,
     doctor,
+    init,
     llm,
     login,
     samples,
@@ -40,6 +41,7 @@ _COMMAND_ORDER = (
     "whoami",
     "doctor",
     "samples",
+    "init",
     "claude",
     "version",
 )
@@ -100,6 +102,7 @@ app.add_typer(llm.app)
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples")
+app.add_typer(init.app)
 app.add_typer(claude.app, name="claude")
 
 

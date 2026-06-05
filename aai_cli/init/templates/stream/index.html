@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live captions · AssemblyAI</title>
+  <style>
+    :root { --accent: #4338ca; --line: #e5e7eb; --muted: #6b7280; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { font: 15px/1.6 -apple-system, system-ui, sans-serif; color: #111827;
+           background: var(--bg); margin: 0; padding: 48px 16px; }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    button { background: var(--accent); color: #fff; border: 0; border-radius: 9px;
+             padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    button.rec { background: #dc2626; }
+    button:disabled { opacity: .55; cursor: default; }
+    #status { display: inline-block; margin-left: 12px; font-size: 13px; font-weight: 600;
+              padding: 5px 12px; border-radius: 999px; }
+    #status:empty { display: none; }
+    #status.live { background: #fee2e2; color: #991b1b; }
+    #status.idle { background: #f3f4f6; color: #4b5563; }
+    #status.error { background: #fee2e2; color: #991b1b; }
+    .caption { margin-top: 24px; font-size: 19px; line-height: 1.7; min-height: 120px;
+               background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+    .final { color: #111827; }
+    .partial { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🎙️ Live captions</h1>
+    <p class="sub">Click record and talk — your mic streams to AssemblyAI and transcribes in real time. Audio goes straight from the browser to AssemblyAI with a one-time token; your API key stays on the server.</p>
+
+    <button id="rec">● Record</button>
+    <span id="status"></span>
+
+    <div class="caption"><span id="final" class="final"></span><span id="partial" class="partial"></span></div>
+  </main>
+
+  <script>
+    const recBtn = document.getElementById("rec");
+    const statusEl = document.getElementById("status");
+    const finalEl = document.getElementById("final");
+    const partialEl = document.getElementById("partial");
+
+    let ws = null;
+    let audioCtx = null;
+    let mediaStream = null;
+    let processor = null;
+    let recording = false;
+
+    recBtn.addEventListener("click", () => (recording ? stop() : start().catch(fail)));
+
+    function setStatus(msg, state) { statusEl.textContent = msg; statusEl.className = state; }
+
+    async function start() {
+      setStatus("Connecting…", "idle");
+      const res = await fetch("/api/token", { method: "POST" });
+      if (!res.ok) return fail(await res.text());
+      const { token, ws_url } = await res.json();
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaStreamSource(mediaStream);
+      processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+      const params = new URLSearchParams({
+        token,
+        sample_rate: "16000",
+        encoding: "pcm_s16le",
+        speech_model: "u3-rt-pro",
+        format_turns: "true",
+      });
+      ws = new WebSocket(`${ws_url}?${params}`);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        recording = true;
+        recBtn.textContent = "■ Stop";
+        recBtn.classList.add("rec");
+        setStatus("● Live", "live");
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+        processor.onaudioprocess = (e) => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(downsampleTo16kPCM(e.inputBuffer.getChannelData(0), audioCtx.sampleRate));
+          }
+        };
+      };
+      ws.onmessage = (e) => onMessage(JSON.parse(e.data));
+      ws.onerror = () => fail("WebSocket error");
+      ws.onclose = () => { if (recording) stop(); };
+    }
+
+    function onMessage(msg) {
+      if (msg.type !== "Turn") return;
+      if (msg.end_of_turn) {
+        finalEl.textContent += (msg.transcript || "") + " ";
+        partialEl.textContent = "";
+      } else {
+        partialEl.textContent = msg.transcript || "";
+      }
+    }
+
+    function stop() {
+      recording = false;
+      recBtn.textContent = "● Record";
+      recBtn.classList.remove("rec");
+      setStatus("Stopped", "idle");
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "Terminate" }));
+      if (processor) processor.disconnect();
+      if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop());
+      if (audioCtx) audioCtx.close();
+      ws = processor = mediaStream = audioCtx = null;
+    }
+
+    // Web Audio gives Float32 at the device rate (often 48k); the API wants 16k PCM16.
+    function downsampleTo16kPCM(input, inRate) {
+      const ratio = inRate / 16000;
+      const outLen = Math.floor(input.length / ratio);
+      const out = new Int16Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const s = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out.buffer;
+    }
+
+    function fail(msg) {
+      setStatus("Error: " + msg, "error");
+      if (recording) stop();
+    }
+  </script>
+</body>
+</html>

@@ -17,7 +17,7 @@ def login(
     api_key: str = typer.Option(None, "--api-key", help="Provide key non-interactively."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Authenticate via your browser (Stytch); stores a CLI API key."""
+    """Authenticate via your browser; stores a CLI API key."""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
