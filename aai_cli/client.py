@@ -120,24 +120,36 @@ def transcript_json_payload(transcript: Any) -> dict[str, object]:
 TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "srt", "json")
 
 
+def _transcript_text(transcript: Any) -> str:
+    return str(getattr(transcript, "text", "") or "")
+
+
+def _render_utterances(transcript: Any) -> str:
+    utterances = getattr(transcript, "utterances", None) or []
+    if not utterances:
+        return _transcript_text(transcript)
+    return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
+
+
+def _export_srt(transcript: Any) -> str:
+    # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
+    with _sdk_errors("Could not export SRT subtitles"):
+        return str(transcript.export_subtitles_srt())
+
+
+# Output field -> renderer. Fields absent here fall back to the plain transcript text.
+_FIELD_RENDERERS: dict[str, Callable[[Any], str]] = {
+    "id": lambda t: str(getattr(t, "id", "") or ""),
+    "status": status_str,
+    "utterances": _render_utterances,
+    "srt": _export_srt,
+    "json": lambda t: json.dumps(transcript_json_payload(t), default=str),
+}
+
+
 def select_transcript_field(transcript: Any, field: str) -> str:
     """Render a single transcript field for ``-o/--output``."""
-    if field == "id":
-        return str(getattr(transcript, "id", "") or "")
-    if field == "status":
-        return status_str(transcript)
-    if field == "utterances":
-        utterances = getattr(transcript, "utterances", None) or []
-        if utterances:
-            return "\n".join(f"Speaker {u.speaker}: {u.text}" for u in utterances)
-        return str(getattr(transcript, "text", "") or "")
-    if field == "srt":
-        # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
-        with _sdk_errors("Could not export SRT subtitles"):
-            return str(transcript.export_subtitles_srt())
-    if field == "json":
-        return json.dumps(transcript_json_payload(transcript), default=str)
-    return str(getattr(transcript, "text", "") or "")  # "text" (and the validated default)
+    return _FIELD_RENDERERS.get(field, _transcript_text)(transcript)
 
 
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:

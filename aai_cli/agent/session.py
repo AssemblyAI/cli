@@ -4,6 +4,7 @@ import base64
 import contextlib
 import json
 import threading
+from collections.abc import Callable
 from typing import Any
 
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
@@ -56,51 +57,60 @@ class VoiceAgentSession:
             return self.ready and not self.muted
 
     def dispatch(self, event: dict) -> None:
-        etype = event.get("type")
+        """Route one server event to its handler; unknown types are ignored.
 
-        if etype == "session.ready":
+        Handlers are registered in ``_EVENT_HANDLERS`` (below the class). Events with
+        no handler — ``input.speech.stopped``, ``tool.call``, anything new — are no-ops.
+        """
+        handler = _EVENT_HANDLERS.get(event.get("type", ""))
+        if handler is not None:
+            handler(self, event)
+
+    def _on_session_ready(self, _event: dict) -> None:
+        with self._lock:
+            self.ready = True
+        if self.ready_event is not None:
+            self.ready_event.set()
+        self.renderer.connected()
+
+    def _on_speech_started(self, _event: dict) -> None:
+        if self.full_duplex:
+            self.player.flush()
+
+    def _on_user_delta(self, event: dict) -> None:
+        self.renderer.user_partial(event.get("text", ""))
+
+    def _on_user_final(self, event: dict) -> None:
+        self._saw_user = True
+        self.renderer.user_final(event.get("text", ""))
+
+    def _on_reply_started(self, _event: dict) -> None:
+        if not self.full_duplex:
             with self._lock:
-                self.ready = True
-            if self.ready_event is not None:
-                self.ready_event.set()
-            self.renderer.connected()
-        elif etype == "input.speech.started":
-            if self.full_duplex:
-                self.player.flush()
-        elif etype == "input.speech.stopped":
-            pass
-        elif etype == "transcript.user.delta":
-            self.renderer.user_partial(event.get("text", ""))
-        elif etype == "transcript.user":
-            self._saw_user = True
-            self.renderer.user_final(event.get("text", ""))
-        elif etype == "reply.started":
-            if not self.full_duplex:
-                with self._lock:
-                    self.muted = True
-            self.renderer.reply_started()
-        elif etype == "reply.audio":
-            data = event.get("data")
-            if data:
-                self.player.enqueue(base64.b64decode(data))
-        elif etype == "transcript.agent":
-            self.renderer.agent_transcript(
-                event.get("text", ""), interrupted=bool(event.get("interrupted", False))
-            )
-        elif etype == "reply.done":
-            if not self.full_duplex:
-                with self._lock:
-                    self.muted = False
-            interrupted = event.get("status") == "interrupted"
-            if interrupted:
-                self.player.flush()
-            self.renderer.reply_done(interrupted=interrupted)
-            # File-driven run: the agent has answered the spoken input, so stop.
-            if self.exit_after_reply and self._saw_user and not interrupted:
-                self.finished = True
-        elif etype == "session.error":
-            self._raise_error(event)
-        # tool.call and unknown event types: intentionally ignored.
+                self.muted = True
+        self.renderer.reply_started()
+
+    def _on_reply_audio(self, event: dict) -> None:
+        data = event.get("data")
+        if data:
+            self.player.enqueue(base64.b64decode(data))
+
+    def _on_agent_transcript(self, event: dict) -> None:
+        self.renderer.agent_transcript(
+            event.get("text", ""), interrupted=bool(event.get("interrupted", False))
+        )
+
+    def _on_reply_done(self, event: dict) -> None:
+        if not self.full_duplex:
+            with self._lock:
+                self.muted = False
+        interrupted = event.get("status") == "interrupted"
+        if interrupted:
+            self.player.flush()
+        self.renderer.reply_done(interrupted=interrupted)
+        # File-driven run: the agent has answered the spoken input, so stop.
+        if self.exit_after_reply and self._saw_user and not interrupted:
+            self.finished = True
 
     def _raise_error(self, event: dict) -> None:
         code = event.get("code", "")
@@ -112,6 +122,21 @@ class VoiceAgentSession:
                 exit_code=2,
             )
         raise APIError(f"Voice agent error ({code}): {message}")
+
+
+# Server event type -> the VoiceAgentSession method that handles it. Types absent
+# here (input.speech.stopped, tool.call, anything unrecognized) are ignored.
+_EVENT_HANDLERS: dict[str, Callable[[VoiceAgentSession, dict], None]] = {
+    "session.ready": VoiceAgentSession._on_session_ready,
+    "input.speech.started": VoiceAgentSession._on_speech_started,
+    "transcript.user.delta": VoiceAgentSession._on_user_delta,
+    "transcript.user": VoiceAgentSession._on_user_final,
+    "reply.started": VoiceAgentSession._on_reply_started,
+    "reply.audio": VoiceAgentSession._on_reply_audio,
+    "transcript.agent": VoiceAgentSession._on_agent_transcript,
+    "reply.done": VoiceAgentSession._on_reply_done,
+    "session.error": VoiceAgentSession._raise_error,
+}
 
 
 def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
