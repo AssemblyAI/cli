@@ -64,7 +64,7 @@ def built_wheel(tmp_path_factory) -> Path:
         capture_output=True,
         text=True,
     )
-    wheels = list(out.glob("*.whl"))
+    wheels: list[Path] = list(out.glob("*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel, got {wheels}"
     return wheels[0]
 
