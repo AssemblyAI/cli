@@ -75,9 +75,7 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
     else:
         error_console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")
         if err.suggestion:
-            error_console.print(
-                f"[aai.muted]Suggestion:[/aai.muted] {escape(err.suggestion)}"
-            )
+            error_console.print(f"[aai.muted]Suggestion:[/aai.muted] {escape(err.suggestion)}")
 
 
 def print_code(code: str, *, language: str = "python") -> None:

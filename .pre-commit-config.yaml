@@ -2,15 +2,20 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # syrupy indents every line of an .ambr block (blank lines become "  "), so
+      # trimming/EOF-fixing those files desyncs them from the live render and breaks
+      # the snapshot tests. Leave the generated snapshots alone.
       - id: trailing-whitespace
+        exclude: ^tests/__snapshots__/
       - id: end-of-file-fixer
+        exclude: ^tests/__snapshots__/
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+    rev: v0.15.16
     hooks:
       - id: ruff
         args: [--fix]
