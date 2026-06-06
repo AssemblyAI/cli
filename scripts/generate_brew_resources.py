@@ -33,9 +33,8 @@ for name in sorted(seen):
         out.append(f"# WARNING: {name} has no sdist (wheel-only) — handle manually\n")
         continue
     digest = sdist["hash"].removeprefix("sha256:")
-    out.append(f'  resource "{name}" do\n')
-    out.append(f'    url "{sdist["url"]}"\n')
-    out.append(f'    sha256 "{digest}"\n')
-    out.append("  end\n\n")
+    out.append(
+        f'  resource "{name}" do\n    url "{sdist["url"]}"\n    sha256 "{digest}"\n  end\n\n'
+    )
 
 sys.stdout.write("".join(out))
