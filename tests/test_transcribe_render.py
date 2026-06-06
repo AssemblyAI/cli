@@ -21,6 +21,15 @@ def _render_styled(transcript) -> str:
     return cap.get()
 
 
+def test_fmt_ms_formats_minutes_and_seconds():
+    # Pins the mm:ss math: values straddling a 60s boundary distinguish // from %
+    # and the literal 60 (e.g. 120s is 02:00, not 01:xx).
+    assert tr._fmt_ms(0) == "00:00"
+    assert tr._fmt_ms(133000) == "02:13"
+    assert tr._fmt_ms(120000) == "02:00"
+    assert tr._fmt_ms(605000) == "10:05"
+
+
 def test_per_speaker_lines_are_styled():
     transcript = SimpleNamespace(
         text="flat",
@@ -84,17 +93,20 @@ def test_renders_sentiment_aggregate():
             SimpleNamespace(text="c", sentiment=SimpleNamespace(value="NEGATIVE")),
         ],
     )
-    out = _render(transcript)
-    assert "Sentiment:" in out
-    assert "positive" in out.lower()
+    out = _render(transcript).lower()
+    assert "sentiment:" in out
+    # Exact aggregated percentages pin the `* 100 // total` math and the `or 1`
+    # guard: 2 of 3 positive -> 66%, 1 of 3 negative -> 33%.
+    assert "66% positive" in out
+    assert "33% negative" in out
 
 
 def test_renders_entities_topics_content_safety_highlights():
     transcript = SimpleNamespace(
         text="t",
         entities=[SimpleNamespace(entity_type=SimpleNamespace(value="person_name"), text="Ada")],
-        iab_categories=SimpleNamespace(summary={"Technology": 0.91}),
-        content_safety=SimpleNamespace(summary={"profanity": 0.4}),
+        iab_categories=SimpleNamespace(summary={"Technology": 0.91, "Health": 0.12}),
+        content_safety=SimpleNamespace(summary={"profanity": 0.40, "alcohol": 0.10}),
         auto_highlights=SimpleNamespace(
             results=[SimpleNamespace(text="key phrase", count=3, rank=0.9)]
         ),
@@ -104,3 +116,9 @@ def test_renders_entities_topics_content_safety_highlights():
     assert "Topics:" in out and "Technology" in out
     assert "Content Safety:" in out and "profanity" in out
     assert "Highlights:" in out and "key phrase" in out
+    # Relevance/confidence are rendered to 2 decimals...
+    assert "Technology (0.91)" in out
+    assert "profanity (0.40)" in out
+    # ...and both lists are sorted most-relevant-first (pins reverse=True).
+    assert out.index("Technology") < out.index("Health")
+    assert out.index("profanity") < out.index("alcohol")
