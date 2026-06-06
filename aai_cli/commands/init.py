@@ -59,6 +59,110 @@ def _resolve_dir(directory: str | None, template: str, *, here: bool) -> Path:
     return Path.cwd() / template
 
 
+def _resolve_template(template: str | None) -> str:
+    """Resolve the template name: the picker when omitted, else validate the arg."""
+    chosen = template if template is not None else _pick_template()
+    if not templates.is_template(chosen):
+        raise CLIError(
+            f"Unknown template {chosen!r}. Choose one of: {', '.join(templates.TEMPLATE_ORDER)}.",
+            error_type="usage_error",
+            exit_code=1,
+        )
+    return chosen
+
+
+def _active_env_vars() -> dict[str, str]:
+    """Pin the scaffolded app to the active environment's hosts.
+
+    A sandbox key (minted by `aai login` against a non-prod env) would otherwise be
+    rejected by the production defaults baked into the template.
+    """
+    env = environments.active()
+    return {
+        "ASSEMBLYAI_BASE_URL": env.api_base,
+        "ASSEMBLYAI_LLM_GATEWAY_URL": env.llm_gateway_base,
+        "ASSEMBLYAI_STREAMING_HOST": env.streaming_host,
+        # Voice Agent host mirrors the streaming host's naming across environments.
+        "ASSEMBLYAI_AGENTS_HOST": env.streaming_host.replace("streaming", "agents", 1),
+    }
+
+
+def _install_step(
+    target: Path, *, no_install: bool, api_key: str | None, use_uv: bool
+) -> tuple[list[steps.Step], bool]:
+    """Run (or skip) dependency install, returning the report rows and whether to launch.
+
+    Launch only happens when deps are installed and there's a key; an install failure
+    flips `will_launch` off so the caller exits non-zero instead of starting a server.
+    """
+    will_launch = not no_install and api_key is not None
+    if no_install:
+        return [{"name": "install", "status": "skipped", "detail": "--no-install"}], will_launch
+    setup = runner.run_setup(target, use_uv=use_uv)
+    if setup.returncode != 0:
+        row: steps.Step = {
+            "name": "install",
+            "status": "failed",
+            "detail": (setup.stderr or setup.stdout).strip()[:300],
+        }
+        return [row], False
+    return [
+        {
+            "name": "install",
+            "status": "installed",
+            "detail": "uv" if use_uv else "venv + pip",
+        }
+    ], will_launch
+
+
+def _resolve_target(directory: str | None, chosen: str, *, here: bool, force: bool) -> Path:
+    """Resolve the target directory and reject --here+DIRECTORY or a non-empty conflict."""
+    if here and directory:
+        raise CLIError(
+            "Pass either a DIRECTORY or --here, not both.",
+            error_type="usage_error",
+            exit_code=1,
+        )
+    target = _resolve_dir(directory, chosen, here=here)
+    if scaffold.target_conflict(target) and not force:
+        raise CLIError(
+            f"{target} already exists and is not empty. "
+            f"Use --force to overwrite or pick another directory.",
+            error_type="usage_error",
+            exit_code=1,
+        )
+    return target
+
+
+def _scaffold_report(chosen: str, target: Path, api_key: str | None) -> list[steps.Step]:
+    """Write the template to `target` and return the opening report rows."""
+    scaffold.scaffold(chosen, target, api_key=api_key, env_vars=_active_env_vars())
+    report: list[steps.Step] = [{"name": "scaffold", "status": "created", "detail": str(target)}]
+    if api_key is None:
+        report.append(
+            {
+                "name": "key",
+                "status": "skipped",
+                "detail": "no API key found; wrote a placeholder to .env (run `aai login`)",
+            }
+        )
+    return report
+
+
+def _launch(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: bool) -> None:
+    """Start the scaffolded app on a free port and open the browser, then block."""
+    chosen_port = runner.find_free_port(port)
+    url = f"http://localhost:{chosen_port}"
+    if not json_mode:
+        output.console.print(
+            f"[aai.heading]Starting[/aai.heading] [aai.url]{escape(url)}[/aai.url]"
+            "  [aai.muted](Ctrl-C to stop)[/aai.muted]"
+        )
+    code = runner.launch_and_open(target, port=chosen_port, use_uv=use_uv, open_browser=not no_open)
+    if code:
+        raise typer.Exit(code=code)
+
+
 @app.command(
     rich_help_panel=help_panels.QUICK_START,
     epilog=examples_epilog(
@@ -102,80 +206,17 @@ def init(
             output.console.print(
                 f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
             )
-        chosen = template
-        if chosen is None:
-            chosen = _pick_template()
-        if not templates.is_template(chosen):
-            raise CLIError(
-                f"Unknown template {chosen!r}. Choose one of: "
-                f"{', '.join(templates.TEMPLATE_ORDER)}.",
-                error_type="usage_error",
-                exit_code=1,
-            )
-
-        if here and directory:
-            raise CLIError(
-                "Pass either a DIRECTORY or --here, not both.",
-                error_type="usage_error",
-                exit_code=1,
-            )
-        target = _resolve_dir(directory, chosen, here=here)
-        if scaffold.target_conflict(target) and not force:
-            raise CLIError(
-                f"{target} already exists and is not empty. "
-                f"Use --force to overwrite or pick another directory.",
-                error_type="usage_error",
-                exit_code=1,
-            )
+        chosen = _resolve_template(template)
+        target = _resolve_target(directory, chosen, here=here, force=force)
 
         api_key = keys.resolve_optional_api_key(profile=state.profile)
-        # Pin the app to the active environment's hosts so a sandbox key (minted by
-        # `aai login` against a non-prod env) isn't rejected by the production defaults.
-        env = environments.active()
-        env_vars = {
-            "ASSEMBLYAI_BASE_URL": env.api_base,
-            "ASSEMBLYAI_LLM_GATEWAY_URL": env.llm_gateway_base,
-            "ASSEMBLYAI_STREAMING_HOST": env.streaming_host,
-            # Voice Agent host mirrors the streaming host's naming across environments.
-            "ASSEMBLYAI_AGENTS_HOST": env.streaming_host.replace("streaming", "agents", 1),
-        }
-        scaffold.scaffold(chosen, target, api_key=api_key, env_vars=env_vars)
-
-        report: list[steps.Step] = [
-            {"name": "scaffold", "status": "created", "detail": str(target)}
-        ]
-        if api_key is None:
-            report.append(
-                {
-                    "name": "key",
-                    "status": "skipped",
-                    "detail": "no API key found; wrote a placeholder to .env (run `aai login`)",
-                }
-            )
+        report = _scaffold_report(chosen, target, api_key)
 
         use_uv = runner.has_uv()
-        will_launch = not no_install and api_key is not None
-        if no_install:
-            report.append({"name": "install", "status": "skipped", "detail": "--no-install"})
-        else:
-            setup = runner.run_setup(target, use_uv=use_uv)
-            if setup.returncode != 0:
-                report.append(
-                    {
-                        "name": "install",
-                        "status": "failed",
-                        "detail": (setup.stderr or setup.stdout).strip()[:300],
-                    }
-                )
-                will_launch = False
-            else:
-                report.append(
-                    {
-                        "name": "install",
-                        "status": "installed",
-                        "detail": "uv" if use_uv else "venv + pip",
-                    }
-                )
+        install_rows, will_launch = _install_step(
+            target, no_install=no_install, api_key=api_key, use_uv=use_uv
+        )
+        report.extend(install_rows)
 
         # Deps are installed but there's no key, so the server can't start — say so
         # rather than exiting silently.
@@ -193,18 +234,7 @@ def init(
             raise typer.Exit(code=1)
 
         if will_launch:
-            chosen_port = runner.find_free_port(port)
-            url = f"http://localhost:{chosen_port}"
-            if not json_mode:
-                output.console.print(
-                    f"[aai.heading]Starting[/aai.heading] [aai.url]{escape(url)}[/aai.url]"
-                    "  [aai.muted](Ctrl-C to stop)[/aai.muted]"
-                )
-            code = runner.launch_and_open(
-                target, port=chosen_port, use_uv=use_uv, open_browser=not no_open
-            )
-            if code:
-                raise typer.Exit(code=code)
+            _launch(target, port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
         elif not json_mode:
             # Scaffolded but not launched (no key, or --no-install): leave the user with
             # the one command that starts their app, the way `vercel`/`supabase` sign off.

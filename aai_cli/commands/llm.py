@@ -13,6 +13,33 @@ from aai_cli.help_text import examples_epilog
 app = typer.Typer()
 
 
+def _validate_follow_args(
+    prompt: str | None, output_field: str | None, transcript_id: str | None
+) -> str:
+    """Reject flag combinations that don't apply to --follow's live-panel mode.
+
+    Returns the validated (non-empty) prompt so the caller has a plain ``str``.
+    """
+    if not prompt:
+        raise UsageError("Provide a prompt to run over the streamed transcript.")
+    if output_field is not None:
+        raise UsageError(
+            "--output applies to one-shot mode; --follow renders a live panel "
+            "(or NDJSON when piped)."
+        )
+    if transcript_id:
+        raise UsageError(
+            "--follow runs over live transcript text piped on stdin; it can't be "
+            "combined with --transcript-id."
+        )
+    if not stdio.stdin_is_piped():
+        raise UsageError(
+            "--follow needs transcript text piped on stdin, e.g. "
+            '`aai stream -o text | aai llm -f "summarize action items as I talk"`.'
+        )
+    return prompt
+
+
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
@@ -65,24 +92,7 @@ def llm(
         raise typer.Exit(code=0)
 
     def follow_body(state: AppState, json_mode: bool) -> None:
-        if not prompt:
-            raise UsageError("Provide a prompt to run over the streamed transcript.")
-        prompt_text = prompt
-        if output_field is not None:
-            raise UsageError(
-                "--output applies to one-shot mode; --follow renders a live panel "
-                "(or NDJSON when piped)."
-            )
-        if transcript_id:
-            raise UsageError(
-                "--follow runs over live transcript text piped on stdin; it can't be "
-                "combined with --transcript-id."
-            )
-        if not stdio.stdin_is_piped():
-            raise UsageError(
-                "--follow needs transcript text piped on stdin, e.g. "
-                '`aai stream -o text | aai llm -f "summarize action items as I talk"`.'
-            )
+        prompt_text = _validate_follow_args(prompt, output_field, transcript_id)
         api_key = config.resolve_api_key(profile=state.profile)
 
         def ask(transcript_text: str) -> str:

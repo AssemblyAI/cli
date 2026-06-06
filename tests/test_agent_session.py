@@ -3,7 +3,12 @@ import json
 
 import pytest
 
-from aai_cli.agent.session import VoiceAgentSession, _send_audio_loop, run_session
+from aai_cli.agent.session import (
+    AgentRunConfig,
+    VoiceAgentSession,
+    _send_audio_loop,
+    run_session,
+)
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
@@ -216,9 +221,7 @@ def test_run_session_connect_auth_failure_raises_not_authenticated():
             renderer=FakeRenderer(),
             player=FakePlayer(),
             mic=[],
-            voice="ivy",
-            system_prompt="x",
-            greeting="hi",
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
             connect=bad_connect,
         )
 
@@ -241,9 +244,7 @@ def test_run_session_mid_stream_1008_raises_not_authenticated():
             renderer=FakeRenderer(),
             player=player,
             mic=[],
-            voice="ivy",
-            system_prompt="x",
-            greeting="hi",
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
             connect=lambda url, **kwargs: FakeWS(),
         )
     assert player.closed is True  # speaker stream still torn down
@@ -278,9 +279,7 @@ def test_run_session_surfaces_mic_open_failure_from_capture_thread():
             renderer=FakeRenderer(),
             player=FakePlayer(),
             mic=_BoomMic(),
-            voice="ivy",
-            system_prompt="x",
-            greeting="hi",
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
             connect=lambda url, **kwargs: _BlockingWS(),
         )
     assert exc.value.exit_code == 1  # the real mic failure reaches the user, not a hang
@@ -296,9 +295,7 @@ def test_run_session_non_auth_failure_stays_api_error():
             renderer=FakeRenderer(),
             player=FakePlayer(),
             mic=[],
-            voice="ivy",
-            system_prompt="x",
-            greeting="hi",
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
             connect=boom,
         )
 
@@ -395,11 +392,13 @@ def test_run_session_file_driven_stops_after_reply():
         renderer=renderer,
         player=FakePlayer(),
         mic=[],  # capture thread waits for ready, then this empty source ends at once
-        voice="ivy",
-        system_prompt="x",
-        greeting="",
-        full_duplex=True,
-        exit_after_reply=True,
+        config=AgentRunConfig(
+            voice="ivy",
+            system_prompt="x",
+            greeting="",
+            full_duplex=True,
+            exit_after_reply=True,
+        ),
         connect=lambda url, **kwargs: _ScriptedWS(),
     )
     finals = [c for c in renderer.calls if c[0] == "user_final"]
@@ -430,9 +429,7 @@ def test_run_session_ws_url_follows_active_environment():
                 renderer=FakeRenderer(),
                 player=FakePlayer(),
                 mic=[],
-                voice="ivy",
-                system_prompt="x",
-                greeting="hi",
+                config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
                 connect=capture,
             )
         assert seen["url"] == expected

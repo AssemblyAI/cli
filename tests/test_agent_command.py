@@ -51,18 +51,7 @@ def test_agent_unauthenticated_runs_login(monkeypatch):
 def test_agent_drives_renderer_json(monkeypatch):
     config.set_api_key("default", "sk_live")
 
-    def fake_run_session(
-        api_key,
-        *,
-        renderer,
-        player,
-        mic,
-        voice,
-        system_prompt,
-        greeting,
-        full_duplex=False,
-        exit_after_reply=False,
-    ):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.connected()
         renderer.user_final("hello agent")
         renderer.agent_transcript("hello human", interrupted=False)
@@ -79,21 +68,10 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake_run_session(
-        api_key,
-        *,
-        renderer,
-        player,
-        mic,
-        voice,
-        system_prompt,
-        greeting,
-        full_duplex=False,
-        exit_after_reply=False,
-    ):
-        seen["voice"] = voice
-        seen["prompt"] = system_prompt
-        seen["full_duplex"] = full_duplex
+    def fake_run_session(api_key, *, renderer, player, mic, config):
+        seen["voice"] = config.voice
+        seen["prompt"] = config.system_prompt
+        seen["full_duplex"] = config.full_duplex
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     prompt_file = tmp_path / "p.txt"
@@ -175,9 +153,9 @@ def test_agent_file_source_streams_clip_and_exits_after_reply(monkeypatch, tmp_p
     assert result.exit_code == 0
     # File input drives a deterministic, headless, self-terminating session.
     assert seen["mic"] == f"filesrc:{wav}"
-    assert seen["exit_after_reply"] is True
-    assert seen["full_duplex"] is True
-    assert seen["greeting"] == ""
+    assert seen["config"].exit_after_reply is True
+    assert seen["config"].full_duplex is True
+    assert seen["config"].greeting == ""
     from aai_cli.agent.audio import NullPlayer
 
     assert isinstance(seen["player"], NullPlayer)
@@ -197,7 +175,7 @@ def test_agent_sample_uses_hosted_clip(monkeypatch):
     result = runner.invoke(app, ["agent", "--sample"])
     assert result.exit_code == 0
     assert captured["src"].endswith("wildfires.mp3")
-    assert seen["exit_after_reply"] is True
+    assert seen["config"].exit_after_reply is True
 
 
 def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):

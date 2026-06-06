@@ -96,6 +96,37 @@ finally:
 """
 
 
+def _imports_block(merged: dict[str, object]) -> str:
+    """Sorted streaming-class import lines; SpeechModel only when a model kwarg is emitted."""
+    names = list(_BASE_IMPORTS)
+    if "speech_model" in merged:
+        names.append("SpeechModel")
+    return "\n".join(f"    {name}," for name in sorted(names))
+
+
+def _build_preamble(imports: str, llm: dict[str, object] | None) -> str:
+    """Pick and fill the plain vs. LLM-Gateway preamble for the given imports."""
+    if llm:
+        prompts = "\n".join(f"    {p!r}," for p in cast("list[str]", llm["prompts"]))
+        return _LLM_PREAMBLE.format(
+            imports=imports,
+            base_url=gateway.GATEWAY_BASE_URL,
+            prompts=prompts,
+            model=llm["model"],
+            max_tokens=llm["max_tokens"],
+        )
+    return _PREAMBLE.format(imports=imports)
+
+
+def _build_connect(merged: dict[str, object]) -> str:
+    """The `client.connect(StreamingParameters(...))` call for the given params."""
+    if not merged:
+        return "client.connect(StreamingParameters())"
+    # indent=8: 4 for connect(), 4 more for the StreamingParameters() args.
+    kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=8))
+    return f"client.connect(\n    StreamingParameters(\n{kwargs}\n    )\n)"
+
+
 def render(merged: dict[str, object], *, llm: dict[str, object] | None = None) -> str:
     """Generate a runnable microphone-streaming script with the given params.
 
@@ -103,31 +134,8 @@ def render(merged: dict[str, object], *, llm: dict[str, object] | None = None) -
     refreshing a prompt chain on every finalized turn (the live sibling of
     `transcribe --llm`).
     """
-    names = list(_BASE_IMPORTS)
-    if "speech_model" in merged:
-        names.append("SpeechModel")
-    imports = "\n".join(f"    {name}," for name in sorted(names))
-
-    if llm:
-        prompts = "\n".join(f"    {p!r}," for p in cast("list[str]", llm["prompts"]))
-        preamble = _LLM_PREAMBLE.format(
-            imports=imports,
-            base_url=gateway.GATEWAY_BASE_URL,
-            prompts=prompts,
-            model=llm["model"],
-            max_tokens=llm["max_tokens"],
-        )
-    else:
-        preamble = _PREAMBLE.format(imports=imports)
-
+    preamble = _build_preamble(_imports_block(merged), llm)
     # Mic capture rate must match StreamingParameters.sample_rate, else audio is corrupt.
     rate = merged.get("sample_rate", 16000)
-
-    if merged:
-        # indent=8: 4 for connect(), 4 more for the StreamingParameters() args.
-        kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=8))
-        connect = f"client.connect(\n    StreamingParameters(\n{kwargs}\n    )\n)"
-    else:
-        connect = "client.connect(StreamingParameters())"
-
+    connect = _build_connect(merged)
     return preamble + "\n" + connect + "\n" + _FOOTER.format(rate=rate)
