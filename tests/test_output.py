@@ -145,3 +145,22 @@ def test_print_code_highlights_for_interactive_human(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "import" in out
     assert "\x1b[" in out  # syntax-highlighted -> ANSI present
+
+
+def test_data_table_is_minimal_and_themed():
+    from rich import box
+
+    table = output.data_table("id", "status")
+    # One shared, quiet look: a header-rule box (no heavy outer border) and the
+    # brand heading style — so every listing command renders identically.
+    assert table.box is box.SIMPLE_HEAD
+    assert table.header_style == "aai.heading"
+    assert [str(col.header) for col in table.columns] == ["id", "status"]
+
+
+def test_detail_table_is_borderless_label_value_grid():
+    table = output.detail_table()
+    # A grid (no box) with a muted label column, shared by whoami / sessions get.
+    assert table.box is None
+    assert len(table.columns) == 2
+    assert table.columns[0].style == "aai.muted"

@@ -76,7 +76,7 @@ def list_(
         rows = client.list_transcripts(api_key, limit=limit)
 
         def render(data: list[dict[str, object]]) -> Table:
-            table = Table("id", "status", "created", header_style="aai.heading")
+            table = output.data_table("id", "status", "created")
             for row in data:
                 status = str(row["status"])
                 table.add_row(

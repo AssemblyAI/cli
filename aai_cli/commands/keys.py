@@ -61,7 +61,7 @@ def list_(
             )
 
         def render(data: list[dict[str, object]]) -> Table:
-            table = Table("id", "name", "project", "key", "disabled", header_style="aai.heading")
+            table = output.data_table("id", "name", "project", "key", "disabled")
             for row in data:
                 table.add_row(
                     str(row["id"]),

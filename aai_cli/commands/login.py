@@ -126,9 +126,7 @@ def whoami(
         account_id = config.get_account_id(profile)
 
         def render(_d: dict[str, object]) -> Table:
-            table = Table.grid(padding=(0, 3))
-            table.add_column(style="aai.muted")
-            table.add_column()
+            table = output.detail_table()
             table.add_row("Profile", escape(profile))
             table.add_row("Env", escape(env))
             table.add_row("API key", escape(masked))
