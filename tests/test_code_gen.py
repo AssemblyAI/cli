@@ -154,6 +154,8 @@ def test_transcribe_render_parses_and_uses_env_key():
     assert "https://assembly.ai/wildfires.mp3" in code
     assert "transcript.utterances" in code  # result handling for speaker_labels
     assert "{{API_KEY}}" not in code  # never echo a real key
+    # config kwargs are rendered 4-space indented inside the TranscriptionConfig call
+    assert "aai.TranscriptionConfig(\n    speaker_labels=True,\n)" in code
 
 
 def test_transcribe_render_no_config_is_minimal():
