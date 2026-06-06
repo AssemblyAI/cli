@@ -301,10 +301,8 @@ def transcribe(
                 max_tokens=max_tokens,
             )
             output.emit(
-                {
-                    **client.transcript_summary(transcript),
-                    "transform": {"model": model, "steps": steps},
-                },
+                client.transcript_summary(transcript)
+                | {"transform": {"model": model, "steps": steps}},
                 _render_transform_steps,
                 json_mode=json_mode,
             )

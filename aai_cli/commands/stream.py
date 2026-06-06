@@ -158,7 +158,7 @@ class _StreamSession:
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
         merged = config_builder.merge_streaming_params(
-            flags={**self.base_flags, "sample_rate": rate},
+            flags=self.base_flags | {"sample_rate": rate},
             overrides=self.overrides,
             config_file=self.config_file,
         )
@@ -453,7 +453,7 @@ def stream(
             if opts.from_system_audio:
                 raise UsageError("--show-code does not support macOS system audio capture yet.")
             merged = config_builder.merge_streaming_params(
-                flags={**base_flags, "sample_rate": TARGET_RATE},
+                flags=base_flags | {"sample_rate": TARGET_RATE},
                 overrides=config_kv,
                 config_file=config_file,
             )

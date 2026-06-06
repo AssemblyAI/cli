@@ -1,0 +1,18 @@
+# gitleaks config for the aai CLI secret-scan gate (scripts/check.sh + CI).
+#
+# Real credentials never live in this repo by design: the API key is stored only in
+# the OS keyring (see aai_cli/config.py, KEYRING_SERVICE), never in a dotfile or source
+# file. So the only "secrets" gitleaks can legitimately find are the obviously-fake
+# placeholder keys used as test fixtures and in planning-doc examples. Allowlist those
+# exact values — everything else (real-looking tokens in src/, scripts/, workflows) is
+# still scanned and will fail the gate.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake placeholder API keys used only in tests and planning docs"
+regexTarget = "match"
+regexes = [
+  '''sk_abcdef1234''',
+  '''sk_zzzzzz9999''',
+]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import suppress
+
 import typer
 from rich.markup import escape
 
@@ -106,13 +108,11 @@ def llm(
 
         with FollowRenderer(json_mode=json_mode) as render:
             transcript: list[str] = []
-            try:
+            # Ctrl-C is the normal "stop watching" signal -> exit cleanly (code 0).
+            with suppress(KeyboardInterrupt):
                 for turn in stdio.iter_piped_stdin_lines():
                     transcript.append(turn)
                     render(ask("\n".join(transcript)), len(transcript))
-            except KeyboardInterrupt:
-                # Ctrl-C is the normal "stop watching" signal -> exit cleanly (code 0).
-                pass
 
     def body(state: AppState, json_mode: bool) -> None:
         if not prompt:

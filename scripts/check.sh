@@ -115,6 +115,34 @@ else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi
 
+echo "==> actionlint (GitHub Actions workflow lint)"
+# Static-lint the CI workflows the same way shellcheck covers install.sh: catches
+# bad expressions, undefined needs/matrix refs, and shell bugs inside `run:` blocks.
+# Go binary (no PyPI wheel), so it self-skips locally and CI installs it (see ci.yml).
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+else
+  echo "   actionlint not found; skipping (CI runs it)"
+fi
+
+echo "==> zizmor (GitHub Actions security audit)"
+# Audits the workflows for CI security issues (script injection via untrusted
+# ${{ github.* }} interpolation, over-broad token permissions, unpinned actions).
+# Pip-installable, so it runs in the locked env as a hard gate like ruff/mypy.
+# --offline keeps it deterministic (skips audits that would query the GitHub API).
+uv run zizmor --offline .github/workflows
+
+echo "==> gitleaks (secret scan)"
+# Defends the project's core promise that credentials never land in the repo (the API
+# key lives only in the OS keyring). Scans the working tree; obviously-fake test/doc
+# fixtures are allowlisted in .gitleaks.toml. Go binary, so it self-skips locally and
+# CI installs it (see ci.yml).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks dir --no-banner --redact -c .gitleaks.toml .
+else
+  echo "   gitleaks not found; skipping (CI runs it)"
+fi
+
 echo "==> generated --show-code compile gate"
 generated_code_dir="$(mktemp -d)"
 trap cleanup_generated_code_dir EXIT
@@ -134,7 +162,7 @@ echo "==> pytest (with branch-coverage gate)"
 #   uv run pytest -m e2e
 #   uv run pytest -m install
 #   uv run pytest -m install_script
-uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and
@@ -148,6 +176,18 @@ else
   echo "   origin/main not found; skipping patch-coverage gate (CI provides it)"
 fi
 
+echo "==> mutation gate (diff-scoped: a changed line's test must fail when it breaks)"
+# Coverage proves a changed line ran; this proves a test would FAIL if it broke.
+# Mutates only the lines changed vs origin/main and reruns just the tests that cover
+# each mutant (per-test contexts from the .coverage written above). Survivors mean a
+# weak/missing assertion — fix it or mark the line `# pragma: no mutate`. Self-skips
+# when origin/main is absent (same as diff-cover).
+if git rev-parse --verify --quiet origin/main >/dev/null; then
+  uv run python scripts/mutation_gate.py origin/main
+else
+  echo "   origin/main not found; skipping mutation gate (CI provides it)"
+fi
+
 echo "==> no new static-analysis escape hatches"
 # Existing escape hatches are tolerated for now; new ones must be refactored away or
 # justified by changing this gate deliberately. Broad noqa/type-ignore/no-cover are
@@ -159,6 +199,20 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   if [[ -n "$escape_hatches" ]]; then
     printf '%s\n' "$escape_hatches"
     echo "New static-analysis ignore/no-cover escape hatch found; refactor it or update the gate explicitly."
+    exit 1
+  fi
+
+  # Test-suite escape hatches, same net-new-only policy: a skip/xfail is how an agent
+  # makes a red test go away instead of fixing it, and time.sleep() is the classic
+  # source of flakiness (use events/polling). The legitimate existing skips guard the
+  # env-gated marker suites (e2e/install/install_script) and live on origin/main, so
+  # they aren't added diff lines and don't trip this; a genuinely-needed new one must
+  # update this gate deliberately. Scoped to tests/ — production sleeps are fine.
+  test_shortcuts="$(git diff -U0 origin/main -- tests \
+    | rg '^\+.*(pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\()' || true)"
+  if [[ -n "$test_shortcuts" ]]; then
+    printf '%s\n' "$test_shortcuts"
+    echo "New test skip/xfail/time.sleep found; fix the test (or sync properly) or update the gate explicitly."
     exit 1
   fi
 
