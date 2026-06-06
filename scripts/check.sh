@@ -197,6 +197,20 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
     exit 1
   fi
 
+  # Test-suite escape hatches, same net-new-only policy: a skip/xfail is how an agent
+  # makes a red test go away instead of fixing it, and time.sleep() is the classic
+  # source of flakiness (use events/polling). The legitimate existing skips guard the
+  # env-gated marker suites (e2e/install/install_script) and live on origin/main, so
+  # they aren't added diff lines and don't trip this; a genuinely-needed new one must
+  # update this gate deliberately. Scoped to tests/ — production sleeps are fine.
+  test_shortcuts="$(git diff -U0 origin/main -- tests \
+    | rg '^\+.*(pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\()' || true)"
+  if [[ -n "$test_shortcuts" ]]; then
+    printf '%s\n' "$test_shortcuts"
+    echo "New test skip/xfail/time.sleep found; fix the test (or sync properly) or update the gate explicitly."
+    exit 1
+  fi
+
   base_any_count="$({ git grep -n "Any" origin/main -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   work_any_count="$({ rg -n "Any" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   if (( work_any_count > base_any_count )); then
