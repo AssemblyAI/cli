@@ -306,12 +306,9 @@ def merge_transcribe_config(
     return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
 
 
-_ConfigT = typing.TypeVar("_ConfigT")
-
-
-def _construct(
-    model_cls: Callable[..., _ConfigT], merged: dict[str, typing.Any], *, label: str
-) -> _ConfigT:
+def _construct[ConfigT](
+    model_cls: Callable[..., ConfigT], merged: dict[str, typing.Any], *, label: str
+) -> ConfigT:
     """Build `model_cls(**merged)`, surfacing SDK validation as a usage error.
 
     `label` (e.g. "transcription") names the config in the error message.
