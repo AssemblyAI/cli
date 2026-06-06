@@ -37,6 +37,22 @@ def test_keys_list_flattens_tokens():
     assert "sk_abcdef1234" not in result.output  # api key is masked
 
 
+def test_keys_list_renders_table_human(monkeypatch):
+    _auth()
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+    projects = [
+        {
+            "project": {"id": 1, "name": "Default"},
+            "tokens": [{"id": 10, "name": "ci", "api_key": "sk_abcdef1234", "is_disabled": False}],
+        }
+    ]
+    with patch("aai_cli.commands.keys.ams.list_projects", return_value=projects):
+        result = runner.invoke(app, ["keys", "list"])
+    assert result.exit_code == 0
+    assert "ci" in result.output and "Default" in result.output
+    assert "sk_abcdef1234" not in result.output  # masked in the human table too
+
+
 def test_keys_shape_helpers_filter_invalid_values():
     assert keys._project_id({"id": True}) is None
     assert keys._project_id({"id": 7}) == 7

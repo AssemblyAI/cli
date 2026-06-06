@@ -47,6 +47,18 @@ def test_whoami_reports_authenticated():
     assert data["api_key"].startswith("sk_") and "…" in data["api_key"]
 
 
+def test_whoami_human_render_shows_detail_rows(monkeypatch):
+    config.set_api_key("default", "sk_1234567890")
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["whoami"])
+    assert result.exit_code == 0
+    # The shared borderless detail grid: labelled rows, no JSON, key masked.
+    assert "Profile" in result.output and "default" in result.output
+    assert "reachable" in result.output
+    assert "…" in result.output and '"profile"' not in result.output
+
+
 def test_whoami_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     with patch("aai_cli.commands.login.client.validate_key", return_value=True) as validate:
