@@ -69,6 +69,11 @@ aai stream -o text                 # finalized turns as plain lines, pipe-friend
 Two-way voice conversation (mic in, TTS out). Pass a file/URL or `--sample` to
 speak a recorded clip instead of the mic; the session then ends after the reply.
 
+> **`aai agent` only *runs* a live conversation in the terminal — it does not
+> create any code or project.** If the goal is to *build* a voice-agent app,
+> use `aai init` with the `voice-agent` template (see `setup.md`), not this
+> command.
+
 High-value flags:
 
 - `--voice ivy` (see `--list-voices`), `--system-prompt "..."` or

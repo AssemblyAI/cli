@@ -1,14 +1,23 @@
 # Setup & Tools
 
-Commands for scaffolding projects, validating the environment, and wiring
-AssemblyAI into Claude Code.
+Commands for scaffolding projects, validating the environment, and setting up
+your coding agent (docs MCP + skills) for AssemblyAI.
 
 ## `aai init [TEMPLATE] [DIRECTORY]` — scaffold a starter app
+
+**This is how you build a new app.** When the goal is to create an
+application or project — including a voice-agent app — start here, not with the
+`aai agent` / `aai transcribe` / `aai stream` run commands (those just *run* a
+one-off action in the terminal and produce no code).
 
 Picks a template, scaffolds it into a directory, optionally installs
 dependencies, starts the local server, and opens the browser. Available
 templates: `audio-transcription`, `live-captions`, `voice-agent`. The API key
 is written to a git-ignored `.env` file in the scaffolded directory.
+
+To build a **voice agent app**, use `aai init voice-agent` (a full
+FastAPI + browser starter) — `aai agent` only runs a live mic conversation and
+writes no code.
 
 Key options:
 
@@ -77,16 +86,18 @@ Examples:
 aai doctor
 ```
 
-## `aai claude` — wire AssemblyAI into Claude Code
+## `aai setup` — set up your coding agent for AssemblyAI
 
-Sub-app that installs the `assemblyai-docs` MCP server and the `assemblyai`
-skill (plus the `aai-cli` skill) into Claude Code via `claude mcp add` /
-`npx skills add`. Missing `claude` or `npx` is reported and skipped, not
-treated as an error.
+Sub-app that wires three things into your coding agent: the `assemblyai-docs`
+MCP server (via `claude mcp add`), the `assemblyai` skill (downloaded with
+`npx skills add`), and the `aai-cli` skill (this skill — bundled in the pip
+package and copied in directly, no network needed). Missing `claude` or `npx`
+is reported and skipped, not treated as an error; the bundled `aai-cli` skill
+installs regardless.
 
-### `aai claude install`
+### `aai setup install`
 
-Install the AssemblyAI docs MCP server and skill into Claude Code.
+Install the docs MCP server and both skills into your coding agent.
 
 Key options:
 
@@ -98,14 +109,13 @@ Key options:
 Examples:
 
 ```bash
-aai claude install
-aai claude install --scope project
+aai setup install
+aai setup install --scope project
 ```
 
-### `aai claude status`
+### `aai setup status`
 
-Show whether the AssemblyAI MCP server and skill are currently wired into
-Claude Code.
+Show whether the MCP server and both skills are currently set up.
 
 Key options:
 
@@ -114,23 +124,23 @@ Key options:
 Examples:
 
 ```bash
-aai claude status
+aai setup status
 ```
 
-### `aai claude remove`
+### `aai setup remove`
 
-Remove the AssemblyAI MCP server and skill from Claude Code.
+Remove the MCP server and both skills from your coding agent.
 
 Key options:
 
-- `--scope user|project|local` — remove only from this scope (default: remove
-  from whichever scope it is found in).
+- `--scope user|project|local` — remove the MCP only from this scope (default:
+  remove from whichever scope it is found in).
 - `--json` — machine-readable output.
 
 Examples:
 
 ```bash
-aai claude remove
+aai setup remove
 ```
 
 ## `aai version` — show CLI version

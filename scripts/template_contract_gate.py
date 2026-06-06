@@ -50,9 +50,10 @@ def _required_files(template: str, path: Path) -> None:
     for rel in _REQUIRED_FILES:
         if not (path / rel).exists():
             _fail(f"{template}: missing {rel}")
-    if template in {"live-captions", "voice-agent"} and not (
-        path / "public/static/audio.js"
-    ).exists():
+    if (
+        template in {"live-captions", "voice-agent"}
+        and not (path / "public/static/audio.js").exists()
+    ):
         _fail(f"{template}: missing public/static/audio.js")
 
 

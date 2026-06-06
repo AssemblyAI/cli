@@ -1,6 +1,6 @@
 ---
 name: aai-cli
-description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold starter apps and SDK samples (init/samples); diagnose setup (doctor); and wire up Claude Code (claude). Use whenever an agent is invoking the `aai` command.
+description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold starter apps and SDK samples (init/samples); diagnose setup (doctor); and set up your coding agent's AssemblyAI docs MCP + skills (setup). Use whenever an agent is invoking the `aai` command.
 ---
 
 # AssemblyAI CLI (`aai`)
@@ -58,15 +58,27 @@ aai stream                     # live transcription from the mic
 aai init                       # scaffold a starter app
 ```
 
+## Building an app vs running a command
+
+If the task is to **build/create an app or project** (a transcription app, live
+captions, or a **voice agent app**), that is `aai init` — a scaffolder that
+writes a full starter project (pick the `voice-agent` template for an agent
+app). The verbs `aai transcribe`, `aai stream`, and **`aai agent`** are *run*
+commands: they perform a one-off action in the terminal (e.g. `aai agent` holds
+a live mic conversation) and produce **no code**. When someone says "build an
+agent," reach for `aai init voice-agent`, not `aai agent`.
+
 ## Decision tree
 
-- **Transcribe a file/URL/YouTube, stream live audio, run a voice agent, or
+- **Build/scaffold an app (transcription, live captions, or a voice agent app)**
+  → `aai init` — see `references/setup.md`
+- **Transcribe a file/URL/YouTube, stream live audio, run a live voice agent, or
   query the LLM Gateway** → `references/transcription.md`
 - **Browse past transcripts or streaming sessions** → `references/history.md`
 - **Sign in/out, identity, balance, usage, rate limits, API keys, audit log** →
   `references/account.md`
-- **Scaffold apps/samples (`init`, `samples`), diagnose setup (`doctor`), wire
-  up Claude Code (`claude`), version** → `references/setup.md`
+- **Scaffold apps/samples (`init`, `samples`), diagnose setup (`doctor`), set up
+  your coding agent's MCP + skills (`setup`), version** → `references/setup.md`
 
 ## Anti-patterns
 

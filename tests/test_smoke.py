@@ -47,7 +47,7 @@ def test_help_lists_commands_in_workflow_order():
         # Setup & Tools
         "samples",
         "doctor",
-        "claude",
+        "setup",
         "version",
         # Transcription & AI
         "transcribe",

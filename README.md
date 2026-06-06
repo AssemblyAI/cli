@@ -27,16 +27,25 @@ aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
 
-## Scaffold a starter app
+## Build an app
+
+`aai init` is how you **build a new app** — it scaffolds a complete project from a
+template. This is the starting point whenever you want to *create* something, including
+a voice agent app.
 
 ```sh
 aai init                            # pick a template, scaffold it, install deps, open the browser
 aai init audio-transcription myapp  # non-interactive: template + directory
+aai init voice-agent my-agent       # build a voice agent app (full FastAPI + browser starter)
 ```
 
 `aai init` copies a small, self-contained FastAPI + HTML project you can run locally
 and deploy to Vercel as-is. Your key is written to a git-ignored `.env` (and is never
 sent to the browser). Use `--no-install` to scaffold only.
+
+> **Building a voice agent? Use `aai init voice-agent`, not `aai agent`.** `aai agent`
+> only *runs* a live mic conversation in the terminal and writes no code; `aai init`
+> creates the actual app.
 
 ## API key & security
 
@@ -89,9 +98,9 @@ and `aai whoami` / `aai doctor` confirm which source is active without printing 
 | `aai transcribe <file\|url>` | Transcribe an audio file, URL, or YouTube URL (`--sample` for a demo, `--llm` to transform the result through LLM Gateway, `--show-code` to print the equivalent Python). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
-| `aai agent` | Live two-way voice conversation with a voice agent. |
+| `aai agent` | *Run* a live two-way voice conversation (to **build** a voice agent app, use `aai init voice-agent`). |
 | `aai llm <prompt>` | Prompt AssemblyAI's LLM Gateway (over a past transcript with `--transcript-id`, or a live streamed transcript with `--follow`). |
-| `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
+| `aai setup install` | Set up your coding agent for AssemblyAI (docs MCP + skills). |
 | `aai samples create <name>` | Scaffold a runnable starter script (reads your key from `ASSEMBLYAI_API_KEY`). |
 | `aai keys list` / `create` / `rename` | Manage your API keys (browser login). |
 | `aai balance` / `usage` / `limits` | Account billing, usage, and rate limits (browser login). |
@@ -249,7 +258,8 @@ Without `--follow`, `aai llm` stays one-shot — it reads stdin to EOF and answe
 
 ## Voice agent
 
-Have a live, two-way voice conversation:
+Have a live, two-way voice conversation. (To **build** a voice agent *app*, use
+`aai init voice-agent` instead — this command just runs a conversation in the terminal.)
 
 ```sh
 aai agent                                 # talk; the agent talks back. Ctrl-C to stop.
@@ -418,18 +428,21 @@ done
 
 ## AI coding agents
 
-Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so
-your agent writes current, correct integration code:
+Set your coding agent up for AssemblyAI — the live docs (MCP server), the AssemblyAI
+skill, and the bundled `aai-cli` skill — so your agent writes current, correct
+integration code:
 
 ```sh
-aai claude install        # installs the docs MCP server + skill (user scope)
-aai claude status         # show what's wired up
-aai claude remove         # unwind both
+aai setup install        # docs MCP + assemblyai skill + bundled aai-cli skill (user scope)
+aai setup status         # show what's set up
+aai setup remove         # unwind all three
 ```
 
-`install` shells out to `claude mcp add` and `npx skills add`. Pass `--scope project` to
-scope the MCP server to the current project. A missing `claude` or `npx` is reported and
-skipped (with the manual command to run), not treated as an error.
+`install` shells out to `claude mcp add` for the MCP and `npx skills add` for the
+`assemblyai` skill; the `aai-cli` skill ships inside the package and is copied in
+directly (no network). Pass `--scope project` to scope the MCP server to the current
+project. A missing `claude` or `npx` is reported and skipped (with the manual command to
+run), not treated as an error.
 
 ## Development
 
@@ -440,7 +453,7 @@ use the locked environment (`pyproject.toml` + `uv.lock`):
 uv sync --extra dev        # create/refresh the project venv with dev dependencies
 uv run aai --help          # run the CLI from the locked environment
 uv run pytest              # run the test suite (uv run mypy / ruff likewise)
-./scripts/check.sh         # ruff + mypy + pytest (the same checks CI runs on every PR)
+./scripts/check.sh         # full lint/typecheck/test/build gate CI runs on every PR
 ```
 
 ## License

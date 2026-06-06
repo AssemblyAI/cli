@@ -32,10 +32,10 @@ ENVIRONMENTS: dict[str, Environment] = {
         streaming_host="streaming.assemblyai.com",
         agents_host="agents.assemblyai.com",
         llm_gateway_base="https://llm-gateway.assemblyai.com/v1",
-        # NOTE: production AMS + Stytch are not provisioned yet — the values below are
-        # placeholders (see the REPLACE_ME token), which is why DEFAULT_ENV stays
-        # "sandbox000". Tracked under spec P2/O4.
-        ams_base="https://ams.assemblyai.com",
+        # NOTE: production Stytch is not provisioned yet (see the REPLACE_ME
+        # token), which is why DEFAULT_ENV stays "sandbox000". Tracked under
+        # spec O4.
+        ams_base="https://ams.internal.assemblyai-labs.com",
         stytch_domain="https://api.stytch.com",
         stytch_public_token="public-token-live-REPLACE_ME",  # noqa: S106 - public token, safe to ship
         signup_url="https://www.assemblyai.com/dashboard",
@@ -54,7 +54,7 @@ ENVIRONMENTS: dict[str, Environment] = {
 }
 
 # Shipped default when nothing selects an environment. Flip to "production" at
-# release once the prod AMS/Stytch values above are real.
+# release once the production Stytch value above is real.
 DEFAULT_ENV = "sandbox000"
 
 # The environment in effect for this process, set once at CLI startup (like

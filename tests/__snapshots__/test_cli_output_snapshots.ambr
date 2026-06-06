@@ -9,6 +9,9 @@
    Pass an audio file/URL (or --sample) to speak a recorded clip to the agent
    instead of the microphone; the session then ends after the agent's reply.
   
+   This only runs a conversation in the terminal — it writes no code. To build
+   a voice agent app, run 'aai init voice-agent' instead.
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
   │                         to use the microphone.                               │
@@ -103,75 +106,6 @@
   
   '''
 # ---
-# name: test_command_help_matches_snapshot[claude_install]
-  '''
-  
-   Usage: aai claude install [OPTIONS]
-  
-   Install the AssemblyAI docs MCP server and skill into Claude Code.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        TEXT  Config scope to register the MCP under: user, project,  │
-  │                      or local. Presence is detected across all scopes.       │
-  │                      [default: user]                                         │
-  │ --force              Reinstall even if already present.                      │
-  │ --json               Output raw JSON.                                        │
-  │ --help               Show this message and exit.                             │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Wire AssemblyAI docs + skill into Claude Code
-   $ aai claude install
-   Install for the current project only
-   $ aai claude install --scope project
-  
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[claude_remove]
-  '''
-  
-   Usage: aai claude remove [OPTIONS]
-  
-   Remove the AssemblyAI MCP server and skill from Claude Code.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        TEXT  Only remove the MCP from this scope (user, project, or  │
-  │                      local). Default: remove from whichever scope it exists  │
-  │                      in.                                                     │
-  │ --json               Output raw JSON.                                        │
-  │ --help               Show this message and exit.                             │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Remove the AssemblyAI MCP server and skill
-   $ aai claude remove
-  
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[claude_status]
-  '''
-  
-   Usage: aai claude status [OPTIONS]
-  
-   Show whether the AssemblyAI MCP server and skill are wired into Claude Code.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Show whether Claude Code is wired up
-   $ aai claude status
-  
-  
-  
-  '''
-# ---
 # name: test_command_help_matches_snapshot[doctor]
   '''
   
@@ -197,8 +131,12 @@
   
    Usage: aai init [OPTIONS] [TEMPLATE] [DIRECTORY]
   
-   Pick a template, scaffold it, install deps, launch the server, open the
-   browser.
+   Build a new app: pick a template, scaffold it, install deps, launch it, open
+   the browser.
+  
+   This is the starting point for creating an app — including a voice agent app
+   ('aai init voice-agent'). The 'aai agent' command only runs a live mic
+   conversation and writes no code.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   template       [TEMPLATE]   Template to scaffold (omit to pick             │
@@ -497,6 +435,76 @@
    $ aai sessions list
    Only completed sessions
    $ aai sessions list --status completed
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_install]
+  '''
+  
+   Usage: aai setup install [OPTIONS]
+  
+   Install the AssemblyAI docs MCP server and skills into your coding agent.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --scope        TEXT  Config scope to register the MCP under: user, project,  │
+  │                      or local. Presence is detected across all scopes.       │
+  │                      [default: user]                                         │
+  │ --force              Reinstall even if already present.                      │
+  │ --json               Output raw JSON.                                        │
+  │ --help               Show this message and exit.                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Set up your coding agent for AssemblyAI
+   $ aai setup install
+   Install for the current project only
+   $ aai setup install --scope project
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_remove]
+  '''
+  
+   Usage: aai setup remove [OPTIONS]
+  
+   Remove the AssemblyAI MCP server and skills from your coding agent.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --scope        TEXT  Only remove the MCP from this scope (user, project, or  │
+  │                      local). Default: remove from whichever scope it exists  │
+  │                      in.                                                     │
+  │ --json               Output raw JSON.                                        │
+  │ --help               Show this message and exit.                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Remove the AssemblyAI MCP server and skills
+   $ aai setup remove
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_status]
+  '''
+  
+   Usage: aai setup status [OPTIONS]
+  
+   Show whether the AssemblyAI MCP server and skills are set up in your coding
+   agent.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show what's set up
+   $ aai setup status
   
   
   

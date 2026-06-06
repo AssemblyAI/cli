@@ -16,7 +16,6 @@ from aai_cli.commands import (
     account,
     agent,
     audit,
-    claude,
     doctor,
     init,
     keys,
@@ -24,6 +23,7 @@ from aai_cli.commands import (
     login,
     samples,
     sessions,
+    setup,
     stream,
     transcribe,
     transcripts,
@@ -42,7 +42,7 @@ _COMMAND_ORDER = (
     # Setup & Tools — get set up & maintain; `version` last
     "samples",
     "doctor",
-    "claude",
+    "setup",
     "version",
     # Transcription & AI — the verbs you run
     "transcribe",
@@ -134,7 +134,7 @@ app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples", rich_help_panel=help_panels.SETUP)
 app.add_typer(init.app)
-app.add_typer(claude.app, name="claude", rich_help_panel=help_panels.SETUP)
+app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 
 

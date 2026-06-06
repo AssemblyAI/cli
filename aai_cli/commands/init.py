@@ -89,7 +89,12 @@ def init(
     port: int = typer.Option(3000, "--port", help="Local server port."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Pick a template, scaffold it, install deps, launch the server, open the browser."""
+    """Build a new app: pick a template, scaffold it, install deps, launch it, open the browser.
+
+    This is the starting point for creating an app — including a voice agent app
+    ('aai init voice-agent'). The 'aai agent' command only runs a live mic
+    conversation and writes no code.
+    """
 
     def body(state: AppState, json_mode: bool) -> None:
         if not json_mode:

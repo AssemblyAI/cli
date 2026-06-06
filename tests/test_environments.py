@@ -12,6 +12,11 @@ def test_get_returns_named_environment():
     assert env.llm_gateway_base == "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
 
 
+def test_production_uses_production_ams_endpoint():
+    env = environments.get("production")
+    assert env.ams_base == "https://ams.internal.assemblyai-labs.com"
+
+
 def test_get_unknown_raises_cli_error():
     with pytest.raises(CLIError) as exc:
         environments.get("nope")
