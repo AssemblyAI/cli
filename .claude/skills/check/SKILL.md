@@ -16,7 +16,9 @@ Run the project's canonical verification gate and report the result.
    ./scripts/check.sh
    ```
 
-   This runs, in order: `ruff check` → `ruff format --check` → `mypy` (src + tests) → `markdownlint` (excludes generated `docs/`) → `shellcheck install.sh` → `pytest` with a **90% branch-coverage gate** (`--cov-fail-under=90`, excluding `e2e` and `install_script` markers) → `uv build` + `twine check --strict`. Everything runs through `uv run` against the locked environment.
+   This runs, in order: `uv lock --check` → `ruff check` → `ruff format --check` → `mypy` (src + tests) → `pyright` (src strict, then tests) → `vulture` (dead code) → `deptry` (dependency hygiene) → `lint-imports` (architecture contracts) → `xenon` (cyclomatic complexity, max grade B / project avg A) → `swiftlint` + swift compile (macOS only) → `markdownlint` (excludes generated `docs/`) → `prettier` (init template JS/CSS) → `shellcheck install.sh scripts/check.sh` → generated `--show-code` compile gate → init template contract gate → `pytest` with a **90% branch-coverage gate** (`--cov-fail-under=90`, excluding `e2e`/`install`/`install_script` markers) → `diff-cover` (100% patch coverage vs `origin/main`) → a "no new escape hatches" diff gate → `uv build` + `twine check --strict`. Everything Python runs through `uv run` against the locked environment.
+
+   Heads-up on the stages `ruff`+`mypy` don't cover: `vulture` flags unused code, `deptry` flags unused/missing/misplaced dependencies, `lint-imports` enforces the import-architecture contracts in `.importlinter`, and `xenon` fails any function over cyclomatic-complexity grade B (CC > 10). These are the ones that most often surprise an otherwise-clean change.
 
 2. If anything fails, fix it and re-run `./scripts/check.sh` until it passes. Do not claim success until the script prints `All checks passed.`
 
@@ -31,5 +33,6 @@ uv run pytest -m install_script  # builds a wheel and runs install.sh for real; 
 
 ## Notes
 
-- If `shellcheck` isn't installed locally, `check.sh` skips it with a notice (CI still runs it) — that's expected, not a failure.
+- External linters that aren't Python deps — `shellcheck`, `prettier`, `swiftlint`/`swiftc` — self-skip with a notice when not installed (CI still runs them); that's expected, not a failure. `swiftlint`/`swiftc` also no-op off macOS.
+- `diff-cover` and the escape-hatch gate self-skip when `origin/main` isn't present (e.g. a shallow branch-only clone); CI provides the base ref.
 - Report the final outcome with the actual tail of the output, not a summary from memory.

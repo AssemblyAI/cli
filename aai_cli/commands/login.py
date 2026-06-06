@@ -5,8 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from aai_cli import client, config, environments, help_panels, output
-from aai_cli.auth import run_login_flow
-from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli.context import AppState, persist_browser_login, resolve_profile, run_command
 from aai_cli.errors import APIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
 
@@ -47,15 +46,7 @@ def login(
             # login rather than silently reusing the old (possibly different) identity.
             config.clear_session(profile)
         else:
-            result = run_login_flow()
-            config.set_api_key(profile, result.api_key)
-            config.set_profile_env(profile, env)
-            config.set_session(
-                profile,
-                session_jwt=result.session_jwt,
-                session_token=result.session_token,
-                account_id=result.account_id,
-            )
+            persist_browser_login(profile, env)
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
             lambda _d: (
