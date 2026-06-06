@@ -9,10 +9,23 @@ class Aai < Formula
 
   depends_on "pkgconf" => :build      # cffi / cryptography native builds
   depends_on "rust" => :build         # pydantic-core, jiter, cryptography
-  depends_on "openssl@3"              # cryptography linkage
-  depends_on "portaudio"             # sounddevice (audio capture)
   depends_on "ffmpeg"                # decode non-WAV/URL audio (transcribe/stream)
+  depends_on "openssl@3"             # cryptography linkage
+  depends_on "portaudio"             # sounddevice (audio capture)
   depends_on "python@3.13"
+
+  # Linux-only keyring backend (D-Bus Secret Service); not built on macOS.
+  on_linux do
+    resource "jeepney" do
+      url "https://files.pythonhosted.org/packages/7b/6f/357efd7602486741aa73ffc0617fb310a29b588ed0fd69c2399acbb85b0c/jeepney-0.9.0.tar.gz"
+      sha256 "cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732"
+    end
+
+    resource "secretstorage" do
+      url "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz"
+      sha256 "f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be"
+    end
+  end
 
   resource "annotated-doc" do
     url "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz"
@@ -242,19 +255,6 @@ class Aai < Formula
   resource "yt-dlp" do
     url "https://files.pythonhosted.org/packages/8b/34/7c6b4e3f89cb6416d2cd7ab6dab141a1df97ab0fb22d15816db2c92148c9/yt_dlp-2026.3.17.tar.gz"
     sha256 "ba7aa31d533f1ffccfe70e421596d7ca8ff0bf1398dc6bb658b7d9dec057d2c9"
-  end
-
-  # Linux-only keyring backend (D-Bus Secret Service); not built on macOS.
-  on_linux do
-    resource "jeepney" do
-      url "https://files.pythonhosted.org/packages/7b/6f/357efd7602486741aa73ffc0617fb310a29b588ed0fd69c2399acbb85b0c/jeepney-0.9.0.tar.gz"
-      sha256 "cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732"
-    end
-
-    resource "secretstorage" do
-      url "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz"
-      sha256 "f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be"
-    end
   end
 
   def install
