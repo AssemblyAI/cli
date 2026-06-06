@@ -10,7 +10,7 @@ import sys
 from collections.abc import Callable, Generator, Sequence
 from importlib import resources
 from pathlib import Path
-from typing import IO, Protocol, TypeAlias
+from typing import IO, Protocol
 
 from platformdirs import user_cache_path
 
@@ -20,7 +20,7 @@ from aai_cli.streaming.sources import CHUNK_BYTES, TARGET_RATE
 _HELPER_RESOURCE = "macos_system_audio.swift"
 _CACHE_DIR = "macos-system-audio"
 _HELPER_PREFIX = "aai-macos-audio"
-_Pipe: TypeAlias = IO[bytes] | io.BytesIO
+type _Pipe = IO[bytes] | io.BytesIO
 
 
 class _CaptureProcess(Protocol):

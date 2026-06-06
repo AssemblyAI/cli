@@ -3,25 +3,45 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
   push:
+    branches: [main]          # PRs are covered by pull_request (incl. synchronize);
+                              # scoping push to main avoids double-running every PR commit.
 
 # Least privilege: CI only needs to read the repo. Actions are pinned to commit
 # SHAs (a moved tag can't silently change what runs); Dependabot keeps them current.
 permissions:
   contents: read
 
+# Cancel superseded runs when new commits land on a PR/branch, but never cancel a
+# main run (don't kill an in-flight merge build).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   check:
-    name: lint + typecheck + tests
+    name: lint + typecheck + tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Test both ends of the supported range: 3.12 is the floor (requires-python),
+    # 3.13 is what the Homebrew formula ships. fail-fast off so one version's
+    # failure doesn't mask the other's.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    # Pin the interpreter every `uv run`/`uv build` in check.sh resolves to, so the
+    # matrix actually exercises each version rather than whatever uv would pick.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false  # no job pushes; don't leave the token in .git/config
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       # PortAudio backs sounddevice; ffmpeg decodes non-WAV/URL audio (the `--sample`
@@ -44,9 +64,54 @@ jobs:
       - name: Lint, typecheck, test
         run: ./scripts/check.sh
 
+  # Branch protection requires a check literally named "lint + typecheck + tests",
+  # but `check` is a matrix, so its contexts are suffixed "(py3.12)" / "(py3.13)".
+  # Re-publish the un-suffixed name here, green only when every matrix cell passed
+  # (if: always() + an explicit result check, so a failed/skipped/cancelled matrix
+  # can't satisfy the required check). Point branch protection at this one stable
+  # name and matrix changes never break the required check again.
+  check-result:
+    name: lint + typecheck + tests
+    needs: [check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every py-version matrix cell to have passed
+        run: |
+          if [ "${{ needs.check.result }}" != "success" ]; then
+            echo "check matrix result: ${{ needs.check.result }}"
+            exit 1
+          fi
+          echo "all py-version matrix cells passed"
+
+  lint-formula:
+    name: brew style (Homebrew formula)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false  # no job pushes; don't leave the token in .git/config
+
+      # Homebrew's formula linters live inside `brew`, so set it up on the runner.
+      # Homebrew/actions is a monorepo (setup-homebrew is a subpath); pin it to a
+      # commit SHA like every other action here — Dependabot keeps it current.
+      - uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1
+
+      # `brew style` is the RuboCop-based formula linter and runs fully offline, so
+      # it lints idioms (resource/depends_on ordering, on_linux scoping) on every PR.
+      # The stricter `brew audit --strict --online` and a real `brew install`/`brew
+      # test` build are deliberately NOT here: they need the source `sha256`, which
+      # stays a placeholder until the v0.1.0 release tag is cut. Those belong in a
+      # release-time job (see the Homebrew tap plan, Task 4/6).
+      - name: Lint the formula
+        run: brew style ./Formula/aai.rb
+
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -72,6 +137,7 @@ jobs:
   build:
     name: build + twine check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -92,6 +158,7 @@ jobs:
   audit:
     name: pip-audit (dependency CVEs)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -122,6 +189,7 @@ jobs:
           - os: macos-latest
             kfilter: "-k pipx"      # pipx only — PEP 668 makes pip --user flaky on macOS
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:

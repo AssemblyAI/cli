@@ -1,6 +1,6 @@
 {
   "include": ["tests"],
-  "pythonVersion": "3.11",
+  "pythonVersion": "3.12",
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
   "venvPath": ".",

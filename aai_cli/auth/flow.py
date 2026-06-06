@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import webbrowser
 from dataclasses import dataclass
-from typing import TypeVar
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from rich.markup import escape
@@ -69,15 +68,13 @@ class _CreatedToken(BaseModel):
     api_key: str
 
 
-T = TypeVar("T")
-
 _DISCOVERY: TypeAdapter[_Discovery] = TypeAdapter(_Discovery)
 _SIGNED_IN: TypeAdapter[_SignedIn] = TypeAdapter(_SignedIn)
 _CREATED_TOKEN: TypeAdapter[_CreatedToken] = TypeAdapter(_CreatedToken)
 _PROJECT_LIST: TypeAdapter[list[_ProjectEntry]] = TypeAdapter(list[_ProjectEntry])
 
 
-def _parse(adapter: TypeAdapter[T], data: object) -> T:
+def _parse[T](adapter: TypeAdapter[T], data: object) -> T:
     """Validate an AMS response into a typed view, or raise a clean login error."""
     try:
         return adapter.validate_python(data)

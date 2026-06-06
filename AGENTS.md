@@ -45,7 +45,7 @@ CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`)
 
 - The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `aai` (`[project.scripts] aai = "aai_cli.main:run"`).
 - `aai init` templates live in `aai_cli/init/templates/` and are **committed**, including renamed dotfiles (`gitignore` → `.gitignore`, `env.example`). The wheel force-includes them via `[tool.hatch.build.targets.wheel] artifacts`, excluding `__pycache__/*.pyc`. Editing templates needs care — see the parametrized contract tests (`tests/test_init_template_*.py`).
-- `audioop` left the stdlib in 3.13; `audioop-lts` backfills it (conditional dependency). Supported Pythons: 3.10–3.13.
+- `audioop` left the stdlib in 3.13; `audioop-lts` backfills it (conditional dependency). Supported Pythons: 3.12–3.13.
 
 ## Architecture
 
