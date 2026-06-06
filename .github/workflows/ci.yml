@@ -13,15 +13,26 @@ permissions:
 
 jobs:
   check:
-    name: lint + typecheck + tests
+    name: lint + typecheck + tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Test both ends of the supported range: 3.12 is the floor (requires-python),
+    # 3.13 is what the Homebrew formula ships. fail-fast off so one version's
+    # failure doesn't mask the other's.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    # Pin the interpreter every `uv run`/`uv build` in check.sh resolves to, so the
+    # matrix actually exercises each version rather than whatever uv would pick.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false  # no job pushes; don't leave the token in .git/config
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       # PortAudio backs sounddevice; ffmpeg decodes non-WAV/URL audio (the `--sample`
