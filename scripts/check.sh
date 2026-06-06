@@ -169,7 +169,7 @@ echo "==> pytest (with branch-coverage gate)"
 #   uv run pytest -m e2e
 #   uv run pytest -m install
 #   uv run pytest -m install_script
-uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and
@@ -181,6 +181,18 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=100
 else
   echo "   origin/main not found; skipping patch-coverage gate (CI provides it)"
+fi
+
+echo "==> mutation gate (diff-scoped: a changed line's test must fail when it breaks)"
+# Coverage proves a changed line ran; this proves a test would FAIL if it broke.
+# Mutates only the lines changed vs origin/main and reruns just the tests that cover
+# each mutant (per-test contexts from the .coverage written above). Survivors mean a
+# weak/missing assertion — fix it or mark the line `# pragma: no mutate`. Self-skips
+# when origin/main is absent (same as diff-cover).
+if git rev-parse --verify --quiet origin/main >/dev/null; then
+  uv run python scripts/mutation_gate.py origin/main
+else
+  echo "   origin/main not found; skipping mutation gate (CI provides it)"
 fi
 
 echo "==> no new static-analysis escape hatches"

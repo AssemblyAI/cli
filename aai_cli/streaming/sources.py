@@ -71,9 +71,11 @@ class FileSource:
         # the subprocess teardown happens deterministically on early stop.
         try:
             for chunk in chunks:
-                produced += len(chunk)
+                produced += len(chunk)  # pragma: no mutate (only == 0 matters)
                 yield chunk
-                self._sleep(len(chunk) / (TARGET_RATE * 2))  # ~real-time pacing
+                # ~real-time pacing; tests inject a no-op sleep, so the duration is
+                # deliberately not asserted (it's cosmetic, not behavioral).
+                self._sleep(len(chunk) / (TARGET_RATE * 2))  # pragma: no mutate
         finally:
             chunks.close()
         if produced == 0:

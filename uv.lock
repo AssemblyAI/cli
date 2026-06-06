@@ -31,6 +31,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "coverage" },
     { name = "deptry" },
     { name = "diff-cover" },
     { name = "fastapi" },
@@ -73,6 +74,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "coverage", specifier = ">=7.0" },
     { name = "deptry", specifier = ">=0.23.0" },
     { name = "diff-cover", specifier = ">=9.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
