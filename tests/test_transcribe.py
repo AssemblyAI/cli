@@ -235,6 +235,26 @@ def test_transcribe_prompt_human_shows_only_transform(monkeypatch):
     assert "hello world" not in result.output  # human mode shows the transform only
 
 
+def test_transcribe_chained_prompts_human_labels_each_step(monkeypatch):
+    # Human render of a multi-step chain labels each step (the single-step path
+    # prints only the lone output; this one enumerates "Step N").
+    _auth()
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
+        monkeypatch.setattr(
+            "aai_cli.commands.transcribe.llm.transform_transcript",
+            lambda *a, **k: f"out({k['prompt']})",
+        )
+        result = runner.invoke(
+            app,
+            ["transcribe", "audio.mp3", "--llm", "summarize", "--llm", "translate"],
+        )
+    assert result.exit_code == 0
+    assert "Step 1 — summarize:" in result.output
+    assert "Step 2 — translate:" in result.output
+    assert "out(summarize)" in result.output
+
+
 def test_transcribe_prompt_biases_speech_model():
     _auth()
     with patch(

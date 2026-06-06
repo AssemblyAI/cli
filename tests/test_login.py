@@ -160,6 +160,17 @@ def test_unknown_env_exits_2():
     assert result.exit_code == 2
 
 
+def test_env_override_prints_warning_to_stderr():
+    # The root callback warns when an explicit --env contradicts the profile's stored
+    # env (the stored key was minted for a different environment).
+    config.set_api_key("default", "sk_1234567890")
+    config.set_profile_env("default", "production")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["--env", "sandbox000", "whoami", "--json"])
+    assert result.exit_code == 0
+    assert "may be rejected by sandbox000" in result.output
+
+
 def test_rejected_api_key_has_suggestion(monkeypatch):
     from aai_cli import client
 
@@ -192,3 +203,36 @@ def test_whoami_session_none_without_browser_login():
     data = json.loads(result.output)
     assert data["session"] == "none"
     assert data["account_id"] is None
+
+
+def test_whoami_renders_human_table_reachable():
+    # Human-readable (non-JSON) render path: the grid lists profile, env, masked key,
+    # a reachable status, and the account/session rows.
+    config.set_api_key("default", "sk_1234567890")
+    config.set_session("default", session_jwt="j", session_token="t", account_id=77)
+    with (
+        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.commands.login.client.validate_key", return_value=True),
+    ):
+        result = runner.invoke(app, ["whoami"])
+    assert result.exit_code == 0
+    assert "Profile" in result.output
+    assert "default" in result.output
+    assert "reachable" in result.output
+    assert "77" in result.output
+    assert "stored" in result.output
+    assert "sk_1234567890" not in result.output  # masked
+
+
+def test_whoami_renders_human_table_rejected_key():
+    # The non-JSON render path also covers the "key rejected" branch and the
+    # account/session "none" fallbacks (the em-dash placeholder).
+    config.set_api_key("default", "sk_1234567890")
+    with (
+        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.commands.login.client.validate_key", return_value=False),
+    ):
+        result = runner.invoke(app, ["whoami"])
+    assert result.exit_code == 0
+    assert "key rejected" in result.output
+    assert "none" in result.output

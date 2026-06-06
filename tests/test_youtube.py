@@ -73,6 +73,31 @@ def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
     assert youtube.download_audio("https://youtu.be/x", tmp_path) == landed
 
 
+def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
+    # prepare_filename points at a missing file and nothing landed in dest_dir.
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            return {"id": "x"}  # writes no file
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "guessed.m4a")  # doesn't exist
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    with pytest.raises(CLIError) as exc:
+        youtube.download_audio("https://youtu.be/x", tmp_path)
+    assert exc.value.error_type == "youtube_error"
+    assert "no audio file" in exc.value.message
+
+
 def test_download_audio_error_raises_cli_error(tmp_path, monkeypatch):
     class FakeYDL:
         def __init__(self, opts):
