@@ -46,13 +46,12 @@ def test_piped_stdin_text_returns_text(monkeypatch):
 
 
 def test_read_binary_stdin_uses_buffer(monkeypatch):
-    class _Bin(io.BytesIO):
-        pass
+    # A real stdin exposes a binary `.buffer`; read_binary_stdin reads from it.
+    class _WithBuffer:
+        def __init__(self, data: bytes):
+            self.buffer = io.BytesIO(data)
 
-    class _WithBuffer(io.StringIO):
-        buffer = _Bin(b"\x00\x01\x02")
-
-    monkeypatch.setattr("sys.stdin", _WithBuffer())
+    monkeypatch.setattr("sys.stdin", _WithBuffer(b"\x00\x01\x02"))
     assert stdio.read_binary_stdin() == b"\x00\x01\x02"
 
 
