@@ -11,8 +11,10 @@ This project uses [uv](https://docs.astral.sh/uv/). **Run every Python tool thro
 ```sh
 uv sync --extra dev          # create/refresh the venv with dev dependencies
 uv run aai --help            # run the CLI from the locked environment
-./scripts/check.sh           # the full gate CI runs: ruff + mypy + markdownlint + prettier + shellcheck + pytest(+coverage) + build/twine
+./scripts/check.sh           # the full gate CI runs (scripts/check.sh is the source of truth)
 ```
+
+`scripts/check.sh` is the authoritative gate; keep this list in sync with it. It runs, in order: `uv lock --check` → `ruff check` → `ruff format --check` → `mypy` → `pyright` (src strict) → `pyright` (tests) → `vulture` (dead code) → `deptry` (dependency hygiene) → `lint-imports` (import-linter architecture contracts) → `xenon` (cyclomatic complexity, max grade B / project avg A) → `swiftlint` + swift compile (macOS only, skipped elsewhere) → `markdownlint` → `prettier` (init template JS/CSS) → `shellcheck` → generated `--show-code` compile gate → init template contract gate → `pytest` (90% branch coverage) → `diff-cover` (100% patch coverage vs `origin/main`) → a "no new escape hatches" diff gate (`# type: ignore` / `# noqa` / `pragma: no cover` / net-new `Any` / `cast(`) → `uv build` + `twine check --strict`. The `vulture`/`deptry`/`lint-imports`/`xenon` and patch-coverage stages catch the failures that `ruff`+`mypy` alone won't — don't claim the gate is green until the script prints `All checks passed.`
 
 Individual tools (all via `uv run`):
 
@@ -36,6 +38,8 @@ uv run pytest -m install_script  # builds a wheel and runs install.sh for real; 
 ```
 
 `check.sh` runs `-m "not e2e and not install_script"` with a **90% branch-coverage gate** (`--cov-fail-under=90`). New code generally needs tests to clear that gate.
+
+CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`). Changing help text, tables, or rendered output will fail those tests until you regenerate them with `uv run pytest --snapshot-update` and commit the updated `.ambr` files. The auto-format hook only touches `*.py`, and pre-commit's whitespace fixers deliberately skip `tests/__snapshots__/` (syrupy's indentation must stay byte-for-byte), so never hand-edit a snapshot — always regenerate.
 
 ## Naming & packaging gotchas
 
