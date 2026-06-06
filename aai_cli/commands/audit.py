@@ -6,7 +6,6 @@ from datetime import datetime
 import typer
 from rich.console import Group
 from rich.markup import escape
-from rich.table import Table
 from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, output, timeparse
@@ -141,7 +140,7 @@ def audit(
                     )
                 return Text(message, style="aai.muted")
 
-            table = Table("when (UTC)", "event", "resource", "actor", header_style="aai.heading")
+            table = output.data_table("when (UTC)", "event", "resource", "actor")
             for entry in shown:
                 table.add_row(
                     escape(_format_time(entry.get("log_time"))),

@@ -95,6 +95,8 @@ def test_sessions_get_renders_detail(monkeypatch):
         result = runner.invoke(app, ["sessions", "get", "s_1"])
     assert result.exit_code == 0
     assert "s_1" in result.output and "universal" in result.output
+    # Field labels are humanized (underscores -> spaces) for the detail view.
+    assert "speech model" in result.output and "speech_model" not in result.output
 
 
 def test_sessions_without_session_runs_login(monkeypatch):
