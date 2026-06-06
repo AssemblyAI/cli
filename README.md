@@ -31,9 +31,8 @@
 # YOLO
 curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
 
-# pipx (recommended) or pip
+# pipx (recommended)
 pipx install "git+https://github.com/AssemblyAI/cli.git"
-pip install --user "git+https://github.com/AssemblyAI/cli.git"
 ```
 
 Requires Python 3.11+. The installer prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`.
