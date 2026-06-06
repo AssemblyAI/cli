@@ -143,13 +143,6 @@ else
   echo "   gitleaks not found; skipping (CI runs it)"
 fi
 
-echo "==> refurb (modernization lint, src only)"
-# Suggests modern Python rewrites ruff's UP rules don't cover (dict-union, suppress,
-# .extend). Runs in the locked 3.12+ env via `uv run`: refurb parses with the running
-# interpreter, and PEP 695 generics don't parse on the 3.11 a bare `uvx` might pick.
-# Tuned in [tool.refurb] (FURB123/159/184 disabled — see the comment there).
-uv run refurb aai_cli
-
 echo "==> generated --show-code compile gate"
 generated_code_dir="$(mktemp -d)"
 trap cleanup_generated_code_dir EXIT

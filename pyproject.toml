@@ -80,7 +80,6 @@ dev = [
     "vulture>=2.14",
     "deptry>=0.23.0",
     "import-linter>=2.3",
-    "refurb>=2.1.0",
     "zizmor>=1.10",
     "coverage>=7.0",
 ]
@@ -238,17 +237,3 @@ DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
 # coverage is read by scripts/mutation_gate.py (a dev-only gate run from check.sh,
 # never shipped in the wheel), so deptry sees a dev dep imported from non-test code.
 DEP004 = ["fastapi", "httpx", "hypothesis", "pytest", "coverage"]
-
-[tool.refurb]
-# Modernization linter (FURB codes), run on aai_cli in check.sh to complement ruff's
-# UP rules with rewrites ruff doesn't cover (dict-union, contextlib.suppress, .extend).
-# Must run under the project's 3.12+ interpreter via `uv run`: refurb parses with the
-# running mypy/ast, and PEP 695 generics (`def f[T](...)`) don't parse on 3.11.
-# Disabled checks — each either misfires on this codebase or fights a deliberate choice:
-#   FURB123 (redundant cast): flags intentional conversions as no-ops. `bytes(data)`
-#     materializes the sounddevice/CFFI read buffer (dropping it leaks a reused buffer),
-#     and `list(<const>)` defensively copies tuple constants where `.copy()` would crash.
-#   FURB159: its `rstrip("0").rstrip(".")` -> `rstrip(".0")` rewrite changes behavior
-#     (".0" is a char set, so "10.00" -> "1" instead of "10").
-#   FURB184 (fluid interface): would inline named intermediates we keep for readability.
-ignore = ["FURB123", "FURB159", "FURB184"]

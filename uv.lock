@@ -45,7 +45,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
-    { name = "refurb" },
     { name = "ruff" },
     { name = "syrupy" },
     { name = "uvicorn" },
@@ -88,7 +87,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "refurb", specifier = ">=2.1.0" },
     { name = "ruff", specifier = ">=0.15.15" },
     { name = "syrupy", specifier = ">=4.0" },
     { name = "uvicorn", specifier = ">=0.30.0" },
@@ -1564,18 +1562,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/6d/98e61600febf6bd929cf04154537c39dc577ce414bafbfc24a286c4fa76d/radon-6.0.1.tar.gz", hash = "sha256:d1ac0053943a893878940fedc8b19ace70386fc9c9bf0a09229a44125ebf45b5", size = 1874992, upload-time = "2023-03-26T06:24:38.868Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/f7/d00d9b4a0313a6be3a3e0818e6375e15da6d7076f4ae47d1324e7ca986a1/radon-6.0.1-py2.py3-none-any.whl", hash = "sha256:632cc032364a6f8bb1010a2f6a12d0f14bc7e5ede76585ef29dc0cecf4cd8859", size = 52784, upload-time = "2023-03-26T06:24:33.949Z" },
-]
-
-[[package]]
-name = "refurb"
-version = "2.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "mypy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/48/90/572837d7ec45cb9385b85b751bd5f317294a938e1600b2b7190618a2929b/refurb-2.3.1.tar.gz", hash = "sha256:8605ef2cf40804403340396b9cf51b13bd5d0f5f6a84f8b4447484b7ba94bc79", size = 90117, upload-time = "2026-04-03T21:43:51.158Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/62/e675136b4b04d2e2910c78763ff264339bd968162d9a7d8dfb9771af3051/refurb-2.3.1-py3-none-any.whl", hash = "sha256:c18f0abdeb478ab86df5bfc352b635fa3543b403950f610814884055115e9a82", size = 141403, upload-time = "2026-04-03T21:43:52.595Z" },
 ]
 
 [[package]]
