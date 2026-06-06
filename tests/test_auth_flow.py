@@ -63,6 +63,33 @@ def test_find_or_create_creates_when_existing_cli_token_disabled(monkeypatch):
     assert flow.find_or_create_cli_key(1, "jwt") == "sk_fresh"
 
 
+def test_find_or_create_raises_when_no_projects(monkeypatch):
+    # An account with zero projects can't hold a key; surface a clean APIError.
+    monkeypatch.setattr(flow.ams, "list_projects", lambda acct, jwt: [])
+    monkeypatch.setattr(flow.ams, "create_token", lambda *a, **k: pytest.fail("should not create"))
+    with pytest.raises(APIError) as exc:
+        flow.find_or_create_cli_key(1, "jwt")
+    assert "no project" in exc.value.message
+
+
+def test_capture_delegates_to_loopback(monkeypatch):
+    sentinel = loopback.CallbackResult(token="tok", token_type="discovery_oauth")
+    monkeypatch.setattr(flow.loopback, "capture_callback", lambda: sentinel)
+    assert flow._capture() is sentinel
+
+
+def test_run_login_flow_rejects_wrong_token_type(monkeypatch):
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(
+        flow,
+        "_capture",
+        lambda: loopback.CallbackResult(token="tok", token_type="something_else"),
+    )
+    with pytest.raises(APIError) as exc:
+        flow.run_login_flow()
+    assert "valid OAuth token" in exc.value.message
+
+
 def test_run_login_flow_happy_path(monkeypatch):
     opened = {}
     monkeypatch.setattr(flow, "_open_browser", lambda url: opened.setdefault("url", url))
