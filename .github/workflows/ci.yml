@@ -64,6 +64,27 @@ jobs:
       - name: Lint, typecheck, test
         run: ./scripts/check.sh
 
+  # Branch protection requires a check literally named "lint + typecheck + tests",
+  # but `check` is a matrix, so its contexts are suffixed "(py3.12)" / "(py3.13)".
+  # Re-publish the un-suffixed name here, green only when every matrix cell passed
+  # (if: always() + an explicit result check, so a failed/skipped/cancelled matrix
+  # can't satisfy the required check). Point branch protection at this one stable
+  # name and matrix changes never break the required check again.
+  check-result:
+    name: lint + typecheck + tests
+    needs: [check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every py-version matrix cell to have passed
+        run: |
+          if [ "${{ needs.check.result }}" != "success" ]; then
+            echo "check matrix result: ${{ needs.check.result }}"
+            exit 1
+          fi
+          echo "all py-version matrix cells passed"
+
   lint-formula:
     name: brew style (Homebrew formula)
     runs-on: ubuntu-latest
