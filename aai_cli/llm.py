@@ -182,22 +182,16 @@ def run_chain_steps(
     if not prompts:
         return []
 
-    if transcript_id is not None:
-        output = transform_transcript(
-            api_key,
-            prompt=prompts[0],
-            model=model,
-            max_tokens=max_tokens,
-            transcript_id=transcript_id,
-        )
-    else:
-        output = transform_transcript(
-            api_key,
-            prompt=prompts[0],
-            model=model,
-            max_tokens=max_tokens,
-            transcript_text=transcript_text,
-        )
+    # Exactly one of transcript_id / transcript_text is set by callers; pass both
+    # through (build_messages prefers the id) so the two cases share one call.
+    output = transform_transcript(
+        api_key,
+        prompt=prompts[0],
+        model=model,
+        max_tokens=max_tokens,
+        transcript_id=transcript_id,
+        transcript_text=transcript_text,
+    )
     steps = [{"prompt": prompts[0], "output": output}]
 
     for prompt in prompts[1:]:

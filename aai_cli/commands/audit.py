@@ -15,29 +15,24 @@ from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="View your account's audit log.")
 
-_LOGIN_ACTIONS = {"login", "login.succeeded", "login__succeeded"}
+# `__`-separated variants are handled by _normalize_action (which maps `__` -> `.`),
+# so only the dotted forms need entries here.
+_LOGIN_ACTIONS = {"login", "login.succeeded"}
 _ACTION_LABELS = {
     "account.create": "Account created",
     "account.created": "Account created",
-    "account__created": "Account created",
     "account.tos_accepted": "Terms accepted",
     "account.tos.accepted": "Terms accepted",
-    "account__tos_accepted": "Terms accepted",
     "account.upgrade": "Account upgraded",
     "account.upgraded": "Account upgraded",
-    "account__upgraded": "Account upgraded",
     "member.create": "Member created",
     "member.created": "Member created",
-    "member__created": "Member created",
     "token.create": "API key created",
     "token.created": "API key created",
-    "token__created": "API key created",
     "token.rename": "API key renamed",
     "token.renamed": "API key renamed",
-    "token__renamed": "API key renamed",
     "login": "Login",
     "login.succeeded": "Login succeeded",
-    "login__succeeded": "Login succeeded",
 }
 
 

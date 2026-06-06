@@ -87,9 +87,8 @@ def env_override_warning(state: AppState) -> str | None:
     return state.env_override_warning()
 
 
-def _persist_browser_login(state: AppState) -> None:
-    profile = state.resolve_profile()
-    env = environments.active().name
+def persist_browser_login(profile: str, env: str) -> None:
+    """Run the browser login flow and persist its credentials for `profile`/`env`."""
     result = run_login_flow()
     config.set_api_key(profile, result.api_key)
     config.set_profile_env(profile, env)
@@ -99,6 +98,10 @@ def _persist_browser_login(state: AppState) -> None:
         session_token=result.session_token,
         account_id=result.account_id,
     )
+
+
+def _persist_browser_login(state: AppState) -> None:
+    persist_browser_login(state.resolve_profile(), environments.active().name)
 
 
 def _login_persistence_error(exc: object) -> APIError:
