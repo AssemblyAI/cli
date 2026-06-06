@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 import wave
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -65,10 +65,17 @@ class FileSource:
     def __iter__(self) -> Iterator[bytes]:
         chunks = self._wav_chunks() if self._wav else self._ffmpeg_chunks()
         produced = 0
-        for chunk in chunks:
-            produced += len(chunk)
-            yield chunk
-            self._sleep(len(chunk) / (TARGET_RATE * 2))  # ~real-time pacing
+        # Closing this outer generator early raises GeneratorExit at the `yield` below,
+        # but a plain `for` loop won't forward it into `chunks`; its cleanup (ffmpeg
+        # terminate/wait) would then run only at GC, not synchronously. Close it here so
+        # the subprocess teardown happens deterministically on early stop.
+        try:
+            for chunk in chunks:
+                produced += len(chunk)
+                yield chunk
+                self._sleep(len(chunk) / (TARGET_RATE * 2))  # ~real-time pacing
+        finally:
+            chunks.close()
         if produced == 0:
             raise CLIError(
                 f"No audio data in {self.source}.",
@@ -77,7 +84,7 @@ class FileSource:
                 suggestion="Check the file isn't empty or silent.",
             )
 
-    def _wav_chunks(self) -> Iterator[bytes]:
+    def _wav_chunks(self) -> Generator[bytes, None, None]:
         frames_per_chunk = CHUNK_BYTES // 2
         with wave.open(str(self._path), "rb") as w:  # _wav implies a local path
             while True:
@@ -86,7 +93,7 @@ class FileSource:
                     return
                 yield data
 
-    def _ffmpeg_chunks(self) -> Iterator[bytes]:
+    def _ffmpeg_chunks(self) -> Generator[bytes, None, None]:
         proc = subprocess.Popen(
             [
                 "ffmpeg",
