@@ -19,6 +19,5 @@ def examples_epilog(examples: Sequence[Example]) -> str:
     """
     blocks = ["[bold]Examples[/bold]"]
     for description, command in examples:
-        blocks.append(f"[dim]{escape(description)}[/dim]")
-        blocks.append(f"$ {escape(command)}")
+        blocks.extend((f"[dim]{escape(description)}[/dim]", f"$ {escape(command)}"))
     return "\n\n".join(blocks)

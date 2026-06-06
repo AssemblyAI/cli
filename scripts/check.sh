@@ -115,6 +115,41 @@ else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi
 
+echo "==> actionlint (GitHub Actions workflow lint)"
+# Static-lint the CI workflows the same way shellcheck covers install.sh: catches
+# bad expressions, undefined needs/matrix refs, and shell bugs inside `run:` blocks.
+# Go binary (no PyPI wheel), so it self-skips locally and CI installs it (see ci.yml).
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+else
+  echo "   actionlint not found; skipping (CI runs it)"
+fi
+
+echo "==> zizmor (GitHub Actions security audit)"
+# Audits the workflows for CI security issues (script injection via untrusted
+# ${{ github.* }} interpolation, over-broad token permissions, unpinned actions).
+# Pip-installable, so it runs in the locked env as a hard gate like ruff/mypy.
+# --offline keeps it deterministic (skips audits that would query the GitHub API).
+uv run zizmor --offline .github/workflows
+
+echo "==> gitleaks (secret scan)"
+# Defends the project's core promise that credentials never land in the repo (the API
+# key lives only in the OS keyring). Scans the working tree; obviously-fake test/doc
+# fixtures are allowlisted in .gitleaks.toml. Go binary, so it self-skips locally and
+# CI installs it (see ci.yml).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks dir --no-banner --redact -c .gitleaks.toml .
+else
+  echo "   gitleaks not found; skipping (CI runs it)"
+fi
+
+echo "==> refurb (modernization lint, src only)"
+# Suggests modern Python rewrites ruff's UP rules don't cover (dict-union, suppress,
+# .extend). Runs in the locked 3.12+ env via `uv run`: refurb parses with the running
+# interpreter, and PEP 695 generics don't parse on the 3.11 a bare `uvx` might pick.
+# Tuned in [tool.refurb] (FURB123/159/184 disabled — see the comment there).
+uv run refurb aai_cli
+
 echo "==> generated --show-code compile gate"
 generated_code_dir="$(mktemp -d)"
 trap cleanup_generated_code_dir EXIT
