@@ -37,6 +37,24 @@ def test_capture_returns_token_and_type():
     assert result.error is None
 
 
+def test_capture_ignores_unknown_paths():
+    # A request to a non-callback path gets a 404 and the server keeps waiting; the
+    # real callback that follows still completes the capture.
+    result_box = {}
+
+    def run():
+        result_box["result"] = loopback.capture_callback(timeout=5.0)
+
+    t = threading.Thread(target=run)
+    t.start()
+    _hit("/favicon.ico")  # unknown path -> 404, capture stays open
+    _hit("/callback?stytch_token_type=discovery_oauth&token=tok_late")
+    t.join(timeout=5)
+
+    result = result_box["result"]
+    assert result.token == "tok_late"
+
+
 def test_capture_times_out_without_callback():
     result = loopback.capture_callback(timeout=0.3)
     assert result.error == "timeout"
