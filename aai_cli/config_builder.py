@@ -255,17 +255,26 @@ def parse_config_overrides(
     return out
 
 
-def load_config_file(path: str | Path, fields: dict[str, str]) -> dict[str, object]:
-    """Load a JSON config file and validate its keys against `fields`."""
+def _load_json_object(path: str | Path, *, label: str) -> dict[str, object]:
+    """Read `path` as a JSON object, surfacing read/parse/shape errors as usage errors.
+
+    `label` (e.g. "Config file") prefixes the error messages.
+    """
     try:
         data: object = json.loads(Path(path).read_text())
     except FileNotFoundError as exc:
-        raise UsageError(f"Config file not found: {path}") from exc
+        raise UsageError(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:
-        raise UsageError(f"Config file is not valid JSON: {exc}") from exc
-    config = jsonshape.as_mapping(data)
-    if config is None:
-        raise UsageError("Config file must contain a JSON object.")
+        raise UsageError(f"{label} is not valid JSON: {exc}") from exc
+    mapping = jsonshape.as_mapping(data)
+    if mapping is None:
+        raise UsageError(f"{label} must contain a JSON object.")
+    return mapping
+
+
+def load_config_file(path: str | Path, fields: dict[str, str]) -> dict[str, object]:
+    """Load a JSON config file and validate its keys against `fields`."""
+    config = _load_json_object(path, label="Config file")
     unknown = [key for key in config if key not in fields]
     if unknown:
         valid = ", ".join(sorted(fields))
@@ -297,14 +306,27 @@ def merge_transcribe_config(
     return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
 
 
-def construct_transcription_config(merged: dict[str, typing.Any]) -> aai.TranscriptionConfig:
-    """Build a TranscriptionConfig from a merged kwargs dict, surfacing errors as usage."""
+_ConfigT = typing.TypeVar("_ConfigT")
+
+
+def _construct(
+    model_cls: Callable[..., _ConfigT], merged: dict[str, typing.Any], *, label: str
+) -> _ConfigT:
+    """Build `model_cls(**merged)`, surfacing SDK validation as a usage error.
+
+    `label` (e.g. "transcription") names the config in the error message.
+    """
     try:
-        return aai.TranscriptionConfig(**merged)
+        return model_cls(**merged)
     except UsageError:
         raise
     except Exception as exc:  # surface SDK validation as a usage error
-        raise UsageError(f"Invalid transcription config: {exc}") from exc
+        raise UsageError(f"Invalid {label} config: {exc}") from exc
+
+
+def construct_transcription_config(merged: dict[str, typing.Any]) -> aai.TranscriptionConfig:
+    """Build a TranscriptionConfig from a merged kwargs dict, surfacing errors as usage."""
+    return _construct(aai.TranscriptionConfig, merged, label="transcription")
 
 
 def merge_streaming_params(
@@ -329,12 +351,7 @@ def merge_streaming_params(
 
 def construct_streaming_params(merged: dict[str, typing.Any]) -> StreamingParameters:
     """Build StreamingParameters from a merged kwargs dict, surfacing errors as usage."""
-    try:
-        return StreamingParameters(**merged)
-    except UsageError:
-        raise
-    except Exception as exc:
-        raise UsageError(f"Invalid streaming config: {exc}") from exc
+    return _construct(StreamingParameters, merged, label="streaming")
 
 
 def split_csv(value: str | None) -> list[str] | None:
@@ -365,16 +382,7 @@ def auth_header_flags(value: str | None) -> dict[str, object]:
 
 def load_custom_spelling(path: str) -> dict[str, object]:
     """Load a custom-spelling JSON map (e.g. {"AssemblyAI": ["assembly ai"]})."""
-    try:
-        data: object = json.loads(Path(path).read_text())
-    except FileNotFoundError as exc:
-        raise UsageError(f"Custom spelling file not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise UsageError(f"Custom spelling file is not valid JSON: {exc}") from exc
-    mapping = jsonshape.as_mapping(data)
-    if mapping is None:
-        raise UsageError("Custom spelling file must contain a JSON object.")
-    return mapping
+    return _load_json_object(path, label="Custom spelling file")
 
 
 def translation_request(languages: list[str]) -> dict[str, object]:

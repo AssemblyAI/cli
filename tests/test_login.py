@@ -77,14 +77,14 @@ def test_logout_clears_key():
 
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):
-    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"
 
 
 def test_login_oauth_persists_session(monkeypatch):
-    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert config.get_session("default") == {"jwt": "jwt_x", "token": "tok_x"}
@@ -124,7 +124,7 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
     def boom():
         raise APIError("Login timed out waiting for the browser.")
 
-    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", boom)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", boom)
     result = runner.invoke(app, ["login"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
@@ -132,7 +132,7 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
 
 def test_login_api_key_flag_still_bypasses_oauth(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.commands.login.run_login_flow",
+        "aai_cli.context.run_login_flow",
         lambda: (_ for _ in ()).throw(AssertionError("OAuth must not run with --api-key")),
     )
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
@@ -142,7 +142,7 @@ def test_login_api_key_flag_still_bypasses_oauth(monkeypatch):
 
 
 def test_login_binds_env_to_profile(monkeypatch):
-    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["--env", "sandbox000", "login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"
@@ -150,7 +150,7 @@ def test_login_binds_env_to_profile(monkeypatch):
 
 
 def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
-    monkeypatch.setattr("aai_cli.commands.login.run_login_flow", lambda: _fake_login_result("sk_x"))
+    monkeypatch.setattr("aai_cli.context.run_login_flow", lambda: _fake_login_result("sk_x"))
     result = runner.invoke(app, ["--sandbox", "login"])
     assert result.exit_code == 0
     assert config.get_profile_env("default") == "sandbox000"

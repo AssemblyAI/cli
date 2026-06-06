@@ -55,6 +55,13 @@ def _json_object_list_or_raise(resp: httpx.Response) -> list[dict[str, object]]:
     return objects
 
 
+def _scalar_params(filters: dict[str, object]) -> dict[str, str | int | float | bool]:
+    """Keep only scalar filter values, suitable as query-string params."""
+    return {
+        key: value for key, value in filters.items() if isinstance(value, str | int | float | bool)
+    }
+
+
 def _client(session_jwt: str | None = None) -> httpx.Client:
     """An AMS HTTP client; pass a session JWT to send the authenticated cookie."""
     cookies = {"stytch_session_jwt": session_jwt} if session_jwt else None
@@ -144,9 +151,7 @@ def rename_token(account_id: int, token_id: int, token_name: str, session_jwt: s
 
 def list_streaming(session_jwt: str, **filters: object) -> dict[str, object]:
     """GET /v1/users/streaming -> {page_details, data: [StreamingSessionSchema]}."""
-    params = {
-        key: value for key, value in filters.items() if isinstance(value, str | int | float | bool)
-    }
+    params = _scalar_params(filters)
     with _client(session_jwt) as client:
         resp = client.get("/v1/users/streaming", params=params)
     return _json_object_or_raise(resp)
@@ -161,9 +166,7 @@ def get_streaming(session_id: str, session_jwt: str) -> dict[str, object]:
 
 def list_audit_logs(session_jwt: str, **filters: object) -> dict[str, object]:
     """GET /v2/user/audit-logs -> {page_details, data: [AuditLogResponse]}."""
-    params = {
-        key: value for key, value in filters.items() if isinstance(value, str | int | float | bool)
-    }
+    params = _scalar_params(filters)
     with _client(session_jwt) as client:
         resp = client.get("/v2/user/audit-logs", params=params)
     return _json_object_or_raise(resp)

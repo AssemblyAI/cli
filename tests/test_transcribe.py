@@ -165,7 +165,7 @@ def test_transcribe_prompt_transforms_json(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_transform(api_key, *, prompt, model, transcript_id, max_tokens):
+    def fake_transform(api_key, *, prompt, model, transcript_id, max_tokens, transcript_text=None):
         seen["prompt"] = prompt
         seen["model"] = model
         seen["transcript_id"] = transcript_id
