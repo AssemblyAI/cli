@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AssemblyAI/cli"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-D6402E?style=flat-square"></a>
+  <a href="https://github.com/AssemblyAI/cli"><img alt="Python" src="https://img.shields.io/badge/python-3.12+-D6402E?style=flat-square"></a>
   <a href="https://github.com/AssemblyAI/cli/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/AssemblyAI/cli?style=flat-square&color=D6402E"></a>
   <a href="https://www.assemblyai.com/docs"><img alt="Docs" src="https://img.shields.io/badge/docs-assemblyai-D6402E?style=flat-square"></a>
 </p>
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
 pipx install "git+https://github.com/AssemblyAI/cli.git"
 ```
 
-Requires Python 3.11+. The installer prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`.
+Requires Python 3.12+. The installer prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`.
 
 ### Homebrew (macOS / Linux)
 

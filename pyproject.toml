@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "AssemblyAI", email = "support@assemblyai.com" }]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 keywords = ["assemblyai", "transcription", "speech-to-text", "cli", "audio", "streaming"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
@@ -115,7 +114,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["aai_cli", "tests"]
 # Init templates are packaged scaffold assets, not importable package modules.
 exclude = ["^aai_cli/init/templates/"]
@@ -144,7 +143,7 @@ disallow_untyped_defs = false
 # create thousands of low-value strict diagnostics.
 include = ["aai_cli"]
 exclude = ["aai_cli/init/templates/**"]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 reportMissingTypeStubs = false
@@ -156,7 +155,7 @@ venv = ".venv"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 # PGH/ERA/TRY/TD/FIX close the "make the error go away" escape hatches a coding agent
