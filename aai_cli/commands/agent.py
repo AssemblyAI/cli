@@ -9,7 +9,12 @@ import typer
 from aai_cli import client, code_gen, config, help_panels, output
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT, run_session
+from aai_cli.agent.session import (
+    DEFAULT_GREETING,
+    DEFAULT_PROMPT,
+    AgentRunConfig,
+    run_session,
+)
 from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
@@ -17,6 +22,46 @@ from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import FileSource
 
 app = typer.Typer()
+
+
+def _resolve_system_prompt(system_prompt: str, system_prompt_file: Path | None) -> str:
+    """The persona text: a --system-prompt-file (if given) overrides --system-prompt."""
+    if system_prompt_file is None:
+        return system_prompt
+    try:
+        return system_prompt_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CLIError(
+            f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
+            error_type="file_not_found",
+            exit_code=2,
+            suggestion="Check the path and that the file is readable.",
+        ) from exc
+
+
+def _open_audio(
+    renderer: AgentRenderer,
+    *,
+    source: str | None,
+    sample: bool,
+    device: int | None,
+    from_file: bool,
+) -> tuple[Any, Any]:
+    """Build the (mic, player) pair for either file-driven or live-mic input."""
+    if from_file:
+        # Stream the clip as the user's speech and stop after the agent replies.
+        # No greeting and full-duplex so no part of the clip is muted/dropped,
+        # and a NullPlayer since there is no listener for the reply audio.
+        return FileSource(client.resolve_audio_source(source, sample=sample)), NullPlayer()
+    # One full-duplex stream for mic + speaker: macOS rejects two separate
+    # streams on a device, which silently kills capture.
+    duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
+    # notice() self-suppresses in JSON mode and routes to stderr in text mode.
+    renderer.notice(
+        "Use headphones — the mic stays open while the agent speaks, "
+        "so speakers would let it hear itself.\n"
+    )
+    return duplex.mic, duplex.player
 
 
 @app.command(
@@ -83,18 +128,7 @@ def agent(
                 f"Unknown voice {voice!r}.",
                 suggestion="Run 'aai agent --list-voices' to see the options.",
             )
-        if system_prompt_file is not None:
-            try:
-                system_prompt_text = system_prompt_file.read_text(encoding="utf-8")
-            except OSError as exc:
-                raise CLIError(
-                    f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
-                    error_type="file_not_found",
-                    exit_code=2,
-                    suggestion="Check the path and that the file is readable.",
-                ) from exc
-        else:
-            system_prompt_text = system_prompt
+        system_prompt_text = _resolve_system_prompt(system_prompt, system_prompt_file)
 
         if show_code:
             # Print-only: emit the equivalent agent script from the flags and exit
@@ -112,37 +146,18 @@ def agent(
             text_mode=text_mode,
             mic_input=not from_file,
         )
-        audio: Any
-        player: Any
-        if from_file:
-            # Stream the clip as the user's speech and stop after the agent replies.
-            # No greeting and full-duplex so no part of the clip is muted/dropped,
-            # and a NullPlayer since there is no listener for the reply audio.
-            audio = FileSource(client.resolve_audio_source(source, sample=sample))
-            player = NullPlayer()
-        else:
-            # One full-duplex stream for mic + speaker: macOS rejects two separate
-            # streams on a device, which silently kills capture.
-            duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
-            audio = duplex.mic
-            player = duplex.player
-            # notice() self-suppresses in JSON mode and routes to stderr in text mode.
-            renderer.notice(
-                "Use headphones — the mic stays open while the agent speaks, "
-                "so speakers would let it hear itself.\n"
-            )
+        audio, player = _open_audio(
+            renderer, source=source, sample=sample, device=device, from_file=from_file
+        )
+        run_config = AgentRunConfig(
+            voice=voice,
+            system_prompt=system_prompt_text,
+            greeting="" if from_file else greeting,
+            full_duplex=True,  # one duplex stream -> mic always open (use headphones)
+            exit_after_reply=from_file,
+        )
         try:
-            run_session(
-                api_key,
-                renderer=renderer,
-                player=player,
-                mic=audio,
-                voice=voice,
-                system_prompt=system_prompt_text,
-                greeting="" if from_file else greeting,
-                full_duplex=True,  # one duplex stream -> mic always open (use headphones)
-                exit_after_reply=from_file,
-            )
+            run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
         except KeyboardInterrupt:
             renderer.stopped()
         except BrokenPipeError as exc:

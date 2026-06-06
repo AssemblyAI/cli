@@ -165,8 +165,8 @@ target-version = "py312"
 # boolean traps, pylint-style design issues, centralized raw output, pytest style,
 # small simplifications, performance footguns, and type-only import hygiene.
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF",
-          "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "T20", "PT", "PIE",
-          "PERF", "TCH"]
+          "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "C90", "T20", "PT",
+          "PIE", "PERF", "TCH"]
 # E501: line length is owned by the formatter.
 # B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
 # S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
@@ -179,8 +179,18 @@ select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S"
 ignore = ["E501", "B008", "S603", "S607", "TRY003", "N818", "PLC0415",
           "TC001", "TC002", "TC003"]
 
+# Function-size pressure, tuned to keep functions small enough to read and edit in
+# one screen (the friction a coding agent hits most). These complement xenon's
+# cyclomatic-complexity gate in check.sh: mccabe (C901) and max-branches bound
+# branchiness; max-statements bounds raw length; max-args bounds signatures.
+[tool.ruff.lint.mccabe]
+max-complexity = 10  # matches xenon's grade-B ceiling (CC <= 10) so the two agree
+
 [tool.ruff.lint.pylint]
-max-args = 10
+max-args = 8
+max-branches = 12
+max-returns = 6
+max-statements = 40
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use throwaway args/temp paths, and don't need pathlib/security lints.
@@ -190,8 +200,10 @@ max-args = 10
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005",
               "PTH123", "SIM117", "TRY300", "FBT", "PLR2004", "PLC0415", "PLR0913",
               "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH"]
-# Typer command functions naturally have many boolean options and broad signatures.
-"aai_cli/commands/**" = ["FBT001", "FBT003", "PLR0912", "PLR0913", "PLR0915"]
+# Typer command functions naturally have many boolean options and broad signatures
+# (PLR0913/FBT). Their *bodies*, though, are held to the same length/branch limits as
+# the rest of the package: PLR0912/PLR0915/C901 are deliberately NOT ignored here.
+"aai_cli/commands/**" = ["FBT001", "FBT003", "PLR0913"]
 # The root callback is also a Typer command signature.
 "aai_cli/main.py" = ["FBT001", "FBT003"]
 # Raw stdout/stderr writes are centralized here; command modules call output helpers.

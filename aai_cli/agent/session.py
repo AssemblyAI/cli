@@ -5,6 +5,7 @@ import contextlib
 import json
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from aai_cli import environments
@@ -26,6 +27,30 @@ DEFAULT_GREETING = "Hey, what's on your mind?"
 # session.error codes that mean the connection is unauthorized -> exit 2.
 _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
 
+# The websocket connection, the `connect` factory, and the renderer/player/mic I/O
+# objects come from libraries/modules with no usable type stubs. Alias that untyped
+# boundary here so each role is named in signatures and `Any` stays in one place.
+# (Server event payloads remain `dict[str, Any]`.)
+_WebSocket = Any
+_Connect = Any
+_IO = Any
+
+
+@dataclass(frozen=True)
+class AgentRunConfig:
+    """The static (per-run) configuration for a Voice Agent session.
+
+    Bundled into one value so `run_session`'s signature stays small: the I/O
+    objects (renderer/player/mic) vary per call, but these knobs are fixed once
+    the command has parsed its flags.
+    """
+
+    voice: str
+    system_prompt: str
+    greeting: str
+    full_duplex: bool = False
+    exit_after_reply: bool = False
+
 
 class VoiceAgentSession:
     """Routes Voice Agent server events to the renderer, player, and duplex state."""
@@ -33,8 +58,8 @@ class VoiceAgentSession:
     def __init__(
         self,
         *,
-        renderer: Any,
-        player: Any,
+        renderer: _IO,
+        player: _IO,
         full_duplex: bool = False,
         exit_after_reply: bool = False,
         ready_event: threading.Event | None = None,
@@ -144,7 +169,7 @@ _EVENT_HANDLERS: dict[str, Callable[[VoiceAgentSession, dict[str, Any]], None]] 
 }
 
 
-def _send_audio_loop(ws: Any, session: VoiceAgentSession, mic: Any) -> None:
+def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> None:
     """Forward mic PCM as input.audio while the session gate allows it."""
     # File-driven runs wait for session.ready before consuming the source, so a
     # finite clip isn't partly drained (and dropped) before the server accepts it.
@@ -168,7 +193,7 @@ def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
     return APIError(f"{message}: {exc}")
 
 
-def _open_ws(connect: Any, api_key: str) -> Any:
+def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
     """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
     try:
         return connect(_ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
@@ -176,35 +201,53 @@ def _open_ws(connect: Any, api_key: str) -> Any:
         raise _auth_or_api_error(exc, "Could not connect to the voice agent") from exc
 
 
+def _session_update_message(config: AgentRunConfig) -> str:
+    """The initial session.update payload as a JSON string: persona, greeting, voice."""
+    return json.dumps(
+        {
+            "type": "session.update",
+            "session": {
+                "system_prompt": config.system_prompt,
+                "greeting": config.greeting,
+                "output": {"voice": config.voice},
+            },
+        }
+    )
+
+
+def _receive_loop(ws: _WebSocket, session: VoiceAgentSession) -> None:
+    """Dispatch inbound server events until the socket closes or the run finishes."""
+    for raw in ws:
+        session.dispatch(json.loads(raw))
+        if session.finished:
+            break
+
+
 def run_session(
     api_key: str,
     *,
-    renderer: Any,
-    player: Any,
-    mic: Any,
-    voice: str,
-    system_prompt: str,
-    greeting: str,
-    full_duplex: bool = False,
-    exit_after_reply: bool = False,
-    connect: Any = None,
+    renderer: _IO,
+    player: _IO,
+    mic: _IO,
+    config: AgentRunConfig,
+    connect: _Connect = None,
 ) -> None:
     """Open the Voice Agent WebSocket and run the bidirectional loop until close.
 
     `connect` defaults to websockets' synchronous client; injectable for tests.
-    When `exit_after_reply` is set (file-driven runs), the loop stops after the
-    agent's first reply to the spoken input and the capture thread waits for
+    When `config.exit_after_reply` is set (file-driven runs), the loop stops after
+    the agent's first reply to the spoken input and the capture thread waits for
     session.ready before streaming the source.
     """
     if connect is None:
         from websockets.sync.client import connect
 
-    ready_event = threading.Event() if exit_after_reply else None
+    ready_event = threading.Event() if config.exit_after_reply else None
     session = VoiceAgentSession(
         renderer=renderer,
         player=player,
-        full_duplex=full_duplex,
-        exit_after_reply=exit_after_reply,
+        full_duplex=config.full_duplex,
+        exit_after_reply=config.exit_after_reply,
         ready_event=ready_event,
     )
 
@@ -231,22 +274,8 @@ def run_session(
         player.start()  # opens the speaker stream; CLIError here if sounddevice can't load
         player_started = True
         threading.Thread(target=_capture, daemon=True).start()
-        ws.send(
-            json.dumps(
-                {
-                    "type": "session.update",
-                    "session": {
-                        "system_prompt": system_prompt,
-                        "greeting": greeting,
-                        "output": {"voice": voice},
-                    },
-                }
-            )
-        )
-        for raw in ws:
-            session.dispatch(json.loads(raw))
-            if session.finished:
-                break
+        ws.send(_session_update_message(config))
+        _receive_loop(ws, session)
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, user Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:
