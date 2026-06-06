@@ -20,7 +20,7 @@ uvicorn api.index:app --reload --port 3000
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY` as a
 Vercel environment variable (the local `.env` is git-ignored). The backend is just the
 `/api/token` function; the WebSocket runs browser → AssemblyAI, so nothing long-running
-is needed. `vercel.json` routes the page and the function.
+is needed.
 
 ## Ideas to extend
 

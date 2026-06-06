@@ -1,6 +1,7 @@
 /* THEME TOKENS: edit this block first for monotone colors, spacing, radii, and width. */
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.12 0 0);
   --card: oklch(1 0 0);
@@ -10,7 +11,10 @@
   --secondary-foreground: oklch(0.38 0 0);
   --muted-foreground: oklch(0.58 0 0);
   --border: oklch(0.9 0 0);
-  --shadow-focus: 0 0 0 1px oklch(0 0 0 / 0.08), 0 2px 8px -2px oklch(0 0 0 / 0.08);
+  --ring: oklch(0.5 0 0);
+  --shadow-panel: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
+  --shadow-focus:
+    0 0 0 1px oklch(0 0 0 / 0.08), 0 2px 8px -2px oklch(0 0 0 / 0.08);
   --color-bg: var(--background);
   --color-surface: var(--card);
   --color-text: var(--foreground);
@@ -18,14 +22,12 @@
   --color-border: var(--border);
   --color-accent: var(--primary);
   --color-accent-contrast: var(--primary-foreground);
-  --color-user: oklch(0.42 0 0);
-  --color-success: var(--foreground);
-  --color-success-soft: var(--secondary);
   --color-danger: var(--foreground);
   --color-danger-strong: var(--foreground);
   --color-danger-soft: var(--secondary);
   --color-neutral: var(--secondary-foreground);
   --color-neutral-soft: var(--secondary);
+  --radius-panel: 8px;
   --radius-control: 8px;
   --radius-pill: 999px;
   --space-page-block: 48px;
@@ -34,7 +36,9 @@
 }
 
 /* BASE */
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   min-height: 100vh;
@@ -110,7 +114,12 @@ button {
   outline: none;
 }
 
-.connection-button[data-state="connected"] {
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.record-button[data-state="recording"] {
   --button-bg: var(--color-danger-strong);
 }
 
@@ -127,9 +136,10 @@ button {
   display: none;
 }
 
-.status-pill[data-state="live"] {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+.status-pill[data-state="live"],
+.status-pill[data-state="error"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .status-pill[data-state="idle"] {
@@ -137,41 +147,25 @@ button {
   color: var(--color-neutral);
 }
 
-.status-pill[data-state="error"] {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-/* CONVERSATION VIEW */
-.conversation-log {
+/* CAPTION VIEW */
+.caption-output {
+  min-height: 120px;
   margin-top: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+  font-size: 19px;
+  line-height: 1.7;
+  padding: 18px;
 }
 
-.conversation-turn {
-  margin: 8px 0;
-  border-left: 3px solid var(--color-border);
-  padding: 8px 0 8px 12px;
-  overflow-wrap: anywhere;
+.caption-final {
+  color: var(--color-text);
 }
 
-.conversation-turn[data-speaker="you"] {
-  border-left-color: var(--color-user);
-}
-
-.conversation-turn[data-speaker="agent"] {
-  border-left-color: var(--color-accent);
-}
-
-.turn-speaker {
-  font-weight: 700;
-}
-
-.conversation-turn[data-speaker="you"] .turn-speaker {
-  color: var(--color-user);
-}
-
-.conversation-turn[data-speaker="agent"] .turn-speaker {
-  color: var(--color-accent);
+.caption-partial {
+  color: var(--color-text-muted);
 }
 
 @media (max-width: 640px) {
@@ -179,7 +173,10 @@ button {
     --space-page-block: 32px;
   }
 
-  .button,
+  .button {
+    width: 100%;
+  }
+
   .status-pill {
     width: 100%;
   }

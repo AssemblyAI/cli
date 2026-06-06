@@ -50,7 +50,7 @@ def test_token_uses_bearer_authorization_header(monkeypatch):
 
 def test_page_reads_reply_audio_from_data_field():
     # reply.audio carries the base64 PCM in `data` (not `audio`); guard the regression.
-    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    app_js = (TEMPLATE_DIR / "public" / "static" / "app.js").read_text()
     assert "reply.audio" in app_js
     assert "event.data" in app_js
 
@@ -64,3 +64,10 @@ def test_token_surfaces_error_as_502(monkeypatch):
     monkeypatch.setattr(mod.httpx2, "get", boom)
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 502
+
+
+def test_index_route_serves_page(monkeypatch):
+    mod = _load_app(monkeypatch)
+    resp = TestClient(mod.app).get("/")
+    assert resp.status_code == 200
+    assert "<html" in resp.text.lower()

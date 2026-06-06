@@ -29,10 +29,10 @@ jobs:
       - name: System deps (PortAudio + ffmpeg)
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
 
-      # check.sh lints Markdown via the markdownlint CLI (a Node tool); pin to the
-      # version used locally. The runner ships Node, so a global npm install suffices.
-      - name: markdownlint CLI
-        run: npm install -g markdownlint-cli@0.45.0
+      # check.sh lints Markdown and template JS/CSS via Node CLIs; pin to the
+      # versions used locally. The runner ships Node, so a global npm install suffices.
+      - name: Node lint CLIs
+        run: npm install -g markdownlint-cli@0.45.0 prettier@3.8.3
 
       # check.sh runs every tool through `uv run` / `uv build` for a locked,
       # reproducible env, so only uv must be on PATH (installed from PyPI to match

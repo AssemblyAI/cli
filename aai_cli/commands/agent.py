@@ -67,6 +67,9 @@ def agent(
 
     Pass an audio file/URL (or --sample) to speak a recorded clip to the agent
     instead of the microphone; the session then ends after the agent's reply.
+
+    This only runs a conversation in the terminal — it writes no code. To build
+    a voice agent app, run 'aai init voice-agent' instead.
     """
 
     if list_voices:

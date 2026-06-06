@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
@@ -13,8 +14,13 @@ from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.steps import Step, render_steps
 
+if TYPE_CHECKING:
+    # Annotation only (PEP 563 string), so no runtime import. Import from
+    # importlib.abc — that is the protocol `resources.files()` is typed to return.
+    from importlib.abc import Traversable
+
 app = typer.Typer(
-    help="Wire up Claude Code for AssemblyAI (docs MCP + skill).",
+    help="Set up your coding agent for AssemblyAI (docs MCP + skills).",
     no_args_is_help=True,
 )
 
@@ -52,6 +58,17 @@ def _proc_detail(proc: subprocess.CompletedProcess[str]) -> str:
     return (proc.stderr or proc.stdout).strip()
 
 
+def _skills_root() -> Path:
+    # Honor CLAUDE_CONFIG_DIR so install/status/remove agree with the agent's actual
+    # config root rather than assuming ~/.claude.
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    root = Path(config_dir) if config_dir else Path.home() / ".claude"
+    return root / "skills"
+
+
+# --- docs MCP (registered via the `claude` CLI) ------------------------------
+
+
 def _mcp_present() -> bool:
     return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
 
@@ -85,9 +102,44 @@ def _install_mcp(scope: str, force: bool) -> Step:
     return {"name": "mcp", "status": "installed", "detail": f"{MCP_NAME} @ {scope} scope"}
 
 
+def _mcp_status() -> Step:
+    if shutil.which("claude") is None:
+        return {"name": "mcp", "status": "unknown", "detail": "Claude Code not found"}
+    present = _mcp_present()
+    return {
+        "name": "mcp",
+        "status": "installed" if present else "not_installed",
+        "detail": MCP_NAME,
+    }
+
+
+def _remove_mcp(scope: str | None) -> Step:
+    if shutil.which("claude") is None:
+        return {"name": "mcp", "status": "skipped", "detail": "Claude Code not found"}
+    if not _mcp_present():
+        return {"name": "mcp", "status": "not_installed", "detail": MCP_NAME}
+    cmd = ["claude", "mcp", "remove", MCP_NAME]
+    if scope is not None:
+        cmd += ["--scope", scope]
+    proc = _run(cmd)
+    if proc.returncode != 0:
+        return {"name": "mcp", "status": "failed", "detail": _proc_detail(proc)}
+    return {"name": "mcp", "status": "removed", "detail": MCP_NAME}
+
+
+# --- assemblyai skill (downloaded from its own repo via the `skills` CLI) -----
+
 _SKILL_ADD = ["npx", "-y", "skills", "add", SKILL_REPO, "--global", "--yes"]
 _SKILL_REMOVE = ["npx", "-y", "skills", "remove", "assemblyai", "--global"]
 _SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
+
+
+def _skill_dir() -> Path:
+    return _skills_root() / "assemblyai"
+
+
+def _skill_installed() -> bool:
+    return (_skill_dir() / "SKILL.md").exists()
 
 
 def _install_skill(force: bool) -> Step:
@@ -126,49 +178,12 @@ def _install_skill(force: bool) -> Step:
     return {"name": "skill", "status": "installed", "detail": str(_skill_dir())}
 
 
-def _skill_dir() -> Path:
-    # Honor CLAUDE_CONFIG_DIR so install/status/remove agree with Claude Code's
-    # actual config root rather than assuming ~/.claude.
-    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
-    root = Path(config_dir) if config_dir else Path.home() / ".claude"
-    return root / "skills" / "assemblyai"
-
-
-def _skill_installed() -> bool:
-    return (_skill_dir() / "SKILL.md").exists()
-
-
-def _mcp_status() -> Step:
-    if shutil.which("claude") is None:
-        return {"name": "mcp", "status": "unknown", "detail": "Claude Code not found"}
-    present = _mcp_present()
-    return {
-        "name": "mcp",
-        "status": "installed" if present else "not_installed",
-        "detail": MCP_NAME,
-    }
-
-
 def _skill_status() -> Step:
     return {
         "name": "skill",
         "status": "installed" if _skill_installed() else "not_installed",
         "detail": str(_skill_dir()),
     }
-
-
-def _remove_mcp(scope: str | None) -> Step:
-    if shutil.which("claude") is None:
-        return {"name": "mcp", "status": "skipped", "detail": "Claude Code not found"}
-    if not _mcp_present():
-        return {"name": "mcp", "status": "not_installed", "detail": MCP_NAME}
-    cmd = ["claude", "mcp", "remove", MCP_NAME]
-    if scope is not None:
-        cmd += ["--scope", scope]
-    proc = _run(cmd)
-    if proc.returncode != 0:
-        return {"name": "mcp", "status": "failed", "detail": _proc_detail(proc)}
-    return {"name": "mcp", "status": "removed", "detail": MCP_NAME}
 
 
 def _remove_skill() -> Step:
@@ -189,6 +204,88 @@ def _remove_skill() -> Step:
     return {"name": "skill", "status": "removed", "detail": str(_skill_dir())}
 
 
+# --- aai-cli skill (bundled in this package, copied into the agent) -----------
+
+_CLI_SKILL_NAME = "aai-cli"
+
+
+def _cli_skill_dir() -> Path:
+    return _skills_root() / _CLI_SKILL_NAME
+
+
+def _cli_skill_installed() -> bool:
+    return (_cli_skill_dir() / "SKILL.md").exists()
+
+
+def _bundled_cli_skill() -> Traversable:
+    # Ships inside the wheel (force-included via [tool.hatch.build.targets.wheel]
+    # artifacts). skills/ has no __init__.py, so navigate from the aai_cli package.
+    from importlib import resources
+
+    return resources.files("aai_cli") / "skills" / _CLI_SKILL_NAME
+
+
+def _copy_tree(node: Traversable, dest: Path) -> None:
+    dest.mkdir(parents=True, exist_ok=True)
+    for child in node.iterdir():
+        if child.name == "__pycache__" or child.name.endswith(".pyc"):
+            continue
+        out = dest / child.name
+        if child.is_dir():
+            _copy_tree(child, out)
+        else:
+            out.write_bytes(child.read_bytes())
+
+
+def _install_cli_skill(force: bool) -> Step:
+    # Bundled in the package, so no network/npx — just copy it into the agent's
+    # skills dir. Idempotent: skip the copy when already present and not --force.
+    dest = _cli_skill_dir()
+    if _cli_skill_installed() and not force:
+        return {"name": "aai-cli skill", "status": "already", "detail": f"aai-cli skill at {dest}"}
+    src = _bundled_cli_skill()
+    if not src.is_dir():
+        return {
+            "name": "aai-cli skill",
+            "status": "failed",
+            "detail": f"bundled aai-cli skill missing at {src} — this is a packaging bug.",
+        }
+    if dest.exists():
+        shutil.rmtree(dest)
+    _copy_tree(src, dest)
+    if not _cli_skill_installed():
+        return {
+            "name": "aai-cli skill",
+            "status": "failed",
+            "detail": f"copied the bundled skill but {dest / 'SKILL.md'} is missing.",
+        }
+    return {"name": "aai-cli skill", "status": "installed", "detail": str(dest)}
+
+
+def _cli_skill_status() -> Step:
+    return {
+        "name": "aai-cli skill",
+        "status": "installed" if _cli_skill_installed() else "not_installed",
+        "detail": str(_cli_skill_dir()),
+    }
+
+
+def _remove_cli_skill() -> Step:
+    # We copied a real directory in (not a symlink into a store), so removal is a
+    # plain rmtree of the destination.
+    dest = _cli_skill_dir()
+    if not _cli_skill_installed():
+        return {"name": "aai-cli skill", "status": "not_installed", "detail": str(dest)}
+    shutil.rmtree(dest, ignore_errors=True)
+    if _cli_skill_installed():
+        return {
+            "name": "aai-cli skill",
+            "status": "failed",
+            "detail": "skill still present after removal",
+        }
+    return {"name": "aai-cli skill", "status": "removed", "detail": str(dest)}
+
+
 def _render(data: dict[str, list[Step]]) -> str:
     return render_steps(data["steps"], heading=_STEPS_HEADING)
 
@@ -196,8 +293,8 @@ def _render(data: dict[str, list[Step]]) -> str:
 @app.command(
     epilog=examples_epilog(
         [
-            ("Wire AssemblyAI docs + skill into Claude Code", "aai claude install"),
-            ("Install for the current project only", "aai claude install --scope project"),
+            ("Set up your coding agent for AssemblyAI", "aai setup install"),
+            ("Install for the current project only", "aai setup install --scope project"),
         ]
     )
 )
@@ -214,14 +311,14 @@ def install(
     force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Install the AssemblyAI docs MCP server and skill into Claude Code."""
+    """Install the AssemblyAI docs MCP server and skills into your coding agent."""
 
     def body(_state: AppState, json_mode: bool) -> None:
         if scope not in _VALID_SCOPES:
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
-        steps = [_install_mcp(scope, force), _install_skill(force)]
+        steps = [_install_mcp(scope, force), _install_skill(force), _install_cli_skill(force)]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
@@ -232,7 +329,7 @@ def install(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Show whether Claude Code is wired up", "aai claude status"),
+            ("Show what's set up", "aai setup status"),
         ]
     )
 )
@@ -240,10 +337,10 @@ def status(
     ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Show whether the AssemblyAI MCP server and skill are wired into Claude Code."""
+    """Show whether the AssemblyAI MCP server and skills are set up in your coding agent."""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        steps = [_mcp_status(), _skill_status()]
+        steps = [_mcp_status(), _skill_status(), _cli_skill_status()]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
@@ -252,7 +349,7 @@ def status(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Remove the AssemblyAI MCP server and skill", "aai claude remove"),
+            ("Remove the AssemblyAI MCP server and skills", "aai setup remove"),
         ]
     )
 )
@@ -268,14 +365,14 @@ def remove(
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Remove the AssemblyAI MCP server and skill from Claude Code."""
+    """Remove the AssemblyAI MCP server and skills from your coding agent."""
 
     def body(_state: AppState, json_mode: bool) -> None:
         if scope is not None and scope not in _VALID_SCOPES:
             raise UsageError(
                 f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
             )
-        steps = [_remove_mcp(scope), _remove_skill()]
+        steps = [_remove_mcp(scope), _remove_skill(), _remove_cli_skill()]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)

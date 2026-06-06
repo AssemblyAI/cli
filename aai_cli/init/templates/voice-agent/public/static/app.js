@@ -1,5 +1,6 @@
 const SESSION_CONFIG = {
-  systemPrompt: "You are a friendly, concise voice assistant. Keep replies short and conversational.",
+  systemPrompt:
+    "You are a friendly, concise voice assistant. Keep replies short and conversational.",
   greeting: "Hi! I'm your AssemblyAI voice agent. What can I help you with?",
   input: { format: { encoding: "audio/pcm" } },
   output: { voice: "ivy", format: { encoding: "audio/pcm" } },
@@ -18,7 +19,9 @@ let micPipeline = null;
 let player = null;
 let connected = false;
 
-connBtn.addEventListener("click", () => (connected ? hangup() : connect().catch(fail)));
+connBtn.addEventListener("click", () =>
+  connected ? hangup() : connect().catch(fail),
+);
 
 function setStatus(message, state) {
   statusEl.textContent = message;
@@ -33,7 +36,9 @@ async function connect() {
 
   ws = new WebSocket(`${ws_url}?token=${encodeURIComponent(token)}`);
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "session.update", session: buildSessionConfig() }));
+    ws.send(
+      JSON.stringify({ type: "session.update", session: buildSessionConfig() }),
+    );
     startMic().catch(fail);
   };
   ws.onmessage = (event) => onEvent(JSON.parse(event.data));
@@ -53,16 +58,29 @@ function buildSessionConfig() {
 }
 
 async function startMic() {
-  const stream = await navigator.mediaDevices.getUserMedia(SESSION_CONFIG.microphone);
+  const stream = await navigator.mediaDevices.getUserMedia(
+    SESSION_CONFIG.microphone,
+  );
   micPipeline = AudioHelpers.createMicrophonePipeline(stream, {
     bufferSize: SESSION_CONFIG.processorBufferSize,
   });
-  player = AudioHelpers.createPcmPlayer({ sampleRate: SESSION_CONFIG.outputSampleRate });
+  player = AudioHelpers.createPcmPlayer({
+    sampleRate: SESSION_CONFIG.outputSampleRate,
+  });
   await player.resume();
   await micPipeline.start((frame, sampleRate) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const pcm = AudioHelpers.downsampleToPCM(frame, sampleRate, SESSION_CONFIG.inputSampleRate);
-    ws.send(JSON.stringify({ type: "input.audio", audio: AudioHelpers.bytesToB64(pcm) }));
+    const pcm = AudioHelpers.downsampleToPCM(
+      frame,
+      sampleRate,
+      SESSION_CONFIG.inputSampleRate,
+    );
+    ws.send(
+      JSON.stringify({
+        type: "input.audio",
+        audio: AudioHelpers.bytesToB64(pcm),
+      }),
+    );
   });
 
   connected = true;

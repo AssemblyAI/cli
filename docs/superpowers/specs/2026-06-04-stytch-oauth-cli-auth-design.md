@@ -177,7 +177,8 @@ CLI; surface a clear message and stop).
 - `STYTCH_OAUTH_PROVIDER = "google"` (enabled + verified on the project)
 - `LOOPBACK_REDIRECT = "http://127.0.0.1:8585/callback"` (fixed port; exact-match
   validation — Stytch rejects unregistered ports/paths. Single registered URL.)
-- `AMS_BASE_URL` (`https://ams.sandbox000.assemblyai-labs.com`; prod URL per P2)
+- `AMS_BASE_URL` (`https://ams.sandbox000.assemblyai-labs.com`; production:
+  `https://ams.internal.assemblyai-labs.com`)
 - `CLI_TOKEN_NAME = "AssemblyAI CLI"`
 
 Hardcode sandbox defaults; allow override via env (e.g. `AAI_AUTH_*`) so swapping
@@ -232,10 +233,9 @@ Mirror existing test patterns in `tests/` (see `test_login*`-style if present).
   → 401 unauth; `/v2/auth/discover` processes via Stytch). Settle via fcastillo or
   the first real end-to-end login. Note: a first-time user with **0 orgs** hits the
   `/v2/auth/organization` create branch — the CLI must handle it.
-- **P2 — Blessed public, stable AMS URL.** A public sandbox is already reachable
-  (`ams.sandbox000.assemblyai-labs.com`); a production public URL (out of
-  `experimental/`) is needed for release. *(Downgraded: the "internal-only,
-  unreachable" risk is resolved — a public ingress demonstrably exists.)*
+- **P2 — RESOLVED.** Production AMS endpoint:
+  `https://ams.internal.assemblyai-labs.com`. A public sandbox remains reachable
+  at `ams.sandbox000.assemblyai-labs.com`.
 
 *(Former P3 removed: AMS already brokers the Stytch exchange via
 `/v2/auth/discover` + `/v2/auth/exchange`; no new endpoint is required.)*

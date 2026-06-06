@@ -92,6 +92,9 @@ fi
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
+echo "==> prettier (init template JS/CSS)"
+prettier --check "aai_cli/init/templates/**/*.{js,css}"
+
 echo "==> shellcheck (install.sh)"
 # Static-lint the public install script and this gate script. CI's ubuntu runner ships shellcheck;
 # locally it's skipped with a notice if not installed.

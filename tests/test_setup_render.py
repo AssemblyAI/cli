@@ -1,7 +1,7 @@
 import io
 
 from aai_cli import theme
-from aai_cli.commands.claude import _render
+from aai_cli.commands.setup import _render
 from aai_cli.steps import Step
 
 

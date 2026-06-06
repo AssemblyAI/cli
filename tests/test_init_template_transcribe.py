@@ -43,10 +43,9 @@ def test_required_files_exist():
     for rel in (
         "api/index.py",
         "api/settings.py",
-        "index.html",
-        "static/app.js",
-        "static/styles.css",
-        "vercel.json",
+        "public/index.html",
+        "public/static/app.js",
+        "public/static/styles.css",
         "requirements.txt",
         "README.md",
         "AGENTS.md",
@@ -70,8 +69,8 @@ def test_base_url_env_is_applied(monkeypatch):
 
 def test_page_explores_all_features_and_speakers():
     # Guard the UI surface: each audio-intelligence view + per-speaker coloring stay wired.
-    html = (TEMPLATE_DIR / "index.html").read_text()
-    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    html = (TEMPLATE_DIR / "public" / "index.html").read_text()
+    app_js = (TEMPLATE_DIR / "public" / "static" / "app.js").read_text()
     ui_src = html + app_js
     for token in (
         "chapters",

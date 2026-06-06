@@ -45,16 +45,19 @@ aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
 
-## Scaffold A Starter App
+## Build An App
 
-Copy a small, self-contained FastAPI + HTML project you can run locally and deploy to Vercel as-is:
+`aai init` is how you **build a new app** — it copies a small, self-contained FastAPI + HTML project you can run locally and deploy to Vercel as-is. This is the starting point whenever you want to *create* something, including a voice agent app:
 
 ```sh
 aai init                            # pick a template, scaffold, install deps, open the browser
 aai init audio-transcription myapp  # non-interactive: template + directory
+aai init voice-agent my-agent       # build a voice agent app (full FastAPI + browser starter)
 ```
 
 Your key is written to a git-ignored `.env` (never sent to the browser). Use `--no-install` to scaffold only.
+
+> **Building a voice agent? Use `aai init voice-agent`, not `aai agent`.** `aai agent` only *runs* a live mic conversation in the terminal and writes no code; `aai init` creates the actual app.
 
 ## Commands
 
@@ -65,9 +68,9 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | `aai transcribe <file\|url>` | Transcribe a file, URL, or YouTube URL (`--sample`, `--llm`, `--show-code`). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
-| `aai agent` | Live two-way voice conversation with a voice agent. |
+| `aai agent` | *Run* a live two-way voice conversation (to **build** a voice agent app, use `aai init voice-agent`). |
 | `aai llm <prompt>` | Prompt the LLM Gateway (`--transcript-id`, or `--follow` for a live stream). |
-| `aai claude install` | Wire Claude Code up to AssemblyAI's docs + skill. |
+| `aai setup install` | Set up your coding agent for AssemblyAI (docs MCP + skills). |
 | `aai samples create <name>` | Scaffold a runnable starter script. |
 | `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
@@ -128,7 +131,7 @@ aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize a
 
 ## Voice Agent
 
-Have a live, two-way voice conversation — full-duplex, so you can interrupt mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself:
+Have a live, two-way voice conversation — full-duplex, so you can interrupt mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself. (To **build** a voice agent *app*, use `aai init voice-agent` instead — this command just runs a conversation in the terminal.)
 
 ```sh
 aai agent                                    # talk; the agent talks back. Ctrl-C to stop.
@@ -208,15 +211,15 @@ AMS sessions are short-lived — if a command reports it needs a browser login, 
 
 ## AI Coding Agents
 
-Wire Claude Code up to AssemblyAI's live docs (MCP server) and the AssemblyAI skill so your agent writes current, correct integration code:
+Set your coding agent up for AssemblyAI — the live docs (MCP server), the AssemblyAI skill, and the bundled `aai-cli` skill — so your agent writes current, correct integration code:
 
 ```sh
-aai claude install        # installs the docs MCP server + skill (user scope)
-aai claude status         # show what's wired up
-aai claude remove         # unwind both
+aai setup install        # docs MCP + assemblyai skill + bundled aai-cli skill (user scope)
+aai setup status         # show what's set up
+aai setup remove         # unwind all three
 ```
 
-`install` shells out to `claude mcp add` and `npx skills add`. Pass `--scope project` to scope the MCP server to the current project. A missing `claude` or `npx` is reported and skipped, not treated as an error.
+`install` shells out to `claude mcp add` for the MCP and `npx skills add` for the `assemblyai` skill; the `aai-cli` skill ships inside the package and is copied in directly (no network). Pass `--scope project` to scope the MCP server to the current project. A missing `claude` or `npx` is reported and skipped, not treated as an error.
 
 ## Reference
 

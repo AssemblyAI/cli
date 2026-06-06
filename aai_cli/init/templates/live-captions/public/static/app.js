@@ -15,7 +15,9 @@ let ws = null;
 let audioPipeline = null;
 let recording = false;
 
-recBtn.addEventListener("click", () => (recording ? stop() : start().catch(fail)));
+recBtn.addEventListener("click", () =>
+  recording ? stop() : start().catch(fail),
+);
 
 function setStatus(message, state) {
   statusEl.textContent = message;
@@ -50,7 +52,13 @@ async function start() {
     setStatus("● Live", "live");
     audioPipeline.connect((frame, sampleRate) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(AudioHelpers.downsampleToPCM(frame, sampleRate, STREAMING_CONFIG.sampleRate));
+        ws.send(
+          AudioHelpers.downsampleToPCM(
+            frame,
+            sampleRate,
+            STREAMING_CONFIG.sampleRate,
+          ),
+        );
       }
     });
   };
@@ -76,7 +84,8 @@ function stop() {
   recBtn.textContent = "● Record";
   recBtn.dataset.state = "idle";
   setStatus("Stopped", "idle");
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "Terminate" }));
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({ type: "Terminate" }));
   if (audioPipeline) audioPipeline.close();
   ws = null;
   audioPipeline = null;

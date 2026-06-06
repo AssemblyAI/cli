@@ -177,14 +177,14 @@ def _check_audio() -> Check:
 
 
 def _check_coding_agent() -> Check:
-    affects = ["aai claude install"]
+    affects = ["aai setup install"]
     missing = [tool for tool in ("claude", "npx") if shutil.which(tool) is None]
     if not missing:
         return {
             "name": "coding-agent",
             "status": "ok",
             "affects": [],
-            "detail": "claude and npx found.",
+            "detail": "claude and npx found; run 'aai setup install' to wire up the docs MCP + skills.",
             "fix": None,
         }
     return {
@@ -192,7 +192,10 @@ def _check_coding_agent() -> Check:
         "status": "warn",
         "affects": affects,
         "detail": f"not found: {', '.join(missing)}.",
-        "fix": "Install Claude Code (https://claude.com/claude-code) and Node.js to wire up docs.",
+        "fix": (
+            "Install Claude Code (https://claude.com/claude-code) and Node.js, "
+            "then run 'aai setup install'."
+        ),
     }
 
 
