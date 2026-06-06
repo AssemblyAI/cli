@@ -93,7 +93,13 @@ echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
 echo "==> prettier (init template JS/CSS)"
-prettier --check "aai_cli/init/templates/**/*.{js,css}"
+# CI's runner has prettier on PATH; locally it's skipped with a notice if not
+# installed, matching how shellcheck/swiftlint self-skip above.
+if command -v prettier >/dev/null 2>&1; then
+  prettier --check "aai_cli/init/templates/**/*.{js,css}"
+else
+  echo "   prettier not found; skipping (CI runs it)"
+fi
 
 echo "==> shellcheck (install.sh)"
 # Static-lint the public install script and this gate script. CI's ubuntu runner ships shellcheck;
