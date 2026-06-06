@@ -47,14 +47,14 @@ _SYMBOL = {
 def _check_python() -> Check:
     v = sys.version_info
     version = f"{v.major}.{v.minor}.{v.micro}"
-    if v >= (3, 11):
+    if v >= (3, 12):
         return {"name": "python", "status": "ok", "affects": [], "detail": version, "fix": None}
     return {
         "name": "python",
         "status": "fail",
         "affects": ["everything"],
-        "detail": f"Python {version} is too old; the CLI needs 3.11+",
-        "fix": "Install Python 3.11 or newer, then reinstall the CLI.",
+        "detail": f"Python {version} is too old; the CLI needs 3.12+",
+        "fix": "Install Python 3.12 or newer, then reinstall the CLI.",
     }
 
 
