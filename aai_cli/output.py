@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from rich import box
 from rich.markup import escape
@@ -15,8 +15,6 @@ from aai_cli.errors import UsageError
 
 if TYPE_CHECKING:
     from aai_cli.errors import CLIError
-
-T = TypeVar("T")
 
 console = theme.make_console()
 # Errors go to stderr so they never pollute piped stdout (e.g. `aai transcribe x -o text > out`).
@@ -119,7 +117,7 @@ def detail_table() -> Table:
     return table
 
 
-def emit(data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
+def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(data, default=str))
     else:

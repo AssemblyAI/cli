@@ -4,7 +4,7 @@
 
 **Goal:** Distribute the `aai` CLI via `brew install` using a Homebrew `Language::Python::Virtualenv` formula that lives inside this repo (the repo *is* the tap), sourcing the package from a GitHub release tag and never touching PyPI for our own package.
 
-**Architecture:** A `Formula/aai.rb` file is committed to `AssemblyAI/cli`. Users run `brew tap assemblyai/cli https://github.com/AssemblyAI/cli` then `brew install aai`. Homebrew builds an isolated virtualenv from our package's source tarball (the `v0.1.0` git-tag tarball) and installs all runtime dependencies from pinned `resource` stanzas (sourced from PyPI — those are third-party packages, we publish nothing). Native dependencies (`portaudio`, `openssl`) are declared via `depends_on` and provided by Homebrew rather than bundled.
+**Architecture:** A `Formula/aai.rb` file is committed to `AssemblyAI/cli`. Users run `brew tap assemblyai/cli https://github.com/AssemblyAI/cli` then `brew install aai`. Homebrew builds an isolated virtualenv from our package's source tarball (the `v0.1.0` git-tag tarball) and installs all runtime dependencies from pinned `resource` stanzas (sourced from PyPI — those are third-party packages, we publish nothing). Native dependencies (`portaudio`, `openssl`, `ffmpeg`) are declared via `depends_on` and provided by Homebrew rather than bundled.
 
 **Tech Stack:** Homebrew (Ruby formula DSL), `Language::Python::Virtualenv`, Python 3.13, `brew update-python-resources`, hatchling (our build backend), GitHub Releases.
 
@@ -15,7 +15,7 @@
 - **Source artifact = GitHub tag tarball.** `url` → `https://github.com/AssemblyAI/cli/archive/refs/tags/v0.1.0.tar.gz` (the tarball GitHub auto-generates per tag). Idiomatic (httpie/azure-cli), zero per-release asset upload. Not PyPI.
 - **Release is on the critical path (bootstrap only).** The main `sha256` requires the tag to exist, and `brew update-python-resources` requires a resolvable `url`. So Task 2 (cut `v0.1.0` *by hand*) gates Tasks 3–4. This manual step happens **once**; from then on Task 6's pipeline cuts every release automatically on merge to `main` (Conventional Commits → SemVer via `python-semantic-release`, then an auto formula bump). No PyPI publish in either the bootstrap or the steady state.
 - **Resources come from `brew update-python-resources`, not a lockfile dump.** It correctly handles platform-conditional deps. The 48-package runtime closure includes Linux-only (`jeepney`, `secretstorage`) and Windows-only (`pywin32-ctypes`) packages that must NOT be unconditional `resource` blocks. Appendix A has an offline `uv.lock` generator as a fallback, with this caveat called out.
-- **Native build dependencies.** Closure contains Rust-built (`pydantic-core`, `jiter`, `cryptography`) and C-extension (`cffi`) packages, plus `sounddevice` which needs PortAudio. Formula declares `rust`/`pkgconf` (build), `openssl@3`, `portaudio`, `python@3.13`. The `cryptography` source build is slow; Appendix B documents the `depends_on "cryptography" => :no_linkage` optimization if the build is too painful.
+- **Native build dependencies.** Closure contains Rust-built (`pydantic-core`, `jiter`, `cryptography`) and C-extension (`cffi`) packages, plus `sounddevice` which needs PortAudio. Formula declares `rust`/`pkgconf` (build), `openssl@3`, `portaudio`, `python@3.13`. It also declares `ffmpeg` (not a build/link dep of any Python package — a runtime executable `transcribe`/`stream` shell out to for decoding non-WAV/URL audio), so `brew install aai` yields a fully working CLI without a separate `brew install ffmpeg`. The `cryptography` source build is slow; Appendix B documents the `depends_on "cryptography" => :no_linkage` optimization if the build is too painful.
 - **RISK — `aai` binary name collision.** Your `alexkroman/aai` tap installs a command also named `aai`. Both cannot coexist in one Homebrew prefix. This plan keeps `aai` (matches `[project.scripts] aai = "assemblyai_cli.main:run"`). Resolving the collision (rename command, or rename one tap's formula) is out of scope and tracked as an open product decision.
 - **RISK — `sounddevice` runtime linkage.** Built from sdist, `sounddevice` binds PortAudio via cffi/`ctypes.util.find_library`. With `depends_on "portaudio"` it should resolve, but this is the most likely runtime failure; Task 4 explicitly tests the audio import path, not just `--version`.
 - **Branch hygiene.** You are on `stytch-oauth-cli-login` with an uncommitted `auth/endpoints.py`. The release tag (Task 2) must come off `main`. Do all formula/script work on a normal feature branch; do not tag from the feature branch.
@@ -55,6 +55,7 @@ class Aai < Formula
   depends_on "rust" => :build         # pydantic-core, jiter, cryptography
   depends_on "openssl@3"              # cryptography linkage
   depends_on "portaudio"             # sounddevice (audio capture)
+  depends_on "ffmpeg"                # decode non-WAV/URL audio (transcribe/stream)
   depends_on "python@3.13"
 
   # RESOURCE STANZAS INSERTED IN TASK 3 (brew update-python-resources)
