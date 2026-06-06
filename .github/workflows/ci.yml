@@ -5,16 +5,25 @@ on:
     branches: [main]
     types: [opened, reopened, ready_for_review, synchronize]
   push:
+    branches: [main]          # PRs are covered by pull_request (incl. synchronize);
+                              # scoping push to main avoids double-running every PR commit.
 
 # Least privilege: CI only needs to read the repo. Actions are pinned to commit
 # SHAs (a moved tag can't silently change what runs); Dependabot keeps them current.
 permissions:
   contents: read
 
+# Cancel superseded runs when new commits land on a PR/branch, but never cancel a
+# main run (don't kill an in-flight merge build).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   check:
     name: lint + typecheck + tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Test both ends of the supported range: 3.12 is the floor (requires-python),
     # 3.13 is what the Homebrew formula ships. fail-fast off so one version's
     # failure doesn't mask the other's.
@@ -58,6 +67,7 @@ jobs:
   lint-formula:
     name: brew style (Homebrew formula)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -80,6 +90,7 @@ jobs:
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -105,6 +116,7 @@ jobs:
   build:
     name: build + twine check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -125,6 +137,7 @@ jobs:
   audit:
     name: pip-audit (dependency CVEs)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -155,6 +168,7 @@ jobs:
           - os: macos-latest
             kfilter: "-k pipx"      # pipx only — PEP 668 makes pip --user flaky on macOS
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
