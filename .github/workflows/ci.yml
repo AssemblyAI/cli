@@ -44,6 +44,28 @@ jobs:
       - name: Lint, typecheck, test
         run: ./scripts/check.sh
 
+  lint-formula:
+    name: brew style (Homebrew formula)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false  # no job pushes; don't leave the token in .git/config
+
+      # Homebrew's formula linters live inside `brew`, so set it up on the runner.
+      # Homebrew/actions is a monorepo (setup-homebrew is a subpath); pin it to a
+      # commit SHA like every other action here — Dependabot keeps it current.
+      - uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1
+
+      # `brew style` is the RuboCop-based formula linter and runs fully offline, so
+      # it lints idioms (resource/depends_on ordering, on_linux scoping) on every PR.
+      # The stricter `brew audit --strict --online` and a real `brew install`/`brew
+      # test` build are deliberately NOT here: they need the source `sha256`, which
+      # stays a placeholder until the v0.1.0 release tag is cut. Those belong in a
+      # release-time job (see the Homebrew tap plan, Task 4/6).
+      - name: Lint the formula
+        run: brew style ./Formula/aai.rb
+
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-latest
