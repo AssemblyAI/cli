@@ -557,3 +557,38 @@ def test_setup_no_subcommand_lists_commands():
     assert "install" in result.output
     assert "status" in result.output
     assert "remove" in result.output
+
+
+# --- aai-cli skill: defensive failure branches --------------------------------
+
+
+def test_install_cli_skill_fails_when_bundle_missing(monkeypatch, tmp_path):
+    from aai_cli.commands import setup
+
+    monkeypatch.setattr(setup, "_bundled_cli_skill", lambda: tmp_path / "nonexistent")
+    step = setup._install_cli_skill(force=False)
+    assert step["status"] == "failed"
+    assert "packaging bug" in step["detail"]
+
+
+def test_install_cli_skill_fails_when_copy_lacks_skill_md(monkeypatch, tmp_path):
+    from aai_cli.commands import setup
+
+    empty = tmp_path / "emptybundle"
+    empty.mkdir()
+    monkeypatch.setattr(setup, "_bundled_cli_skill", lambda: empty)
+    step = setup._install_cli_skill(force=False)
+    assert step["status"] == "failed"
+    assert "SKILL.md" in step["detail"]
+
+
+def test_remove_cli_skill_fails_when_rmtree_noops(monkeypatch):
+    from aai_cli.commands import setup
+
+    dest = _cli_skill_path()
+    dest.mkdir(parents=True)
+    (dest / "SKILL.md").write_text("# x")
+    monkeypatch.setattr(setup.shutil, "rmtree", lambda *a, **k: None)
+    step = setup._remove_cli_skill()
+    assert step["status"] == "failed"
+    assert "still present" in step["detail"]
