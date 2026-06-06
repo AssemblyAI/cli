@@ -66,20 +66,22 @@ def stream(
     speech_model: str = typer.Option(
         DEFAULT_SPEECH_MODEL, "--speech-model", help="Streaming speech model."
     ),
-    encoding: str | None = typer.Option(None, "--encoding", help="pcm_s16le or pcm_mulaw."),
+    encoding: str | None = typer.Option(
+        None, "--encoding", help="Audio encoding: pcm_s16le or pcm_mulaw."
+    ),
     language_detection: bool | None = typer.Option(
         None, "--language-detection", help="Auto-detect the spoken language."
     ),
     domain: str | None = typer.Option(None, "--domain", help="Domain preset (e.g. medical)."),
     # turn detection
     end_of_turn_confidence_threshold: float | None = typer.Option(
-        None, "--end-of-turn-confidence-threshold", help="0-1 end-of-turn confidence."
+        None, "--end-of-turn-confidence-threshold", help="End-of-turn confidence (0-1)."
     ),
     min_turn_silence: int | None = typer.Option(
-        None, "--min-turn-silence", help="Min turn silence (ms)."
+        None, "--min-turn-silence", help="Min silence to end a turn (ms)."
     ),
     max_turn_silence: int | None = typer.Option(
-        None, "--max-turn-silence", help="Max turn silence (ms)."
+        None, "--max-turn-silence", help="Max silence before ending a turn (ms)."
     ),
     vad_threshold: float | None = typer.Option(
         None, "--vad-threshold", help="Voice-activity threshold."
@@ -99,7 +101,9 @@ def stream(
     ),
     speaker_labels: bool | None = typer.Option(None, "--speaker-labels", help="Label speakers."),
     max_speakers: int | None = typer.Option(None, "--max-speakers", help="Max speakers."),
-    voice_focus: str | None = typer.Option(None, "--voice-focus", help="near_field or far_field."),
+    voice_focus: str | None = typer.Option(
+        None, "--voice-focus", help="Voice focus: near_field or far_field."
+    ),
     voice_focus_threshold: float | None = typer.Option(
         None, "--voice-focus-threshold", help="Voice-focus threshold."
     ),
@@ -108,7 +112,7 @@ def stream(
         None, "--redact-pii-policy", help="Comma-separated PII policies."
     ),
     redact_pii_sub: str | None = typer.Option(
-        None, "--redact-pii-sub", help="hash or entity_name."
+        None, "--redact-pii-sub", help="Replace redacted PII with: hash or entity_name."
     ),
     inactivity_timeout: int | None = typer.Option(
         None, "--inactivity-timeout", help="Auto-close after N seconds idle."
@@ -125,7 +129,9 @@ def stream(
         None, "--config-file", help="JSON file of streaming fields."
     ),
     # existing
-    prompt: str | None = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
+    prompt: str | None = typer.Option(
+        None, "--prompt", help="Prompt to bias the speech model (u3-pro)."
+    ),
     llm_prompt: list[str] | None = typer.Option(
         None,
         "--llm",
@@ -150,8 +156,9 @@ def stream(
 ) -> None:
     """Transcribe live audio in real time — from your mic, a file, or a URL.
 
-    --prompt biases the speech model. --llm-gateway-prompt transforms the full
-    transcript through LLM Gateway once the stream ends (e.g. "summarize the call").
+    --prompt biases the speech model. --llm runs a prompt over the live transcript
+    through LLM Gateway, refreshing the answer on every finalized turn (e.g.
+    "summarize action items").
     """
 
     def body(state: AppState, json_mode: bool) -> None:

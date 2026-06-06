@@ -517,9 +517,9 @@
   
    Transcribe live audio in real time — from your mic, a file, or a URL.
   
-   --prompt biases the speech model. --llm-gateway-prompt transforms the full
-   transcript through LLM Gateway once the stream ends (e.g. "summarize the
-   call").
+   --prompt biases the speech model. --llm runs a prompt over the live transcript
+   through LLM Gateway, refreshing the answer on every finalized turn (e.g.
+   "summarize action items").
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Omit │
@@ -546,18 +546,19 @@
   │ --speech-model                                 TEXT     Streaming speech     │
   │                                                         model.               │
   │                                                         [default: u3-rt-pro] │
-  │ --encoding                                     TEXT     pcm_s16le or         │
+  │ --encoding                                     TEXT     Audio encoding:      │
+  │                                                         pcm_s16le or         │
   │                                                         pcm_mulaw.           │
   │ --language-detection                                    Auto-detect the      │
   │                                                         spoken language.     │
   │ --domain                                       TEXT     Domain preset (e.g.  │
   │                                                         medical).            │
-  │ --end-of-turn-confi…                           FLOAT    0-1 end-of-turn      │
-  │                                                         confidence.          │
-  │ --min-turn-silence                             INTEGER  Min turn silence     │
-  │                                                         (ms).                │
-  │ --max-turn-silence                             INTEGER  Max turn silence     │
-  │                                                         (ms).                │
+  │ --end-of-turn-confi…                           FLOAT    End-of-turn          │
+  │                                                         confidence (0-1).    │
+  │ --min-turn-silence                             INTEGER  Min silence to end a │
+  │                                                         turn (ms).           │
+  │ --max-turn-silence                             INTEGER  Max silence before   │
+  │                                                         ending a turn (ms).  │
   │ --vad-threshold                                FLOAT    Voice-activity       │
   │                                                         threshold.           │
   │ --format-turns            --no-format-turns             Punctuate/format     │
@@ -568,7 +569,8 @@
   │ --filter-profanity                                      Mask profanity.      │
   │ --speaker-labels                                        Label speakers.      │
   │ --max-speakers                                 INTEGER  Max speakers.        │
-  │ --voice-focus                                  TEXT     near_field or        │
+  │ --voice-focus                                  TEXT     Voice focus:         │
+  │                                                         near_field or        │
   │                                                         far_field.           │
   │ --voice-focus-thres…                           FLOAT    Voice-focus          │
   │                                                         threshold.           │
@@ -576,7 +578,9 @@
   │                                                         turns.               │
   │ --redact-pii-policy                            TEXT     Comma-separated PII  │
   │                                                         policies.            │
-  │ --redact-pii-sub                               TEXT     hash or entity_name. │
+  │ --redact-pii-sub                               TEXT     Replace redacted PII │
+  │                                                         with: hash or        │
+  │                                                         entity_name.         │
   │ --inactivity-timeout                           INTEGER  Auto-close after N   │
   │                                                         seconds idle.        │
   │ --webhook-url                                  TEXT     Webhook URL.         │
@@ -588,8 +592,9 @@
   │                                                         (repeatable).        │
   │ --config-file                                  TEXT     JSON file of         │
   │                                                         streaming fields.    │
-  │ --prompt                                       TEXT     Bias the speech      │
-  │                                                         model (u3-pro).      │
+  │ --prompt                                       TEXT     Prompt to bias the   │
+  │                                                         speech model         │
+  │                                                         (u3-pro).            │
   │ --llm                                          TEXT     Run a prompt over    │
   │                                                         the live transcript  │
   │                                                         through LLM Gateway, │
@@ -658,7 +663,8 @@
   │ --sample                                                Use the hosted       │
   │                                                         wildfires.mp3        │
   │                                                         sample.              │
-  │ --speech-model                                 TEXT     best, nano, slam-1,  │
+  │ --speech-model                                 TEXT     Speech model: best,  │
+  │                                                         nano, slam-1, or     │
   │                                                         universal.           │
   │ --language-code                                TEXT     Force a language     │
   │                                                         (e.g. en_us).        │
@@ -668,34 +674,48 @@
   │                                                         (repeatable).        │
   │ --temperature                                  FLOAT    Speech model         │
   │                                                         temperature.         │
-  │ --prompt                                       TEXT     Bias the speech      │
-  │                                                         model (u3-pro).      │
+  │ --prompt                                       TEXT     Prompt to bias the   │
+  │                                                         speech model         │
+  │                                                         (u3-pro).            │
   │ --punctuate                --no-punctuate               Add punctuation.     │
-  │ --format-text              --no-format-text             Format text.         │
-  │ --disfluencies                                          Keep filler words.   │
+  │ --format-text              --no-format-text             Apply text           │
+  │                                                         formatting (casing,  │
+  │                                                         numbers).            │
+  │ --disfluencies                                          Keep filler words    │
+  │                                                         (e.g. um, uh).       │
   │ --speaker-labels                                        Enable diarization.  │
   │ --speakers-expected                            INTEGER  Hint speaker count.  │
   │ --multichannel                                          Transcribe each      │
-  │                                                         channel.             │
+  │                                                         audio channel        │
+  │                                                         separately.          │
   │ --redact-pii                                            Redact PII from the  │
   │                                                         transcript.          │
   │ --redact-pii-policy                            TEXT     Comma-separated PII  │
   │                                                         policies (e.g.       │
   │                                                         person_name,...).    │
-  │ --redact-pii-sub                               TEXT     Substitution: hash   │
-  │                                                         or entity_name.      │
+  │ --redact-pii-sub                               TEXT     Replace redacted PII │
+  │                                                         with: hash or        │
+  │                                                         entity_name.         │
   │ --redact-pii-audio                                      Also redact audio.   │
   │ --filter-profanity                                      Mask profanity.      │
   │ --content-safety                                        Detect sensitive     │
   │                                                         content.             │
-  │ --content-safety-con…                          INTEGER  Confidence threshold │
-  │                                                         25-100.              │
-  │ --speech-threshold                             FLOAT    Minimum speech       │
-  │                                                         proportion 0-1.      │
+  │ --content-safety-con…                          INTEGER  Content-safety       │
+  │                                                         confidence threshold │
+  │                                                         (25-100).            │
+  │ --speech-threshold                             FLOAT    Minimum proportion   │
+  │                                                         of speech required   │
+  │                                                         (0-1).               │
   │ --summarization                                         Summarize the        │
   │                                                         transcript.          │
-  │ --summary-model                                TEXT     informative/convers… │
-  │ --summary-type                                 TEXT     bullets/gist/headli… │
+  │ --summary-model                                TEXT     Summary model:       │
+  │                                                         informative,         │
+  │                                                         conversational, or   │
+  │                                                         catchy.              │
+  │ --summary-type                                 TEXT     Summary format:      │
+  │                                                         bullets, gist,       │
+  │                                                         headline, or         │
+  │                                                         paragraph.           │
   │ --auto-chapters                                         Generate chapters.   │
   │ --sentiment-analysis                                    Analyze sentiment.   │
   │ --entity-detection                                      Detect entities.     │

@@ -82,7 +82,7 @@ def transcribe(
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # model & language
     speech_model: str | None = typer.Option(
-        None, "--speech-model", help="best, nano, slam-1, universal."
+        None, "--speech-model", help="Speech model: best, nano, slam-1, or universal."
     ),
     language_code: str | None = typer.Option(
         None, "--language-code", help="Force a language (e.g. en_us)."
@@ -96,22 +96,26 @@ def transcribe(
     temperature: float | None = typer.Option(
         None, "--temperature", help="Speech model temperature."
     ),
-    prompt: str | None = typer.Option(None, "--prompt", help="Bias the speech model (u3-pro)."),
+    prompt: str | None = typer.Option(
+        None, "--prompt", help="Prompt to bias the speech model (u3-pro)."
+    ),
     # formatting
     punctuate: bool | None = typer.Option(
         None, "--punctuate/--no-punctuate", help="Add punctuation."
     ),
     format_text: bool | None = typer.Option(
-        None, "--format-text/--no-format-text", help="Format text."
+        None, "--format-text/--no-format-text", help="Apply text formatting (casing, numbers)."
     ),
-    disfluencies: bool | None = typer.Option(None, "--disfluencies", help="Keep filler words."),
+    disfluencies: bool | None = typer.Option(
+        None, "--disfluencies", help="Keep filler words (e.g. um, uh)."
+    ),
     # speakers & channels
     speaker_labels: bool = typer.Option(False, "--speaker-labels", help="Enable diarization."),
     speakers_expected: int | None = typer.Option(
         None, "--speakers-expected", help="Hint speaker count."
     ),
     multichannel: bool | None = typer.Option(
-        None, "--multichannel", help="Transcribe each channel."
+        None, "--multichannel", help="Transcribe each audio channel separately."
     ),
     # guardrails
     redact_pii: bool | None = typer.Option(
@@ -121,7 +125,7 @@ def transcribe(
         None, "--redact-pii-policy", help="Comma-separated PII policies (e.g. person_name,...)."
     ),
     redact_pii_sub: str | None = typer.Option(
-        None, "--redact-pii-sub", help="Substitution: hash or entity_name."
+        None, "--redact-pii-sub", help="Replace redacted PII with: hash or entity_name."
     ),
     redact_pii_audio: bool | None = typer.Option(
         None, "--redact-pii-audio", help="Also redact audio."
@@ -133,20 +137,20 @@ def transcribe(
         None, "--content-safety", help="Detect sensitive content."
     ),
     content_safety_confidence: int | None = typer.Option(
-        None, "--content-safety-confidence", help="Confidence threshold 25-100."
+        None, "--content-safety-confidence", help="Content-safety confidence threshold (25-100)."
     ),
     speech_threshold: float | None = typer.Option(
-        None, "--speech-threshold", help="Minimum speech proportion 0-1."
+        None, "--speech-threshold", help="Minimum proportion of speech required (0-1)."
     ),
     # analysis
     summarization: bool | None = typer.Option(
         None, "--summarization", help="Summarize the transcript."
     ),
     summary_model: str | None = typer.Option(
-        None, "--summary-model", help="informative/conversational/catchy."
+        None, "--summary-model", help="Summary model: informative, conversational, or catchy."
     ),
     summary_type: str | None = typer.Option(
-        None, "--summary-type", help="bullets/gist/headline/paragraph."
+        None, "--summary-type", help="Summary format: bullets, gist, headline, or paragraph."
     ),
     auto_chapters: bool | None = typer.Option(None, "--auto-chapters", help="Generate chapters."),
     sentiment_analysis: bool | None = typer.Option(
