@@ -6,7 +6,9 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from rich import box
 from rich.markup import escape
+from rich.table import Table
 
 from aai_cli import theme
 from aai_cli.errors import UsageError
@@ -88,6 +90,31 @@ def hint(text: str) -> str:
 def heading(text: str) -> str:
     """A section heading in the brand accent — the one voice for multi-line output."""
     return f"[aai.heading]{text}[/aai.heading]"
+
+
+def data_table(*columns: str) -> Table:
+    """A list table with the one consistent, minimal look used CLI-wide.
+
+    Headers render in the brand heading style with a single rule beneath them and
+    no surrounding box — the quiet, scannable style the Vercel/Supabase CLIs use.
+    Defined once here so every listing command (`transcripts list`, `keys list`,
+    `sessions list`, `usage`, `limits`, `audit`) shares the same table, rather than
+    each re-deriving Rich's heavy default box.
+    """
+    return Table(*columns, box=box.SIMPLE_HEAD, header_style="aai.heading", pad_edge=False)
+
+
+def detail_table() -> Table:
+    """A borderless label/value grid for single-record views (`whoami`, `sessions get`).
+
+    The label column is muted so the values read as the content and the pair scans
+    as a definition list, not a boxed table. Centralizes what was two divergent
+    one-off tables into one look.
+    """
+    table = Table.grid(padding=(0, 3))
+    table.add_column(style="aai.muted")
+    table.add_column()
+    return table
 
 
 def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:

@@ -252,6 +252,25 @@ def test_llm_output_with_follow_is_rejected(monkeypatch):
     assert "one-shot" in result.output
 
 
+def test_llm_follow_requires_a_prompt(monkeypatch):
+    # --follow re-runs a prompt over each turn; with no prompt there's nothing to run.
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(app, ["llm", "--follow", "--json"], input="x\n")
+    assert result.exit_code == 2
+    assert "prompt" in result.output.lower()
+
+
+def test_llm_follow_requires_piped_stdin(monkeypatch):
+    # Interactively (no pipe) --follow would block forever; reject it with guidance.
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.stdio.stdin_is_piped", lambda: False)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"])
+    assert result.exit_code == 2
+    assert "stdin" in result.output.lower()
+
+
 def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
     _auth()
     calls = []

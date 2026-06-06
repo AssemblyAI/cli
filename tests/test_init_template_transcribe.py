@@ -185,3 +185,28 @@ def test_status_surfaces_sdk_exception_as_502_not_500(monkeypatch):
     client = TestClient(app)
     resp = client.get("/api/status/t-x")
     assert resp.status_code == 502
+
+
+def test_submit_returns_502_when_no_id(monkeypatch):
+    # The SDK returned a transcript object without an id — surface a clean 502.
+    app, fake, _api = _load_app(monkeypatch)
+    fake.Transcriber.return_value.submit.return_value = MagicMock(id=None)
+    client = TestClient(app)
+    resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
+    assert resp.status_code == 502
+    assert "did not return an id" in resp.json()["detail"]
+
+
+def test_ask_surfaces_gateway_error_as_502(monkeypatch):
+    # A gateway failure (e.g. no plan access) becomes a clean 502, not a 500 traceback.
+    fake_openai = MagicMock()
+    fake_openai.OpenAI.return_value.chat.completions.create.side_effect = RuntimeError(
+        "no plan access"
+    )
+    monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+    app, _aai, _api = _load_app(monkeypatch)
+    client = TestClient(app)
+    resp = client.post("/api/ask", json={"transcript_id": "t-1", "question": "what?"})
+    assert resp.status_code == 502
+    assert "LLM Gateway error" in resp.json()["detail"]

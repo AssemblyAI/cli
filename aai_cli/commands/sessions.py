@@ -56,13 +56,12 @@ def list_(
         rows = _session_rows(payload.get("data"))
 
         def render(data: list[dict[str, object]]) -> Table:
-            table = Table(
+            table = output.data_table(
                 "session id",
                 "status",
                 "created",
                 "audio (s)",
                 "model",
-                header_style="aai.heading",
             )
             for s in data:
                 status_str = str(s["status"])
@@ -99,10 +98,11 @@ def get(
         data = ams.get_streaming(session_id, jwt)
 
         def render(d: dict[str, object]) -> Table:
-            table = Table(show_header=False)
+            table = output.detail_table()
             for field in _DETAIL_FIELDS:
                 value = d.get(field)
-                table.add_row(field, escape("" if value is None else str(value)))
+                label = field.replace("_", " ")
+                table.add_row(label, escape("" if value is None else str(value)))
             return table
 
         output.emit(data, render, json_mode=json_mode)

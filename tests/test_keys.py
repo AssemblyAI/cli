@@ -37,6 +37,22 @@ def test_keys_list_flattens_tokens():
     assert "sk_abcdef1234" not in result.output  # api key is masked
 
 
+def test_keys_list_renders_table_human(monkeypatch):
+    _auth()
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+    projects = [
+        {
+            "project": {"id": 1, "name": "Default"},
+            "tokens": [{"id": 10, "name": "ci", "api_key": "sk_abcdef1234", "is_disabled": False}],
+        }
+    ]
+    with patch("aai_cli.commands.keys.ams.list_projects", return_value=projects):
+        result = runner.invoke(app, ["keys", "list"])
+    assert result.exit_code == 0
+    assert "ci" in result.output and "Default" in result.output
+    assert "sk_abcdef1234" not in result.output  # masked in the human table too
+
+
 def test_keys_shape_helpers_filter_invalid_values():
     assert keys._project_id({"id": True}) is None
     assert keys._project_id({"id": 7}) == 7
@@ -126,3 +142,55 @@ def test_keys_rename_calls_ams():
         result = runner.invoke(app, ["keys", "rename", "10", "prod"])
     assert result.exit_code == 0
     rename.assert_called_once_with(42, 10, "prod", "jwt")
+
+
+def test_keys_list_renders_human_table():
+    # Human-readable (non-JSON) render path: the table includes names, project, and
+    # the disabled flag rendered as yes/no.
+    _auth()
+    projects = [
+        {
+            "project": {"id": 1, "name": "Default"},
+            "tokens": [
+                {"id": 10, "name": "ci", "api_key": "sk_abcdef1234", "is_disabled": False},
+                {"id": 11, "name": "old", "api_key": "sk_zzzzzz9999", "is_disabled": True},
+            ],
+        }
+    ]
+    with (
+        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.commands.keys.ams.list_projects", return_value=projects),
+    ):
+        result = runner.invoke(app, ["keys", "list"])
+    assert result.exit_code == 0
+    assert "ci" in result.output
+    assert "Default" in result.output
+    assert "yes" in result.output  # the disabled key
+    assert "no" in result.output  # the enabled key
+    assert "sk_abcdef1234" not in result.output  # masked
+
+
+def test_keys_create_rejects_empty_project_list():
+    # No projects at all -> clean APIError, create_token never called.
+    _auth()
+    with (
+        patch("aai_cli.commands.keys.ams.list_projects", return_value=[]),
+        patch("aai_cli.commands.keys.ams.create_token") as create,
+    ):
+        result = runner.invoke(app, ["keys", "create", "--name", "ci"])
+    assert result.exit_code == 1
+    create.assert_not_called()
+
+
+def test_keys_create_with_explicit_project_skips_lookup():
+    # Passing --project bypasses the default-project lookup entirely.
+    _auth()
+    created = {"id": 5, "name": "ci", "api_key": "sk_explicit999", "is_disabled": False}
+    with (
+        patch("aai_cli.commands.keys.ams.list_projects") as list_projects,
+        patch("aai_cli.commands.keys.ams.create_token", return_value=created) as create,
+    ):
+        result = runner.invoke(app, ["keys", "create", "--name", "ci", "--project", "9"])
+    assert result.exit_code == 0
+    list_projects.assert_not_called()
+    create.assert_called_once_with(42, 9, "ci", "jwt")

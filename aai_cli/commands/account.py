@@ -182,9 +182,9 @@ def usage(
             shown_with_breakdown = [(item, _line_items_summary(item)) for item in shown]
             show_breakdown = any(summary for _, summary in shown_with_breakdown)
             table = (
-                Table("period", "total", "breakdown", header_style="aai.heading")
+                output.data_table("period", "total", "breakdown")
                 if show_breakdown
-                else Table("period", "total", header_style="aai.heading")
+                else output.data_table("period", "total")
             )
             hidden_count = len(items) - len(shown)
             for item, breakdown in shown_with_breakdown:
@@ -230,7 +230,7 @@ def limits(
         data = ams.get_rate_limits(account_id, jwt)
 
         def render(d: dict[str, object]) -> Table:
-            table = Table("service", "limit", header_style="aai.heading")
+            table = output.data_table("service", "limit")
             for limit in jsonshape.mapping_list(d.get("rate_limits")):
                 table.add_row(
                     escape(str(limit.get("service", ""))),

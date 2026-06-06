@@ -88,6 +88,25 @@ def test_json_emit_swallows_non_pipe_errors():
     AgentRenderer(json_mode=True, out=FlakyOut()).connected()  # non-pipe errors are non-fatal
 
 
+# --- text mode (plain stdout + stderr status) ------------------------------
+def test_text_connected_status_goes_to_stderr():
+    out, err = io.StringIO(), io.StringIO()
+    r = AgentRenderer(json_mode=False, text_mode=True, out=out, err=err)
+    r.connected()
+    # The "start talking" prompt is a status notice -> stderr, keeping stdout clean
+    # for the piped transcript.
+    assert "start talking" in err.getvalue().lower()
+    assert out.getvalue() == ""
+
+
+def test_text_notice_goes_to_stderr():
+    out, err = io.StringIO(), io.StringIO()
+    r = AgentRenderer(json_mode=False, text_mode=True, out=out, err=err)
+    r.notice("Half-duplex note.\n")
+    assert "Half-duplex note." in err.getvalue()
+    assert out.getvalue() == ""
+
+
 # --- human mode (Rich) -----------------------------------------------------
 def test_human_partial_then_final():
     r, buf = _human()

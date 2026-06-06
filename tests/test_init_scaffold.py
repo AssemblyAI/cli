@@ -70,6 +70,14 @@ def test_scaffold_unknown_template_raises(tmp_path):
         scaffold.scaffold("nope", tmp_path / "app", api_key=None)
 
 
+def test_scaffold_registered_but_missing_files_raises(tmp_path, monkeypatch):
+    # Defense in depth: the registry lists a template whose on-disk dir is gone.
+    monkeypatch.setattr("aai_cli.init.templates.is_template", lambda _t: True)
+    with pytest.raises(CLIError) as exc:
+        scaffold.scaffold("ghost-template", tmp_path / "app", api_key=None)
+    assert exc.value.error_type == "template_missing"
+
+
 def test_target_conflict_detects_nonempty_dir(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
