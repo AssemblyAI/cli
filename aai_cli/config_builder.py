@@ -286,7 +286,7 @@ def _merge(
     fields: dict[str, str],
     flags: dict[str, object],
     overrides: Sequence[str] | None,
-    config_file: str | None,
+    config_file: str | Path | None,
 ) -> dict[str, object]:
     data: dict[str, object] = {}
     if config_file:
@@ -300,7 +300,7 @@ def merge_transcribe_config(
     *,
     flags: dict[str, object],
     overrides: Sequence[str] | None = None,
-    config_file: str | None = None,
+    config_file: str | Path | None = None,
 ) -> dict[str, object]:
     """Merge config-file + --config overrides + curated flags into a kwargs dict."""
     return _merge(TRANSCRIBE_FIELDS, flags, overrides, config_file)
@@ -330,7 +330,7 @@ def merge_streaming_params(
     *,
     flags: dict[str, object],
     overrides: Sequence[str] | None = None,
-    config_file: str | None = None,
+    config_file: str | Path | None = None,
 ) -> dict[str, object]:
     """Merge streaming config into a kwargs dict, coercing speech_model to a SpeechModel."""
     merged = _merge(STREAM_FIELDS, flags, overrides, config_file)
@@ -349,6 +349,16 @@ def merge_streaming_params(
 def construct_streaming_params(merged: dict[str, typing.Any]) -> StreamingParameters:
     """Build StreamingParameters from a merged kwargs dict, surfacing errors as usage."""
     return _construct(StreamingParameters, merged, label="streaming")
+
+
+def enum_value(member: enum.Enum | None) -> str | None:
+    """The string value of an optional Enum flag, or None when unset.
+
+    CLI options typed as SDK enums (e.g. ``--speech-model``) parse to enum members;
+    this unwraps them to the canonical string the config/codegen pipelines expect,
+    so the rest of the flow stays string-based.
+    """
+    return str(member.value) if member is not None else None
 
 
 def split_csv(value: str | None) -> list[str] | None:
@@ -377,7 +387,7 @@ def auth_header_flags(value: str | None) -> dict[str, object]:
     return {"webhook_auth_header_name": header[0], "webhook_auth_header_value": header[1]}
 
 
-def load_custom_spelling(path: str) -> dict[str, object]:
+def load_custom_spelling(path: str | Path) -> dict[str, object]:
     """Load a custom-spelling JSON map (e.g. {"AssemblyAI": ["assembly ai"]})."""
     return _load_json_object(path, label="Custom spelling file")
 

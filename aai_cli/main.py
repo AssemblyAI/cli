@@ -82,9 +82,16 @@ app = typer.Typer(
     name="aai",
     help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
     no_args_is_help=True,
-    add_completion=False,
+    add_completion=True,
     cls=_OrderedGroup,
 )
+
+
+def _version_callback(value: bool) -> None:
+    """Eager ``--version``: print the version and exit before any command runs."""
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
 
 
 @app.callback(
@@ -103,6 +110,16 @@ def main(
         None, "--env", help="Backend environment (production, sandbox000)."
     ),
     sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
+    _version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show the CLI version and exit.",
+        callback=_version_callback,
+        # Eager so --version short-circuits before subcommand/arg parsing. The plain
+        # `aai --version` path behaves identically with or without this, so there's no
+        # cheap test that distinguishes it.
+        is_eager=True,  # pragma: no mutate
+    ),
 ) -> None:
     if sandbox and env is None:
         env = "sandbox000"

@@ -5,7 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from aai_cli import client, config, output, theme
+from aai_cli import choices, client, config, output, theme
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
@@ -24,18 +24,17 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
 def get(
     ctx: typer.Context,
     transcript_id: str = typer.Argument(..., help="Transcript id."),
-    output_field: str | None = typer.Option(
+    output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, srt, or json.",
+        help="Print one field of the result.",
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.get_transcript(api_key, transcript_id)
         if client.status_str(transcript) == "error":

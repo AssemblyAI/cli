@@ -19,6 +19,15 @@ def test_version_command():
     assert result.output.strip() == __version__
 
 
+def test_version_flag():
+    from aai_cli import __version__
+
+    # Eager --version prints the version and exits before any subcommand is required.
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == __version__
+
+
 def test_global_flags_parse():
     # --profile is a global option accepted before a subcommand
     assert runner.invoke(app, ["--profile", "staging", "version"]).exit_code == 0

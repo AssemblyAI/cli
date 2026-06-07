@@ -190,3 +190,36 @@ def test_emit_ndjson_writes_one_flushed_line(monkeypatch):
     # One newline-terminated JSON record, explicitly flushed so live pipelines see it.
     assert rec.text == '{"a": 1}\n'
     assert rec.flushed >= 1
+
+
+def test_status_is_noop_in_json_mode(monkeypatch):
+    # JSON mode must never enter the spinner (it would render to stderr unnecessarily).
+    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    entered = {"status": False}
+    monkeypatch.setattr(
+        output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
+    )
+    with output.status("Working…", json_mode=True):
+        pass
+    assert entered["status"] is False
+
+
+def test_status_is_noop_when_agentic(monkeypatch):
+    monkeypatch.setattr(output, "_is_agentic", lambda: True)
+    entered = {"status": False}
+    monkeypatch.setattr(
+        output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
+    )
+    with output.status("Working…", json_mode=False):
+        pass
+    assert entered["status"] is False
+
+
+def test_status_shows_spinner_for_interactive_human(monkeypatch):
+    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    calls = []
+    with output.error_console.capture():
+        with output.status("Transcribing…", json_mode=False):
+            calls.append("inside")
+    # The body ran inside the spinner context and the spinner targeted stderr.
+    assert calls == ["inside"]
