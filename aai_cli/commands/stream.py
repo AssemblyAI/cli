@@ -10,7 +10,17 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
-from aai_cli import client, code_gen, config, config_builder, help_panels, llm, output, youtube
+from aai_cli import (
+    choices,
+    client,
+    code_gen,
+    config,
+    config_builder,
+    help_panels,
+    llm,
+    output,
+    youtube,
+)
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.follow import FollowRenderer
@@ -483,11 +493,11 @@ def stream(
         rich_help_panel=help_panels.OPT_ADVANCED,
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
-    output_field: str | None = typer.Option(
+    output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Output mode: 'text' (finalized turns as plain lines, pipe-friendly) or 'json'.",
+        help="Output mode: text (finalized turns as plain lines, pipe-friendly) or json.",
     ),
     show_code: bool = typer.Option(
         False,

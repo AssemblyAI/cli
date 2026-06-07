@@ -8,6 +8,7 @@ import assemblyai as aai
 import typer
 
 from aai_cli import (
+    choices,
     client,
     code_gen,
     config,
@@ -323,11 +324,11 @@ def transcribe(
         rich_help_panel=help_panels.OPT_LLM,
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
-    output_field: str | None = typer.Option(
+    output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, srt, or json.",
+        help="Print one field of the result.",
     ),
     show_code: bool = typer.Option(
         False,
@@ -343,7 +344,6 @@ def transcribe(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         flags: dict[str, object] = {
             "speech_model": config_builder.enum_value(speech_model),
             "language_code": language_code,

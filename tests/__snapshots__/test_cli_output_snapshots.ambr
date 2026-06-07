@@ -17,31 +17,36 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                               Speak the hosted wildfires.mp3 sample │
-  │                                        to the agent.                         │
-  │ --voice                       TEXT     Agent voice. See --list-voices.       │
-  │                                        [default: ivy]                        │
-  │ --system-prompt               TEXT     System prompt (the agent's persona).  │
-  │                                        [default: You are a friendly voice    │
-  │                                        assistant having a casual             │
-  │                                        conversation. Keep replies short and  │
-  │                                        natural, usually one or two           │
-  │                                        sentences. Speak the way a person     │
-  │                                        would in real conversation: relaxed,  │
-  │                                        low-key, no exclamation marks.]       │
-  │ --system-prompt-file          PATH     Read the system prompt from a file    │
-  │                                        (overrides --system-prompt).          │
-  │ --greeting                    TEXT     Spoken greeting.                      │
-  │                                        [default: Hey, what's on your mind?]  │
-  │ --device                      INTEGER  Microphone device index.              │
-  │ --list-voices                          Print known voices and exit.          │
-  │ --json                                 Emit newline-delimited JSON events.   │
-  │ --output              -o      TEXT     Output mode: 'text' (you:/agent:      │
-  │                                        lines as plain stdout, pipe-friendly) │
-  │                                        or 'json'.                            │
-  │ --show-code                            Print the equivalent Python SDK code  │
-  │                                        and exit (does not start a session).  │
-  │ --help                                 Show this message and exit.           │
+  │ --sample                                   Speak the hosted wildfires.mp3    │
+  │                                            sample to the agent.              │
+  │ --voice                       TEXT         Agent voice. See --list-voices.   │
+  │                                            [default: ivy]                    │
+  │ --system-prompt               TEXT         System prompt (the agent's        │
+  │                                            persona).                         │
+  │                                            [default: You are a friendly      │
+  │                                            voice assistant having a casual   │
+  │                                            conversation. Keep replies short  │
+  │                                            and natural, usually one or two   │
+  │                                            sentences. Speak the way a person │
+  │                                            would in real conversation:       │
+  │                                            relaxed, low-key, no exclamation  │
+  │                                            marks.]                           │
+  │ --system-prompt-file          PATH         Read the system prompt from a     │
+  │                                            file (overrides --system-prompt). │
+  │ --greeting                    TEXT         Spoken greeting.                  │
+  │                                            [default: Hey, what's on your     │
+  │                                            mind?]                            │
+  │ --device                      INTEGER      Microphone device index.          │
+  │ --list-voices                              Print known voices and exit.      │
+  │ --json                                     Emit newline-delimited JSON       │
+  │                                            events.                           │
+  │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
+  │                                            lines as plain stdout,            │
+  │                                            pipe-friendly) or json.           │
+  │ --show-code                                Print the equivalent Python SDK   │
+  │                                            code and exit (does not start a   │
+  │                                            session).                         │
+  │ --help                                     Show this message and exit.       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -271,24 +276,26 @@
   │   prompt      [PROMPT]  The prompt to send to the model.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model                  TEXT     LLM Gateway model.                         │
-  │                                   [default: claude-haiku-4-5-20251001]       │
-  │ --transcript-id          TEXT     Inject this transcript's text into the     │
-  │                                   prompt.                                    │
-  │ --system                 TEXT     Optional system prompt.                    │
-  │ --follow         -f               Re-run the prompt over a growing           │
-  │                                   transcript piped on stdin, refreshing the  │
-  │                                   answer in place on every finalized turn    │
-  │                                   (e.g. aai stream -o text | aai llm -f      │
-  │                                   "summarize action items as I talk").       │
-  │                                   Ctrl-C to stop.                            │
-  │ --output         -o      TEXT     Print one field of the result: text (just  │
-  │                                   the answer, pipe-friendly) or json.        │
-  │ --max-tokens             INTEGER  Max tokens to generate. [default: 1000]    │
-  │ --list-models                     Print known models and exit.               │
-  │ --json                            Output raw JSON (one object per turn in    │
-  │                                   --follow mode).                            │
-  │ --help                            Show this message and exit.                │
+  │ --model                  TEXT         LLM Gateway model.                     │
+  │                                       [default: claude-haiku-4-5-20251001]   │
+  │ --transcript-id          TEXT         Inject this transcript's text into the │
+  │                                       prompt.                                │
+  │ --system                 TEXT         Optional system prompt.                │
+  │ --follow         -f                   Re-run the prompt over a growing       │
+  │                                       transcript piped on stdin, refreshing  │
+  │                                       the answer in place on every finalized │
+  │                                       turn (e.g. aai stream -o text | aai    │
+  │                                       llm -f "summarize action items as I    │
+  │                                       talk"). Ctrl-C to stop.                │
+  │ --output         -o      [text|json]  Print one field of the result: text    │
+  │                                       (just the answer, pipe-friendly) or    │
+  │                                       json.                                  │
+  │ --max-tokens             INTEGER      Max tokens to generate.                │
+  │                                       [default: 1000]                        │
+  │ --list-models                         Print known models and exit.           │
+  │ --json                                Output raw JSON (one object per turn   │
+  │                                       in --follow mode).                     │
+  │ --help                                Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -526,13 +533,13 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                   Stream the hosted wildfires.mp3 sample.           │
-  │ --json                     Emit newline-delimited JSON events.               │
-  │ --output     -o      TEXT  Output mode: 'text' (finalized turns as plain     │
-  │                            lines, pipe-friendly) or 'json'.                  │
-  │ --show-code                Print the equivalent Python SDK code and exit     │
-  │                            (does not stream).                                │
-  │ --help                     Show this message and exit.                       │
+  │ --sample                          Stream the hosted wildfires.mp3 sample.    │
+  │ --json                            Emit newline-delimited JSON events.        │
+  │ --output     -o      [text|json]  Output mode: text (finalized turns as      │
+  │                                   plain lines, pipe-friendly) or json.       │
+  │ --show-code                       Print the equivalent Python SDK code and   │
+  │                                   exit (does not stream).                    │
+  │ --help                            Show this message and exit.                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
   │ --sample-rate              INTEGER  Force a microphone capture rate in Hz    │
@@ -643,13 +650,15 @@
   │   source      [SOURCE]  Audio file path, public URL, or YouTube URL.         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                   Use the hosted wildfires.mp3 sample.              │
-  │ --json                     Output raw JSON.                                  │
-  │ --output     -o      TEXT  Print one field of the result: text, id, status,  │
-  │                            utterances, srt, or json.                         │
-  │ --show-code                Print the equivalent Python SDK code and exit     │
-  │                            (does not transcribe).                            │
-  │ --help                     Show this message and exit.                       │
+  │ --sample                                         Use the hosted              │
+  │                                                  wildfires.mp3 sample.       │
+  │ --json                                           Output raw JSON.            │
+  │ --output     -o      [text|id|status|utterances  Print one field of the      │
+  │                      |srt|json]                  result.                     │
+  │ --show-code                                      Print the equivalent Python │
+  │                                                  SDK code and exit (does not │
+  │                                                  transcribe).                │
+  │ --help                                           Show this message and exit. │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
@@ -764,10 +773,10 @@
   │ *    transcript_id      TEXT  Transcript id. [required]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --output  -o      TEXT  Print one field of the result: text, id, status,     │
-  │                         utterances, srt, or json.                            │
-  │ --json                  Output raw JSON.                                     │
-  │ --help                  Show this message and exit.                          │
+  │ --output  -o      [text|id|status|utterances|s  Print one field of the       │
+  │                   rt|json]                      result.                      │
+  │ --json                                          Output raw JSON.             │
+  │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

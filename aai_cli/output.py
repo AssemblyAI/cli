@@ -10,8 +10,7 @@ from rich import box
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import theme
-from aai_cli.errors import UsageError
+from aai_cli import choices, theme
 
 if TYPE_CHECKING:
     from aai_cli.errors import CLIError
@@ -39,22 +38,16 @@ def resolve_json(*, explicit: bool) -> bool:
     return explicit or _is_agentic()
 
 
-def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
-    """Reject an unknown ``-o/--output`` value with a consistent, listing error."""
-    if field is not None and field not in allowed:
-        raise UsageError(f"Unknown --output {field!r}. Choose one of: {', '.join(allowed)}.")
-
-
-def stream_output_modes(field: str | None, *, json_mode: bool) -> tuple[bool, bool]:
+def stream_output_modes(field: choices.TextOrJson | None, *, json_mode: bool) -> tuple[bool, bool]:
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
     Shared by `stream` and `agent`, whose renderers take the same two flags: `text`
     emits plain finalized lines, `json` forces NDJSON, and an unset field falls back
-    to the auto-detected `json_mode` (JSON when piped/agentic, human otherwise).
+    to the auto-detected `json_mode` (JSON when piped/agentic, human otherwise). Typer
+    validates `field` against the enum, so no value check is needed here.
     """
-    validate_output_field(field, ("text", "json"))
-    text_mode = field == "text"
-    return text_mode, (field == "json") or (json_mode and not text_mode)
+    text_mode = field is choices.TextOrJson.text
+    return text_mode, (field is choices.TextOrJson.json) or (json_mode and not text_mode)
 
 
 def mask_secret(value: str) -> str:

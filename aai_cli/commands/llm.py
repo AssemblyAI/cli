@@ -5,7 +5,7 @@ from contextlib import suppress
 import typer
 from rich.markup import escape
 
-from aai_cli import config, help_panels, output, stdio
+from aai_cli import choices, config, help_panels, output, stdio
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -69,7 +69,7 @@ def llm(
         "the answer in place on every finalized turn (e.g. aai stream -o text | aai "
         'llm -f "summarize action items as I talk"). Ctrl-C to stop.',
     ),
-    output_field: str | None = typer.Option(
+    output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",
         "--output",
@@ -121,7 +121,6 @@ def llm(
                 suggestion="Or pass --list-models to see available models.",
             )
         prompt_text = prompt
-        output.validate_output_field(output_field, ("text", "json"))
         api_key = config.resolve_api_key(profile=state.profile)
         # Text piped on stdin becomes the content the prompt operates on, unless an
         # explicit --transcript-id is given (that injects server-side and takes priority).
