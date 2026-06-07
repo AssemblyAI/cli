@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING
 
 from rich import box
@@ -125,6 +126,22 @@ def emit_ndjson(obj: object) -> None:
 def emit_text(text: str) -> None:
     """Write one raw text value to stdout for pipe-friendly single-field output."""
     print(text)
+
+
+@contextlib.contextmanager
+def status(message: str, *, json_mode: bool) -> Generator[None]:
+    """Show an ephemeral spinner on stderr during a long human-facing wait.
+
+    A no-op in JSON or non-interactive mode (piped / agent-run), so stdout stays
+    clean for pipelines and machine output is never decorated. Rendered on the
+    stderr console so even an interactive `aai transcribe x -o text` keeps stdout
+    pristine.
+    """
+    if json_mode or _is_agentic():
+        yield
+        return
+    with error_console.status(message):
+        yield
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:
