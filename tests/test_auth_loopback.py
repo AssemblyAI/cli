@@ -1,8 +1,7 @@
+import http.client
 import socket
 import threading
 import time
-import urllib.error
-import urllib.request
 
 import pytest
 
@@ -11,18 +10,25 @@ from aai_cli.errors import APIError
 
 
 def _hit(path: str) -> int | None:
-    """Request `path` against the loopback server, returning the HTTP status code."""
-    url = f"http://{endpoints.LOOPBACK_HOST}:{endpoints.LOOPBACK_PORT}{path}"
+    """Request `path` against the loopback server, returning the HTTP status code.
+
+    Uses http.client (not urllib) so a 404 comes back as a normal response status
+    rather than a raised HTTPError, and so no urllib audit suppression is needed.
+    """
     # Retry briefly until the server thread is bound.
     for _ in range(50):
+        conn = http.client.HTTPConnection(
+            endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT, timeout=2
+        )
         try:
-            with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310 - localhost
-                resp.read()
-                return resp.status
-        except urllib.error.HTTPError as exc:
-            return exc.code  # server is up and answered (e.g. 404) — return that status
+            conn.request("GET", path)
+            resp = conn.getresponse()
+            resp.read()
+            return resp.status
         except OSError:
             time.sleep(0.05)
+        finally:
+            conn.close()
     return None
 
 
