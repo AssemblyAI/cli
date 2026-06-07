@@ -37,12 +37,7 @@ def as_object_list(value: object) -> list[dict[str, object]] | None:
 
 
 def mapping_list(value: object) -> list[dict[str, object]]:
-    valid: list[dict[str, object]] = []
-    for item in object_list(value):
-        mapped = as_mapping(item)
-        if mapped is not None:
-            valid.append(mapped)
-    return valid
+    return [mapped for item in object_list(value) if (mapped := as_mapping(item)) is not None]
 
 
 def as_int(value: object, default: int = 0) -> int:

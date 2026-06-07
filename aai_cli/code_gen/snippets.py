@@ -7,7 +7,7 @@ _Entry = tuple[str, Callable[[dict[str, object]], bool], str]
 
 
 def _has(*keys: str) -> Callable[[dict[str, object]], bool]:
-    return lambda merged: any(bool(merged.get(k)) for k in keys)
+    return lambda merged: any(merged.get(k) for k in keys)
 
 
 _SNIPPETS: list[_Entry] = [
