@@ -74,8 +74,49 @@ def test_find_or_create_raises_when_no_projects(monkeypatch):
 
 def test_capture_delegates_to_loopback(monkeypatch):
     sentinel = loopback.CallbackResult(token="tok", token_type="discovery_oauth")
-    monkeypatch.setattr(flow.loopback, "capture_callback", lambda: sentinel)
-    assert flow._capture() is sentinel
+    captured = {}
+
+    def fake_capture(state):
+        captured["state"] = state
+        return sentinel
+
+    monkeypatch.setattr(flow.loopback, "capture_callback", fake_capture)
+    assert flow._capture("nonce-1") is sentinel
+    assert captured["state"] == "nonce-1"  # the nonce is forwarded to the loopback
+
+
+def test_run_login_flow_binds_state_nonce(monkeypatch):
+    # The nonce build_start_url() carries to Stytch must be the same one the loopback
+    # capture is told to expect, or a genuine callback would never be accepted.
+    seen = {}
+    monkeypatch.setattr(
+        flow.discovery, "build_start_url", lambda state: seen.setdefault("url_state", state) or "u"
+    )
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+
+    def fake_capture(state):
+        seen["capture_state"] = state
+        return loopback.CallbackResult(token="tok", token_type="discovery_oauth")
+
+    monkeypatch.setattr(flow, "_capture", fake_capture)
+    monkeypatch.setattr(
+        flow.ams,
+        "discover",
+        lambda token: {
+            "organizations": [{"organization_id": "org_1"}],
+            "intermediate_session_token": "ist",
+        },
+    )
+    monkeypatch.setattr(
+        flow.ams,
+        "exchange",
+        lambda ist, org: {"account": {"id": 9}, "session_jwt": "jwt", "session_token": "t"},
+    )
+    monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
+
+    flow.run_login_flow()
+    assert seen["url_state"] == seen["capture_state"]
+    assert len(seen["capture_state"]) >= 32  # token_urlsafe(32) -> unguessable nonce
 
 
 def test_run_login_flow_rejects_wrong_token_type(monkeypatch):
@@ -83,7 +124,7 @@ def test_run_login_flow_rejects_wrong_token_type(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="something_else"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="something_else"),
     )
     with pytest.raises(APIError) as exc:
         flow.run_login_flow()
@@ -96,7 +137,7 @@ def test_run_login_flow_happy_path(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -120,7 +161,7 @@ def test_run_login_flow_happy_path(monkeypatch):
 
 def test_run_login_flow_timeout_raises(monkeypatch):
     monkeypatch.setattr(flow, "_open_browser", lambda url: None)
-    monkeypatch.setattr(flow, "_capture", lambda: loopback.CallbackResult(error="timeout"))
+    monkeypatch.setattr(flow, "_capture", lambda _state: loopback.CallbackResult(error="timeout"))
     with pytest.raises(APIError) as exc:
         flow.run_login_flow()
     assert exc.value.message == "Login timed out waiting for the browser."
@@ -162,7 +203,7 @@ def test_run_login_flow_uses_exchange_account(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -193,7 +234,7 @@ def test_run_login_flow_multi_org_notes_selection(monkeypatch, capsys):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -233,7 +274,7 @@ def test_run_login_flow_missing_session_token_raises_api_error(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -249,7 +290,7 @@ def test_run_login_flow_org_missing_id_raises_api_error(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -268,7 +309,7 @@ def test_run_login_flow_zero_orgs_raises(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
+        lambda _state: loopback.CallbackResult(token="tok", token_type="discovery_oauth"),
     )
     monkeypatch.setattr(
         flow.ams,
@@ -288,7 +329,9 @@ def test_run_login_flow_returns_session_material(monkeypatch):
     monkeypatch.setattr(
         flow,
         "_capture",
-        lambda: loopback.CallbackResult(token="tok", token_type="discovery_oauth", error=None),
+        lambda _state: loopback.CallbackResult(
+            token="tok", token_type="discovery_oauth", error=None
+        ),
     )
     monkeypatch.setattr(
         flow.ams,
