@@ -14,10 +14,13 @@ def _fake_login_result(key="sk_from_oauth"):
 
 
 def test_login_with_api_key_flag_stores_key():
+    import json
+
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
-        result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
+        result = runner.invoke(app, ["login", "--api-key", "sk_flag", "--json"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_flag"
+    assert json.loads(result.output)["authenticated"] is True  # pins the success flag
 
 
 def test_login_rejects_invalid_key():
@@ -70,10 +73,13 @@ def test_whoami_unauthenticated_runs_login(monkeypatch):
 
 
 def test_logout_clears_key():
+    import json
+
     config.set_api_key("default", "sk_1234567890")
-    result = runner.invoke(app, ["logout"])
+    result = runner.invoke(app, ["logout", "--json"])
     assert result.exit_code == 0
     assert config.get_api_key("default") is None
+    assert json.loads(result.output)["logged_out"] is True  # pins the success flag
 
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):

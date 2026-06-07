@@ -74,6 +74,12 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
     # (AMS rejects naive datetimes with a 400).
     for bound in (captured["start"], captured["end"]):
         assert bound.endswith("+00:00") and "T" in bound, bound
+    # The default range spans exactly the last 30 days (pins `today - timedelta(days=30)`).
+    from datetime import datetime as _dt
+
+    start_day = _dt.fromisoformat(captured["start"]).date()
+    end_day = _dt.fromisoformat(captured["end"]).date()
+    assert (end_day - start_day).days == 30
     data = json.loads(result.output)
     assert data["usage_items"][0]["total"] == 12.5
 
@@ -116,6 +122,20 @@ def test_usage_helpers_format_windows_and_line_items():
             }
         )
         == "2026-01-01 to 2026-01-03"
+    )
+    # Exactly one parseable bound falls back to the single start-day label (pins the
+    # `start is None or end is None` guard; an `and` would dereference the None end).
+    assert account._window_label({"start_timestamp": "2026-01-01T00:00:00Z"}) == "2026-01-01"
+    # A one-day window (end == start + 1 day) collapses to a single day, not a range
+    # (pins the `start.date() + timedelta(days=1)`).
+    assert (
+        account._window_label(
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+            }
+        )
+        == "2026-01-01"
     )
     assert account._line_item_label({"name": "minutes", "total": "12.500"}) == "minutes: 12.5"
     assert account._line_item_label({"product": "streaming"}) == "streaming"
