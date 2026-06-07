@@ -57,6 +57,9 @@ def download_audio(url: str, dest_dir: Path) -> Path:
 
     if not path.is_file():
         # Post-processing can change the extension; fall back to whatever landed.
+        # yt-dlp may also drop sidecars (thumbnail, .info.json, a leftover .part)
+        # in dest_dir, and iterdir() order is arbitrary, so pick the largest file:
+        # the decoded audio track dwarfs any metadata sidecar.
         files = [p for p in dest_dir.iterdir() if p.is_file()]
         if not files:
             raise CLIError(
@@ -64,5 +67,5 @@ def download_audio(url: str, dest_dir: Path) -> Path:
                 error_type="youtube_error",
                 exit_code=1,
             )
-        path = files[0]
+        path = max(files, key=lambda p: p.stat().st_size)
     return path
