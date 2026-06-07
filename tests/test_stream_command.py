@@ -29,6 +29,68 @@ def _login_result():
     )
 
 
+def test_stream_session_listening_notice_latches(monkeypatch):
+    # _listening_once must announce "Listening…" exactly once even if the first-audio
+    # callback fires repeatedly (pins the `self._listening_started = True` latch).
+    import io
+
+    from aai_cli.commands.stream import _StreamSession
+    from aai_cli.streaming.render import StreamRenderer
+
+    renderer = StreamRenderer(json_mode=False, out=io.StringIO())
+    calls = {"n": 0}
+    monkeypatch.setattr(renderer, "listening", lambda: calls.__setitem__("n", calls["n"] + 1))
+    session = _StreamSession(
+        api_key="sk",
+        base_flags={},
+        overrides=None,
+        config_file=None,
+        renderer=renderer,
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+    )
+    session._listening_once()
+    session._listening_once()
+    assert calls["n"] == 1
+
+
+def test_stream_session_closes_renderer_on_error(monkeypatch):
+    # When streaming raises mid-run, the live region must still be torn down (pins the
+    # `if self.follow is None: self.renderer.close()` in the finally block).
+    import io
+
+    import pytest
+
+    from aai_cli.commands.stream import _StreamSession
+    from aai_cli.errors import CLIError
+    from aai_cli.streaming.render import StreamRenderer
+
+    renderer = StreamRenderer(json_mode=False, out=io.StringIO())
+    closed = {"n": 0}
+    monkeypatch.setattr(renderer, "close", lambda: closed.__setitem__("n", closed["n"] + 1))
+
+    def boom(*_args, **_kwargs):
+        raise CLIError("stream blew up")
+
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", boom)
+    session = _StreamSession(
+        api_key="sk",
+        base_flags={},
+        overrides=None,
+        config_file=None,
+        renderer=renderer,
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+    )
+    with pytest.raises(CLIError):
+        session.run([b"\x00"], 16000)
+    assert closed["n"] >= 1
+
+
 def test_stream_help_lists_command():
     result = runner.invoke(app, ["stream", "--help"])
     assert result.exit_code == 0
@@ -236,8 +298,14 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
     def fake(
         api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
     ):
+        # In non-follow mode begin/turn/termination must all be wired through to the
+        # renderer (pins the `follow is not None` None-vs-handler choices).
+        if on_begin:
+            on_begin(types.SimpleNamespace(id="sess_1"))
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="from file", end_of_turn=True))
+        if on_termination:
+            on_termination(types.SimpleNamespace(audio_duration_seconds=2.0))
 
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake)
     p = tmp_path / "a.wav"
@@ -249,7 +317,9 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
     result = runner.invoke(app, ["stream", str(p), "--json"])
     assert result.exit_code == 0
     lines = [_json.loads(x) for x in result.output.splitlines() if x.strip()]
+    assert {"type": "begin", "id": "sess_1"} in lines
     assert {"type": "turn", "transcript": "from file", "end_of_turn": True} in lines
+    assert {"type": "termination", "audio_duration_seconds": 2.0} in lines
 
 
 def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
@@ -261,6 +331,7 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
             on_turn(types.SimpleNamespace(transcript="hola", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="partial", end_of_turn=False))  # ignored
+            on_turn(types.SimpleNamespace(transcript="no-eot"))  # missing flag -> not final
 
     def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
         seen["texts"].append(transcript_text)
