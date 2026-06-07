@@ -67,6 +67,18 @@ def test_llm_sends_prompt_and_prints_output(monkeypatch):
     assert seen["messages"][0]["content"] == "What is 2+2?"
 
 
+def test_llm_output_json_forces_json_for_human(monkeypatch):
+    _auth()
+    # Simulate an interactive human (not piped/agentic); `-o json` must still emit
+    # JSON, pinning the `output_field == "json"` that forces machine output.
+    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("4"))
+    result = runner.invoke(app, ["llm", "hi", "-o", "json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["output"] == "4"
+
+
 def test_llm_transcript_id_injected(monkeypatch):
     _auth()
     seen = {}

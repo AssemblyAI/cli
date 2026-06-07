@@ -25,10 +25,11 @@ def _fake_ytdlp(monkeypatch, ydl_cls):
 
 def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
     created = tmp_path / "vid123.m4a"
+    captured = {}
 
     class FakeYDL:
         def __init__(self, opts):
-            self.opts = opts
+            captured["opts"] = opts
 
         def __enter__(self):
             return self
@@ -37,6 +38,7 @@ def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
             return False
 
         def extract_info(self, url, download):
+            captured["download"] = download
             created.write_bytes(b"audio")
             return {"id": "vid123", "ext": "m4a"}
 
@@ -47,6 +49,11 @@ def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
     out = youtube.download_audio("https://youtu.be/vid123", tmp_path)
     assert out == created
     assert out.is_file()
+    # yt-dlp is driven quietly (no console noise) and actually downloads the media.
+    assert captured["opts"]["quiet"] is True
+    assert captured["opts"]["no_warnings"] is True
+    assert captured["opts"]["noprogress"] is True
+    assert captured["download"] is True
 
 
 def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
@@ -95,6 +102,7 @@ def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
     with pytest.raises(CLIError) as exc:
         youtube.download_audio("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
+    assert exc.value.exit_code == 1
     assert "no audio file" in exc.value.message
 
 

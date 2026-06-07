@@ -25,6 +25,16 @@ def test_to_dict_includes_suggestion_when_present():
     }
 
 
+def test_cli_error_defaults():
+    # A bare CLIError must default to exit_code 1 and error_type "error" (nothing
+    # else relies on these defaults, so pin them here).
+    err = CLIError("nope")
+    assert err.exit_code == 1
+    assert err.error_type == "error"
+    assert err.transcript_id is None
+    assert err.suggestion is None
+
+
 def test_to_dict_omits_none_transcript_id_and_suggestion():
     err = CLIError("nope", error_type="generic", exit_code=1)
     assert err.to_dict() == {"error": {"type": "generic", "message": "nope"}}
@@ -79,15 +89,24 @@ def test_is_auth_failure_detects_structural_status_codes():
     class _ClosedRcvd(Exception):
         rcvd = _Frame()
 
-    class _Resp:
+    class _Resp403:
         status_code = 403
 
-    class _HTTPish(Exception):
-        response = _Resp()
+    class _Forbidden(Exception):
+        response = _Resp403()
+
+    class _Resp401:
+        status_code = 401
+
+    class _Unauthorized(Exception):
+        response = _Resp401()
 
     assert is_auth_failure(_Closed("policy violation"))  # no auth word in the text
     assert is_auth_failure(_ClosedRcvd("connection closed"))
-    assert is_auth_failure(_HTTPish("nope"))
+    # Both HTTP rejection codes must be matched structurally, with text that carries
+    # no auth hint so only the status_code path can flag it (kills 401-vs-403 mutants).
+    assert is_auth_failure(_Forbidden("nope"))
+    assert is_auth_failure(_Unauthorized("nope"))
 
 
 def test_is_auth_failure_ignores_unrelated_status_codes():

@@ -99,8 +99,16 @@ def test_split_csv():
 def test_parse_auth_header():
     assert cb.parse_auth_header("Authorization:Bearer x") == ("Authorization", "Bearer x")
     assert cb.parse_auth_header(None) is None
+    # Only the first ':' separates NAME from VALUE; colons in the value are preserved.
+    assert cb.parse_auth_header("X-Auth:Bearer a:b:c") == ("X-Auth", "Bearer a:b:c")
     with pytest.raises(UsageError):
         cb.parse_auth_header("no-colon")
+
+
+def test_parse_config_overrides_splits_on_first_equals_only():
+    # A value may itself contain '='; only the first '=' separates key from value.
+    out = cb.parse_config_overrides(cb.TRANSCRIBE_FIELDS, ["keyterms_prompt=a=b,c"])
+    assert out["keyterms_prompt"] == ["a=b", "c"]
 
 
 def test_load_custom_spelling(tmp_path):
@@ -396,6 +404,21 @@ def test_derive_kind_multi_type_union_without_str_falls_back_to_json():
 
 def test_derive_kind_dict_origin_is_json():
     assert cb._derive_kind(dict[str, int]) == "json"
+
+
+def test_derive_kind_unwraps_optional_and_classifies_bare_scalars():
+    import typing
+
+    # A bare scalar is classified by its type, not treated as a dict/json value (pins
+    # the `origin is dict` check) and a list origin -> "list".
+    assert cb._derive_kind(int) == "int"
+    assert cb._derive_kind(list[str]) == "list"
+    # Optional[int] must unwrap to its single inner type (pins the `a is not None`
+    # filter). Build the Union via typing.__dict__ so ruff's UP007 ("use X | Y")
+    # stays quiet — the unwrap path specifically keys on the typing.Union origin,
+    # which `int | None` doesn't share.
+    optional_int = typing.__dict__["Union"][int, None]
+    assert cb._derive_kind(optional_int) == "int"
 
 
 def test_coerce_table_unknown_field_defaults_to_str():

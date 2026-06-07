@@ -56,6 +56,9 @@ def test_500_raises_api_error_with_detail(monkeypatch):
     with pytest.raises(APIError) as exc:
         ams.discover("x")
     assert "Something went wrong" in str(exc.value)
+    # The "detail" field is extracted, not the raw JSON body: the field name and its
+    # braces must not leak (pins `mapping is not None and "detail" in mapping`).
+    assert "detail" not in str(exc.value)
 
 
 def test_error_with_non_json_body_falls_back_to_text(monkeypatch):

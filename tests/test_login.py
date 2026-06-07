@@ -14,10 +14,13 @@ def _fake_login_result(key="sk_from_oauth"):
 
 
 def test_login_with_api_key_flag_stores_key():
+    import json
+
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
-        result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
+        result = runner.invoke(app, ["login", "--api-key", "sk_flag", "--json"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_flag"
+    assert json.loads(result.output)["authenticated"] is True  # pins the success flag
 
 
 def test_login_rejects_invalid_key():
@@ -70,10 +73,13 @@ def test_whoami_unauthenticated_runs_login(monkeypatch):
 
 
 def test_logout_clears_key():
+    import json
+
     config.set_api_key("default", "sk_1234567890")
-    result = runner.invoke(app, ["logout"])
+    result = runner.invoke(app, ["logout", "--json"])
     assert result.exit_code == 0
     assert config.get_api_key("default") is None
+    assert json.loads(result.output)["logged_out"] is True  # pins the success flag
 
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):
@@ -165,6 +171,34 @@ def test_whoami_reports_env():
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["env"] == "production"
+
+
+def test_root_callback_keeps_profile_env_without_sandbox():
+    # Without --sandbox the profile's own env must stand (pins `sandbox and env is
+    # None`: an `or` would force sandbox000 onto every default invocation).
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    config.set_profile_env("default", "production")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["env"] == "production"
+
+
+def test_root_callback_sandbox_overrides_profile_env():
+    # --sandbox forces sandbox000 even when the profile is bound elsewhere (pins the
+    # `env is None` arm: an `is not None` would leave the profile env in place).
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    config.set_profile_env("default", "production")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["--sandbox", "whoami", "--json"])
+    assert result.exit_code == 0
+    # A profile/env mismatch warning prints to stderr first; the JSON is the last line.
+    payload = json.loads(result.output.strip().splitlines()[-1])
+    assert payload["env"] == "sandbox000"
 
 
 def test_unknown_env_exits_2():

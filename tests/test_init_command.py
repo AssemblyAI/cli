@@ -31,8 +31,10 @@ def test_init_scaffold_only_creates_project(tmp_path, monkeypatch):
 def test_init_writes_key_from_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-from-env")
-    runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
     assert "ASSEMBLYAI_API_KEY=sk-from-env" in (tmp_path / "myapp" / ".env").read_text()
+    # A resolved key means no skipped-key row (pins `if api_key is None`).
+    assert "no API key found" not in result.output
 
 
 def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypatch):
@@ -53,6 +55,9 @@ def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypat
     assert result.exit_code == 0, result.output
     assert launched["v"] is False
     assert "aai login" in result.output
+    # Deps installed but no key -> a launch-skipped row with the manual run command
+    # (pins `not no_install and api_key is None`).
+    assert "uvicorn api.index" in result.output
 
 
 def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
@@ -66,9 +71,12 @@ def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
 
 def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
     env = (tmp_path / "myapp" / ".env").read_text()
     assert "your_assemblyai_api_key_here" in env
+    # --no-install means no deps were installed, so there's no launch-skipped row even
+    # without a key (pins the `not no_install` half of the launch guard).
+    assert "uvicorn api.index" not in result.output
 
 
 def test_init_unknown_template_errors(tmp_path, monkeypatch):

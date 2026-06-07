@@ -18,6 +18,17 @@ def _isolate_home(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 
+def test_proc_detail_prefers_stderr_then_falls_back_to_stdout():
+    from aai_cli.commands import setup
+
+    # stderr wins when present (pins `proc.stderr or proc.stdout`); stdout is the
+    # fallback when stderr is empty.
+    both = subprocess.CompletedProcess([], 1, stdout="out text", stderr="err text")
+    assert setup._proc_detail(both) == "err text"
+    only_out = subprocess.CompletedProcess([], 1, stdout="only out", stderr="")
+    assert setup._proc_detail(only_out) == "only out"
+
+
 def _skill_path() -> Path:
     return Path.home() / ".claude" / "skills" / "assemblyai"
 

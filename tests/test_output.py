@@ -155,6 +155,7 @@ def test_data_table_is_minimal_and_themed():
     # brand heading style — so every listing command renders identically.
     assert table.box is box.SIMPLE_HEAD
     assert table.header_style == "aai.heading"
+    assert table.pad_edge is False  # no leading/trailing pad column -> flush-left listing
     assert [str(col.header) for col in table.columns] == ["id", "status"]
 
 
@@ -164,3 +165,28 @@ def test_detail_table_is_borderless_label_value_grid():
     assert table.box is None
     assert len(table.columns) == 2
     assert table.columns[0].style == "aai.muted"
+    # padding=(0, 3): no vertical pad, 3 cols of horizontal gap between label/value.
+    assert table.padding == (0, 3, 0, 3)
+
+
+def test_emit_ndjson_writes_one_flushed_line(monkeypatch):
+    import sys
+
+    class _RecordingStdout:
+        def __init__(self):
+            self.text = ""
+            self.flushed = 0
+
+        def write(self, s):
+            self.text += s
+            return len(s)
+
+        def flush(self):
+            self.flushed += 1
+
+    rec = _RecordingStdout()
+    monkeypatch.setattr(sys, "stdout", rec)
+    output.emit_ndjson({"a": 1})
+    # One newline-terminated JSON record, explicitly flushed so live pipelines see it.
+    assert rec.text == '{"a": 1}\n'
+    assert rec.flushed >= 1

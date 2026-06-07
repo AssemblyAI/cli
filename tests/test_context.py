@@ -181,6 +181,56 @@ def test_resolve_session_raises_when_no_session():
         resolve_session(AppState())
 
 
+def test_resolve_session_raises_when_only_account_id_missing(monkeypatch):
+    # A stored session JWT but no account id is still incomplete and must raise,
+    # pinning the `session is None or account_id is None` guard (an `and` there would
+    # fall through and return a None account id instead of failing cleanly).
+    import pytest
+
+    from aai_cli.context import AppState, resolve_session
+    from aai_cli.errors import NotAuthenticated
+
+    monkeypatch.setattr(config, "get_session", lambda _profile: {"jwt": "j", "token": "t"})
+    monkeypatch.setattr(config, "get_account_id", lambda _profile: None)
+    with pytest.raises(NotAuthenticated):
+        resolve_session(AppState())
+
+
+def test_resolve_session_raises_when_only_jwt_missing(monkeypatch):
+    # The mirror case: an account id but no stored session must also raise.
+    import pytest
+
+    from aai_cli.context import AppState, resolve_session
+    from aai_cli.errors import NotAuthenticated
+
+    monkeypatch.setattr(config, "get_session", lambda _profile: None)
+    monkeypatch.setattr(config, "get_account_id", lambda _profile: 42)
+    with pytest.raises(NotAuthenticated):
+        resolve_session(AppState())
+
+
+def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(monkeypatch):
+    # ENV key present but the failure is a generic NotAuthenticated (not a key
+    # rejection): a browser login can still fix it, so we DO auto-login. This pins
+    # the `and` in _should_auto_login — an `or` would wrongly skip the retry here.
+    monkeypatch.setenv(config.ENV_API_KEY, "sk_env")
+    ran = {"login": 0}
+
+    def fake_login():
+        ran["login"] += 1
+        return LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=7)
+
+    monkeypatch.setattr("aai_cli.context.run_login_flow", fake_login)
+
+    def body(state, json_mode):
+        raise NotAuthenticated()  # message != REJECTED_KEY_MESSAGE
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert ran["login"] == 1  # auto-login was attempted despite the env key
+    assert result.exit_code == 2
+    assert "Run the same command again" in result.output
+
+
 def test_appstate_methods_are_the_single_source_of_truth():
     # The module-level resolve_* helpers are thin adapters over the AppState methods;
     # both must agree, and the precedence (default profile + default env) must hold.

@@ -179,3 +179,63 @@ def test_listening_is_silent_in_json_mode():
     r = StreamRenderer(json_mode=True, out=out)
     r.listening()
     assert out.getvalue() == ""  # the "Listening…" line is human-only
+
+
+class _FakeLive:
+    def __init__(self, *args, **kwargs):
+        self.init_kwargs = kwargs
+        self.refreshes = []
+        self.started = False
+        self.stopped = False
+
+    def start(self):
+        self.started = True
+
+    def update(self, renderable, refresh):
+        self.refreshes.append(refresh)
+
+    def stop(self):
+        self.stopped = True
+
+
+def test_human_live_region_construction_and_refresh(monkeypatch):
+    # The live region must be built non-transient, never auto-refresh (we drive it),
+    # and never redirect the process streams the JSON/threaded paths also write to.
+    # Pin those kwargs and the forced per-update refresh with a fake Live.
+    import aai_cli.render as render_mod
+
+    fake = _FakeLive()
+
+    def factory(*args, **kwargs):
+        fake.init_kwargs = kwargs
+        return fake
+
+    monkeypatch.setattr(render_mod, "Live", factory)
+    r, _buf = _human()
+    r.turn(_turn("partial", False))  # builds the Live and updates it
+    r.turn(_turn("done", True))  # final update, then commit (stop)
+
+    assert fake.started is True
+    assert fake.stopped is True
+    assert fake.init_kwargs["auto_refresh"] is False
+    assert fake.init_kwargs["transient"] is False
+    assert fake.init_kwargs["redirect_stdout"] is False
+    assert fake.init_kwargs["redirect_stderr"] is False
+    assert fake.refreshes == [True, True]
+
+
+def test_status_notice_is_flushed():
+    # Status notices go to stderr with flush=True so they aren't buffered behind a
+    # long-running stream; a fake stream records that flush actually happens.
+    class _RecordingErr(io.StringIO):
+        flushed = 0
+
+        def flush(self):
+            self.flushed += 1
+            super().flush()
+
+    err = _RecordingErr()
+    r = StreamRenderer(json_mode=False, text_mode=True, out=io.StringIO(), err=err)
+    r.listening()
+    assert "Listening" in err.getvalue()
+    assert err.flushed >= 1

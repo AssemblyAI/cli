@@ -169,6 +169,19 @@ def test_device_default_rate_reads_device(monkeypatch):
     assert _device_default_rate(2) == 44100
 
 
+def test_resample_pcm16_uses_16bit_mono_params():
+    # resample_pcm16 must treat the buffer as 16-bit (2-byte) mono (1-channel) PCM.
+    # Compare against audioop driven with those exact params; a mutated width/channel
+    # count yields different bytes (or rejects the frame count), killing the mutant.
+    import aai_cli.microphone as m
+
+    chunk = bytes(range(256))  # 128 little-endian 16-bit mono samples (a ramp)
+    expected, _ = m.audioop.ratecv(chunk, 2, 1, 48000, 24000, None)
+    out, _ = m.resample_pcm16(chunk, None, src_rate=48000, dst_rate=24000)
+    assert out == expected
+    assert out != chunk  # 48k -> 24k actually changes the data
+
+
 def test_device_default_rate_falls_back_on_query_error(monkeypatch):
     fake_sd: Any = types.ModuleType("sounddevice")
 
@@ -213,6 +226,8 @@ def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch):
     assert created["samplerate"] == 16000
     assert created["device"] == 2
     assert created["blocksize"] == 1600  # ~100 ms at 16 kHz
+    assert created["channels"] == 1  # mono capture
+    assert created["dtype"] == "int16"  # PCM16
     assert next(iter(stream)) == b"\x01\x02"
 
 

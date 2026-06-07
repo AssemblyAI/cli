@@ -28,3 +28,8 @@ def test_parse_iso_utc_rejects_non_dates():
     assert timeparse.parse_iso_utc(None) is None
     assert timeparse.parse_iso_utc("") is None
     assert timeparse.parse_iso_utc("not-a-date") is None
+    # A truthy non-string must also be rejected (not just falsy None/""). This pins
+    # the `not isinstance(...) or not value` guard: an `and` there would fall through
+    # to str-only operations on the int and raise instead of returning None.
+    assert timeparse.parse_iso_utc(20260601) is None
+    assert timeparse.parse_iso_utc(["2026-06-01"]) is None

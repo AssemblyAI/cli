@@ -15,6 +15,16 @@ def test_samples_list_shows_transcribe():
     assert "transcribe" in result.output
 
 
+def test_samples_list_human_mode_renders_bullets(monkeypatch):
+    # Force human (non-agentic) rendering so the bullet-list branch runs; pins the
+    # string concatenation in the human renderer (a `-` there would raise TypeError).
+    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)
+    result = runner.invoke(app, ["samples", "list"])
+    assert result.exit_code == 0
+    assert "Available samples:" in result.output
+    assert "- transcribe" in result.output
+
+
 def test_samples_list_shows_templates():
     result = runner.invoke(app, ["samples", "list"])
     assert result.exit_code == 0
@@ -47,6 +57,7 @@ def test_samples_create_stream_uses_env_key(tmp_path, monkeypatch):
     body = Path(tmp_path, "stream", "stream.py").read_text()
     assert _ENV_KEY in body
     assert "MicrophoneStream" in body
+    assert "format_turns=True" in body  # the stream sample requests formatted turns
 
 
 def test_samples_create_transcribe_uses_env_key(tmp_path, monkeypatch):

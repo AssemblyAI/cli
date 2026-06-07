@@ -112,9 +112,12 @@ def test_transcripts_routed_to_renderer():
     s.dispatch({"type": "transcript.user.delta", "text": "what"})
     s.dispatch({"type": "transcript.user", "text": "what time"})
     s.dispatch({"type": "transcript.agent", "text": "noon", "interrupted": False})
+    # An agent transcript with no "interrupted" key defaults to False (pins the default).
+    s.dispatch({"type": "transcript.agent", "text": "later"})
     assert ("user_partial", "what") in s.renderer.calls
     assert ("user_final", "what time") in s.renderer.calls
     assert ("agent_transcript", "noon", False) in s.renderer.calls
+    assert ("agent_transcript", "later", False) in s.renderer.calls
 
 
 def test_unauthorized_error_raises_cli_error_exit_2():
@@ -122,6 +125,7 @@ def test_unauthorized_error_raises_cli_error_exit_2():
     with pytest.raises(CLIError) as excinfo:
         s.dispatch({"type": "session.error", "code": "UNAUTHORIZED", "message": "bad key"})
     assert excinfo.value.exit_code == 2
+    assert "bad key" in str(excinfo.value)  # the server message wins over code/fallback
 
 
 def test_other_session_error_raises_api_error():
@@ -283,6 +287,26 @@ def test_run_session_surfaces_mic_open_failure_from_capture_thread():
             connect=lambda url, **kwargs: _BlockingWS(),
         )
     assert exc.value.exit_code == 1  # the real mic failure reaches the user, not a hang
+
+
+def test_run_session_does_not_close_player_that_failed_to_open():
+    # If opening the speaker stream raises, the cleanup must NOT call close() on a
+    # player that never started (pins the player_started=False initializer).
+    class _FailingPlayer(FakePlayer):
+        def start(self):
+            raise CLIError("speaker busy", error_type="audio_output_error", exit_code=1)
+
+    player = _FailingPlayer()
+    with pytest.raises(CLIError):
+        run_session(
+            "sk",
+            renderer=FakeRenderer(),
+            player=player,
+            mic=[],
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
+            connect=lambda url, **kwargs: _RecordingWS(),
+        )
+    assert player.closed is False  # never opened, so never closed
 
 
 def test_run_session_non_auth_failure_stays_api_error():

@@ -23,23 +23,36 @@ def test_json_mode_does_not_start_a_live_region():
 
 class _FakeLive:
     def __init__(self, *args, **kwargs):
+        self.init_kwargs = kwargs
         self.started = False
         self.stopped = False
         self.updates = []
+        self.refreshes = []
 
     def start(self):
         self.started = True
 
     def update(self, renderable, refresh):
         self.updates.append(renderable)
+        self.refreshes.append(refresh)
 
     def stop(self):
         self.stopped = True
 
 
+def _patch_live(monkeypatch, fake):
+    """Patch follow.Live so the constructor kwargs land on the fake instance."""
+
+    def factory(*args, **kwargs):
+        fake.init_kwargs = kwargs
+        return fake
+
+    monkeypatch.setattr(follow, "Live", factory)
+
+
 def test_terminal_mode_renders_panels_and_prints_final(monkeypatch):
     fake = _FakeLive()
-    monkeypatch.setattr(follow, "Live", lambda *a, **k: fake)
+    _patch_live(monkeypatch, fake)
     printed = []
     monkeypatch.setattr(output.console, "print", lambda renderable: printed.append(renderable))
 
@@ -52,6 +65,11 @@ def test_terminal_mode_renders_panels_and_prints_final(monkeypatch):
     assert fake.stopped is True
     # the final panel is reprinted to the normal screen as scrollback
     assert printed == [fake.updates[-1]]
+    # The live region must own an isolated alternate screen and never auto-refresh
+    # (we drive refresh explicitly), and each update must force a synchronous redraw.
+    assert fake.init_kwargs["screen"] is True
+    assert fake.init_kwargs["auto_refresh"] is False
+    assert fake.refreshes == [True, True]
 
 
 def test_terminal_mode_panel_title_pluralizes_turns(monkeypatch):
