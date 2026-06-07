@@ -31,7 +31,7 @@
   │                                            would in real conversation:       │
   │                                            relaxed, low-key, no exclamation  │
   │                                            marks.]                           │
-  │ --system-prompt-file          PATH         Read the system prompt from a     │
+  │ --system-prompt-file          FILE         Read the system prompt from a     │
   │                                            file (overrides --system-prompt). │
   │ --greeting                    TEXT         Spoken greeting.                  │
   │                                            [default: Hey, what's on your     │
@@ -598,8 +598,8 @@
   │                                  entity_name.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
-  │ --webhook-url                TEXT  Webhook URL.                              │
-  │ --webhook-auth-header        TEXT  Webhook auth header as NAME:VALUE.        │
+  │ --webhook-url                TEXT        Webhook URL.                        │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Run a prompt over the live transcript through   │
@@ -611,9 +611,9 @@
   │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
-  │ --config             TEXT  Set any StreamingParameters field as KEY=VALUE    │
-  │                            (repeatable).                                     │
-  │ --config-file        TEXT  JSON file of streaming fields.                    │
+  │ --config             KEY=VALUE  Set any StreamingParameters field as         │
+  │                                 KEY=VALUE (repeatable).                      │
+  │ --config-file        FILE       JSON file of streaming fields.               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -720,21 +720,21 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Customization ──────────────────────────────────────────────────────────────╮
   │ --word-boost                  TEXT     Boost a word (repeatable).            │
-  │ --custom-spelling-file        TEXT     JSON map of custom spellings.         │
+  │ --custom-spelling-file        FILE     JSON map of custom spellings.         │
   │ --audio-start                 INTEGER  Start offset in ms.                   │
   │ --audio-end                   INTEGER  End offset in ms.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
-  │ --webhook-url                TEXT  Webhook URL for completion.               │
-  │ --webhook-auth-header        TEXT  Webhook auth header as NAME:VALUE.        │
+  │ --webhook-url                TEXT        Webhook URL for completion.         │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Translation ────────────────────────────────────────────────────────────────╮
   │ --translate-to        TEXT  Translate transcript to a language (repeatable). │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
-  │ --config             TEXT  Set any TranscriptionConfig field as KEY=VALUE    │
-  │                            (repeatable).                                     │
-  │ --config-file        TEXT  JSON file of config fields.                       │
+  │ --config             KEY=VALUE  Set any TranscriptionConfig field as         │
+  │                                 KEY=VALUE (repeatable).                      │
+  │ --config-file        FILE       JSON file of config fields.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Transform the finished transcript through LLM   │

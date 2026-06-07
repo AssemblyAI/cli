@@ -111,7 +111,7 @@ class _StreamSession:
     api_key: str
     base_flags: dict[str, object]
     overrides: list[str] | None
-    config_file: str | None
+    config_file: str | Path | None
     renderer: StreamRenderer
     follow: FollowRenderer | None
     llm_prompts: list[str]
@@ -460,6 +460,7 @@ def stream(
         "--webhook-auth-header",
         help="Webhook auth header as NAME:VALUE.",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
+        metavar="NAME:VALUE",
     ),
     # llm transform
     llm_prompt: list[str] | None = typer.Option(
@@ -489,12 +490,15 @@ def stream(
         "--config",
         help="Set any StreamingParameters field as KEY=VALUE (repeatable).",
         rich_help_panel=help_panels.OPT_ADVANCED,
+        metavar="KEY=VALUE",
     ),
-    config_file: str | None = typer.Option(
+    config_file: Path | None = typer.Option(
         None,
         "--config-file",
         help="JSON file of streaming fields.",
         rich_help_panel=help_panels.OPT_ADVANCED,
+        exists=True,
+        dir_okay=False,
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
     output_field: choices.TextOrJson | None = typer.Option(

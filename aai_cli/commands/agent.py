@@ -96,6 +96,8 @@ def agent(
         None,
         "--system-prompt-file",
         help="Read the system prompt from a file (overrides --system-prompt).",
+        exists=True,
+        dir_okay=False,
     ),
     greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting."),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),

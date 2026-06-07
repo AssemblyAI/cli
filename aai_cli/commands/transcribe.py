@@ -258,11 +258,13 @@ def transcribe(
         help="Boost a word (repeatable).",
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
-    custom_spelling_file: str | None = typer.Option(
+    custom_spelling_file: Path | None = typer.Option(
         None,
         "--custom-spelling-file",
         help="JSON map of custom spellings.",
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
+        exists=True,
+        dir_okay=False,
     ),
     audio_start: int | None = typer.Option(
         None,
@@ -285,6 +287,7 @@ def transcribe(
         "--webhook-auth-header",
         help="Webhook auth header as NAME:VALUE.",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
+        metavar="NAME:VALUE",
     ),
     # speech understanding
     translate_to: list[str] | None = typer.Option(
@@ -299,12 +302,15 @@ def transcribe(
         "--config",
         help="Set any TranscriptionConfig field as KEY=VALUE (repeatable).",
         rich_help_panel=help_panels.OPT_ADVANCED,
+        metavar="KEY=VALUE",
     ),
-    config_file: str | None = typer.Option(
+    config_file: Path | None = typer.Option(
         None,
         "--config-file",
         help="JSON file of config fields.",
         rich_help_panel=help_panels.OPT_ADVANCED,
+        exists=True,
+        dir_okay=False,
     ),
     # llm gateway transform
     llm_prompt: list[str] | None = typer.Option(
