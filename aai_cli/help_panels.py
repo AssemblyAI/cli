@@ -17,3 +17,20 @@ TRANSCRIPTION = "Transcription & AI"  # the verbs you run: transcribe, stream, a
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
 SETUP = "Setup & Tools"  # get set up & maintain: samples, doctor, claude, version
+
+# Option panels group a single command's flags within its own ``--help``. The
+# `transcribe` command exposes 40+ options; without panels they render as one
+# flat wall. Each ``typer.Option(rich_help_panel=...)`` files the flag under one
+# of these headings; flags left unpanelled fall in Rich's default "Options"
+# panel — we keep the everyday ones (source, --sample, --json, -o, --show-code)
+# there so the common case stays at the top.
+OPT_MODEL = "Model & Language"
+OPT_FORMATTING = "Formatting"
+OPT_SPEAKERS = "Speakers & Channels"
+OPT_GUARDRAILS = "Guardrails"
+OPT_ANALYSIS = "Analysis"
+OPT_CUSTOMIZATION = "Customization"
+OPT_WEBHOOKS = "Webhooks"
+OPT_TRANSLATION = "Translation"
+OPT_ADVANCED = "Advanced"
+OPT_LLM = "LLM Transform"
