@@ -9,8 +9,16 @@ from urllib.parse import parse_qs, urlparse
 from aai_cli.auth import endpoints
 from aai_cli.errors import APIError
 
+# The callback URL carries the single-use OAuth token (and the state nonce) in its
+# query string, so it would otherwise linger in the browser's history and address
+# bar. Scrub it from the current history entry with replaceState the moment the page
+# loads — no extra request to race the server shutdown, unlike a redirect. The token
+# is already spent server-side by the time the user reads this, but keeping it out of
+# history is the OAuth-for-native-apps (RFC 8252) hygiene. The page reflects no query
+# data, so there is nothing to inject; the script is a static literal.
 _SUCCESS_HTML = (
     b"<html><body style='font-family:sans-serif'>"
+    b"<script>history.replaceState(null,'',location.pathname)</script>"
     b"<h2>Signed in.</h2><p>You can close this tab and return to the terminal.</p>"
     b"</body></html>"
 )

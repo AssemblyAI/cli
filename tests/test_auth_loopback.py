@@ -68,6 +68,36 @@ def test_capture_ignores_unknown_paths():
     assert result.token == "tok_late"
 
 
+def _body(path: str) -> bytes:
+    """Fetch `path` once (no retry) and return the response body.
+
+    Callers first confirm the server is bound via `_hit`, so no readiness loop is
+    needed here.
+    """
+    conn = http.client.HTTPConnection(endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT, timeout=2)
+    try:
+        conn.request("GET", path)
+        return conn.getresponse().read()
+    finally:
+        conn.close()
+
+
+def test_success_page_scrubs_token_from_history():
+    # The callback URL holds the single-use token + state in its query string; the
+    # success page must drop it from browser history rather than leave it lingering.
+    def run():
+        loopback.capture_callback("st8", timeout=5.0)
+
+    t = threading.Thread(target=run)
+    t.start()
+    assert _hit("/favicon.ico") == 404  # wait until the server is bound (keeps capture open)
+    body = _body("/callback?state=st8&stytch_token_type=discovery_oauth&token=tok_abc")
+    t.join(timeout=5)
+
+    assert b"replaceState" in body  # the query (token + state) is scrubbed client-side
+    assert b"tok_abc" not in body  # the page never reflects the token itself
+
+
 def test_capture_rejects_mismatched_state():
     # A callback with the wrong state nonce (a forged/login-CSRF attempt) is refused
     # with a 400 and does not end the capture; the genuine callback then completes it.
