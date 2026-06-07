@@ -173,6 +173,34 @@ def test_whoami_reports_env():
     assert data["env"] == "production"
 
 
+def test_root_callback_keeps_profile_env_without_sandbox():
+    # Without --sandbox the profile's own env must stand (pins `sandbox and env is
+    # None`: an `or` would force sandbox000 onto every default invocation).
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    config.set_profile_env("default", "production")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["env"] == "production"
+
+
+def test_root_callback_sandbox_overrides_profile_env():
+    # --sandbox forces sandbox000 even when the profile is bound elsewhere (pins the
+    # `env is None` arm: an `is not None` would leave the profile env in place).
+    import json
+
+    config.set_api_key("default", "sk_1234567890")
+    config.set_profile_env("default", "production")
+    with patch("aai_cli.commands.login.client.validate_key", return_value=True):
+        result = runner.invoke(app, ["--sandbox", "whoami", "--json"])
+    assert result.exit_code == 0
+    # A profile/env mismatch warning prints to stderr first; the JSON is the last line.
+    payload = json.loads(result.output.strip().splitlines()[-1])
+    assert payload["env"] == "sandbox000"
+
+
 def test_unknown_env_exits_2():
     result = runner.invoke(app, ["--env", "bogus", "whoami"])
     assert result.exit_code == 2
