@@ -80,6 +80,34 @@ def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
     assert youtube.download_audio("https://youtu.be/x", tmp_path) == landed
 
 
+def test_download_audio_falls_back_to_largest_file(tmp_path, monkeypatch):
+    # yt-dlp can leave sidecars (thumbnail, .info.json) next to the audio track;
+    # the fallback must pick the audio (largest), not an arbitrary iterdir() entry.
+    audio = tmp_path / "actual.webm"
+    thumb = tmp_path / "actual.webp"
+
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            thumb.write_bytes(b"\x00" * 16)  # small sidecar
+            audio.write_bytes(b"\x00" * 4096)  # the real, much larger track
+            return {"id": "x"}
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "guessed.m4a")  # wrong extension; file doesn't exist
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    assert youtube.download_audio("https://youtu.be/x", tmp_path) == audio
+
+
 def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
     # prepare_filename points at a missing file and nothing landed in dest_dir.
     class FakeYDL:
