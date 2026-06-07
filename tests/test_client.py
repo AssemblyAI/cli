@@ -22,6 +22,9 @@ def test_validate_key_true_on_success():
     with patch.object(client.aai, "Transcriber") as T:
         T.return_value.list_transcripts.return_value = MagicMock()
         assert client.validate_key("sk_good") is True
+    # The probe asks for a single row — it only needs to confirm the key authenticates.
+    params = T.return_value.list_transcripts.call_args.args[0]
+    assert params.limit == 1
 
 
 def test_validate_key_false_on_auth_error():
@@ -126,6 +129,23 @@ def test_transcribe_raises_on_error_status():
         with pytest.raises(APIError) as exc:
             client.transcribe("sk", "audio.mp3", config=aai.TranscriptionConfig())
     assert exc.value.transcript_id == "t_err"
+    assert exc.value.message == "decode failed"  # surfaces the SDK's error verbatim
+
+
+def test_transcribe_error_status_without_message_uses_fallback():
+    # When the SDK reports an error status but no error text, fall back to a generic
+    # message (pins the `transcript.error or "Transcription failed."`).
+    fake_transcript = MagicMock()
+    fake_transcript.status = client.aai.TranscriptStatus.error
+    fake_transcript.error = None
+    fake_transcript.id = "t_err"
+    fake_transcriber = MagicMock()
+    fake_transcriber.transcribe.return_value = fake_transcript
+
+    with patch.object(client.aai, "Transcriber", return_value=fake_transcriber):
+        with pytest.raises(APIError) as exc:
+            client.transcribe("sk", "audio.mp3", config=aai.TranscriptionConfig())
+    assert exc.value.message == "Transcription failed."
 
 
 def test_select_transcript_field_utterances_formats_speakers():
@@ -270,6 +290,26 @@ def test_stream_audio_wires_handlers_and_streams(monkeypatch):
     assert last.params.sample_rate == 16000
     assert last.params.format_turns is True
     assert last.terminate is True  # graceful flush requested
+
+
+def test_stream_audio_registers_begin_handler_when_provided(monkeypatch):
+    # A provided on_begin must actually be wired to the Begin event (pins
+    # `if on_begin is not None`); inverting it would leave Begin unhandled.
+    class BeginClient(_FakeStreamingClient):
+        def stream(self, source):
+            from assemblyai.streaming.v3 import StreamingEvents
+
+            self.handlers[StreamingEvents.Begin](self, _types.SimpleNamespace(id="sess_1"))
+
+    monkeypatch.setattr(client, "StreamingClient", BeginClient)
+    begins = []
+    client.stream_audio(
+        "sk",
+        [b"\x00"],
+        params=_stream_params(),
+        on_begin=lambda e: begins.append(e.id),
+    )
+    assert begins == ["sess_1"]
 
 
 def test_stream_audio_raises_on_error_event(monkeypatch):
