@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -22,10 +23,17 @@ class CallbackResult:
     error: str | None = None
 
 
-def capture_callback(timeout: float = 120.0) -> CallbackResult:
+def capture_callback(
+    expected_state: str,
+    timeout: float = 120.0,  # pragma: no mutate (default window; tests pass explicit timeouts)
+) -> CallbackResult:
     """Bind the fixed loopback port, capture one OAuth callback, return its token.
 
-    Returns a CallbackResult; `error="timeout"` if no callback arrives in time.
+    Only a callback whose `state` query parameter equals `expected_state` is
+    accepted; any other request (wrong/missing state, or a different path) gets a
+    4xx and the server keeps waiting, so a forged callback can't complete someone
+    else's login. Returns a CallbackResult; `error="timeout"` if no matching
+    callback arrives in time.
     """
     result = CallbackResult()
     done = threading.Event()
@@ -38,6 +46,14 @@ def capture_callback(timeout: float = 120.0) -> CallbackResult:
                 self.end_headers()
                 return
             qs = parse_qs(parsed.query)
+            state = next(iter(qs.get("state", [])), None)
+            # Constant-time compare so a forged callback can't probe the nonce by
+            # timing. A mismatch is rejected without ending the capture: the real
+            # callback can still arrive (otherwise it falls through to timeout).
+            if state is None or not secrets.compare_digest(state, expected_state):
+                self.send_response(400)
+                self.end_headers()
+                return
             result.token = next(iter(qs.get("token", [])), None)
             result.token_type = next(iter(qs.get("stytch_token_type", [])), None)
             self.send_response(200)

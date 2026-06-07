@@ -1,6 +1,8 @@
 # aai_cli/init/scaffold.py
 from __future__ import annotations
 
+import os
+import stat
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -84,5 +86,15 @@ def scaffold(
     _copy_tree(root, target)
     lines = [f"ASSEMBLYAI_API_KEY={api_key or PLACEHOLDER_KEY}"]
     lines += [f"{k}={v}" for k, v in (env_vars or {}).items()]
-    (target / ".env").write_text("\n".join(lines) + "\n")
+    env_path = target / ".env"
+    # The .env holds the real API key, so create it readable/writable by the owner
+    # only (0600) instead of the umask default (commonly 0644) — otherwise the key
+    # would be world/group-readable on a shared host. Open with the 0600 mode so the
+    # secret is never briefly world-readable; the explicit chmod then also tightens an
+    # existing file when `aai init --force` overwrites one (O_CREAT's mode is ignored
+    # for a file that already exists).
+    fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+    with os.fdopen(fd, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    env_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
     return target

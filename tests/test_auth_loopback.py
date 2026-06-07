@@ -36,11 +36,11 @@ def test_capture_returns_token_and_type():
     result_box = {}
 
     def run():
-        result_box["result"] = loopback.capture_callback(timeout=5.0)
+        result_box["result"] = loopback.capture_callback("st8", timeout=5.0)
 
     t = threading.Thread(target=run)
     t.start()
-    status = _hit("/callback?stytch_token_type=discovery_oauth&token=tok_abc")
+    status = _hit("/callback?state=st8&stytch_token_type=discovery_oauth&token=tok_abc")
     t.join(timeout=5)
 
     assert status == 200  # the callback is acknowledged with 200 OK
@@ -56,20 +56,55 @@ def test_capture_ignores_unknown_paths():
     result_box = {}
 
     def run():
-        result_box["result"] = loopback.capture_callback(timeout=5.0)
+        result_box["result"] = loopback.capture_callback("st8", timeout=5.0)
 
     t = threading.Thread(target=run)
     t.start()
     assert _hit("/favicon.ico") == 404  # unknown path -> 404, capture stays open
-    _hit("/callback?stytch_token_type=discovery_oauth&token=tok_late")
+    _hit("/callback?state=st8&stytch_token_type=discovery_oauth&token=tok_late")
     t.join(timeout=5)
 
     result = result_box["result"]
     assert result.token == "tok_late"
 
 
+def test_capture_rejects_mismatched_state():
+    # A callback with the wrong state nonce (a forged/login-CSRF attempt) is refused
+    # with a 400 and does not end the capture; the genuine callback then completes it.
+    result_box = {}
+
+    def run():
+        result_box["result"] = loopback.capture_callback("good", timeout=5.0)
+
+    t = threading.Thread(target=run)
+    t.start()
+    assert _hit("/callback?state=evil&stytch_token_type=discovery_oauth&token=tok_bad") == 400
+    _hit("/callback?state=good&stytch_token_type=discovery_oauth&token=tok_ok")
+    t.join(timeout=5)
+
+    result = result_box["result"]
+    assert result.token == "tok_ok"  # the forged token was never captured
+
+
+def test_capture_rejects_missing_state():
+    # A callback with no state at all is refused (400) and never captured.
+    result_box = {}
+
+    def run():
+        result_box["result"] = loopback.capture_callback("good", timeout=0.8)
+
+    t = threading.Thread(target=run)
+    t.start()
+    assert _hit("/callback?stytch_token_type=discovery_oauth&token=tok_bad") == 400
+    t.join(timeout=5)
+
+    result = result_box["result"]
+    assert result.error == "timeout"
+    assert result.token is None
+
+
 def test_capture_times_out_without_callback():
-    result = loopback.capture_callback(timeout=0.3)
+    result = loopback.capture_callback("st8", timeout=0.3)
     assert result.error == "timeout"
     assert result.token is None
 
@@ -84,6 +119,6 @@ def test_capture_raises_clean_error_when_port_unavailable(monkeypatch):
     monkeypatch.setattr(endpoints, "LOOPBACK_PORT", port)
     try:
         with pytest.raises(APIError):
-            loopback.capture_callback(timeout=1.0)
+            loopback.capture_callback("st8", timeout=1.0)
     finally:
         busy.close()
