@@ -1,7 +1,31 @@
+import stat
+
 import pytest
 
 from aai_cli.errors import CLIError
 from aai_cli.init import scaffold
+
+
+def test_scaffold_env_is_owner_only_readable(tmp_path):
+    # The .env holds the real API key, so it must not be world/group-readable. (CI is
+    # POSIX; the project gates its Windows-specific paths in scripts/check.sh, not here.)
+    target = tmp_path / "app"
+    scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
+    mode = stat.S_IMODE((target / ".env").stat().st_mode)
+    assert mode == 0o600
+    assert not mode & (stat.S_IRGRP | stat.S_IROTH)  # no group/other read of the key
+
+
+def test_scaffold_tightens_existing_env_on_overwrite(tmp_path):
+    # `aai init --force` re-scaffolds over an existing project; a stale, loosely
+    # permissioned .env must be tightened to 0600 rather than left as-is.
+    target = tmp_path / "app"
+    target.mkdir()
+    stale = target / ".env"
+    stale.write_text("ASSEMBLYAI_API_KEY=old\n")
+    stale.chmod(0o644)
+    scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
+    assert stat.S_IMODE(stale.stat().st_mode) == 0o600
 
 
 def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
