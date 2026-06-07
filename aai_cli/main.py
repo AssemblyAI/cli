@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, environments, help_panels, stdio
+from aai_cli import __version__, environments, help_panels, output, stdio
 from aai_cli.commands import (
     account,
     agent,
@@ -125,14 +125,17 @@ def main(
         env = "sandbox000"
     state = AppState(profile=profile, env=env)
     ctx.obj = state
+    # The command's own --json flag isn't parsed yet, so fall back to auto-detection
+    # (JSON when piped/agentic) — the same default run_command uses for its errors.
+    json_mode = output.resolve_json(explicit=False)
     try:
         environments.set_active(resolve_environment(state))
     except CLIError as err:
-        typer.echo(err.message, err=True)
+        output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
     warning = env_override_warning(state)
     if warning:
-        typer.echo(warning, err=True)
+        output.error_console.print(output.warn(warning))
 
 
 # Help-panel grouping: named sub-typers carry their panel on `add_typer`; merged
