@@ -34,3 +34,7 @@ OPT_WEBHOOKS = "Webhooks"
 OPT_TRANSLATION = "Translation"
 OPT_ADVANCED = "Advanced"
 OPT_LLM = "LLM Transform"
+# stream-specific panels (real-time concerns that file transcription has no equivalent for)
+OPT_CAPTURE = "Audio Capture"
+OPT_TURNS = "Turn Detection"
+OPT_FEATURES = "Features"

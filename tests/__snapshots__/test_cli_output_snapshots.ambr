@@ -526,104 +526,79 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                                                Stream the hosted    │
-  │                                                         wildfires.mp3        │
-  │                                                         sample.              │
-  │ --sample-rate                                  INTEGER  Force a microphone   │
-  │                                                         capture rate in Hz   │
-  │                                                         (default: device     │
-  │                                                         native).             │
-  │ --device                                       INTEGER  Microphone device    │
-  │                                                         index.               │
-  │ --system-audio                                          macOS only: stream   │
-  │                                                         system/app audio and │
-  │                                                         microphone as        │
-  │                                                         separate sessions.   │
-  │ --system-audio-only                                     macOS only: stream   │
-  │                                                         system/app audio     │
-  │                                                         without the          │
-  │                                                         microphone.          │
-  │ --speech-model                                 TEXT     Streaming speech     │
-  │                                                         model.               │
-  │                                                         [default: u3-rt-pro] │
-  │ --encoding                                     TEXT     Audio encoding:      │
-  │                                                         pcm_s16le or         │
-  │                                                         pcm_mulaw.           │
-  │ --language-detection                                    Auto-detect the      │
-  │                                                         spoken language.     │
-  │ --domain                                       TEXT     Domain preset (e.g.  │
-  │                                                         medical).            │
-  │ --end-of-turn-confi…                           FLOAT    End-of-turn          │
-  │                                                         confidence (0-1).    │
-  │ --min-turn-silence                             INTEGER  Min silence to end a │
-  │                                                         turn (ms).           │
-  │ --max-turn-silence                             INTEGER  Max silence before   │
-  │                                                         ending a turn (ms).  │
-  │ --vad-threshold                                FLOAT    Voice-activity       │
-  │                                                         threshold.           │
-  │ --format-turns            --no-format-turns             Punctuate/format     │
-  │                                                         finalized turns.     │
-  │ --include-partial-t…                                    Emit partial turns.  │
-  │ --keyterms-prompt                              TEXT     Boost a key term     │
-  │                                                         (repeatable).        │
-  │ --filter-profanity                                      Mask profanity.      │
-  │ --speaker-labels                                        Label speakers.      │
-  │ --max-speakers                                 INTEGER  Max speakers.        │
-  │ --voice-focus                                  TEXT     Voice focus:         │
-  │                                                         near_field or        │
-  │                                                         far_field.           │
-  │ --voice-focus-thres…                           FLOAT    Voice-focus          │
-  │                                                         threshold.           │
-  │ --redact-pii                                            Redact PII from      │
-  │                                                         turns.               │
-  │ --redact-pii-policy                            TEXT     Comma-separated PII  │
-  │                                                         policies.            │
-  │ --redact-pii-sub                               TEXT     Replace redacted PII │
-  │                                                         with: hash or        │
-  │                                                         entity_name.         │
-  │ --inactivity-timeout                           INTEGER  Auto-close after N   │
-  │                                                         seconds idle.        │
-  │ --webhook-url                                  TEXT     Webhook URL.         │
-  │ --webhook-auth-head…                           TEXT     Webhook auth header  │
-  │                                                         as NAME:VALUE.       │
-  │ --config                                       TEXT     Set any              │
-  │                                                         StreamingParameters  │
-  │                                                         field as KEY=VALUE   │
-  │                                                         (repeatable).        │
-  │ --config-file                                  TEXT     JSON file of         │
-  │                                                         streaming fields.    │
-  │ --prompt                                       TEXT     Prompt to bias the   │
-  │                                                         speech model         │
-  │                                                         (u3-pro).            │
-  │ --llm                                          TEXT     Run a prompt over    │
-  │                                                         the live transcript  │
-  │                                                         through LLM Gateway, │
-  │                                                         refreshing the       │
-  │                                                         answer on every      │
-  │                                                         finalized turn.      │
-  │                                                         Repeatable: each     │
-  │                                                         prompt runs on the   │
-  │                                                         previous one's       │
-  │                                                         response (a chain).  │
-  │ --model                                        TEXT     LLM Gateway model.   │
-  │                                                         [default:            │
-  │                                                         claude-haiku-4-5-20… │
-  │ --max-tokens                                   INTEGER  Max tokens.          │
-  │                                                         [default: 1000]      │
-  │ --json                                                  Emit                 │
-  │                                                         newline-delimited    │
-  │                                                         JSON events.         │
-  │ --output              -o                       TEXT     Output mode: 'text'  │
-  │                                                         (finalized turns as  │
-  │                                                         plain lines,         │
-  │                                                         pipe-friendly) or    │
-  │                                                         'json'.              │
-  │ --show-code                                             Print the equivalent │
-  │                                                         Python SDK code and  │
-  │                                                         exit (does not       │
-  │                                                         stream).             │
-  │ --help                                                  Show this message    │
-  │                                                         and exit.            │
+  │ --sample                   Stream the hosted wildfires.mp3 sample.           │
+  │ --json                     Emit newline-delimited JSON events.               │
+  │ --output     -o      TEXT  Output mode: 'text' (finalized turns as plain     │
+  │                            lines, pipe-friendly) or 'json'.                  │
+  │ --show-code                Print the equivalent Python SDK code and exit     │
+  │                            (does not stream).                                │
+  │ --help                     Show this message and exit.                       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
+  │ --sample-rate              INTEGER  Force a microphone capture rate in Hz    │
+  │                                     (default: device native).                │
+  │ --device                   INTEGER  Microphone device index.                 │
+  │ --system-audio                      macOS only: stream system/app audio and  │
+  │                                     microphone as separate sessions.         │
+  │ --system-audio-only                 macOS only: stream system/app audio      │
+  │                                     without the microphone.                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Model & Language ───────────────────────────────────────────────────────────╮
+  │ --speech-model              TEXT  Streaming speech model.                    │
+  │                                   [default: u3-rt-pro]                       │
+  │ --encoding                  TEXT  Audio encoding: pcm_s16le or pcm_mulaw.    │
+  │ --language-detection              Auto-detect the spoken language.           │
+  │ --domain                    TEXT  Domain preset (e.g. medical).              │
+  │ --prompt                    TEXT  Prompt to bias the speech model (u3-pro).  │
+  │ --keyterms-prompt           TEXT  Boost a key term (repeatable).             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
+  │ --end-of-turn-confid…                         FLOAT    End-of-turn           │
+  │                                                        confidence (0-1).     │
+  │ --min-turn-silence                            INTEGER  Min silence to end a  │
+  │                                                        turn (ms).            │
+  │ --max-turn-silence                            INTEGER  Max silence before    │
+  │                                                        ending a turn (ms).   │
+  │ --vad-threshold                               FLOAT    Voice-activity        │
+  │                                                        threshold.            │
+  │ --format-turns           --no-format-turns             Punctuate/format      │
+  │                                                        finalized turns.      │
+  │ --include-partial-tu…                                  Emit partial turns.   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
+  │ --speaker-labels                 Label speakers.                             │
+  │ --max-speakers          INTEGER  Max speakers.                               │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Features ───────────────────────────────────────────────────────────────────╮
+  │ --voice-focus                  TEXT     Voice focus: near_field or           │
+  │                                         far_field.                           │
+  │ --voice-focus-threshold        FLOAT    Voice-focus threshold.               │
+  │ --inactivity-timeout           INTEGER  Auto-close after N seconds idle.     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
+  │ --filter-profanity               Mask profanity.                             │
+  │ --redact-pii                     Redact PII from turns.                      │
+  │ --redact-pii-policy        TEXT  Comma-separated PII policies.               │
+  │ --redact-pii-sub           TEXT  Replace redacted PII with: hash or          │
+  │                                  entity_name.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
+  │ --webhook-url                TEXT  Webhook URL.                              │
+  │ --webhook-auth-header        TEXT  Webhook auth header as NAME:VALUE.        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --llm               TEXT     Run a prompt over the live transcript through   │
+  │                              LLM Gateway, refreshing the answer on every     │
+  │                              finalized turn. Repeatable: each prompt runs on │
+  │                              the previous one's response (a chain).          │
+  │ --model             TEXT     LLM Gateway model.                              │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
+  │ --config             TEXT  Set any StreamingParameters field as KEY=VALUE    │
+  │                            (repeatable).                                     │
+  │ --config-file        TEXT  JSON file of streaming fields.                    │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
