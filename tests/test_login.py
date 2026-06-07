@@ -202,8 +202,27 @@ def test_root_callback_sandbox_overrides_profile_env():
 
 
 def test_unknown_env_exits_2():
+    import json
+
     result = runner.invoke(app, ["--env", "bogus", "whoami"])
     assert result.exit_code == 2
+    # Routed through the standard error path: JSON shape (piped/agentic) + a suggestion,
+    # not a bare echo of the message.
+    payload = json.loads(result.output.strip().splitlines()[-1])
+    assert payload["error"]["type"] == "invalid_environment"
+    assert "unset AAI_ENV" in payload["error"]["suggestion"]
+
+
+def test_unknown_env_human_output_when_interactive():
+    # For an interactive human (not piped/agentic) the callback emits the human
+    # "Error:" + "Suggestion:" pair, not JSON — pinning that resolve_json(explicit=False)
+    # actually consults the auto-detection rather than always forcing JSON.
+    with patch("aai_cli.output._is_agentic", return_value=False):
+        result = runner.invoke(app, ["--env", "bogus", "whoami"])
+    assert result.exit_code == 2
+    assert "Error:" in result.output
+    assert "Suggestion:" in result.output
+    assert '"error"' not in result.output  # not the JSON shape
 
 
 def test_env_override_prints_warning_to_stderr():
