@@ -206,7 +206,8 @@ def transcribe(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, srt, or json.",
+        help="Print one field as plain text: text, id, status, utterances, or srt. "
+        "For full JSON, use --json.",
     ),
     show_code: bool = typer.Option(
         False,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -20,7 +19,6 @@ console = theme.make_console()
 # Errors go to stderr so they never pollute piped stdout (e.g. `aai transcribe x -o text > out`).
 error_console = theme.make_console(stderr=True)
 
-_AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
 _MIN_MASKABLE_SECRET_LENGTH = 8
 
 
@@ -28,15 +26,19 @@ def _stdout_is_tty() -> bool:
     return sys.stdout.isatty()
 
 
-def _is_agentic() -> bool:
-    if not _stdout_is_tty():
-        return True
-    return any(os.environ.get(var) for var in _AGENT_ENV_VARS)
-
-
 def resolve_json(*, explicit: bool) -> bool:
-    """JSON output when asked for, or when not attached to an interactive human."""
-    return explicit or _is_agentic()
+    """JSON output only when explicitly requested with ``--json`` (or ``-o json``).
+
+    Human-readable text is the default for every command, in every context — a
+    terminal, a pipe, CI, or an agent. We deliberately do NOT switch the output
+    *shape* to JSON just because stdout is piped or a ``CI``/``CLAUDECODE`` env var
+    is set: that surprised plain-text pipelines like ``aai transcribe x | grep word``
+    by handing them a JSON blob instead of the transcript. Being off a TTY still
+    drops color and interactivity (Rich handles that automatically); it just no
+    longer changes the structure. This matches gh/docker/kubectl, which keep their
+    human/tabular output until you opt in to ``--json``.
+    """
+    return explicit
 
 
 def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
@@ -48,13 +50,14 @@ def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
 def stream_output_modes(field: str | None, *, json_mode: bool) -> tuple[bool, bool]:
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
-    Shared by `stream` and `agent`, whose renderers take the same two flags: `text`
-    emits plain finalized lines, `json` forces NDJSON, and an unset field falls back
-    to the auto-detected `json_mode` (JSON when piped/agentic, human otherwise).
+    Shared by `stream` and `agent`. ``-o text`` emits plain finalized lines (handy for
+    ``aai stream -o text | aai llm -f``); ``--json`` (the canonical machine switch)
+    forces NDJSON. With neither, the live human panel renders. ``-o`` is a plain-text
+    projection only — JSON is reached through ``--json``, so the two no longer overlap.
     """
-    validate_output_field(field, ("text", "json"))
+    validate_output_field(field, ("text",))
     text_mode = field == "text"
-    return text_mode, (field == "json") or (json_mode and not text_mode)
+    return text_mode, json_mode and not text_mode
 
 
 def mask_secret(value: str) -> str:
@@ -149,7 +152,7 @@ def print_code(code: str, *, language: str = "python") -> None:
     otherwise. Piping/redirecting (or an agent) yields plain text with no ANSI, so
     `aai … --show-code > script.py` stays byte-clean and runnable.
     """
-    if _is_agentic():
+    if not _stdout_is_tty():
         print(code)
         return
     from rich.syntax import Syntax  # lazily import Pygments-backed highlighter

@@ -36,9 +36,9 @@
   │ --device                      INTEGER  Microphone device index.              │
   │ --list-voices                          Print known voices and exit.          │
   │ --json                                 Emit newline-delimited JSON events.   │
-  │ --output              -o      TEXT     Output mode: 'text' (you:/agent:      │
-  │                                        lines as plain stdout, pipe-friendly) │
-  │                                        or 'json'.                            │
+  │ --output              -o      TEXT     Print you:/agent: lines as plain      │
+  │                                        stdout (pipe-friendly). For NDJSON,   │
+  │                                        use --json.                           │
   │ --show-code                            Print the equivalent Python SDK code  │
   │                                        and exit (does not start a session).  │
   │ --help                                 Show this message and exit.           │
@@ -282,8 +282,9 @@
   │                                   (e.g. aai stream -o text | aai llm -f      │
   │                                   "summarize action items as I talk").       │
   │                                   Ctrl-C to stop.                            │
-  │ --output         -o      TEXT     Print one field of the result: text (just  │
-  │                                   the answer, pipe-friendly) or json.        │
+  │ --output         -o      TEXT     Print just the answer as plain text        │
+  │                                   (pipe-friendly). For full JSON, use        │
+  │                                   --json.                                    │
   │ --max-tokens             INTEGER  Max tokens to generate. [default: 1000]    │
   │ --list-models                     Print known models and exit.               │
   │ --json                            Output raw JSON (one object per turn in    │
@@ -613,11 +614,10 @@
   │ --json                                                  Emit                 │
   │                                                         newline-delimited    │
   │                                                         JSON events.         │
-  │ --output              -o                       TEXT     Output mode: 'text'  │
-  │                                                         (finalized turns as  │
-  │                                                         plain lines,         │
-  │                                                         pipe-friendly) or    │
-  │                                                         'json'.              │
+  │ --output              -o                       TEXT     Print finalized      │
+  │                                                         turns as plain lines │
+  │                                                         (pipe-friendly). For │
+  │                                                         NDJSON, use --json.  │
   │ --show-code                                             Print the equivalent │
   │                                                         Python SDK code and  │
   │                                                         exit (does not       │
@@ -755,11 +755,12 @@
   │ --max-tokens                                   INTEGER  Max tokens.          │
   │                                                         [default: 1000]      │
   │ --json                                                  Output raw JSON.     │
-  │ --output               -o                      TEXT     Print one field of   │
-  │                                                         the result: text,    │
+  │ --output               -o                      TEXT     Print one field as   │
+  │                                                         plain text: text,    │
   │                                                         id, status,          │
-  │                                                         utterances, srt, or  │
-  │                                                         json.                │
+  │                                                         utterances, or srt.  │
+  │                                                         For full JSON, use   │
+  │                                                         --json.              │
   │ --show-code                                             Print the equivalent │
   │                                                         Python SDK code and  │
   │                                                         exit (does not       │
@@ -795,8 +796,8 @@
   │ *    transcript_id      TEXT  Transcript id. [required]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --output  -o      TEXT  Print one field of the result: text, id, status,     │
-  │                         utterances, srt, or json.                            │
+  │ --output  -o      TEXT  Print one field as plain text: text, id, status,     │
+  │                         utterances, or srt. For full JSON, use --json.       │
   │ --json                  Output raw JSON.                                     │
   │ --help                  Show this message and exit.                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯

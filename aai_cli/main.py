@@ -82,9 +82,20 @@ app = typer.Typer(
     name="aai",
     help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
     no_args_is_help=True,
-    add_completion=False,
+    # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
+    # the discoverability affordance gh/kubectl/docker users reach for.
+    add_completion=True,
     cls=_OrderedGroup,
 )
+
+
+def _version_callback(value: bool) -> None:
+    """Print the version and exit when `aai --version`/`-V` is passed, before any command
+    runs. Mirrors the reflex (`tool --version`) every other CLI answers; the `version`
+    subcommand stays for parity."""
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
 
 
 @app.callback(
@@ -103,10 +114,27 @@ def main(
         None, "--env", help="Backend environment (production, sandbox000)."
     ),
     sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show the CLI version and exit.",
+        callback=_version_callback,
+        # Eager so --version short-circuits before any other option processing — the
+        # idiomatic default. With no competing eager option or required root argument
+        # here it's behaviorally indistinguishable from non-eager, so no test can pin it.
+        is_eager=True,  # pragma: no mutate
+    ),
 ) -> None:
+    # `version` is consumed by its eager callback above (prints the version and exits
+    # before we get here); the parameter exists only to declare the --version/-V option.
+    del version
     if sandbox and env is None:
         env = "sandbox000"
-    state = AppState(profile=profile, env=env)
+    state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
     try:
         environments.set_active(resolve_environment(state))
@@ -114,7 +142,7 @@ def main(
         typer.echo(err.message, err=True)
         raise typer.Exit(code=err.exit_code) from None
     warning = env_override_warning(state)
-    if warning:
+    if warning and not quiet:
         typer.echo(warning, err=True)
 
 

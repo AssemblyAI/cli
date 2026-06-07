@@ -394,7 +394,7 @@ def stream(
         None,
         "-o",
         "--output",
-        help="Output mode: 'text' (finalized turns as plain lines, pipe-friendly) or 'json'.",
+        help="Print finalized turns as plain lines (pipe-friendly). For NDJSON, use --json.",
     ),
     show_code: bool = typer.Option(
         False,

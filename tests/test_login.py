@@ -66,7 +66,7 @@ def test_whoami_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     with patch("aai_cli.commands.login.client.validate_key", return_value=True) as validate:
         result = runner.invoke(app, ["whoami", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
     validate.assert_not_called()
     assert "Run the same command again" in result.output
@@ -257,7 +257,7 @@ def test_whoami_renders_human_table_reachable():
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
     with (
-        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.output.resolve_json", return_value=False),
         patch("aai_cli.commands.login.client.validate_key", return_value=True),
     ):
         result = runner.invoke(app, ["whoami"])
@@ -275,7 +275,7 @@ def test_whoami_renders_human_table_rejected_key():
     # account/session "none" fallbacks (the em-dash placeholder).
     config.set_api_key("default", "sk_1234567890")
     with (
-        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.output.resolve_json", return_value=False),
         patch("aai_cli.commands.login.client.validate_key", return_value=False),
     ):
         result = runner.invoke(app, ["whoami"])

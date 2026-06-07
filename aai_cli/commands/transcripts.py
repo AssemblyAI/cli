@@ -28,7 +28,8 @@ def get(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text, id, status, utterances, srt, or json.",
+        help="Print one field as plain text: text, id, status, utterances, or srt. "
+        "For full JSON, use --json.",
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
@@ -44,14 +45,14 @@ def get(
                 transcript_id=transcript_id,
             )
         if output_field is not None:
-            # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
+            # Raw single-field output for pipelines, matching `transcribe`.
             output.emit_text(client.select_transcript_field(transcript, output_field))
             return
-        output.emit(
-            client.transcript_summary(transcript),
-            lambda d: escape(str(d["text"])),
-            json_mode=json_mode,
-        )
+        # --json emits the full payload (matching `transcribe`); human mode prints text.
+        if json_mode:
+            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
+        else:
+            output.console.print(escape(client.select_transcript_field(transcript, "text")))
 
     run_command(ctx, body, json=json_out)
 

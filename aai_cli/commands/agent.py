@@ -100,7 +100,7 @@ def agent(
         None,
         "-o",
         "--output",
-        help="Output mode: 'text' (you:/agent: lines as plain stdout, pipe-friendly) or 'json'.",
+        help="Print you:/agent: lines as plain stdout (pipe-friendly). For NDJSON, use --json.",
     ),
     show_code: bool = typer.Option(
         False,

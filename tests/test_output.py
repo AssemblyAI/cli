@@ -5,26 +5,18 @@ from aai_cli import output
 from aai_cli.errors import CLIError
 
 
-def test_resolve_json_true_when_explicit(monkeypatch):
-    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
+def test_resolve_json_true_only_when_explicit():
+    # JSON is opt-in: the flag is the single source of truth.
     assert output.resolve_json(explicit=True) is True
 
 
-def test_resolve_json_true_when_not_tty(monkeypatch):
+def test_resolve_json_false_when_not_explicit_even_off_tty(monkeypatch):
+    # Human text is the default everywhere — piped, in CI, or under an agent — so a
+    # plain-text pipeline (`aai transcribe x | grep word`) keeps getting text, not JSON.
     monkeypatch.setattr(output, "_stdout_is_tty", lambda: False)
-    assert output.resolve_json(explicit=False) is True
-
-
-def test_resolve_json_true_in_ci(monkeypatch):
-    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
     monkeypatch.setenv("CI", "true")
-    assert output.resolve_json(explicit=False) is True
-
-
-def test_resolve_json_true_for_agent(monkeypatch):
-    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
     monkeypatch.setenv("CLAUDECODE", "1")
-    assert output.resolve_json(explicit=False) is True
+    assert output.resolve_json(explicit=False) is False
 
 
 def test_resolve_json_false_for_human(monkeypatch):
@@ -127,7 +119,7 @@ def test_affordance_helpers_use_resolvable_styles(capsys):
 
 
 def test_print_code_plain_when_piped(monkeypatch, capsys):
-    monkeypatch.setattr(output, "_is_agentic", lambda: True)
+    monkeypatch.setattr(output, "_stdout_is_tty", lambda: False)
     output.print_code("import os\nprint(os.getcwd())\n")
     out = capsys.readouterr().out
     assert "import os" in out
@@ -137,7 +129,7 @@ def test_print_code_plain_when_piped(monkeypatch, capsys):
 def test_print_code_highlights_for_interactive_human(monkeypatch, capsys):
     from aai_cli import theme
 
-    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
     monkeypatch.setattr(
         output, "console", theme.make_console(force_terminal=True, color_system="truecolor")
     )

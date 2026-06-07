@@ -194,7 +194,7 @@ def test_stream_unauthenticated_runs_login(monkeypatch):
 
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
     result = runner.invoke(app, ["stream", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
     assert "Run the same command again" in result.output
 

@@ -82,7 +82,7 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | `aai samples create <name>` | Scaffold a runnable starter script. |
 | `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
-Add `--json` to any command for machine-readable output (the default when output is piped or run by an agent). Errors go to **stderr**, so stdout stays clean for pipelines.
+Every command prints human-readable text by default — in a terminal, a pipe, CI, or under an agent alike. Add `--json` for machine-readable output (it never switches on you just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob). Errors go to **stderr**, so stdout stays clean for pipelines.
 
 > **Tip:** Quote URLs that contain `?` (most YouTube links do) — in zsh the `?` is a glob character: `aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"`.
 
@@ -131,7 +131,7 @@ aai stream --llm "summarize action items as I talk"
 aai stream --llm "extract action items" --llm "rewrite them as a checklist"  # chains
 ```
 
-On a terminal you watch one evolving panel; piped onward it emits one JSON object per refresh. Prefer the pipe? Compose the primitives — `aai stream -o text` writes one finalized turn per line and `aai llm -f` re-runs your prompt over the growing transcript:
+On a terminal you watch one evolving panel; add `--json` for one JSON object per refresh. Prefer the pipe? Compose the primitives — `aai stream -o text` writes one finalized turn per line and `aai llm -f` re-runs your prompt over the growing transcript:
 
 ```sh
 aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize action items"
@@ -169,7 +169,7 @@ With `--llm` (repeatable), it emits the chained LLM Gateway calls too.
 # Pick one field with -o
 aai transcribe call.mp3 -o text         # just the transcript text
 aai transcribe video.mp4 -o srt         # SubRip (.srt) captions
-aai transcribe call.mp3 -o json | jq .  # full JSON when you do want jq
+aai transcribe call.mp3 --json | jq .   # full JSON when you do want jq
 
 # Read audio from stdin
 ffmpeg -i talk.mp4 -f wav - | aai transcribe -          # transcribe any video

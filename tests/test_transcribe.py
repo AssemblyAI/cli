@@ -84,7 +84,7 @@ def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch):
         "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
         result = runner.invoke(app, ["transcribe", "--sample"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
     tx.assert_not_called()
     assert "Run the same command again" in result.output

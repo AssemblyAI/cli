@@ -135,7 +135,8 @@ def transcript_json_payload(transcript: Any) -> dict[str, object]:
 
 
 # Fields `transcribe` and `transcripts get` expose via `-o/--output` (raw, pipe-friendly).
-TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "srt", "json")
+# `-o` is a plain-text projection of one field; full JSON is reached through `--json`.
+TRANSCRIPT_OUTPUT_FIELDS = ("text", "id", "status", "utterances", "srt")
 
 
 def _transcript_text(transcript: Any) -> str:
@@ -168,7 +169,6 @@ _FIELD_RENDERERS: dict[str, Callable[[Any], str]] = {
     "status": status_str,
     "utterances": _render_utterances,
     "srt": _export_srt,
-    "json": lambda t: json.dumps(transcript_json_payload(t), default=str),
 }
 
 

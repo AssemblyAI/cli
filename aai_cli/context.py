@@ -25,6 +25,7 @@ class AppState:
 
     profile: str | None = None
     env: str | None = None
+    quiet: bool = False
 
     def resolve_profile(self) -> str:
         """The profile to act on: explicit --profile, else the active profile."""
@@ -115,7 +116,7 @@ def _rerun_after_login_error() -> CLIError:
     return CLIError(
         "Signed in. Run the command again to continue.",
         error_type="login_required",
-        exit_code=2,
+        exit_code=4,
         suggestion="Run the same command again.",
     )
 
@@ -146,9 +147,10 @@ def run_command(
             output.emit_error(err, json_mode=json_mode)
             raise typer.Exit(code=err.exit_code) from None
         try:
-            output.error_console.print(
-                "[aai.muted]Not signed in; starting browser login.[/aai.muted]"
-            )
+            if not state.quiet:
+                output.error_console.print(
+                    "[aai.muted]Not signed in; starting browser login.[/aai.muted]"
+                )
             _persist_browser_login(state)
         except CLIError as login_err:
             output.emit_error(login_err, json_mode=json_mode)

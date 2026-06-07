@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -51,6 +52,21 @@ def test_get_output_id_prints_id():
     assert result.output.strip() == "t_42"
 
 
+def test_get_json_emits_full_payload():
+    config.set_api_key("default", "sk_live")
+    fake = MagicMock()
+    fake.id = "t_42"
+    fake.text = "retrieved text"
+    fake.status = "completed"
+    fake.json_response = None  # falls back to the compact summary
+    with patch("aai_cli.commands.transcripts.client.get_transcript", return_value=fake):
+        result = runner.invoke(app, ["transcripts", "get", "t_42", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["id"] == "t_42"
+    assert data["text"] == "retrieved text"
+
+
 def test_get_output_invalid_field_exits_2():
     config.set_api_key("default", "sk_live")
     result = runner.invoke(app, ["transcripts", "get", "t_42", "-o", "bogus"])
@@ -71,7 +87,7 @@ def test_list_unauthenticated_runs_login(monkeypatch):
     rows = [{"id": "t1", "status": "completed"}]
     with patch("aai_cli.commands.transcripts.client.list_transcripts", return_value=rows) as list_:
         result = runner.invoke(app, ["transcripts", "list", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
     list_.assert_not_called()
     assert "Run the same command again" in result.output

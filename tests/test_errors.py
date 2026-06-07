@@ -3,7 +3,7 @@ from aai_cli.errors import APIError, CLIError, NotAuthenticated, is_auth_failure
 
 def test_not_authenticated_defaults():
     err = NotAuthenticated()
-    assert err.exit_code == 2
+    assert err.exit_code == 4
     assert err.error_type == "not_authenticated"
     assert err.message == "Not authenticated."
     assert err.suggestion == "Run 'aai login'."

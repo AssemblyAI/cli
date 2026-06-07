@@ -44,7 +44,7 @@ def test_balance_without_session_runs_login(monkeypatch):
         return_value={"account_id": 42, "balance_in_cents": 2575},
     ) as get_balance:
         result = runner.invoke(app, ["balance", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     get_balance.assert_not_called()
     assert "Run the same command again" in result.output

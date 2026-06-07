@@ -107,7 +107,7 @@ def test_sessions_without_session_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     with patch("aai_cli.commands.sessions.ams.list_streaming", return_value={"data": []}) as list_:
         result = runner.invoke(app, ["sessions", "list", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     list_.assert_not_called()
     assert "Run the same command again" in result.output

@@ -19,6 +19,36 @@ def test_version_command():
     assert result.output.strip() == __version__
 
 
+def test_version_flag_prints_and_exits():
+    # `aai --version` / `-V` is the reflex every CLI answers; the eager callback prints
+    # the version and exits before any command runs.
+    from aai_cli import __version__
+
+    for flag in ("--version", "-V"):
+        result = runner.invoke(app, [flag])
+        assert result.exit_code == 0
+        assert result.output.strip() == __version__
+
+
+def test_quiet_suppresses_env_override_warning(monkeypatch):
+    # --env contradicting the profile normally warns on stderr; --quiet silences it.
+    from aai_cli import config
+
+    config.set_api_key("default", "sk_live")
+    config.set_profile_env("default", "production")
+    noisy = runner.invoke(app, ["--env", "sandbox000", "version"])
+    quiet = runner.invoke(app, ["--quiet", "--env", "sandbox000", "version"])
+    assert "may be rejected" in noisy.output
+    assert "may be rejected" not in quiet.output
+
+
+def test_shell_completion_is_available():
+    # add_completion=True ships `--show-completion` (and --install-completion), the
+    # discoverability affordance gh/kubectl/docker users reach for.
+    result = runner.invoke(app, ["--show-completion"])
+    assert result.exit_code == 0
+
+
 def test_global_flags_parse():
     # --profile is a global option accepted before a subcommand
     assert runner.invoke(app, ["--profile", "staging", "version"]).exit_code == 0

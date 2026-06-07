@@ -73,7 +73,7 @@ def llm(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text (just the answer, pipe-friendly) or json.",
+        help="Print just the answer as plain text (pipe-friendly). For full JSON, use --json.",
     ),
     max_tokens: int = typer.Option(
         gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate."
@@ -121,7 +121,7 @@ def llm(
                 suggestion="Or pass --list-models to see available models.",
             )
         prompt_text = prompt
-        output.validate_output_field(output_field, ("text", "json"))
+        output.validate_output_field(output_field, ("text",))
         api_key = config.resolve_api_key(profile=state.profile)
         # Text piped on stdin becomes the content the prompt operates on, unless an
         # explicit --transcript-id is given (that injects server-side and takes priority).
@@ -144,7 +144,7 @@ def llm(
         output.emit(
             {"model": model, "output": content, "usage": gateway.usage_of(response)},
             lambda d: escape(str(d["output"])),
-            json_mode=json_mode or output_field == "json",
+            json_mode=json_mode,
         )
 
     run_command(ctx, follow_body if follow else body, json=json_out)
