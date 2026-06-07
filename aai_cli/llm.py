@@ -124,8 +124,7 @@ def usage_of(response: ChatCompletion) -> dict[str, Any] | None:
     usage = response.usage
     if usage is None:
         return None
-    dumped: dict[str, Any] = usage.model_dump()
-    return dumped
+    return usage.model_dump()
 
 
 def transform_transcript(
