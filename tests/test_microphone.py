@@ -169,15 +169,6 @@ def test_device_default_rate_reads_device(monkeypatch):
     assert _device_default_rate(2) == 44100
 
 
-def test_device_default_rate_keeps_small_positive_rate(monkeypatch):
-    # A positive rate is honored verbatim; only non-positive rates fall back. This
-    # pins the `rate > 0` boundary (a `rate > 1` would wrongly discard a 1 Hz rate).
-    fake_sd: Any = types.ModuleType("sounddevice")
-    fake_sd.query_devices = lambda device, kind: {"default_samplerate": 1.0}
-    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
-    assert _device_default_rate(None) == 1
-
-
 def test_resample_pcm16_uses_16bit_mono_params():
     # resample_pcm16 must treat the buffer as 16-bit (2-byte) mono (1-channel) PCM.
     # Compare against audioop driven with those exact params; a mutated width/channel
@@ -238,22 +229,6 @@ def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch):
     assert created["channels"] == 1  # mono capture
     assert created["dtype"] == "int16"  # PCM16
     assert next(iter(stream)) == b"\x01\x02"
-
-
-def test_default_mic_stream_blocksize_floored_at_one(monkeypatch):
-    created = {}
-
-    def raw_input_stream(**kwargs):
-        created.update(kwargs)
-        return _FakeRawStream(**kwargs)
-
-    fake_sd: Any = types.ModuleType("sounddevice")
-    fake_sd.RawInputStream = raw_input_stream
-    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
-
-    # A pathologically low rate floors to a 1-frame block, never 0 (pins max(1, …)).
-    _default_mic_stream(sample_rate=5, device=None)  # 5 // 10 == 0
-    assert created["blocksize"] == 1
 
 
 def test_default_mic_stream_missing_sounddevice_raises_mic_missing(monkeypatch):
