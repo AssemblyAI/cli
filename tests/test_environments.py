@@ -21,6 +21,9 @@ def test_get_unknown_raises_cli_error():
     with pytest.raises(CLIError) as exc:
         environments.get("nope")
     assert exc.value.exit_code == 2
+    # Carries a recovery hint covering all three sources of the name (flag/env/profile).
+    assert exc.value.suggestion is not None
+    assert "unset AAI_ENV" in exc.value.suggestion
 
 
 def test_resolve_precedence(monkeypatch):
