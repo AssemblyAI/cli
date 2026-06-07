@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import urllib.error
 import urllib.request
 
 import pytest
@@ -9,15 +10,20 @@ from aai_cli.auth import endpoints, loopback
 from aai_cli.errors import APIError
 
 
-def _hit(path: str) -> None:
+def _hit(path: str) -> int | None:
+    """Request `path` against the loopback server, returning the HTTP status code."""
     url = f"http://{endpoints.LOOPBACK_HOST}:{endpoints.LOOPBACK_PORT}{path}"
     # Retry briefly until the server thread is bound.
     for _ in range(50):
         try:
-            urllib.request.urlopen(url, timeout=2).read()  # noqa: S310 - fixed localhost URL
-            return
+            with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310 - localhost
+                resp.read()
+                return resp.status
+        except urllib.error.HTTPError as exc:
+            return exc.code  # server is up and answered (e.g. 404) — return that status
         except OSError:
             time.sleep(0.05)
+    return None
 
 
 def test_capture_returns_token_and_type():
@@ -28,9 +34,10 @@ def test_capture_returns_token_and_type():
 
     t = threading.Thread(target=run)
     t.start()
-    _hit("/callback?stytch_token_type=discovery_oauth&token=tok_abc")
+    status = _hit("/callback?stytch_token_type=discovery_oauth&token=tok_abc")
     t.join(timeout=5)
 
+    assert status == 200  # the callback is acknowledged with 200 OK
     result = result_box["result"]
     assert result.token == "tok_abc"
     assert result.token_type == "discovery_oauth"
@@ -47,7 +54,7 @@ def test_capture_ignores_unknown_paths():
 
     t = threading.Thread(target=run)
     t.start()
-    _hit("/favicon.ico")  # unknown path -> 404, capture stays open
+    assert _hit("/favicon.ico") == 404  # unknown path -> 404, capture stays open
     _hit("/callback?stytch_token_type=discovery_oauth&token=tok_late")
     t.join(timeout=5)
 

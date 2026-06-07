@@ -33,13 +33,30 @@ def test_duplex_opens_at_device_rate_and_closes():
     def factory(*, rate, blocksize, callback, device):
         seen["rate"] = rate
         seen["device"] = device
+        seen["blocksize"] = blocksize
         return fake
 
     d = DuplexAudio(device=3, device_rate=48000, stream_factory=factory)
     d.player.start()
     assert seen["rate"] == 48000 and seen["device"] == 3  # one stream at device rate
+    assert seen["blocksize"] == 4800  # ~100 ms at 48 kHz (device_rate // 10)
     d.close()
     assert fake.stopped and fake.closed
+
+
+def test_duplex_restart_after_close_reopens_stream():
+    calls = {"n": 0}
+
+    def factory(**_k):
+        calls["n"] += 1
+        return FakeStream()
+
+    d = DuplexAudio(device_rate=16000, stream_factory=factory)
+    d.start()
+    assert calls["n"] == 1
+    d.close()
+    d.start()  # close() cleared the started flag, so this reopens the stream
+    assert calls["n"] == 2
 
 
 def test_duplex_callback_captures_input_and_zero_fills_idle_output():
@@ -78,6 +95,26 @@ def test_duplex_playback_resamples_and_drains_into_output():
     d.close()
 
 
+def test_duplex_callback_partial_buffer_zero_fills_exact_remainder():
+    cb = {}
+
+    def factory(*, rate, blocksize, callback, device):
+        cb["fn"] = callback
+        return FakeStream()
+
+    # device == target so playback bytes pass through unresampled and are easy to count.
+    d = DuplexAudio(target_rate=16000, device_rate=16000, stream_factory=factory)
+    d.player.start()
+    d.player.enqueue(b"\x01\x02" * 5)  # 10 bytes buffered
+    outdata = bytearray(20)  # request 20 bytes -> 10 real + 10 zero-filled
+    cb["fn"](b"\x00\x00" * 5, outdata, 5, None, None)
+    # The shortfall is filled with exactly `need - len(take)` zero bytes: the buffer
+    # plays out first, then silence, and the output stays exactly `need` bytes long.
+    assert len(outdata) == 20
+    assert bytes(outdata) == b"\x01\x02" * 5 + b"\x00" * 10
+    d.close()
+
+
 def test_duplex_mic_ends_after_close():
     d = DuplexAudio(target_rate=16000, device_rate=16000, stream_factory=lambda **k: FakeStream())
     d.player.start()
@@ -102,8 +139,8 @@ def test_duplex_player_facade_flush_and_close():
     fake = FakeStream()
     d = DuplexAudio(target_rate=16000, device_rate=16000, stream_factory=lambda **k: fake)
     d.player.start()
-    d.player.enqueue(b"\x01\x02" * 8)
-    assert d.player.pending() > 0
+    d.player.enqueue(b"\x01\x02" * 8)  # 16 bytes, no resample (device == target)
+    assert d.player.pending() == 8  # pending() reports samples = bytes // 2
     d.player.flush()
     assert d.player.pending() == 0
     d.player.close()
@@ -161,3 +198,4 @@ def test_default_duplex_stream_open_failure_raises_audio_output_error(monkeypatc
     with pytest.raises(CLIError) as exc:
         _default_duplex_stream(rate=24000, blocksize=2400, callback=lambda *a: None, device=None)
     assert exc.value.error_type == "audio_output_error"
+    assert exc.value.exit_code == 1
