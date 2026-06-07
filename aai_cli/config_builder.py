@@ -351,6 +351,16 @@ def construct_streaming_params(merged: dict[str, typing.Any]) -> StreamingParame
     return _construct(StreamingParameters, merged, label="streaming")
 
 
+def enum_value(member: enum.Enum | None) -> str | None:
+    """The string value of an optional Enum flag, or None when unset.
+
+    CLI options typed as SDK enums (e.g. ``--speech-model``) parse to enum members;
+    this unwraps them to the canonical string the config/codegen pipelines expect,
+    so the rest of the flow stays string-based.
+    """
+    return str(member.value) if member is not None else None
+
+
 def split_csv(value: str | None) -> list[str] | None:
     """Split a comma-separated flag value into a list, or None if empty."""
     if not value:

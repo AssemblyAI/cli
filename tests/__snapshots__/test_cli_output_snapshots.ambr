@@ -544,13 +544,20 @@
   │                                     without the microphone.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
-  │ --speech-model              TEXT  Streaming speech model.                    │
-  │                                   [default: u3-rt-pro]                       │
-  │ --encoding                  TEXT  Audio encoding: pcm_s16le or pcm_mulaw.    │
-  │ --language-detection              Auto-detect the spoken language.           │
-  │ --domain                    TEXT  Domain preset (e.g. medical).              │
-  │ --prompt                    TEXT  Prompt to bias the speech model (u3-pro).  │
-  │ --keyterms-prompt           TEXT  Boost a key term (repeatable).             │
+  │ --speech-model              [universal-streaming-m  Streaming speech model.  │
+  │                             ultilingual|universal-  [default: u3-rt-pro]     │
+  │                             streaming-english|u3-r                           │
+  │                             t-pro|whisper-rt|u3-pr                           │
+  │                             o]                                               │
+  │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding.          │
+  │ --language-detection                                Auto-detect the spoken   │
+  │                                                     language.                │
+  │ --domain                    TEXT                    Domain preset (e.g.      │
+  │                                                     medical).                │
+  │ --prompt                    TEXT                    Prompt to bias the       │
+  │                                                     speech model (u3-pro).   │
+  │ --keyterms-prompt           TEXT                    Boost a key term         │
+  │                                                     (repeatable).            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
   │ --end-of-turn-confid…                         FLOAT    End-of-turn           │
@@ -570,10 +577,11 @@
   │ --max-speakers          INTEGER  Max speakers.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Features ───────────────────────────────────────────────────────────────────╮
-  │ --voice-focus                  TEXT     Voice focus: near_field or           │
-  │                                         far_field.                           │
-  │ --voice-focus-threshold        FLOAT    Voice-focus threshold.               │
-  │ --inactivity-timeout           INTEGER  Auto-close after N seconds idle.     │
+  │ --voice-focus                 [near-field|far-field]  Voice focus (noise     │
+  │                                                       suppression model).    │
+  │ --voice-focus-thresho…        FLOAT                   Voice-focus threshold. │
+  │ --inactivity-timeout          INTEGER                 Auto-close after N     │
+  │                                                       seconds idle.          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
   │ --filter-profanity               Mask profanity.                             │
@@ -644,13 +652,18 @@
   │ --help                     Show this message and exit.                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
-  │ --speech-model              TEXT   Speech model: best, nano, slam-1, or      │
-  │                                    universal.                                │
-  │ --language-code             TEXT   Force a language (e.g. en_us).            │
-  │ --language-detection               Auto-detect the spoken language.          │
-  │ --keyterms-prompt           TEXT   Boost a key term (repeatable).            │
-  │ --temperature               FLOAT  Speech model temperature.                 │
-  │ --prompt                    TEXT   Prompt to bias the speech model (u3-pro). │
+  │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
+  │                             ersal]                                           │
+  │ --language-code             TEXT                    Force a language (e.g.   │
+  │                                                     en_us).                  │
+  │ --language-detection                                Auto-detect the spoken   │
+  │                                                     language.                │
+  │ --keyterms-prompt           TEXT                    Boost a key term         │
+  │                                                     (repeatable).            │
+  │ --temperature               FLOAT                   Speech model             │
+  │                                                     temperature.             │
+  │ --prompt                    TEXT                    Prompt to bias the       │
+  │                                                     speech model (u3-pro).   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Formatting ─────────────────────────────────────────────────────────────────╮
   │ --punctuate       --no-punctuate        Add punctuation.                     │
@@ -665,30 +678,36 @@
   │                                     separately.                              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
-  │ --redact-pii                                Redact PII from the transcript.  │
-  │ --redact-pii-policy                TEXT     Comma-separated PII policies     │
-  │                                             (e.g. person_name,...).          │
-  │ --redact-pii-sub                   TEXT     Replace redacted PII with: hash  │
-  │                                             or entity_name.                  │
-  │ --redact-pii-audio                          Also redact audio.               │
-  │ --filter-profanity                          Mask profanity.                  │
-  │ --content-safety                            Detect sensitive content.        │
-  │ --content-safety-confidence        INTEGER  Content-safety confidence        │
-  │                                             threshold (25-100).              │
-  │ --speech-threshold                 FLOAT    Minimum proportion of speech     │
-  │                                             required (0-1).                  │
+  │ --redact-pii                                        Redact PII from the      │
+  │                                                     transcript.              │
+  │ --redact-pii-policy             TEXT                Comma-separated PII      │
+  │                                                     policies (e.g.           │
+  │                                                     person_name,...).        │
+  │ --redact-pii-sub                [hash|entity_name]  How to replace redacted  │
+  │                                                     PII.                     │
+  │ --redact-pii-audio                                  Also redact audio.       │
+  │ --filter-profanity                                  Mask profanity.          │
+  │ --content-safety                                    Detect sensitive         │
+  │                                                     content.                 │
+  │ --content-safety-confid…        INTEGER             Content-safety           │
+  │                                                     confidence threshold     │
+  │                                                     (25-100).                │
+  │ --speech-threshold              FLOAT               Minimum proportion of    │
+  │                                                     speech required (0-1).   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
-  │ --summarization                   Summarize the transcript.                  │
-  │ --summary-model             TEXT  Summary model: informative,                │
-  │                                   conversational, or catchy.                 │
-  │ --summary-type              TEXT  Summary format: bullets, gist, headline,   │
-  │                                   or paragraph.                              │
-  │ --auto-chapters                   Generate chapters.                         │
-  │ --sentiment-analysis              Analyze sentiment.                         │
-  │ --entity-detection                Detect entities.                           │
-  │ --auto-highlights                 Detect key phrases.                        │
-  │ --topic-detection                 Detect IAB topics.                         │
+  │ --summarization                                      Summarize the           │
+  │                                                      transcript.             │
+  │ --summary-model             [informative|conversati  Summary model.          │
+  │                             onal|catchy]                                     │
+  │ --summary-type              [bullets|bullets_verbos  Summary format.         │
+  │                             e|gist|headline|paragra                          │
+  │                             ph]                                              │
+  │ --auto-chapters                                      Generate chapters.      │
+  │ --sentiment-analysis                                 Analyze sentiment.      │
+  │ --entity-detection                                   Detect entities.        │
+  │ --auto-highlights                                    Detect key phrases.     │
+  │ --topic-detection                                    Detect IAB topics.      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Customization ──────────────────────────────────────────────────────────────╮
   │ --word-boost                  TEXT     Boost a word (repeatable).            │

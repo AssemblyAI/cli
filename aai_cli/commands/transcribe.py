@@ -81,10 +81,10 @@ def transcribe(
     source: str | None = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # model & language
-    speech_model: str | None = typer.Option(
+    speech_model: aai.SpeechModel | None = typer.Option(
         None,
         "--speech-model",
-        help="Speech model: best, nano, slam-1, or universal.",
+        help="Speech model.",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     language_code: str | None = typer.Option(
@@ -168,10 +168,10 @@ def transcribe(
         help="Comma-separated PII policies (e.g. person_name,...).",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
-    redact_pii_sub: str | None = typer.Option(
+    redact_pii_sub: aai.PIISubstitutionPolicy | None = typer.Option(
         None,
         "--redact-pii-sub",
-        help="Replace redacted PII with: hash or entity_name.",
+        help="How to replace redacted PII.",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_audio: bool | None = typer.Option(
@@ -211,16 +211,16 @@ def transcribe(
         help="Summarize the transcript.",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
-    summary_model: str | None = typer.Option(
+    summary_model: aai.SummarizationModel | None = typer.Option(
         None,
         "--summary-model",
-        help="Summary model: informative, conversational, or catchy.",
+        help="Summary model.",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
-    summary_type: str | None = typer.Option(
+    summary_type: aai.SummarizationType | None = typer.Option(
         None,
         "--summary-type",
-        help="Summary format: bullets, gist, headline, or paragraph.",
+        help="Summary format.",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     auto_chapters: bool | None = typer.Option(
@@ -345,7 +345,7 @@ def transcribe(
     def body(state: AppState, json_mode: bool) -> None:
         output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         flags: dict[str, object] = {
-            "speech_model": speech_model,
+            "speech_model": config_builder.enum_value(speech_model),
             "language_code": language_code,
             "language_detection": language_detection,
             "keyterms_prompt": list(keyterms_prompt) if keyterms_prompt else None,
@@ -359,15 +359,15 @@ def transcribe(
             "multichannel": multichannel,
             "redact_pii": redact_pii,
             "redact_pii_policies": config_builder.split_csv(redact_pii_policy),
-            "redact_pii_sub": redact_pii_sub,
+            "redact_pii_sub": config_builder.enum_value(redact_pii_sub),
             "redact_pii_audio": redact_pii_audio,
             "filter_profanity": filter_profanity,
             "content_safety": content_safety,
             "content_safety_confidence": content_safety_confidence,
             "speech_threshold": speech_threshold,
             "summarization": summarization,
-            "summary_model": summary_model,
-            "summary_type": summary_type,
+            "summary_model": config_builder.enum_value(summary_model),
+            "summary_type": config_builder.enum_value(summary_type),
             "auto_chapters": auto_chapters,
             "sentiment_analysis": sentiment_analysis,
             "entity_detection": entity_detection,

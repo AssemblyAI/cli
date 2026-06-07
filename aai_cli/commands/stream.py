@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
-from assemblyai.streaming.v3 import SpeechModel
+from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import client, code_gen, config, config_builder, help_panels, llm, output, youtube
 from aai_cli.context import AppState, run_command
@@ -22,7 +22,7 @@ from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
 
-DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro.value
+DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
 
 # Sources that can be transcribed in parallel sessions: (label, audio chunks, sample rate).
 _ParallelStreams = list[tuple[str, Iterable[bytes], int]]
@@ -317,16 +317,16 @@ def stream(
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
     # model & input
-    speech_model: str = typer.Option(
+    speech_model: SpeechModel = typer.Option(
         DEFAULT_SPEECH_MODEL,
         "--speech-model",
         help="Streaming speech model.",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
-    encoding: str | None = typer.Option(
+    encoding: Encoding | None = typer.Option(
         None,
         "--encoding",
-        help="Audio encoding: pcm_s16le or pcm_mulaw.",
+        help="Audio encoding.",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     language_detection: bool | None = typer.Option(
@@ -398,10 +398,10 @@ def stream(
         None, "--max-speakers", help="Max speakers.", rich_help_panel=help_panels.OPT_SPEAKERS
     ),
     # features
-    voice_focus: str | None = typer.Option(
+    voice_focus: NoiseSuppressionModel | None = typer.Option(
         None,
         "--voice-focus",
-        help="Voice focus: near_field or far_field.",
+        help="Voice focus (noise suppression model).",
         rich_help_panel=help_panels.OPT_FEATURES,
     ),
     voice_focus_threshold: float | None = typer.Option(
@@ -514,9 +514,9 @@ def stream(
         )
         # Every streaming flag except sample_rate, which is set per source at stream time.
         base_flags: dict[str, object] = {
-            "speech_model": speech_model,
+            "speech_model": config_builder.enum_value(speech_model),
             "format_turns": format_turns if format_turns is not None else True,
-            "encoding": encoding,
+            "encoding": config_builder.enum_value(encoding),
             "language_detection": language_detection,
             "domain": domain,
             "end_of_turn_confidence_threshold": end_of_turn_confidence_threshold,
@@ -528,7 +528,7 @@ def stream(
             "filter_profanity": filter_profanity,
             "speaker_labels": speaker_labels,
             "max_speakers": max_speakers,
-            "voice_focus": voice_focus,
+            "voice_focus": config_builder.enum_value(voice_focus),
             "voice_focus_threshold": voice_focus_threshold,
             "redact_pii": redact_pii,
             "redact_pii_policies": config_builder.split_csv(redact_pii_policy),
