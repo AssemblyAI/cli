@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typer.testing import CliRunner
+import typer
 
 from aai_cli.agent.voices import VOICES, complete_voice
 from aai_cli.llm import KNOWN_MODELS, complete_model
@@ -8,9 +8,12 @@ from aai_cli.main import app
 
 
 def test_shell_completion_is_enabled():
-    # add_completion=True surfaces Typer's --install-completion on the root command.
-    result = CliRunner().invoke(app, ["--help"])
-    assert "--install-completion" in result.output
+    # add_completion=True registers Typer's --install-completion on the root command.
+    # Introspect the Click command rather than rendered --help text, which wraps at
+    # narrow terminal widths (and rendered differently under CI, hiding the flag).
+    command = typer.main.get_command(app)
+    option_names = {opt for param in command.params for opt in param.opts}
+    assert "--install-completion" in option_names
 
 
 def test_complete_model_filters_by_prefix():

@@ -6,10 +6,6 @@
       "headers": {
         "Authorization": "Bearer ${GITHUB_PAT}"
       }
-    },
-    "assemblyai-docs": {
-      "type": "http",
-      "url": "https://mcp.assemblyai.com/docs"
     }
   }
 }
