@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from aai_cli import output
+from aai_cli import choices, output
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.steps import Step, render_steps
 
@@ -27,7 +26,6 @@ app = typer.Typer(
 MCP_NAME = "assemblyai-docs"
 MCP_URL = "https://mcp.assemblyai.com/docs"
 SKILL_REPO = "AssemblyAI/assemblyai-skill"
-_VALID_SCOPES = ("user", "project", "local")
 _STEPS_HEADING = "AssemblyAI coding-agent setup:"
 
 
@@ -300,13 +298,10 @@ def _render(data: dict[str, list[Step]]) -> str:
 )
 def install(
     ctx: typer.Context,
-    scope: str = typer.Option(
-        "user",
+    scope: choices.Scope = typer.Option(
+        choices.Scope.user,
         "--scope",
-        help=(
-            "Config scope to register the MCP under: user, project, or local. "
-            "Presence is detected across all scopes."
-        ),
+        help="Config scope to register the MCP under. Presence is detected across all scopes.",
     ),
     force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -314,10 +309,6 @@ def install(
     """Install the AssemblyAI docs MCP server and skills into your coding agent."""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        if scope not in _VALID_SCOPES:
-            raise UsageError(
-                f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
-            )
         steps = [_install_mcp(scope, force), _install_skill(force), _install_cli_skill(force)]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
@@ -355,11 +346,11 @@ def status(
 )
 def remove(
     ctx: typer.Context,
-    scope: str | None = typer.Option(
+    scope: choices.Scope | None = typer.Option(
         None,
         "--scope",
         help=(
-            "Only remove the MCP from this scope (user, project, or local). "
+            "Only remove the MCP from this scope. "
             "Default: remove from whichever scope it exists in."
         ),
     ),
@@ -368,10 +359,6 @@ def remove(
     """Remove the AssemblyAI MCP server and skills from your coding agent."""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        if scope is not None and scope not in _VALID_SCOPES:
-            raise UsageError(
-                f"Invalid --scope '{scope}'. Choose one of: {', '.join(_VALID_SCOPES)}."
-            )
         steps = [_remove_mcp(scope), _remove_skill(), _remove_cli_skill()]
         output.emit({"steps": steps}, _render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):

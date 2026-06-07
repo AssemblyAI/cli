@@ -25,3 +25,11 @@ class TextOrJson(enum.StrEnum):
 
     text = "text"
     json = "json"
+
+
+class Scope(enum.StrEnum):
+    """Coding-agent config scope for `aai setup` (passed through to `claude mcp add`)."""
+
+    user = "user"
+    project = "project"
+    local = "local"
