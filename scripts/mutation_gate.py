@@ -16,6 +16,8 @@ Usage: python scripts/mutation_gate.py [compare-branch]
 from __future__ import annotations
 
 import ast
+import contextlib
+import importlib.util
 import re
 import subprocess
 import sys
@@ -235,15 +237,32 @@ def _run_tests(nodeids: list[str]) -> bool:
     return proc.returncode != 0
 
 
+def _invalidate_bytecode(path: Path) -> None:
+    """Drop the module's cached ``.pyc`` so the test subprocess recompiles from the
+    source we just wrote.
+
+    Consecutive mutants ``ast.unparse`` to files that differ by a single token, so
+    they're usually byte-for-byte the same length and can be written within the same
+    mtime-second. CPython's default timestamp-based cache validates a ``.pyc`` by
+    exact (mtime, size) match, so without this it can serve the previous mutant's
+    (or the original's) bytecode and run *unmutated* code — a false survivor.
+    """
+    cached = importlib.util.cache_from_source(str(path))
+    with contextlib.suppress(OSError):
+        Path(cached).unlink()
+
+
 def _survives(
     path: Path, tree: ast.Module, src: str, mutant: _Mutant, data: coverage.CoverageData
 ) -> bool:
     mutant.apply()
     try:
         path.write_text(ast.unparse(tree), encoding="utf-8")
+        _invalidate_bytecode(path)
         killed = _run_tests(_covering_tests(data, path, mutant.linenos))
     finally:
         path.write_text(src, encoding="utf-8")
+        _invalidate_bytecode(path)
         mutant.undo()
     return not killed
 
