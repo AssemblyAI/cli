@@ -69,6 +69,10 @@ def test_sessions_list_renders_table_human(monkeypatch):
         result = runner.invoke(app, ["sessions", "list"])
     assert result.exit_code == 0
     assert "s_1" in result.output and "universal" in result.output
+    # The created/duration columns must render their values (pins `value or ""`: an
+    # `and` there would blank a present value).
+    assert "2026-06-01" in result.output
+    assert "12.0" in result.output
 
 
 def test_sessions_list_passes_status_filter():
