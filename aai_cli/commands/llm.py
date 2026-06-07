@@ -56,7 +56,12 @@ def llm(
     ctx: typer.Context,
     prompt: str | None = typer.Argument(None, help="The prompt to send to the model."),
     # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | aai llm "summarize"`).
-    model: str = typer.Option(gateway.DEFAULT_MODEL, "--model", help="LLM Gateway model."),
+    model: str = typer.Option(
+        gateway.DEFAULT_MODEL,
+        "--model",
+        help="LLM Gateway model.",
+        autocompletion=gateway.complete_model,
+    ),
     transcript_id: str | None = typer.Option(
         None, "--transcript-id", help="Inject this transcript's text into the prompt."
     ),

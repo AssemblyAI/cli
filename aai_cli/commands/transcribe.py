@@ -315,7 +315,11 @@ def transcribe(
         rich_help_panel=help_panels.OPT_LLM,
     ),
     model: str = typer.Option(
-        llm.DEFAULT_MODEL, "--model", help="LLM Gateway model.", rich_help_panel=help_panels.OPT_LLM
+        llm.DEFAULT_MODEL,
+        "--model",
+        help="LLM Gateway model.",
+        rich_help_panel=help_panels.OPT_LLM,
+        autocompletion=llm.complete_model,
     ),
     max_tokens: int = typer.Option(
         llm.DEFAULT_MAX_TOKENS,

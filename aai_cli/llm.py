@@ -35,6 +35,15 @@ KNOWN_MODELS = (
 )
 
 
+def complete_model(incomplete: str) -> list[str]:
+    """Shell-completion callback for ``--model``: known model ids matching the prefix.
+
+    The gateway accepts more than this curated list, so completion only *suggests*
+    these — it never restricts what you can type.
+    """
+    return [m for m in KNOWN_MODELS if m.startswith(incomplete)]
+
+
 def build_messages(
     prompt: str,
     *,

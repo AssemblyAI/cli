@@ -15,7 +15,7 @@ from aai_cli.agent.session import (
     AgentRunConfig,
     run_session,
 )
-from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, format_voice_list
+from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_voice_list
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
@@ -83,7 +83,12 @@ def agent(
     sample: bool = typer.Option(
         False, "--sample", help="Speak the hosted wildfires.mp3 sample to the agent."
     ),
-    voice: str = typer.Option(DEFAULT_VOICE, "--voice", help="Agent voice. See --list-voices."),
+    voice: str = typer.Option(
+        DEFAULT_VOICE,
+        "--voice",
+        help="Agent voice. See --list-voices.",
+        autocompletion=complete_voice,
+    ),
     system_prompt: str = typer.Option(
         DEFAULT_PROMPT, "--system-prompt", help="System prompt (the agent's persona)."
     ),

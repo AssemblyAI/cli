@@ -82,7 +82,7 @@ app = typer.Typer(
     name="aai",
     help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
     no_args_is_help=True,
-    add_completion=False,
+    add_completion=True,
     cls=_OrderedGroup,
 )
 
