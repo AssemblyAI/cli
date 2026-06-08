@@ -58,7 +58,7 @@ def auth(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     if method == "key":
         key = prompter.text("Paste your AssemblyAI API key")
         if not client.validate_key(key):
-            output.console.print(output.fail("That key was rejected."))
+            output.error_console.print(output.fail("That key was rejected."))
             return SectionResult.FAILED
         config.set_api_key(ctx.profile, key)
         config.set_profile_env(ctx.profile, env)
