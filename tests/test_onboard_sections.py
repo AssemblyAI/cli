@@ -3,13 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import typer
 
 from aai_cli import client, config, transcribe_render
 from aai_cli.commands import init as init_cmd
+from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
 from aai_cli.onboard.sections import SectionResult, WizardContext
+from aai_cli.steps import Step
 
 
 class _FakeTranscript:
@@ -17,6 +20,32 @@ class _FakeTranscript:
     status = "completed"
     text = "hello"
     utterances = None
+
+
+class _ScriptedPrompter:
+    """A Prompter test-double whose answers are pinned at construction time."""
+
+    def __init__(self, *, select: str = "skip", confirm: bool = True, text: str = "k") -> None:
+        self._select = select
+        self._confirm = confirm
+        self._text = text
+
+    def section(self, title: str) -> None:
+        pass
+
+    def note(self, message: str) -> None:
+        pass
+
+    def confirm(self, title: str, *, default: bool = True) -> bool:
+        return self._confirm
+
+    def select(
+        self, title: str, options: list[tuple[str, str]], *, default: str | None = None
+    ) -> str:
+        return self._select
+
+    def text(self, title: str, *, default: str | None = None) -> str:
+        return self._text
 
 
 @pytest.fixture
@@ -66,3 +95,94 @@ def test_build_path_skip_choice_does_nothing(
 
 def test_next_steps_renders_progress(ctx: WizardContext) -> None:
     assert sections.next_steps(NonInteractivePrompter(), ctx) is SectionResult.DONE
+
+
+def test_welcome_returning_user(ctx: WizardContext) -> None:
+    config.record_request("default")
+    assert sections.welcome(NonInteractivePrompter(), ctx) is SectionResult.DONE
+
+
+def test_welcome_cold_start(ctx: WizardContext) -> None:
+    assert sections.welcome(NonInteractivePrompter(), ctx) is SectionResult.DONE
+
+
+def test_auth_browser_path(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sections, "persist_browser_login", lambda *a, **k: None)
+    assert sections.auth(_ScriptedPrompter(select="browser"), ctx) is SectionResult.DONE
+
+
+def test_auth_key_path_valid(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client, "validate_key", lambda *a, **k: True)
+    result = sections.auth(_ScriptedPrompter(select="key", text="sk_good"), ctx)
+    assert result is SectionResult.DONE
+    assert config.get_api_key("default") == "sk_good"
+
+
+def test_auth_key_path_rejected(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client, "validate_key", lambda *a, **k: False)
+    result = sections.auth(_ScriptedPrompter(select="key", text="sk_bad"), ctx)
+    assert result is SectionResult.FAILED
+
+
+def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def _fake_run_init(*a: object, **k: object) -> Path:
+        nonlocal calls
+        calls += 1
+        return Path()
+
+    monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
+    result = sections.build_path(_ScriptedPrompter(select="audio-transcription", confirm=True), ctx)
+    assert result is SectionResult.DONE
+    assert calls == 1
+
+
+def test_build_path_declined_after_select(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called = False
+
+    def _fake_run_init(*a: object, **k: object) -> Path:
+        nonlocal called
+        called = True
+        return Path()
+
+    monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
+    result = sections.build_path(_ScriptedPrompter(select="voice-agent", confirm=False), ctx)
+    assert result is SectionResult.SKIPPED
+    assert called is False
+
+
+def test_build_path_run_init_failure(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(*a: object, **k: object) -> Path:
+        raise typer.Exit(code=1)
+
+    monkeypatch.setattr(init_cmd, "run_init", _boom)
+    result = sections.build_path(_ScriptedPrompter(select="live-captions", confirm=True), ctx)
+    assert result is SectionResult.FAILED
+
+
+def test_claude_code_skipped(ctx: WizardContext) -> None:
+    assert sections.claude_code(NonInteractivePrompter(), ctx) is SectionResult.SKIPPED
+
+
+def _passing_step(*a: object, **k: object) -> Step:
+    return {"name": "x", "status": "installed", "detail": "ok"}
+
+
+def test_claude_code_done(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(setup_cmd, "_install_mcp", _passing_step)
+    monkeypatch.setattr(setup_cmd, "_install_skill", _passing_step)
+    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _passing_step)
+    assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.DONE
+
+
+def test_claude_code_failed(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _failing_step(*a: object, **k: object) -> Step:
+        return {"name": "x", "status": "failed", "detail": "no npx"}
+
+    monkeypatch.setattr(setup_cmd, "_install_mcp", _passing_step)
+    monkeypatch.setattr(setup_cmd, "_install_skill", _failing_step)
+    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _passing_step)
+    assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.FAILED

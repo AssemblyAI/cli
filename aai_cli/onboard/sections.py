@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from enum import Enum
 
 import assemblyai as aai
+import typer
 
 from aai_cli import client, config, environments, output, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState, persist_browser_login
-from aai_cli.errors import NotAuthenticated
+from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.onboard import progress
 from aai_cli.onboard.prompter import Prompter
 
@@ -113,18 +114,22 @@ def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
         prompter.note(f"You can run `aai init {choice}` whenever you're ready.")
         return SectionResult.SKIPPED
     # launch=False: never block the wizard on a running dev server.
-    init_cmd.run_init(
-        ctx.state,
-        template=choice,
-        directory=None,
-        no_install=False,
-        no_open=True,
-        force=False,
-        here=False,
-        port=3000,
-        json_mode=ctx.json_mode,
-        launch=False,
-    )
+    try:
+        init_cmd.run_init(
+            ctx.state,
+            template=choice,
+            directory=None,
+            no_install=False,
+            no_open=True,
+            force=False,
+            here=False,
+            port=3000,
+            json_mode=ctx.json_mode,
+            launch=False,
+        )
+    except (CLIError, typer.Exit):
+        output.error_console.print(output.fail(f"Could not scaffold '{choice}'."))
+        return SectionResult.FAILED
     return SectionResult.DONE
 
 
@@ -138,6 +143,8 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
         setup_cmd._install_cli_skill(force=False),  # pyright: ignore[reportPrivateUsage]
     ]
     output.console.print(setup_cmd._render({"steps": steps}))  # pyright: ignore[reportPrivateUsage]
+    if any(s["status"] == "failed" for s in steps):
+        return SectionResult.FAILED
     return SectionResult.DONE
 
 
