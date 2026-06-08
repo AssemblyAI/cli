@@ -9,7 +9,7 @@ _MILESTONES: dict[int, str] = {
     1: "You're activated 🎉 — your first request is in.",
     10: "10 requests in. You're getting the hang of it.",
     50: "Halfway to 100 — nice momentum.",
-    GOAL: "100 requests — you're off the ground. 🚀",
+    GOAL: f"{GOAL} requests — you're off the ground. 🚀",
 }
 
 

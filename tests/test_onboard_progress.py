@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from aai_cli.onboard import progress
-
 from aai_cli import config
+from aai_cli.onboard import progress
 
 
 def test_requests_made_starts_at_zero() -> None:
@@ -33,3 +32,5 @@ def test_render_progress_mentions_count_goal_and_usage_pointer() -> None:
     assert "7" in rendered
     assert "100" in rendered
     assert "aai usage" in rendered
+    milestone = progress.render_progress(1)
+    assert "activated" in milestone
