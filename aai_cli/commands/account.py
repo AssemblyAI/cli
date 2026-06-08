@@ -4,7 +4,6 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 
 import typer
-from rich.console import Group
 from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
@@ -169,15 +168,12 @@ def usage(
                 style="aai.heading",
             )
             if not shown:
-                if items:
-                    return Group(
-                        summary,
-                        Text("No usage in this range.", style="aai.muted"),
-                    )
-                return Group(
-                    summary,
-                    Text("No usage windows returned for this range.", style="aai.muted"),
+                message = (
+                    "No usage in this range."
+                    if items
+                    else "No usage windows returned for this range."
                 )
+                return output.stack(summary, output.muted(message))
 
             shown_with_breakdown = [(item, _line_items_summary(item)) for item in shown]
             show_breakdown = any(summary for _, summary in shown_with_breakdown)
@@ -195,16 +191,14 @@ def usage(
                 if show_breakdown:
                     row.append(escape(breakdown))
                 table.add_row(*row)
-            if hidden_count:
-                return Group(
-                    summary,
-                    table,
-                    Text(
-                        f"Hidden: {hidden_count} zero-usage window(s). Use --all to show them.",
-                        style="aai.muted",
-                    ),
+            hidden_note = (
+                output.muted(
+                    f"Hidden: {hidden_count} zero-usage window(s). Use --all to show them."
                 )
-            return Group(summary, table)
+                if hidden_count
+                else None
+            )
+            return output.stack(summary, table, hidden_note)
 
         output.emit(data, render, json_mode=json_mode)
 

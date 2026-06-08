@@ -4,9 +4,7 @@ from collections.abc import Mapping
 from datetime import datetime
 
 import typer
-from rich.console import Group
 from rich.markup import escape
-from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, output, timeparse
 from aai_cli.auth import ams
@@ -119,21 +117,20 @@ def audit(
             hide_logins = not include_logins and action is None
             shown = [entry for entry in data if not (hide_logins and _is_login(entry))]
             hidden_logins = len(data) - len(shown)
+            hidden_note = (
+                output.muted(
+                    f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them."
+                )
+                if hidden_logins
+                else None
+            )
             if not shown:
                 message = (
                     "No notable audit events in the recent log."
                     if hidden_logins
                     else "No audit events found."
                 )
-                if hidden_logins:
-                    return Group(
-                        Text(message, style="aai.muted"),
-                        Text(
-                            f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them.",
-                            style="aai.muted",
-                        ),
-                    )
-                return Text(message, style="aai.muted")
+                return output.stack(output.muted(message), hidden_note)
 
             table = output.data_table("when (UTC)", "event", "resource", "actor")
             for entry in shown:
@@ -143,15 +140,7 @@ def audit(
                     escape(_resource_label(entry)),
                     escape(_actor_label(entry)),
                 )
-            if hidden_logins:
-                return Group(
-                    table,
-                    Text(
-                        f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them.",
-                        style="aai.muted",
-                    ),
-                )
-            return table
+            return output.stack(table, hidden_note)
 
         output.emit(rows, render, json_mode=json_mode)
 

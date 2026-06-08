@@ -174,6 +174,31 @@ def test_detail_table_is_borderless_label_value_grid():
     assert table.padding == (0, 3, 0, 3)
 
 
+def test_muted_returns_dim_text_line():
+    from rich.text import Text
+
+    line = output.muted("Hidden: 1 window.")
+    assert isinstance(line, Text)
+    assert line.plain == "Hidden: 1 window."
+    assert line.style == "aai.muted"
+
+
+def test_stack_returns_lone_item_bare():
+    # A single surviving renderable isn't wrapped in a redundant Group.
+    table = output.data_table("id")
+    assert output.stack(table, None) is table
+
+
+def test_stack_drops_none_and_groups_the_rest():
+    from rich.console import Group
+
+    first = output.muted("a")
+    second = output.muted("b")
+    result = output.stack(first, None, second)
+    assert isinstance(result, Group)
+    assert list(result.renderables) == [first, second]
+
+
 def test_emit_ndjson_writes_one_flushed_line(monkeypatch):
     import sys
 
