@@ -17,31 +17,36 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                               Speak the hosted wildfires.mp3 sample │
-  │                                        to the agent.                         │
-  │ --voice                       TEXT     Agent voice. See --list-voices.       │
-  │                                        [default: ivy]                        │
-  │ --system-prompt               TEXT     System prompt (the agent's persona).  │
-  │                                        [default: You are a friendly voice    │
-  │                                        assistant having a casual             │
-  │                                        conversation. Keep replies short and  │
-  │                                        natural, usually one or two           │
-  │                                        sentences. Speak the way a person     │
-  │                                        would in real conversation: relaxed,  │
-  │                                        low-key, no exclamation marks.]       │
-  │ --system-prompt-file          PATH     Read the system prompt from a file    │
-  │                                        (overrides --system-prompt).          │
-  │ --greeting                    TEXT     Spoken greeting.                      │
-  │                                        [default: Hey, what's on your mind?]  │
-  │ --device                      INTEGER  Microphone device index.              │
-  │ --list-voices                          Print known voices and exit.          │
-  │ --json                                 Emit newline-delimited JSON events.   │
-  │ --output              -o      TEXT     Print you:/agent: lines as plain      │
-  │                                        stdout (pipe-friendly). For NDJSON,   │
-  │                                        use --json.                           │
-  │ --show-code                            Print the equivalent Python SDK code  │
-  │                                        and exit (does not start a session).  │
-  │ --help                                 Show this message and exit.           │
+  │ --sample                                   Speak the hosted wildfires.mp3    │
+  │                                            sample to the agent.              │
+  │ --voice                       TEXT         Agent voice. See --list-voices.   │
+  │                                            [default: ivy]                    │
+  │ --system-prompt               TEXT         System prompt (the agent's        │
+  │                                            persona).                         │
+  │                                            [default: You are a friendly      │
+  │                                            voice assistant having a casual   │
+  │                                            conversation. Keep replies short  │
+  │                                            and natural, usually one or two   │
+  │                                            sentences. Speak the way a person │
+  │                                            would in real conversation:       │
+  │                                            relaxed, low-key, no exclamation  │
+  │                                            marks.]                           │
+  │ --system-prompt-file          FILE         Read the system prompt from a     │
+  │                                            file (overrides --system-prompt). │
+  │ --greeting                    TEXT         Spoken greeting.                  │
+  │                                            [default: Hey, what's on your     │
+  │                                            mind?]                            │
+  │ --device                      INTEGER      Microphone device index.          │
+  │ --list-voices                              Print known voices and exit.      │
+  │ --json                                     Emit newline-delimited JSON       │
+  │                                            events.                           │
+  │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
+  │                                            lines as plain stdout,            │
+  │                                            pipe-friendly) or json.           │
+  │ --show-code                                Print the equivalent Python SDK   │
+  │                                            code and exit (does not start a   │
+  │                                            session).                         │
+  │ --help                                     Show this message and exit.       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -271,25 +276,26 @@
   │   prompt      [PROMPT]  The prompt to send to the model.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model                  TEXT     LLM Gateway model.                         │
-  │                                   [default: claude-haiku-4-5-20251001]       │
-  │ --transcript-id          TEXT     Inject this transcript's text into the     │
-  │                                   prompt.                                    │
-  │ --system                 TEXT     Optional system prompt.                    │
-  │ --follow         -f               Re-run the prompt over a growing           │
-  │                                   transcript piped on stdin, refreshing the  │
-  │                                   answer in place on every finalized turn    │
-  │                                   (e.g. aai stream -o text | aai llm -f      │
-  │                                   "summarize action items as I talk").       │
-  │                                   Ctrl-C to stop.                            │
-  │ --output         -o      TEXT     Print just the answer as plain text        │
-  │                                   (pipe-friendly). For full JSON, use        │
-  │                                   --json.                                    │
-  │ --max-tokens             INTEGER  Max tokens to generate. [default: 1000]    │
-  │ --list-models                     Print known models and exit.               │
-  │ --json                            Output raw JSON (one object per turn in    │
-  │                                   --follow mode).                            │
-  │ --help                            Show this message and exit.                │
+  │ --model                  TEXT         LLM Gateway model.                     │
+  │                                       [default: claude-haiku-4-5-20251001]   │
+  │ --transcript-id          TEXT         Inject this transcript's text into the │
+  │                                       prompt.                                │
+  │ --system                 TEXT         Optional system prompt.                │
+  │ --follow         -f                   Re-run the prompt over a growing       │
+  │                                       transcript piped on stdin, refreshing  │
+  │                                       the answer in place on every finalized │
+  │                                       turn (e.g. aai stream -o text | aai    │
+  │                                       llm -f "summarize action items as I    │
+  │                                       talk"). Ctrl-C to stop.                │
+  │ --output         -o      [text|json]  Print one field of the result: text    │
+  │                                       (just the answer, pipe-friendly) or    │
+  │                                       json.                                  │
+  │ --max-tokens             INTEGER      Max tokens to generate.                │
+  │                                       [default: 1000]                        │
+  │ --list-models                         Print known models and exit.           │
+  │ --json                                Output raw JSON (one object per turn   │
+  │                                       in --follow mode).                     │
+  │ --help                                Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -449,12 +455,12 @@
    Install the AssemblyAI docs MCP server and skills into your coding agent.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        TEXT  Config scope to register the MCP under: user, project,  │
-  │                      or local. Presence is detected across all scopes.       │
-  │                      [default: user]                                         │
-  │ --force              Reinstall even if already present.                      │
-  │ --json               Output raw JSON.                                        │
-  │ --help               Show this message and exit.                             │
+  │ --scope        [user|project|local]  Config scope to register the MCP under. │
+  │                                      Presence is detected across all scopes. │
+  │                                      [default: user]                         │
+  │ --force                              Reinstall even if already present.      │
+  │ --json                               Output raw JSON.                        │
+  │ --help                               Show this message and exit.             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -475,11 +481,11 @@
    Remove the AssemblyAI MCP server and skills from your coding agent.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        TEXT  Only remove the MCP from this scope (user, project, or  │
-  │                      local). Default: remove from whichever scope it exists  │
-  │                      in.                                                     │
-  │ --json               Output raw JSON.                                        │
-  │ --help               Show this message and exit.                             │
+  │ --scope        [user|project|local]  Only remove the MCP from this scope.    │
+  │                                      Default: remove from whichever scope it │
+  │                                      exists in.                              │
+  │ --json                               Output raw JSON.                        │
+  │ --help                               Show this message and exit.             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -527,103 +533,87 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                                                Stream the hosted    │
-  │                                                         wildfires.mp3        │
-  │                                                         sample.              │
-  │ --sample-rate                                  INTEGER  Force a microphone   │
-  │                                                         capture rate in Hz   │
-  │                                                         (default: device     │
-  │                                                         native).             │
-  │ --device                                       INTEGER  Microphone device    │
-  │                                                         index.               │
-  │ --system-audio                                          macOS only: stream   │
-  │                                                         system/app audio and │
-  │                                                         microphone as        │
-  │                                                         separate sessions.   │
-  │ --system-audio-only                                     macOS only: stream   │
-  │                                                         system/app audio     │
-  │                                                         without the          │
-  │                                                         microphone.          │
-  │ --speech-model                                 TEXT     Streaming speech     │
-  │                                                         model.               │
-  │                                                         [default: u3-rt-pro] │
-  │ --encoding                                     TEXT     Audio encoding:      │
-  │                                                         pcm_s16le or         │
-  │                                                         pcm_mulaw.           │
-  │ --language-detection                                    Auto-detect the      │
-  │                                                         spoken language.     │
-  │ --domain                                       TEXT     Domain preset (e.g.  │
-  │                                                         medical).            │
-  │ --end-of-turn-confi…                           FLOAT    End-of-turn          │
-  │                                                         confidence (0-1).    │
-  │ --min-turn-silence                             INTEGER  Min silence to end a │
-  │                                                         turn (ms).           │
-  │ --max-turn-silence                             INTEGER  Max silence before   │
-  │                                                         ending a turn (ms).  │
-  │ --vad-threshold                                FLOAT    Voice-activity       │
-  │                                                         threshold.           │
-  │ --format-turns            --no-format-turns             Punctuate/format     │
-  │                                                         finalized turns.     │
-  │ --include-partial-t…                                    Emit partial turns.  │
-  │ --keyterms-prompt                              TEXT     Boost a key term     │
-  │                                                         (repeatable).        │
-  │ --filter-profanity                                      Mask profanity.      │
-  │ --speaker-labels                                        Label speakers.      │
-  │ --max-speakers                                 INTEGER  Max speakers.        │
-  │ --voice-focus                                  TEXT     Voice focus:         │
-  │                                                         near_field or        │
-  │                                                         far_field.           │
-  │ --voice-focus-thres…                           FLOAT    Voice-focus          │
-  │                                                         threshold.           │
-  │ --redact-pii                                            Redact PII from      │
-  │                                                         turns.               │
-  │ --redact-pii-policy                            TEXT     Comma-separated PII  │
-  │                                                         policies.            │
-  │ --redact-pii-sub                               TEXT     Replace redacted PII │
-  │                                                         with: hash or        │
-  │                                                         entity_name.         │
-  │ --inactivity-timeout                           INTEGER  Auto-close after N   │
-  │                                                         seconds idle.        │
-  │ --webhook-url                                  TEXT     Webhook URL.         │
-  │ --webhook-auth-head…                           TEXT     Webhook auth header  │
-  │                                                         as NAME:VALUE.       │
-  │ --config                                       TEXT     Set any              │
-  │                                                         StreamingParameters  │
-  │                                                         field as KEY=VALUE   │
-  │                                                         (repeatable).        │
-  │ --config-file                                  TEXT     JSON file of         │
-  │                                                         streaming fields.    │
-  │ --prompt                                       TEXT     Prompt to bias the   │
-  │                                                         speech model         │
-  │                                                         (u3-pro).            │
-  │ --llm                                          TEXT     Run a prompt over    │
-  │                                                         the live transcript  │
-  │                                                         through LLM Gateway, │
-  │                                                         refreshing the       │
-  │                                                         answer on every      │
-  │                                                         finalized turn.      │
-  │                                                         Repeatable: each     │
-  │                                                         prompt runs on the   │
-  │                                                         previous one's       │
-  │                                                         response (a chain).  │
-  │ --model                                        TEXT     LLM Gateway model.   │
-  │                                                         [default:            │
-  │                                                         claude-haiku-4-5-20… │
-  │ --max-tokens                                   INTEGER  Max tokens.          │
-  │                                                         [default: 1000]      │
-  │ --json                                                  Emit                 │
-  │                                                         newline-delimited    │
-  │                                                         JSON events.         │
-  │ --output              -o                       TEXT     Print finalized      │
-  │                                                         turns as plain lines │
-  │                                                         (pipe-friendly). For │
-  │                                                         NDJSON, use --json.  │
-  │ --show-code                                             Print the equivalent │
-  │                                                         Python SDK code and  │
-  │                                                         exit (does not       │
-  │                                                         stream).             │
-  │ --help                                                  Show this message    │
-  │                                                         and exit.            │
+  │ --sample                          Stream the hosted wildfires.mp3 sample.    │
+  │ --json                            Emit newline-delimited JSON events.        │
+  │ --output     -o      [text|json]  Output mode: text (finalized turns as      │
+  │                                   plain lines, pipe-friendly) or json.       │
+  │ --show-code                       Print the equivalent Python SDK code and   │
+  │                                   exit (does not stream).                    │
+  │ --help                            Show this message and exit.                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
+  │ --sample-rate              INTEGER  Force a microphone capture rate in Hz    │
+  │                                     (default: device native).                │
+  │ --device                   INTEGER  Microphone device index.                 │
+  │ --system-audio                      macOS only: stream system/app audio and  │
+  │                                     microphone as separate sessions.         │
+  │ --system-audio-only                 macOS only: stream system/app audio      │
+  │                                     without the microphone.                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Model & Language ───────────────────────────────────────────────────────────╮
+  │ --speech-model              [universal-streaming-m  Streaming speech model.  │
+  │                             ultilingual|universal-  [default: u3-rt-pro]     │
+  │                             streaming-english|u3-r                           │
+  │                             t-pro|whisper-rt|u3-pr                           │
+  │                             o]                                               │
+  │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding.          │
+  │ --language-detection                                Auto-detect the spoken   │
+  │                                                     language.                │
+  │ --domain                    TEXT                    Domain preset (e.g.      │
+  │                                                     medical).                │
+  │ --prompt                    TEXT                    Prompt to bias the       │
+  │                                                     speech model (u3-pro).   │
+  │ --keyterms-prompt           TEXT                    Boost a key term         │
+  │                                                     (repeatable).            │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
+  │ --end-of-turn-confid…                         FLOAT    End-of-turn           │
+  │                                                        confidence (0-1).     │
+  │ --min-turn-silence                            INTEGER  Min silence to end a  │
+  │                                                        turn (ms).            │
+  │ --max-turn-silence                            INTEGER  Max silence before    │
+  │                                                        ending a turn (ms).   │
+  │ --vad-threshold                               FLOAT    Voice-activity        │
+  │                                                        threshold.            │
+  │ --format-turns           --no-format-turns             Punctuate/format      │
+  │                                                        finalized turns.      │
+  │ --include-partial-tu…                                  Emit partial turns.   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
+  │ --speaker-labels                 Label speakers.                             │
+  │ --max-speakers          INTEGER  Max speakers.                               │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Features ───────────────────────────────────────────────────────────────────╮
+  │ --voice-focus                 [near-field|far-field]  Voice focus (noise     │
+  │                                                       suppression model).    │
+  │ --voice-focus-thresho…        FLOAT                   Voice-focus threshold. │
+  │ --inactivity-timeout          INTEGER                 Auto-close after N     │
+  │                                                       seconds idle.          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
+  │ --filter-profanity               Mask profanity.                             │
+  │ --redact-pii                     Redact PII from turns.                      │
+  │ --redact-pii-policy        TEXT  Comma-separated PII policies.               │
+  │ --redact-pii-sub           TEXT  Replace redacted PII with: hash or          │
+  │                                  entity_name.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
+  │ --webhook-url                TEXT        Webhook URL.                        │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --llm               TEXT     Run a prompt over the live transcript through   │
+  │                              LLM Gateway, refreshing the answer on every     │
+  │                              finalized turn. Repeatable: each prompt runs on │
+  │                              the previous one's response (a chain).          │
+  │ --model             TEXT     LLM Gateway model.                              │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
+  │ --config             KEY=VALUE  Set any StreamingParameters field as         │
+  │                                 KEY=VALUE (repeatable).                      │
+  │ --config-file        FILE       JSON file of streaming fields.               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -660,113 +650,100 @@
   │   source      [SOURCE]  Audio file path, public URL, or YouTube URL.         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                                                Use the hosted       │
-  │                                                         wildfires.mp3        │
-  │                                                         sample.              │
-  │ --speech-model                                 TEXT     Speech model: best,  │
-  │                                                         nano, slam-1, or     │
-  │                                                         universal.           │
-  │ --language-code                                TEXT     Force a language     │
-  │                                                         (e.g. en_us).        │
-  │ --language-detection                                    Auto-detect the      │
-  │                                                         spoken language.     │
-  │ --keyterms-prompt                              TEXT     Boost a key term     │
-  │                                                         (repeatable).        │
-  │ --temperature                                  FLOAT    Speech model         │
-  │                                                         temperature.         │
-  │ --prompt                                       TEXT     Prompt to bias the   │
-  │                                                         speech model         │
-  │                                                         (u3-pro).            │
-  │ --punctuate                --no-punctuate               Add punctuation.     │
-  │ --format-text              --no-format-text             Apply text           │
-  │                                                         formatting (casing,  │
-  │                                                         numbers).            │
-  │ --disfluencies                                          Keep filler words    │
-  │                                                         (e.g. um, uh).       │
-  │ --speaker-labels                                        Enable diarization.  │
-  │ --speakers-expected                            INTEGER  Hint speaker count.  │
-  │ --multichannel                                          Transcribe each      │
-  │                                                         audio channel        │
-  │                                                         separately.          │
-  │ --redact-pii                                            Redact PII from the  │
-  │                                                         transcript.          │
-  │ --redact-pii-policy                            TEXT     Comma-separated PII  │
-  │                                                         policies (e.g.       │
-  │                                                         person_name,...).    │
-  │ --redact-pii-sub                               TEXT     Replace redacted PII │
-  │                                                         with: hash or        │
-  │                                                         entity_name.         │
-  │ --redact-pii-audio                                      Also redact audio.   │
-  │ --filter-profanity                                      Mask profanity.      │
-  │ --content-safety                                        Detect sensitive     │
-  │                                                         content.             │
-  │ --content-safety-con…                          INTEGER  Content-safety       │
-  │                                                         confidence threshold │
-  │                                                         (25-100).            │
-  │ --speech-threshold                             FLOAT    Minimum proportion   │
-  │                                                         of speech required   │
-  │                                                         (0-1).               │
-  │ --summarization                                         Summarize the        │
-  │                                                         transcript.          │
-  │ --summary-model                                TEXT     Summary model:       │
-  │                                                         informative,         │
-  │                                                         conversational, or   │
-  │                                                         catchy.              │
-  │ --summary-type                                 TEXT     Summary format:      │
-  │                                                         bullets, gist,       │
-  │                                                         headline, or         │
-  │                                                         paragraph.           │
-  │ --auto-chapters                                         Generate chapters.   │
-  │ --sentiment-analysis                                    Analyze sentiment.   │
-  │ --entity-detection                                      Detect entities.     │
-  │ --auto-highlights                                       Detect key phrases.  │
-  │ --topic-detection                                       Detect IAB topics.   │
-  │ --word-boost                                   TEXT     Boost a word         │
-  │                                                         (repeatable).        │
-  │ --custom-spelling-fi…                          TEXT     JSON map of custom   │
-  │                                                         spellings.           │
-  │ --audio-start                                  INTEGER  Start offset in ms.  │
-  │ --audio-end                                    INTEGER  End offset in ms.    │
-  │ --webhook-url                                  TEXT     Webhook URL for      │
-  │                                                         completion.          │
-  │ --webhook-auth-header                          TEXT     Webhook auth header  │
-  │                                                         as NAME:VALUE.       │
-  │ --translate-to                                 TEXT     Translate transcript │
-  │                                                         to a language        │
-  │                                                         (repeatable).        │
-  │ --config                                       TEXT     Set any              │
-  │                                                         TranscriptionConfig  │
-  │                                                         field as KEY=VALUE   │
-  │                                                         (repeatable).        │
-  │ --config-file                                  TEXT     JSON file of config  │
-  │                                                         fields.              │
-  │ --llm                                          TEXT     Transform the        │
-  │                                                         finished transcript  │
-  │                                                         through LLM Gateway. │
-  │                                                         Repeatable: each     │
-  │                                                         prompt runs on the   │
-  │                                                         previous one's       │
-  │                                                         response (a chain),  │
-  │                                                         the first on the     │
-  │                                                         transcript.          │
-  │ --model                                        TEXT     LLM Gateway model.   │
-  │                                                         [default:            │
-  │                                                         claude-haiku-4-5-20… │
-  │ --max-tokens                                   INTEGER  Max tokens.          │
-  │                                                         [default: 1000]      │
-  │ --json                                                  Output raw JSON.     │
-  │ --output               -o                      TEXT     Print one field as   │
-  │                                                         plain text: text,    │
-  │                                                         id, status,          │
-  │                                                         utterances, or srt.  │
-  │                                                         For full JSON, use   │
-  │                                                         --json.              │
-  │ --show-code                                             Print the equivalent │
-  │                                                         Python SDK code and  │
-  │                                                         exit (does not       │
-  │                                                         transcribe).         │
-  │ --help                                                  Show this message    │
-  │                                                         and exit.            │
+  │ --sample                                         Use the hosted              │
+  │                                                  wildfires.mp3 sample.       │
+  │ --json                                           Output raw JSON.            │
+  │ --output     -o      [text|id|status|utterances  Print one field of the      │
+  │                      |srt|json]                  result.                     │
+  │ --show-code                                      Print the equivalent Python │
+  │                                                  SDK code and exit (does not │
+  │                                                  transcribe).                │
+  │ --help                                           Show this message and exit. │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Model & Language ───────────────────────────────────────────────────────────╮
+  │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
+  │                             ersal]                                           │
+  │ --language-code             TEXT                    Force a language (e.g.   │
+  │                                                     en_us).                  │
+  │ --language-detection                                Auto-detect the spoken   │
+  │                                                     language.                │
+  │ --keyterms-prompt           TEXT                    Boost a key term         │
+  │                                                     (repeatable).            │
+  │ --temperature               FLOAT                   Speech model             │
+  │                                                     temperature.             │
+  │ --prompt                    TEXT                    Prompt to bias the       │
+  │                                                     speech model (u3-pro).   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Formatting ─────────────────────────────────────────────────────────────────╮
+  │ --punctuate       --no-punctuate        Add punctuation.                     │
+  │ --format-text     --no-format-text      Apply text formatting (casing,       │
+  │                                         numbers).                            │
+  │ --disfluencies                          Keep filler words (e.g. um, uh).     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
+  │ --speaker-labels                    Enable diarization.                      │
+  │ --speakers-expected        INTEGER  Hint speaker count.                      │
+  │ --multichannel                      Transcribe each audio channel            │
+  │                                     separately.                              │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
+  │ --redact-pii                                        Redact PII from the      │
+  │                                                     transcript.              │
+  │ --redact-pii-policy             TEXT                Comma-separated PII      │
+  │                                                     policies (e.g.           │
+  │                                                     person_name,...).        │
+  │ --redact-pii-sub                [hash|entity_name]  How to replace redacted  │
+  │                                                     PII.                     │
+  │ --redact-pii-audio                                  Also redact audio.       │
+  │ --filter-profanity                                  Mask profanity.          │
+  │ --content-safety                                    Detect sensitive         │
+  │                                                     content.                 │
+  │ --content-safety-confid…        INTEGER             Content-safety           │
+  │                                                     confidence threshold     │
+  │                                                     (25-100).                │
+  │ --speech-threshold              FLOAT               Minimum proportion of    │
+  │                                                     speech required (0-1).   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
+  │ --summarization                                      Summarize the           │
+  │                                                      transcript.             │
+  │ --summary-model             [informative|conversati  Summary model.          │
+  │                             onal|catchy]                                     │
+  │ --summary-type              [bullets|bullets_verbos  Summary format.         │
+  │                             e|gist|headline|paragra                          │
+  │                             ph]                                              │
+  │ --auto-chapters                                      Generate chapters.      │
+  │ --sentiment-analysis                                 Analyze sentiment.      │
+  │ --entity-detection                                   Detect entities.        │
+  │ --auto-highlights                                    Detect key phrases.     │
+  │ --topic-detection                                    Detect IAB topics.      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Customization ──────────────────────────────────────────────────────────────╮
+  │ --word-boost                  TEXT     Boost a word (repeatable).            │
+  │ --custom-spelling-file        FILE     JSON map of custom spellings.         │
+  │ --audio-start                 INTEGER  Start offset in ms.                   │
+  │ --audio-end                   INTEGER  End offset in ms.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
+  │ --webhook-url                TEXT        Webhook URL for completion.         │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Translation ────────────────────────────────────────────────────────────────╮
+  │ --translate-to        TEXT  Translate transcript to a language (repeatable). │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
+  │ --config             KEY=VALUE  Set any TranscriptionConfig field as         │
+  │                                 KEY=VALUE (repeatable).                      │
+  │ --config-file        FILE       JSON file of config fields.                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --llm               TEXT     Transform the finished transcript through LLM   │
+  │                              Gateway. Repeatable: each prompt runs on the    │
+  │                              previous one's response (a chain), the first on │
+  │                              the transcript.                                 │
+  │ --model             TEXT     LLM Gateway model.                              │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -796,10 +773,10 @@
   │ *    transcript_id      TEXT  Transcript id. [required]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --output  -o      TEXT  Print one field as plain text: text, id, status,     │
-  │                         utterances, or srt. For full JSON, use --json.       │
-  │ --json                  Output raw JSON.                                     │
-  │ --help                  Show this message and exit.                          │
+  │ --output  -o      [text|id|status|utterances|s  Print one field of the       │
+  │                   rt|json]                      result.                      │
+  │ --json                                          Output raw JSON.             │
+  │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

@@ -79,14 +79,6 @@ def test_llm_json_emits_json_even_for_interactive_human(monkeypatch):
     assert data["output"] == "4"
 
 
-def test_llm_output_json_field_is_rejected(monkeypatch):
-    # `-o json` no longer exists: -o is a plain-text projection, JSON lives on --json.
-    _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("4"))
-    result = runner.invoke(app, ["llm", "hi", "-o", "json"])
-    assert result.exit_code == 2
-
-
 def test_llm_transcript_id_injected(monkeypatch):
     _auth()
     seen = {}

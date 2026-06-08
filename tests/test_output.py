@@ -24,6 +24,19 @@ def test_resolve_json_false_for_human(monkeypatch):
     assert output.resolve_json(explicit=False) is False
 
 
+def test_is_agentic_true_for_agent_env_var_even_with_tty(monkeypatch):
+    # Interactivity detection (used to suppress the spinner) still reports "no human"
+    # when a CI/agent env var is set — independent of resolve_json, which stays text.
+    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    assert output._is_agentic() is True
+
+
+def test_is_agentic_false_for_plain_interactive_tty(monkeypatch):
+    monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
+    assert output._is_agentic() is False
+
+
 def test_mask_secret_preserves_only_short_edges():
     assert output.mask_secret("sk_1234567890") == "sk_…7890"
     assert output.mask_secret("12345678") == "123…5678"
@@ -182,3 +195,36 @@ def test_emit_ndjson_writes_one_flushed_line(monkeypatch):
     # One newline-terminated JSON record, explicitly flushed so live pipelines see it.
     assert rec.text == '{"a": 1}\n'
     assert rec.flushed >= 1
+
+
+def test_status_is_noop_in_json_mode(monkeypatch):
+    # JSON mode must never enter the spinner (it would render to stderr unnecessarily).
+    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    entered = {"status": False}
+    monkeypatch.setattr(
+        output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
+    )
+    with output.status("Working…", json_mode=True):
+        pass
+    assert entered["status"] is False
+
+
+def test_status_is_noop_when_agentic(monkeypatch):
+    monkeypatch.setattr(output, "_is_agentic", lambda: True)
+    entered = {"status": False}
+    monkeypatch.setattr(
+        output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
+    )
+    with output.status("Working…", json_mode=False):
+        pass
+    assert entered["status"] is False
+
+
+def test_status_shows_spinner_for_interactive_human(monkeypatch):
+    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    calls = []
+    with output.error_console.capture():
+        with output.status("Transcribing…", json_mode=False):
+            calls.append("inside")
+    # The body ran inside the spinner context and the spinner targeted stderr.
+    assert calls == ["inside"]

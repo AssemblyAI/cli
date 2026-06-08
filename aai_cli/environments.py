@@ -66,10 +66,15 @@ def get(name: str) -> Environment:
     """The named environment, or a clean CLIError if it's unknown."""
     env = ENVIRONMENTS.get(name)
     if env is None:
+        # The bad name can arrive via --env, AAI_ENV, or a profile's stored env, so
+        # the suggestion points at all three rather than assuming the flag.
         raise CLIError(
             f"Unknown environment {name!r}. Known: {', '.join(ENVIRONMENTS)}.",
             error_type="invalid_environment",
             exit_code=2,
+            suggestion=(
+                f"Pass --env with one of: {', '.join(ENVIRONMENTS)}, or unset AAI_ENV if it's set."
+            ),
         )
     return env
 

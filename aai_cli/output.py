@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING
 
 from rich import box
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import theme
-from aai_cli.errors import UsageError
+from aai_cli import choices, theme
 
 if TYPE_CHECKING:
     from aai_cli.errors import CLIError
@@ -19,11 +20,22 @@ console = theme.make_console()
 # Errors go to stderr so they never pollute piped stdout (e.g. `aai transcribe x -o text > out`).
 error_console = theme.make_console(stderr=True)
 
+_AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
 _MIN_MASKABLE_SECRET_LENGTH = 8
 
 
 def _stdout_is_tty() -> bool:
     return sys.stdout.isatty()
+
+
+def _is_agentic() -> bool:
+    """True when there's no interactive human at stdout: piped/redirected, or a CI/agent
+    env var is set. Used to suppress *interactivity* (the spinner) — never to change the
+    output *shape*; `resolve_json` keeps text the default regardless (see its docstring).
+    """
+    if not _stdout_is_tty():
+        return True
+    return any(os.environ.get(var) for var in _AGENT_ENV_VARS)
 
 
 def resolve_json(*, explicit: bool) -> bool:
@@ -41,23 +53,18 @@ def resolve_json(*, explicit: bool) -> bool:
     return explicit
 
 
-def validate_output_field(field: str | None, allowed: tuple[str, ...]) -> None:
-    """Reject an unknown ``-o/--output`` value with a consistent, listing error."""
-    if field is not None and field not in allowed:
-        raise UsageError(f"Unknown --output {field!r}. Choose one of: {', '.join(allowed)}.")
-
-
-def stream_output_modes(field: str | None, *, json_mode: bool) -> tuple[bool, bool]:
+def stream_output_modes(field: choices.TextOrJson | None, *, json_mode: bool) -> tuple[bool, bool]:
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
     Shared by `stream` and `agent`. ``-o text`` emits plain finalized lines (handy for
-    ``aai stream -o text | aai llm -f``); ``--json`` (the canonical machine switch)
-    forces NDJSON. With neither, the live human panel renders. ``-o`` is a plain-text
-    projection only — JSON is reached through ``--json``, so the two no longer overlap.
+    ``aai stream -o text | aai llm -f``); ``-o json`` or ``--json`` forces NDJSON; an
+    unset field renders the live human panel. With output now human-by-default
+    (`resolve_json` only flips on an explicit `--json`), `json_mode` here is simply
+    whether `--json` was passed — we never auto-switch to NDJSON just because piped.
+    Typer validates `field` against the enum, so no value check is needed here.
     """
-    validate_output_field(field, ("text",))
-    text_mode = field == "text"
-    return text_mode, json_mode and not text_mode
+    text_mode = field is choices.TextOrJson.text
+    return text_mode, (field is choices.TextOrJson.json) or (json_mode and not text_mode)
 
 
 def mask_secret(value: str) -> str:
@@ -135,6 +142,22 @@ def emit_ndjson(obj: object) -> None:
 def emit_text(text: str) -> None:
     """Write one raw text value to stdout for pipe-friendly single-field output."""
     print(text)
+
+
+@contextlib.contextmanager
+def status(message: str, *, json_mode: bool) -> Generator[None]:
+    """Show an ephemeral spinner on stderr during a long human-facing wait.
+
+    A no-op in JSON or non-interactive mode (piped / agent-run), so stdout stays
+    clean for pipelines and machine output is never decorated. Rendered on the
+    stderr console so even an interactive `aai transcribe x -o text` keeps stdout
+    pristine.
+    """
+    if json_mode or _is_agentic():
+        yield
+        return
+    with error_console.status(message):
+        yield
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:

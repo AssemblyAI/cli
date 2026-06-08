@@ -84,8 +84,10 @@ def scaffold(
     root = _template_root(template)
     target.mkdir(parents=True, exist_ok=True)
     _copy_tree(root, target)
-    lines = [f"ASSEMBLYAI_API_KEY={api_key or PLACEHOLDER_KEY}"]
-    lines += [f"{k}={v}" for k, v in (env_vars or {}).items()]
+    lines = [
+        f"ASSEMBLYAI_API_KEY={api_key or PLACEHOLDER_KEY}",
+        *(f"{k}={v}" for k, v in (env_vars or {}).items()),
+    ]
     env_path = target / ".env"
     # The .env holds the real API key, so create it readable/writable by the owner
     # only (0600) instead of the umask default (commonly 0644) — otherwise the key

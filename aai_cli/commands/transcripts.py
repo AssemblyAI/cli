@@ -5,7 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from aai_cli import client, config, output, theme
+from aai_cli import choices, client, config, output, theme
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
@@ -24,19 +24,17 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
 def get(
     ctx: typer.Context,
     transcript_id: str = typer.Argument(..., help="Transcript id."),
-    output_field: str | None = typer.Option(
+    output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Print one field as plain text: text, id, status, utterances, or srt. "
-        "For full JSON, use --json.",
+        help="Print one field of the result.",
     ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        output.validate_output_field(output_field, client.TRANSCRIPT_OUTPUT_FIELDS)
         api_key = config.resolve_api_key(profile=state.profile)
         transcript = client.get_transcript(api_key, transcript_id)
         if client.status_str(transcript) == "error":
@@ -45,14 +43,14 @@ def get(
                 transcript_id=transcript_id,
             )
         if output_field is not None:
-            # Raw single-field output for pipelines, matching `transcribe`.
+            # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
             output.emit_text(client.select_transcript_field(transcript, output_field))
             return
-        # --json emits the full payload (matching `transcribe`); human mode prints text.
-        if json_mode:
-            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
-        else:
-            output.console.print(escape(client.select_transcript_field(transcript, "text")))
+        output.emit(
+            client.transcript_summary(transcript),
+            lambda d: escape(str(d["text"])),
+            json_mode=json_mode,
+        )
 
     run_command(ctx, body, json=json_out)
 

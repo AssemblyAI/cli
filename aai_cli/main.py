@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, environments, help_panels, stdio
+from aai_cli import __version__, environments, help_panels, output, stdio
 from aai_cli.commands import (
     account,
     agent,
@@ -117,33 +117,35 @@ def main(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
     ),
-    version: bool = typer.Option(
+    # Underscore name: the eager callback does the work, so the parameter is intentionally
+    # unused in the body (avoids ARG001 without a `del`).
+    _version: bool = typer.Option(
         False,
         "--version",
         "-V",
         help="Show the CLI version and exit.",
         callback=_version_callback,
-        # Eager so --version short-circuits before any other option processing — the
-        # idiomatic default. With no competing eager option or required root argument
-        # here it's behaviorally indistinguishable from non-eager, so no test can pin it.
+        # Eager so --version short-circuits before subcommand/arg parsing — the idiomatic
+        # default. The plain `aai --version` path behaves identically with or without this,
+        # so there's no cheap test that distinguishes it.
         is_eager=True,  # pragma: no mutate
     ),
 ) -> None:
-    # `version` is consumed by its eager callback above (prints the version and exits
-    # before we get here); the parameter exists only to declare the --version/-V option.
-    del version
     if sandbox and env is None:
         env = "sandbox000"
     state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
+    # The command's own --json flag isn't parsed yet, and output is human-by-default, so a
+    # root-callback (e.g. bad --env) error renders as human text on stderr.
+    json_mode = output.resolve_json(explicit=False)
     try:
         environments.set_active(resolve_environment(state))
     except CLIError as err:
-        typer.echo(err.message, err=True)
+        output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
     warning = env_override_warning(state)
     if warning and not quiet:
-        typer.echo(warning, err=True)
+        output.error_console.print(output.warn(warning))
 
 
 # Help-panel grouping: named sub-typers carry their panel on `add_typer`; merged

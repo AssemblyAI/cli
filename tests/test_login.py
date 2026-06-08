@@ -202,8 +202,18 @@ def test_root_callback_sandbox_overrides_profile_env():
 
 
 def test_unknown_env_exits_2():
-    result = runner.invoke(app, ["--env", "bogus", "whoami"])
-    assert result.exit_code == 2
+    # Routed through the standard error path. Output is human-by-default (the root
+    # callback can't see a per-command --json, and we never auto-switch to JSON on a
+    # pipe/agent), so it's the "Error:" + "Suggestion:" pair on stderr, not a JSON blob —
+    # regardless of whether stdout is a TTY.
+    for agentic in (True, False):
+        with patch("aai_cli.output._is_agentic", return_value=agentic):
+            result = runner.invoke(app, ["--env", "bogus", "whoami"])
+        assert result.exit_code == 2
+        assert "Error:" in result.output
+        assert "Suggestion:" in result.output
+        assert "unset AAI_ENV" in result.output
+        assert '"error"' not in result.output  # never the JSON shape
 
 
 def test_env_override_prints_warning_to_stderr():

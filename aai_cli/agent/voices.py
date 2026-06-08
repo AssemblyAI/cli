@@ -47,3 +47,8 @@ DEFAULT_VOICE = "ivy"
 def format_voice_list() -> str:
     """Human-readable, newline-separated voice IDs for --list-voices."""
     return "\n".join(VOICES)
+
+
+def complete_voice(incomplete: str) -> list[str]:
+    """Shell-completion callback for ``--voice``: known voice ids matching the prefix."""
+    return [v for v in VOICES if v.startswith(incomplete)]
