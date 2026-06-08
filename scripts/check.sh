@@ -45,6 +45,12 @@ uv run deptry .
 echo "==> import-linter (architecture contracts)"
 uv run lint-imports
 
+echo "==> max file length (500-line gate, src + tests + scripts)"
+# Keep modules small enough for humans and AI coding agents to hold in context.
+# Raising the cap is a deliberate edit to scripts/max_file_length.py, not a per-file
+# exception.
+uv run python scripts/max_file_length.py
+
 echo "==> xenon (cyclomatic complexity gate, src only)"
 # Fail the build if any function gets too branchy. Grades map to cyclomatic
 # complexity: A=1-5, B=6-10, C=11-20, ... Thresholds:
