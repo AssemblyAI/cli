@@ -5,7 +5,7 @@ from aai_cli.commands.setup import _render
 from aai_cli.steps import Step
 
 
-def test_render_steps_colors_status():
+def test_render_steps_colors_status() -> None:
     data: dict[str, list[Step]] = {
         "steps": [
             {"name": "mcp", "status": "installed", "detail": "/path"},

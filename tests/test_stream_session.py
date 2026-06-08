@@ -83,7 +83,7 @@ def test_stream_session_closes_renderer_on_error(monkeypatch):
     assert closed["n"] >= 1
 
 
-def test_stream_system_audio_uses_macos_source(monkeypatch):
+def test_stream_system_audio_uses_macos_source(monkeypatch) -> None:
     config.set_api_key("default", "sk_live")
     source_types: list[str] = []
     rates: list[int] = []

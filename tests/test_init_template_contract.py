@@ -85,7 +85,7 @@ def test_frontend_routes_exist_in_backend(template_dir):
         )
 
 
-def test_requirements_cover_backend_imports(template_dir):
+def test_requirements_cover_backend_imports(template_dir) -> None:
     """Every third-party import in api/*.py appears in requirements.txt."""
     imports: set[str] = set()
     for path in (template_dir / "api").glob("*.py"):
