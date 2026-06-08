@@ -13,7 +13,7 @@ import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aai_cli.errors import NotAuthenticated
+from aai_cli.errors import CLIError, NotAuthenticated
 
 KEYRING_SERVICE = "assemblyai-cli"
 ENV_API_KEY = "ASSEMBLYAI_API_KEY"
@@ -123,9 +123,29 @@ def get_active_profile() -> str:
     return _load().active_profile or DEFAULT_PROFILE
 
 
+def _keyring_set(username: str, secret: str) -> None:
+    """Write a secret to the OS keyring, turning backend failures into a clean error.
+
+    A locked keychain, or an existing entry whose ACL is bound to another app, makes
+    keyring raise a KeyringError (e.g. macOS errSecInvalidOwnerEdit, -25244). Surface
+    it as a CLIError so the command prints a fixable message instead of a traceback.
+    """
+    try:
+        keyring.set_password(KEYRING_SERVICE, username, secret)
+    except keyring.errors.KeyringError as exc:
+        raise CLIError(
+            f"Your OS keyring rejected the write ({exc}).",
+            error_type="keyring_error",
+            suggestion=(
+                "Unlock your keyring, or remove the stale 'assemblyai-cli' entry and "
+                "retry (macOS: security delete-generic-password -s assemblyai-cli)."
+            ),
+        ) from exc
+
+
 def set_api_key(profile: str, api_key: str) -> None:
     _validate_profile(profile)
-    keyring.set_password(KEYRING_SERVICE, profile, api_key)
+    _keyring_set(profile, api_key)
     cfg = _load()
     cfg.profiles.setdefault(profile, Profile())
     if cfg.active_profile is None:
@@ -170,8 +190,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
     key. The JWT is short-lived; an expired session surfaces as NotAuthenticated.
     """
     _validate_profile(profile)
-    keyring.set_password(
-        KEYRING_SERVICE,
+    _keyring_set(
         _session_username(profile),
         StoredSession(jwt=session_jwt, token=session_token).model_dump_json(),
     )

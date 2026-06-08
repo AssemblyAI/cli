@@ -58,6 +58,34 @@ def test_clear_api_key_missing_is_silent():
     assert config.get_api_key("never_set") is None
 
 
+def test_set_api_key_keyring_failure_raises_clean_error(monkeypatch):
+    # A keyring write failure (e.g. a locked/ACL-denied macOS keychain) must surface
+    # as a clean CLIError, never a raw PasswordSetError traceback.
+    import keyring.errors
+
+    def boom(*_a, **_k):
+        raise keyring.errors.PasswordSetError("denied by keychain")
+
+    monkeypatch.setattr(config.keyring, "set_password", boom)
+    with pytest.raises(CLIError) as exc:
+        config.set_api_key("default", "sk_abc")
+    assert "keyring" in exc.value.message.lower()
+    assert exc.value.suggestion is not None
+
+
+def test_set_session_keyring_failure_raises_clean_error(monkeypatch):
+    import keyring.errors
+
+    def boom(*_a, **_k):
+        raise keyring.errors.PasswordSetError("denied by keychain")
+
+    monkeypatch.setattr(config.keyring, "set_password", boom)
+    with pytest.raises(CLIError) as exc:
+        config.set_session("default", session_jwt="j", session_token="t", account_id=1)
+    assert "keyring" in exc.value.message.lower()
+    assert exc.value.suggestion is not None
+
+
 def test_invalid_profile_name_rejected():
     import pytest
 
