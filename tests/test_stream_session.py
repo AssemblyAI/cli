@@ -241,6 +241,39 @@ def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
     assert any("You: FakeMic" in value for value in transcript_inputs)
 
 
+def test_stream_system_audio_speaker_labels_only_diarizes_system(monkeypatch):
+    # --speaker-labels diarizes the system audio but never the mic: the "you" session
+    # is forced to speaker_labels=False so the mic stays a single "You".
+    config.set_api_key("default", "sk_live")
+    speaker_labels_by_chunk = {}
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"system"])
+
+    class FakeMic:
+        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
+            self.sample_rate = target_rate
+
+        def __iter__(self):
+            return iter([b"mic"])
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        chunk = next(iter(source))
+        speaker_labels_by_chunk[chunk] = params.speaker_labels
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "--system-audio", "--speaker-labels", "--json"])
+    assert result.exit_code == 0
+    assert speaker_labels_by_chunk[b"system"] is True
+    assert speaker_labels_by_chunk[b"mic"] is False
+
+
 def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
     config.set_api_key("default", "sk_live")
 

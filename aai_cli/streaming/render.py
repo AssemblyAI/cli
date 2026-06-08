@@ -6,7 +6,38 @@ from typing import TextIO
 from rich.console import Console
 from rich.text import Text
 
+from aai_cli import theme
 from aai_cli.render import BaseRenderer
+
+# Source label -> (display text, Rich style). System audio borrows the agent color;
+# the microphone ("you") its own. Unknown sources fall back to the raw label.
+_SOURCE_LABELS: dict[str, tuple[str, str]] = {
+    "system": ("System", "aai.agent"),
+    "you": ("You", "aai.you"),
+}
+
+
+def speaker_prefix(source: str | None, speaker: str | None) -> tuple[str, str] | None:
+    """The lead-in label and Rich style for a turn, or None when it has neither a
+    source nor a diarized speaker.
+
+    - source + speaker -> "System (A)" (system audio diarized via --speaker-labels)
+    - source only      -> "System"     (parallel system/you streams)
+    - speaker only      -> "Speaker A"  (single-stream diarization, no source label)
+
+    When a speaker is present the whole label is tinted by `theme.speaker_style` so each
+    speaker reads in its own color (matching batch transcribe's diarized output); a
+    sourced turn with no speaker keeps the source's own color.
+    """
+    label, style = (None, "aai.label")
+    if source is not None:
+        label, style = _SOURCE_LABELS.get(source, (source, "aai.label"))
+    if speaker is not None:
+        style = theme.speaker_style(speaker)
+        return (f"{label} ({speaker})" if label is not None else f"Speaker {speaker}"), style
+    if label is not None:
+        return label, style
+    return None
 
 
 class StreamRenderer(BaseRenderer):
@@ -46,25 +77,16 @@ class StreamRenderer(BaseRenderer):
         return payload
 
     @staticmethod
-    def _source_label(source: str) -> tuple[str, str]:
-        labels = {
-            "system": ("System", "aai.agent"),
-            "you": ("You", "aai.you"),
-        }
-        return labels.get(source, (source, "aai.label"))
+    def _label(text: str, source: str | None, speaker: str | None = None) -> str:
+        prefix = speaker_prefix(source, speaker)
+        return text if prefix is None else f"{prefix[0]}: {text}"
 
-    @classmethod
-    def _label(cls, text: str, source: str | None) -> str:
-        if source is None:
+    @staticmethod
+    def _styled_label(text: str, source: str | None, speaker: str | None = None) -> str | Text:
+        prefix = speaker_prefix(source, speaker)
+        if prefix is None:
             return text
-        label, _style = cls._source_label(source)
-        return f"{label}: {text}"
-
-    @classmethod
-    def _styled_label(cls, text: str, source: str | None) -> str | Text:
-        if source is None:
-            return text
-        label, style = cls._source_label(source)
+        label, style = prefix
         rendered = Text()
         rendered.append(f"{label}: ", style=style)
         rendered.append(text)
@@ -90,21 +112,24 @@ class StreamRenderer(BaseRenderer):
     def turn(self, event: object, *, source: str | None = None) -> None:
         text = getattr(event, "transcript", "") or ""
         end = bool(getattr(event, "end_of_turn", False))
+        speaker = getattr(event, "speaker_label", None)  # set when --speaker-labels diarizes
         with self._lock:
             if self.json_mode:
-                self._emit(
-                    self._with_source(
-                        {"type": "turn", "transcript": text, "end_of_turn": end},
-                        source,
-                    )
-                )
+                payload: dict[str, object] = {
+                    "type": "turn",
+                    "transcript": text,
+                    "end_of_turn": end,
+                }
+                if speaker is not None:
+                    payload["speaker"] = speaker
+                self._emit(self._with_source(payload, source))
             elif self.text_mode:
                 if end and text:
-                    self._write(self._label(text, source) + "\n")  # plain finalized line
+                    self._write(self._label(text, source, speaker) + "\n")  # plain finalized line
             elif end:
-                self._finalize_line(self._styled_label(text, source))
+                self._finalize_line(self._styled_label(text, source, speaker))
             else:
-                self._update_line(self._styled_label(text, source))
+                self._update_line(self._styled_label(text, source, speaker))
 
     def termination(self, event: object, *, source: str | None = None) -> None:
         with self._lock:

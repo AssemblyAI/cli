@@ -17,7 +17,9 @@ SYMBOL_ERROR = "✗"
 SYMBOL_WARN = "!"
 SYMBOL_HINT = "›"  # noqa: RUF001 — deliberate angle-quote glyph, not a '>' typo
 
-# Per-speaker label colors, rotated deterministically by speaker_style().
+# Per-speaker label colors, rotated deterministically by speaker_style(). Deliberately
+# excludes the brand blue: that hue is reserved for "you" (aai.you) so a diarized system
+# speaker can never be tinted the same color as your own mic.
 SPEAKER_STYLES: tuple[str, ...] = (
     "aai.speaker.0",
     "aai.speaker.1",
@@ -31,8 +33,9 @@ THEME = Theme(
         "aai.brand": f"bold {BRAND}",
         "aai.heading": f"bold {BRAND}",
         "aai.label": BRAND,
-        # Conversation labels: the human keeps the brand accent, the agent gets a
-        # distinct hue so "you:" and "agent:" are easy to tell apart at a glance.
+        # Conversation labels: the human keeps the brand accent (reserved — never reused
+        # for a diarized speaker, see SPEAKER_STYLES), the agent gets a distinct hue so
+        # "you:" and "agent:" are easy to tell apart at a glance.
         "aai.you": BRAND,
         "aai.agent": "cyan",
         # Links/URLs in cyan, the convention both the Vercel and Supabase CLIs use so
@@ -45,7 +48,7 @@ THEME = Theme(
         "aai.error": "bold red",
         "aai.warn": "yellow",
         "aai.muted": "dim",
-        "aai.speaker.0": BRAND,
+        "aai.speaker.0": "dark_orange",
         "aai.speaker.1": "cyan",
         "aai.speaker.2": "magenta",
         "aai.speaker.3": "green",

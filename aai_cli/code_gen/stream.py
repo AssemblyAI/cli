@@ -40,6 +40,7 @@ client.on(StreamingEvents.Turn, on_turn)
 """
 
 _LLM_PREAMBLE = """import os
+import time
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
@@ -57,7 +58,12 @@ gateway = OpenAI(api_key=API_KEY, base_url={base_url!r})
 PROMPTS = [
 {prompts}
 ]
+# Turns accumulate continuously; the prompt chain re-runs at most once every
+# LLM_INTERVAL seconds (0 = on every finalized turn).
+LLM_INTERVAL = {interval}
 transcript: list[str] = []
+_summarized = 0
+_last_summary = float("-inf")
 
 
 def run_chain(text: str) -> str:
@@ -73,12 +79,26 @@ def run_chain(text: str) -> str:
     return result
 
 
+def summarize(*, final: bool = False) -> None:
+    # Refresh the answer over the growing transcript, throttled to LLM_INTERVAL. `final`
+    # forces a closing refresh so turns since the last tick aren't lost on stop.
+    global _summarized, _last_summary
+    turns = len(transcript)
+    if turns <= _summarized:
+        return
+    now = time.monotonic()
+    if not final and LLM_INTERVAL > 0 and now - _last_summary < LLM_INTERVAL:
+        return
+    _summarized = turns
+    _last_summary = now
+    print(run_chain(" ".join(transcript)))
+
+
 def on_turn(client: StreamingClient, event: TurnEvent) -> None:
-    # Refresh the answer on every finalized turn, over the growing transcript.
     if not event.end_of_turn or not event.transcript:
         return
     transcript.append(event.transcript)
-    print(run_chain(" ".join(transcript)))
+    summarize()
 
 
 client = StreamingClient(
@@ -92,6 +112,17 @@ print("Listening… press Ctrl-C to stop.")
 try:
     client.stream(aai.extras.MicrophoneStream(sample_rate={rate}))
 finally:
+    client.disconnect(terminate=True)
+"""
+
+# Same as _FOOTER, but flushes a closing summary (incl. on Ctrl-C) so the turns since the
+# last interval tick are reflected before disconnecting.
+_LLM_FOOTER = """
+print("Listening… press Ctrl-C to stop.")
+try:
+    client.stream(aai.extras.MicrophoneStream(sample_rate={rate}))
+finally:
+    summarize(final=True)
     client.disconnect(terminate=True)
 """
 
@@ -114,6 +145,7 @@ def _build_preamble(imports: str, llm: dict[str, object] | None) -> str:
             prompts=prompts,
             model=llm["model"],
             max_tokens=llm["max_tokens"],
+            interval=llm.get("interval", 0.0),
         )
     return _PREAMBLE.format(imports=imports)
 
@@ -138,4 +170,5 @@ def render(merged: dict[str, object], *, llm: dict[str, object] | None = None) -
     # Mic capture rate must match StreamingParameters.sample_rate, else audio is corrupt.
     rate = merged.get("sample_rate", 16000)
     connect = _build_connect(merged)
-    return preamble + "\n" + connect + "\n" + _FOOTER.format(rate=rate)
+    footer = _LLM_FOOTER if llm else _FOOTER
+    return preamble + "\n" + connect + "\n" + footer.format(rate=rate)
