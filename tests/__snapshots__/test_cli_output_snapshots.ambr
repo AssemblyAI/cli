@@ -567,26 +567,29 @@
   │                                                     (repeatable).            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
-  │ --end-of-turn-confid…                         FLOAT    End-of-turn           │
-  │                                                        confidence (0-1).     │
-  │ --min-turn-silence                            INTEGER  Min silence to end a  │
-  │                                                        turn (ms).            │
-  │ --max-turn-silence                            INTEGER  Max silence before    │
-  │                                                        ending a turn (ms).   │
-  │ --vad-threshold                               FLOAT    Voice-activity        │
-  │                                                        threshold.            │
-  │ --format-turns           --no-format-turns             Punctuate/format      │
-  │                                                        finalized turns.      │
-  │ --include-partial-tu…                                  Emit partial turns.   │
+  │ --end-of-turn-co…                        FLOAT RANGE       End-of-turn       │
+  │                                          [0.0<=x<=1.0]     confidence (0-1). │
+  │ --min-turn-silen…                        INTEGER           Min silence to    │
+  │                                                            end a turn (ms).  │
+  │ --max-turn-silen…                        INTEGER           Max silence       │
+  │                                                            before ending a   │
+  │                                                            turn (ms).        │
+  │ --vad-threshold                          FLOAT RANGE       Voice-activity    │
+  │                                          [0.0<=x<=1.0]     threshold (0-1).  │
+  │ --format-turns       --no-format-tur…                      Punctuate/format  │
+  │                                                            finalized turns.  │
+  │ --include-partia…                                          Emit partial      │
+  │                                                            turns.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
-  │ --speaker-labels                 Label speakers.                             │
-  │ --max-speakers          INTEGER  Max speakers.                               │
+  │ --speaker-labels                              Label speakers.                │
+  │ --max-speakers          INTEGER RANGE [x>=1]  Max speakers.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Features ───────────────────────────────────────────────────────────────────╮
   │ --voice-focus                 [near-field|far-field]  Voice focus (noise     │
   │                                                       suppression model).    │
-  │ --voice-focus-thresho…        FLOAT                   Voice-focus threshold. │
+  │ --voice-focus-thresho…        FLOAT RANGE             Voice-focus threshold  │
+  │                               [0.0<=x<=1.0]           (0-1).                 │
   │ --inactivity-timeout          INTEGER                 Auto-close after N     │
   │                                                       seconds idle.          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -681,28 +684,28 @@
   │ --disfluencies                          Keep filler words (e.g. um, uh).     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
-  │ --speaker-labels                    Enable diarization.                      │
-  │ --speakers-expected        INTEGER  Hint speaker count.                      │
-  │ --multichannel                      Transcribe each audio channel            │
-  │                                     separately.                              │
+  │ --speaker-labels                                 Enable diarization.         │
+  │ --speakers-expected        INTEGER RANGE [x>=1]  Hint speaker count.         │
+  │ --multichannel                                   Transcribe each audio       │
+  │                                                  channel separately.         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
-  │ --redact-pii                                        Redact PII from the      │
-  │                                                     transcript.              │
-  │ --redact-pii-policy             TEXT                Comma-separated PII      │
-  │                                                     policies (e.g.           │
-  │                                                     person_name,...).        │
-  │ --redact-pii-sub                [hash|entity_name]  How to replace redacted  │
-  │                                                     PII.                     │
-  │ --redact-pii-audio                                  Also redact audio.       │
-  │ --filter-profanity                                  Mask profanity.          │
-  │ --content-safety                                    Detect sensitive         │
-  │                                                     content.                 │
-  │ --content-safety-confid…        INTEGER             Content-safety           │
-  │                                                     confidence threshold     │
-  │                                                     (25-100).                │
-  │ --speech-threshold              FLOAT               Minimum proportion of    │
-  │                                                     speech required (0-1).   │
+  │ --redact-pii                                          Redact PII from the    │
+  │                                                       transcript.            │
+  │ --redact-pii-policy           TEXT                    Comma-separated PII    │
+  │                                                       policies (e.g.         │
+  │                                                       person_name,...).      │
+  │ --redact-pii-sub              [hash|entity_name]      How to replace         │
+  │                                                       redacted PII.          │
+  │ --redact-pii-audio                                    Also redact audio.     │
+  │ --filter-profanity                                    Mask profanity.        │
+  │ --content-safety                                      Detect sensitive       │
+  │                                                       content.               │
+  │ --content-safety-conf…        INTEGER RANGE           Content-safety         │
+  │                               [25<=x<=100]            confidence threshold   │
+  │                                                       (25-100).              │
+  │ --speech-threshold            FLOAT RANGE             Minimum proportion of  │
+  │                               [0.0<=x<=1.0]           speech required (0-1). │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
   │ --summarization                                      Summarize the           │
