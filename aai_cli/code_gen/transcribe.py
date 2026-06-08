@@ -86,7 +86,7 @@ def _llm_gateway_block(llm_gateway: dict[str, object]) -> list[str]:
         f'        content = prompt + "\\n\\n{llm.TRANSCRIPT_TAG}"',
         '        extra = {"transcript_id": transcript.id}',
         "    else:",
-        '        content = prompt + "\\n\\n" + result',
+        '        content = prompt + "\\n\\nTranscript:\\n" + result',
         "        extra = None",
         "    response = gateway.chat.completions.create(",
         f"        model={llm_gateway['model']!r},",
