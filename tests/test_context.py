@@ -28,7 +28,7 @@ def test_run_command_maps_cli_error_to_exit_code():
         raise NotAuthenticated()
 
     result = runner.invoke(_make_app(body, auto_login=False), ["go"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
 
 
 def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
@@ -48,12 +48,14 @@ def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
         raise NotAuthenticated()
 
     result = runner.invoke(_make_app(body), ["go"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert calls["count"] == 1
     assert config.get_session("default") == {"jwt": "jwt_auto", "token": "tok_auto"}
     assert config.get_account_id("default") == 42
     assert config.resolve_api_key() == "sk_auto"
     assert "Run the same command again" in result.output
+    # The auto-login notice prints because AppState defaults to non-quiet (quiet=False).
+    assert "starting browser login" in result.output
 
 
 def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
@@ -105,7 +107,7 @@ def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
         raise auth_failure()
 
     result = runner.invoke(_make_app(body), ["go"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
 
 
 def test_run_command_never_auto_logs_in_login_command(monkeypatch):
@@ -128,7 +130,7 @@ def test_run_command_never_auto_logs_in_login_command(monkeypatch):
         run_command(ctx, body)
 
     result = runner.invoke(app, ["login"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
 
 
 def test_run_command_runs_body_on_success():
@@ -227,7 +229,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
 
     result = runner.invoke(_make_app(body), ["go"])
     assert ran["login"] == 1  # auto-login was attempted despite the env key
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert "Run the same command again" in result.output
 
 

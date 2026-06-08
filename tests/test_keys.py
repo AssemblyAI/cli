@@ -87,7 +87,7 @@ def test_keys_list_without_session_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     with patch("aai_cli.commands.keys.ams.list_projects", return_value=[]) as list_projects:
         result = runner.invoke(app, ["keys", "list", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     list_projects.assert_not_called()
     assert "Run the same command again" in result.output
@@ -158,7 +158,7 @@ def test_keys_list_renders_human_table():
         }
     ]
     with (
-        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.output.resolve_json", return_value=False),
         patch("aai_cli.commands.keys.ams.list_projects", return_value=projects),
     ):
         result = runner.invoke(app, ["keys", "list"])

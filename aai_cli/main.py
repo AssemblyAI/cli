@@ -82,13 +82,17 @@ app = typer.Typer(
     name="aai",
     help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
     no_args_is_help=True,
+    # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
+    # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
     cls=_OrderedGroup,
 )
 
 
 def _version_callback(value: bool) -> None:
-    """Eager ``--version``: print the version and exit before any command runs."""
+    """Print the version and exit when `aai --version`/`-V` is passed, before any command
+    runs. Mirrors the reflex (`tool --version`) every other CLI answers; the `version`
+    subcommand stays for parity."""
     if value:
         typer.echo(__version__)
         raise typer.Exit()
@@ -110,23 +114,29 @@ def main(
         None, "--env", help="Backend environment (production, sandbox000)."
     ),
     sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
+    ),
+    # Underscore name: the eager callback does the work, so the parameter is intentionally
+    # unused in the body (avoids ARG001 without a `del`).
     _version: bool = typer.Option(
         False,
         "--version",
+        "-V",
         help="Show the CLI version and exit.",
         callback=_version_callback,
-        # Eager so --version short-circuits before subcommand/arg parsing. The plain
-        # `aai --version` path behaves identically with or without this, so there's no
-        # cheap test that distinguishes it.
+        # Eager so --version short-circuits before subcommand/arg parsing — the idiomatic
+        # default. The plain `aai --version` path behaves identically with or without this,
+        # so there's no cheap test that distinguishes it.
         is_eager=True,  # pragma: no mutate
     ),
 ) -> None:
     if sandbox and env is None:
         env = "sandbox000"
-    state = AppState(profile=profile, env=env)
+    state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
-    # The command's own --json flag isn't parsed yet, so fall back to auto-detection
-    # (JSON when piped/agentic) — the same default run_command uses for its errors.
+    # The command's own --json flag isn't parsed yet, and output is human-by-default, so a
+    # root-callback (e.g. bad --env) error renders as human text on stderr.
     json_mode = output.resolve_json(explicit=False)
     try:
         environments.set_active(resolve_environment(state))
@@ -134,7 +144,7 @@ def main(
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
     warning = env_override_warning(state)
-    if warning:
+    if warning and not quiet:
         output.error_console.print(output.warn(warning))
 
 

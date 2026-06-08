@@ -31,6 +31,9 @@ class CLIError(Exception):
 
 
 class NotAuthenticated(CLIError):
+    # Exit code 4 (not 2) so scripts can tell "you're not signed in" apart from a
+    # usage error: UsageError keeps the conventional 2, auth gets its own code, the
+    # same split gh uses.
     def __init__(
         self,
         message: str = "Not authenticated.",
@@ -38,7 +41,7 @@ class NotAuthenticated(CLIError):
         suggestion: str | None = "Run 'aai login'.",
     ) -> None:
         super().__init__(
-            message, error_type="not_authenticated", exit_code=2, suggestion=suggestion
+            message, error_type="not_authenticated", exit_code=4, suggestion=suggestion
         )
 
 

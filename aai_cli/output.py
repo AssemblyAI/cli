@@ -29,23 +29,39 @@ def _stdout_is_tty() -> bool:
 
 
 def _is_agentic() -> bool:
+    """True when there's no interactive human at stdout: piped/redirected, or a CI/agent
+    env var is set. Used to suppress *interactivity* (the spinner) — never to change the
+    output *shape*; `resolve_json` keeps text the default regardless (see its docstring).
+    """
     if not _stdout_is_tty():
         return True
     return any(os.environ.get(var) for var in _AGENT_ENV_VARS)
 
 
 def resolve_json(*, explicit: bool) -> bool:
-    """JSON output when asked for, or when not attached to an interactive human."""
-    return explicit or _is_agentic()
+    """JSON output only when explicitly requested with ``--json`` (or ``-o json``).
+
+    Human-readable text is the default for every command, in every context — a
+    terminal, a pipe, CI, or an agent. We deliberately do NOT switch the output
+    *shape* to JSON just because stdout is piped or a ``CI``/``CLAUDECODE`` env var
+    is set: that surprised plain-text pipelines like ``aai transcribe x | grep word``
+    by handing them a JSON blob instead of the transcript. Being off a TTY still
+    drops color and interactivity (Rich handles that automatically); it just no
+    longer changes the structure. This matches gh/docker/kubectl, which keep their
+    human/tabular output until you opt in to ``--json``.
+    """
+    return explicit
 
 
 def stream_output_modes(field: choices.TextOrJson | None, *, json_mode: bool) -> tuple[bool, bool]:
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
-    Shared by `stream` and `agent`, whose renderers take the same two flags: `text`
-    emits plain finalized lines, `json` forces NDJSON, and an unset field falls back
-    to the auto-detected `json_mode` (JSON when piped/agentic, human otherwise). Typer
-    validates `field` against the enum, so no value check is needed here.
+    Shared by `stream` and `agent`. ``-o text`` emits plain finalized lines (handy for
+    ``aai stream -o text | aai llm -f``); ``-o json`` or ``--json`` forces NDJSON; an
+    unset field renders the live human panel. With output now human-by-default
+    (`resolve_json` only flips on an explicit `--json`), `json_mode` here is simply
+    whether `--json` was passed — we never auto-switch to NDJSON just because piped.
+    Typer validates `field` against the enum, so no value check is needed here.
     """
     text_mode = field is choices.TextOrJson.text
     return text_mode, (field is choices.TextOrJson.json) or (json_mode and not text_mode)
@@ -159,7 +175,7 @@ def print_code(code: str, *, language: str = "python") -> None:
     otherwise. Piping/redirecting (or an agent) yields plain text with no ANSI, so
     `aai … --show-code > script.py` stays byte-clean and runnable.
     """
-    if _is_agentic():
+    if not _stdout_is_tty():
         print(code)
         return
     from rich.syntax import Syntax  # lazily import Pygments-backed highlighter
