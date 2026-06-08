@@ -7,7 +7,7 @@ from rich.markup import escape
 
 from aai_cli import choices, config, help_panels, output, stdio
 from aai_cli import llm as gateway
-from aai_cli.context import AppState, run_command
+from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
@@ -141,6 +141,7 @@ def llm(
             transcript_id=transcript_id,
         )
         content = gateway.content_of(response)
+        config.record_request(resolve_profile(state))
         if output_field == "text":
             # Just the answer, raw — so `… | aai llm -o text "…" | next` composes cleanly.
             output.emit_text(content)

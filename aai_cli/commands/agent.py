@@ -16,7 +16,7 @@ from aai_cli.agent.session import (
     run_session,
 )
 from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_voice_list
-from aai_cli.context import AppState, run_command
+from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.streaming.sources import FileSource
@@ -165,6 +165,7 @@ def agent(
         )
         try:
             run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
+            config.record_request(resolve_profile(state))
         except KeyboardInterrupt:
             renderer.stopped()
         except BrokenPipeError as exc:
