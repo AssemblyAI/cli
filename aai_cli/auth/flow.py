@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 import webbrowser
 from dataclasses import dataclass
 
@@ -98,8 +97,8 @@ def _open_browser(url: str) -> None:
         )
 
 
-def _capture(state: str) -> loopback.CallbackResult:
-    return loopback.capture_callback(state)
+def _capture() -> loopback.CallbackResult:
+    return loopback.capture_callback()
 
 
 def _reusable_cli_key(token: _Token) -> str | None:
@@ -138,12 +137,8 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
 
 def run_login_flow() -> LoginResult:
     """Drive the full browser + AMS login and return a LoginResult."""
-    # A fresh single-use nonce binds the browser hand-off to this loopback capture:
-    # build_start_url carries it to Stytch, capture_callback only accepts a callback
-    # that echoes it back. token_urlsafe(32) is 256 bits of entropy — unguessable.
-    state = secrets.token_urlsafe(32)  # pragma: no mutate (any large nonce works; 32 isn't magic)
-    _open_browser(discovery.build_start_url(state))
-    result = _capture(state)
+    _open_browser(discovery.build_start_url())
+    result = _capture()
 
     if result.error == "timeout":
         raise APIError(

@@ -26,7 +26,7 @@ shell history. Do not look for one.
 
 **Environment binding.** The backend environment is selected by `--env`
 (or `AAI_ENV`, or the profile's stored env). `--sandbox` is shorthand for
-`--env sandbox000`. The default environment is currently `sandbox000`.
+`--env sandbox000`. The default environment is `production`.
 **A credential is only valid against the environment that minted it** — a
 sandbox key fails against production and vice-versa. If a freshly-working key
 suddenly returns auth errors, check you are on the same `--env` you logged in

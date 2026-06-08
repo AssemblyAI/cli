@@ -58,6 +58,108 @@ def test_clear_api_key_missing_is_silent():
     assert config.get_api_key("never_set") is None
 
 
+def test_set_api_key_keyring_failure_raises_clean_error(monkeypatch):
+    # A keyring write failure (e.g. a locked/ACL-denied macOS keychain) must surface
+    # as a clean CLIError, never a raw PasswordSetError traceback.
+    import keyring.errors
+
+    def boom(*_a, **_k):
+        raise keyring.errors.PasswordSetError("denied by keychain")
+
+    monkeypatch.setattr(config.keyring, "set_password", boom)
+    with pytest.raises(CLIError) as exc:
+        config.set_api_key("default", "sk_abc")
+    assert "keyring" in exc.value.message.lower()
+    assert exc.value.suggestion is not None
+
+
+def test_set_session_keyring_failure_raises_clean_error(monkeypatch):
+    import keyring.errors
+
+    def boom(*_a, **_k):
+        raise keyring.errors.PasswordSetError("denied by keychain")
+
+    monkeypatch.setattr(config.keyring, "set_password", boom)
+    with pytest.raises(CLIError) as exc:
+        config.set_session("default", session_jwt="j", session_token="t", account_id=1)
+    assert "keyring" in exc.value.message.lower()
+    assert exc.value.suggestion is not None
+
+
+def test_persist_login_writes_key_env_and_session():
+    config.persist_login(
+        "default",
+        api_key="sk_new",
+        env="production",
+        session_jwt="j",
+        session_token="t",
+        account_id=7,
+    )
+    assert config.get_api_key("default") == "sk_new"
+    assert config.get_profile_env("default") == "production"
+    assert config.get_account_id("default") == 7
+    assert config.get_session("default") == {"jwt": "j", "token": "t"}
+
+
+def _fail_on_session_write(monkeypatch):
+    """Make keyring writes to the session entry fail, leaving the api-key write alone.
+
+    Reproduces the partial-write window: set_api_key succeeds, set_session does not.
+    """
+    import keyring.errors
+
+    real_set = config.keyring.set_password
+
+    def selective(service, username, secret):
+        if username.startswith(config.SESSION_KEYRING_PREFIX + ":"):
+            raise keyring.errors.PasswordSetError("denied by keychain")
+        return real_set(service, username, secret)
+
+    monkeypatch.setattr(config.keyring, "set_password", selective)
+
+
+def test_persist_login_rolls_back_to_empty_when_session_write_fails(monkeypatch):
+    # A fresh profile: if the session write fails, nothing must persist — no orphaned
+    # API key or env that would make the CLI look logged in with no usable session.
+    _fail_on_session_write(monkeypatch)
+    with pytest.raises(CLIError):
+        config.persist_login(
+            "default",
+            api_key="sk_new",
+            env="production",
+            session_jwt="j",
+            session_token="t",
+            account_id=5,
+        )
+    assert config.get_api_key("default") is None
+    assert config.get_profile_env("default") is None
+    assert config.get_account_id("default") is None
+    assert config.get_session("default") is None
+
+
+def test_persist_login_restores_prior_credentials_when_session_write_fails(monkeypatch):
+    # An existing logged-in profile must be left exactly as it was if a re-login fails
+    # partway, rather than clobbered with the half-applied new values.
+    config.set_api_key("default", "sk_old")
+    config.set_profile_env("default", "sandbox000")
+    config.set_session("default", session_jwt="oldj", session_token="oldt", account_id=1)
+
+    _fail_on_session_write(monkeypatch)
+    with pytest.raises(CLIError):
+        config.persist_login(
+            "default",
+            api_key="sk_new",
+            env="production",
+            session_jwt="j",
+            session_token="t",
+            account_id=5,
+        )
+    assert config.get_api_key("default") == "sk_old"
+    assert config.get_profile_env("default") == "sandbox000"
+    assert config.get_account_id("default") == 1
+    assert config.get_session("default") == {"jwt": "oldj", "token": "oldt"}
+
+
 def test_invalid_profile_name_rejected():
     import pytest
 
