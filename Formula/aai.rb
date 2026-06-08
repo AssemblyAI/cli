@@ -6,6 +6,7 @@ class Aai < Formula
   url "https://github.com/AssemblyAI/cli/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "0" * 64 # FILLED IN by the release cut (plan Task 2) once the v0.1.0 tag exists
   license "MIT"
+  head "https://github.com/AssemblyAI/cli.git", branch: "main"
 
   depends_on "pkgconf" => :build      # cffi / cryptography native builds
   depends_on "rust" => :build         # pydantic-core, jiter, cryptography
