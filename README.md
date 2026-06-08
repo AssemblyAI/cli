@@ -27,24 +27,34 @@
 
 ## Installation
 
-```sh
-# YOLO
-curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
-
-# pipx (recommended)
-pipx install "git+https://github.com/AssemblyAI/cli.git"
-```
-
-Requires Python 3.12+. The installer prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`. Mic and speaker support (for `stream` and `agent`) ships by default via [`sounddevice`](https://python-sounddevice.readthedocs.io): its macOS and Windows wheels bundle PortAudio; Linux needs it once via `sudo apt-get install libportaudio2`.
-
-### Homebrew (macOS / Linux)
+### Homebrew (recommended — macOS / Linux)
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
-brew install aai
+brew install --HEAD aai
 ```
 
-`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. Upgrade with `brew upgrade aai`; remove with `brew uninstall aai`.
+`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. While the repo is private and pre-release, `--HEAD` builds from the latest `main` (the tap clone uses your existing GitHub credentials); once the first release is tagged, drop the flag and just `brew install aai`. Upgrade with `brew upgrade --fetch-HEAD aai`; remove with `brew uninstall aai`.
+
+### pipx / uv
+
+```sh
+# pipx
+pipx install "git+https://github.com/AssemblyAI/cli.git"
+
+# uv
+uv tool install "git+https://github.com/AssemblyAI/cli.git"
+```
+
+Requires Python 3.12+. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`. You'll also want [`ffmpeg`](https://ffmpeg.org) on `PATH` to decode non-WAV/URL audio.
+
+### One-liner
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+```
+
+Prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`.
 
 ## Quick Start
 

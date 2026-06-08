@@ -1,18 +1,25 @@
-"""Real install-and-run smoke test for install.sh.
+"""Real install-and-run smoke tests for the documented install paths.
 
-Builds a wheel from the checkout and runs install.sh against it (via the
-test-only AAI_SPEC override) into a hermetic location, then asserts the
-installed `aai` binary actually runs. This is the one check that exercises the
-public install path end to end: dependency resolution, the console entrypoint,
-and the pipx / pip --user branches in install.sh.
+Builds a wheel from the checkout once, then installs it into hermetic locations
+and asserts the resulting `aai` binary actually runs — exercising dependency
+resolution + the console entrypoint for each documented installer:
+
+* install.sh's pipx and pip --user branches (via the test-only AAI_SPEC
+  override, which installs the wheel instead of the public git URL so tests
+  need no push); install.sh's pipx branch is literally `pipx install <wheel>`,
+  so it doubles as coverage of the README's `pipx install` command.
+* `uv tool install <wheel>` — the README's uv path.
+
+The Homebrew path is covered separately by the `formula-install` CI job, which
+does a real `brew install` of the formula built against the branch source.
 
 Marked `install_script`: slow + needs network (deps resolve from PyPI) and
 pipx/uv. Excluded from the default run; invoke explicitly::
 
     uv run pytest -m install_script
 
-The two tests map to the two install branches; CI runs both on Linux and only
-the pipx branch on macOS.
+CI runs every branch on Linux; on macOS it runs the pipx + uv tool branches
+(`pip --user` is flaky there under PEP 668).
 """
 
 from __future__ import annotations
@@ -115,3 +122,27 @@ def test_install_via_pip_user(built_wheel: Path, tmp_path: Path) -> None:
     run = subprocess.run([_sh(), str(INSTALL_SH)], env=env, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
     _assert_aai_runs(userbase / "bin" / "aai")
+
+
+def test_install_via_uv_tool(built_wheel: Path, tmp_path: Path) -> None:
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH; required for the uv tool install branch")
+    if not _pypi_reachable():
+        pytest.skip("PyPI unreachable; skipping real-install smoke test (offline)")
+
+    # Hermetic uv tool dirs so the install never touches the developer's real
+    # toolchain; UV_TOOL_BIN_DIR is where uv links the `aai` entrypoint.
+    bindir = tmp_path / "uv_bin"
+    env = {
+        **os.environ,
+        "UV_TOOL_DIR": str(tmp_path / "uv_tools"),
+        "UV_TOOL_BIN_DIR": str(bindir),
+    }
+    run = subprocess.run(
+        ["uv", "tool", "install", str(built_wheel)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == 0, run.stderr
+    _assert_aai_runs(bindir / "aai")
