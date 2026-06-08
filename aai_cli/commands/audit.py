@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
 
 import typer
 from rich.markup import escape
@@ -51,18 +50,6 @@ def _format_action(action: object) -> str:
 def _is_login(entry: Mapping[str, object]) -> bool:
     raw = str(entry.get("action_taken") or "")
     return raw in _LOGIN_ACTIONS or _normalize_action(raw) in _LOGIN_ACTIONS
-
-
-def _parse_time(value: object) -> datetime | None:
-    parsed = timeparse.parse_iso_utc(value)
-    return None if parsed is None else parsed.replace(tzinfo=None)
-
-
-def _format_time(value: object) -> str:
-    parsed = _parse_time(value)
-    if parsed is None:
-        return str(value or "")
-    return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _actor_label(entry: Mapping[str, object]) -> str:
@@ -135,7 +122,7 @@ def audit(
             table = output.data_table("when (UTC)", "event", "resource", "actor")
             for entry in shown:
                 table.add_row(
-                    escape(_format_time(entry.get("log_time"))),
+                    escape(timeparse.format_utc_datetime(entry.get("log_time"))),
                     escape(_format_action(entry.get("action_taken"))),
                     escape(_resource_label(entry)),
                     escape(_actor_label(entry)),

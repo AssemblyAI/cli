@@ -27,3 +27,26 @@ def parse_iso_utc(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def format_utc_day(value: object) -> str:
+    """Render an ISO timestamp as its UTC calendar day (``YYYY-MM-DD``).
+
+    Falls back to the stringified input when it isn't a parseable timestamp, so a
+    listing never blanks out a value it couldn't interpret.
+    """
+    parsed = parse_iso_utc(value)
+    if parsed is None:
+        return str(value or "")
+    return parsed.date().isoformat()
+
+
+def format_utc_datetime(value: object) -> str:
+    """Render an ISO timestamp as a UTC ``YYYY-MM-DD HH:MM:SS`` string.
+
+    Falls back to the stringified input when it isn't a parseable timestamp.
+    """
+    parsed = parse_iso_utc(value)
+    if parsed is None:
+        return str(value or "")
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")

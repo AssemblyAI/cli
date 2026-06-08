@@ -29,17 +29,6 @@ def _utc_day_start(day: str) -> str:
     return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC).isoformat()
 
 
-def _parse_usage_timestamp(value: object) -> datetime | None:
-    return timeparse.parse_iso_utc(value)
-
-
-def _format_usage_day(value: object) -> str:
-    parsed = _parse_usage_timestamp(value)
-    if parsed is None:
-        return str(value or "")
-    return parsed.date().isoformat()
-
-
 def _format_usage_number(value: object) -> str:
     number = jsonshape.as_float(value)
     if number.is_integer():
@@ -52,10 +41,10 @@ def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
 
 
 def _window_label(item: Mapping[str, object]) -> str:
-    start = _parse_usage_timestamp(item.get("start_timestamp"))
-    end = _parse_usage_timestamp(item.get("end_timestamp"))
+    start = timeparse.parse_iso_utc(item.get("start_timestamp"))
+    end = timeparse.parse_iso_utc(item.get("end_timestamp"))
     if start is None or end is None:
-        return _format_usage_day(item.get("start_timestamp"))
+        return timeparse.format_utc_day(item.get("start_timestamp"))
     if end.date() == start.date() + timedelta(days=1):
         return start.date().isoformat()
     return f"{start.date().isoformat()} to {end.date().isoformat()}"
@@ -162,7 +151,10 @@ def usage(
                 else [item for item in items if jsonshape.as_float(item.get("total"))]
             )
             total = sum(jsonshape.as_float(item.get("total")) for item in items)
-            range_label = f"{_format_usage_day(start_date)} to {_format_usage_day(end_date)} (UTC)"
+            range_label = (
+                f"{timeparse.format_utc_day(start_date)} to "
+                f"{timeparse.format_utc_day(end_date)} (UTC)"
+            )
             summary = Text(
                 f"Usage total: {_format_usage_number(total)} for {range_label}",
                 style="aai.heading",
