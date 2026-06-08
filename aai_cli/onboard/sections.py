@@ -6,6 +6,9 @@ from enum import Enum
 import assemblyai as aai
 
 from aai_cli import client, config, environments, output, transcribe_render
+from aai_cli.commands import doctor as doctor_cmd
+from aai_cli.commands import init as init_cmd
+from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import NotAuthenticated
 from aai_cli.onboard import progress
@@ -78,4 +81,70 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     count = config.record_request(ctx.profile)
     transcribe_render.render_transcript_result(transcript, output.console)
     output.console.print(progress.render_progress(count))
+    return SectionResult.DONE
+
+
+_BUILD_CHOICES = [
+    ("audio-transcription", "Transcribe audio files (web app)"),
+    ("live-captions", "Live captions from streaming audio"),
+    ("voice-agent", "A two-way voice agent"),
+    ("skip", "Just the CLI for now"),
+]
+
+
+def environment(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
+    prompter.section("Environment check")
+    checks = [
+        doctor_cmd._check_python(),  # pyright: ignore[reportPrivateUsage]
+        doctor_cmd._check_ffmpeg(),  # pyright: ignore[reportPrivateUsage]
+        doctor_cmd._check_audio(),  # pyright: ignore[reportPrivateUsage]
+    ]
+    output.console.print(doctor_cmd._render({"ok": True, "checks": checks}))  # pyright: ignore[reportPrivateUsage]
+    prompter.note("Warnings here only affect live streaming and the voice agent.")
+    return SectionResult.DONE
+
+
+def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
+    prompter.section("What do you want to build?")
+    choice = prompter.select("Pick a starting point", _BUILD_CHOICES, default="skip")
+    if choice == "skip":
+        return SectionResult.SKIPPED
+    if not prompter.confirm(f"Scaffold the '{choice}' app now?", default=True):
+        prompter.note(f"You can run `aai init {choice}` whenever you're ready.")
+        return SectionResult.SKIPPED
+    # launch=False: never block the wizard on a running dev server.
+    init_cmd.run_init(
+        ctx.state,
+        template=choice,
+        directory=None,
+        no_install=False,
+        no_open=True,
+        force=False,
+        here=False,
+        port=3000,
+        json_mode=ctx.json_mode,
+        launch=False,
+    )
+    return SectionResult.DONE
+
+
+def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
+    prompter.section("Coding agent (optional)")
+    if not prompter.confirm("Wire up Claude Code (docs MCP + skills)?", default=False):
+        return SectionResult.SKIPPED
+    steps = [
+        setup_cmd._install_mcp("user", force=False),  # pyright: ignore[reportPrivateUsage]
+        setup_cmd._install_skill(force=False),  # pyright: ignore[reportPrivateUsage]
+        setup_cmd._install_cli_skill(force=False),  # pyright: ignore[reportPrivateUsage]
+    ]
+    output.console.print(setup_cmd._render({"steps": steps}))  # pyright: ignore[reportPrivateUsage]
+    return SectionResult.DONE
+
+
+def next_steps(prompter: Prompter, ctx: WizardContext) -> SectionResult:
+    prompter.section("You're set up")
+    output.console.print(progress.render_progress(config.get_requests_made(ctx.profile)))
+    output.console.print(output.hint("Transcribe a file:  aai transcribe <file>"))
+    output.console.print(output.hint("Stream live audio:  aai stream"))
+    output.console.print(output.hint("Build an app:       aai init"))
     return SectionResult.DONE
