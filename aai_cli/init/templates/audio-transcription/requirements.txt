@@ -1,6 +1,6 @@
-fastapi
-uvicorn
+fastapi>=0.115.0
+uvicorn>=0.30.0
 assemblyai>=0.64,<1
-python-dotenv
-python-multipart
-openai
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+openai>=2.41.0

@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-httpx2
-python-dotenv
+fastapi>=0.115.0
+uvicorn>=0.30.0
+httpx2>=2.0.0
+python-dotenv>=1.0.0

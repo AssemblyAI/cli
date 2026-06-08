@@ -104,6 +104,27 @@ def test_requirements_cover_backend_imports(template_dir) -> None:
         )
 
 
+def test_requirements_pin_versions(template_dir) -> None:
+    """Every dependency in requirements.txt carries a version specifier.
+
+    SCA scanners read a starter app's requirements.txt as a lockfile: an unpinned
+    line like ``fastapi`` reports as a missing version and blocks vulnerability
+    analysis. Require a specifier (``>=`` floor, ``==`` pin, ...) on every line.
+    """
+    specifier = re.compile(r"(===|==|~=|!=|>=|<=|>|<)")
+    unpinned: list[str] = []
+    for raw in (template_dir / "requirements.txt").read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if not specifier.search(line.split(";", 1)[0]):  # ignore any env marker
+            unpinned.append(line)
+    assert not unpinned, (
+        f"{template_dir.name}: requirements.txt has unpinned dependencies {unpinned}; "
+        f"each needs a version specifier so SCA scanners can analyze the lockfile"
+    )
+
+
 def test_status_endpoint_does_not_block(template_dir):
     """Guard against the blocking SDK call: a poll endpoint must not wait_for_completion."""
     src = (template_dir / "api" / "index.py").read_text()
