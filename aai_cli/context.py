@@ -91,10 +91,10 @@ def env_override_warning(state: AppState) -> str | None:
 def persist_browser_login(profile: str, env: str) -> None:
     """Run the browser login flow and persist its credentials for `profile`/`env`."""
     result = run_login_flow()
-    config.set_api_key(profile, result.api_key)
-    config.set_profile_env(profile, env)
-    config.set_session(
+    config.persist_login(
         profile,
+        api_key=result.api_key,
+        env=env,
         session_jwt=result.session_jwt,
         session_token=result.session_token,
         account_id=result.account_id,

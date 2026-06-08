@@ -143,6 +143,19 @@ def _keyring_set(username: str, secret: str) -> None:
         ) from exc
 
 
+def _keyring_restore(username: str, prior: str | None) -> None:
+    """Best-effort restore of a keyring entry to a snapshot value, for login rollback.
+
+    Suppresses keyring errors (including a delete of an absent entry) so a failed
+    rollback never masks the original write error that triggered it.
+    """
+    with contextlib.suppress(keyring.errors.KeyringError):
+        if prior is None:
+            keyring.delete_password(KEYRING_SERVICE, username)
+        else:
+            keyring.set_password(KEYRING_SERVICE, username, prior)
+
+
 def set_api_key(profile: str, api_key: str) -> None:
     _validate_profile(profile)
     _keyring_set(profile, api_key)
@@ -225,6 +238,46 @@ def clear_session(profile: str) -> None:
     if prof and prof.account_id is not None:
         prof.account_id = None
         _dump(cfg)
+
+
+def persist_login(
+    profile: str,
+    *,
+    api_key: str,
+    env: str,
+    session_jwt: str,
+    session_token: str,
+    account_id: int,
+) -> None:
+    """Atomically persist a full browser-login result (API key + env + session).
+
+    The three writes span the keyring and config.toml, so a mid-sequence failure
+    (e.g. a locked keychain after the key is already stored) would otherwise leave a
+    half-written profile — an API key with no session, which looks signed-in but
+    can't reach AMS. On any failure the pre-login snapshot is restored: config.toml
+    is rewritten verbatim in one atomic dump, and the two keyring entries are
+    restored best-effort.
+    """
+    _validate_profile(profile)
+    prior_api_key = keyring.get_password(KEYRING_SERVICE, profile)
+    prior_session = keyring.get_password(KEYRING_SERVICE, _session_username(profile))
+    prior_cfg = _load()
+    done = False
+    try:
+        set_api_key(profile, api_key)
+        set_profile_env(profile, env)
+        set_session(
+            profile,
+            session_jwt=session_jwt,
+            session_token=session_token,
+            account_id=account_id,
+        )
+        done = True
+    finally:
+        if not done:
+            _keyring_restore(profile, prior_api_key)
+            _keyring_restore(_session_username(profile), prior_session)
+            _dump(prior_cfg)
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:
