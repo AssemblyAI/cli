@@ -103,13 +103,6 @@ def test_usage_renders_table_human(monkeypatch):
     assert "2026-05-01" in result.output and "12.5" in result.output
 
 
-def test_usage_helpers_handle_unparseable_values():
-    assert account._parse_usage_timestamp(None) is None
-    assert account._parse_usage_timestamp("") is None
-    assert account._parse_usage_timestamp("not-a-date") is None
-    assert account._format_usage_day(None) == ""
-
-
 def test_usage_helpers_format_windows_and_line_items():
     assert account._usage_items({"usage_items": "bad"}) == []
     assert account._usage_items({"usage_items": [{"total": 1}, "bad"]}) == [{"total": 1}]

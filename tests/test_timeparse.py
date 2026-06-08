@@ -33,3 +33,19 @@ def test_parse_iso_utc_rejects_non_dates():
     # to str-only operations on the int and raise instead of returning None.
     assert timeparse.parse_iso_utc(20260601) is None
     assert timeparse.parse_iso_utc(["2026-06-01"]) is None
+
+
+def test_format_utc_day_renders_calendar_day_or_falls_back():
+    assert timeparse.format_utc_day("2026-06-01T12:00:00-04:00") == "2026-06-01"
+    assert timeparse.format_utc_day("2026-06-01") == "2026-06-01"
+    # Unparseable input falls back to the stringified value, and None to "".
+    assert timeparse.format_utc_day("bad") == "bad"
+    assert timeparse.format_utc_day(None) == ""
+
+
+def test_format_utc_datetime_renders_seconds_or_falls_back():
+    assert timeparse.format_utc_datetime("2026-06-01T12:00:00") == "2026-06-01 12:00:00"
+    # Offsets are normalized to UTC before formatting.
+    assert timeparse.format_utc_datetime("2026-06-01T12:00:00-04:00") == "2026-06-01 16:00:00"
+    assert timeparse.format_utc_datetime("bad") == "bad"
+    assert timeparse.format_utc_datetime(None) == ""

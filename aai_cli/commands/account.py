@@ -4,7 +4,6 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 
 import typer
-from rich.console import Group
 from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
@@ -30,17 +29,6 @@ def _utc_day_start(day: str) -> str:
     return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC).isoformat()
 
 
-def _parse_usage_timestamp(value: object) -> datetime | None:
-    return timeparse.parse_iso_utc(value)
-
-
-def _format_usage_day(value: object) -> str:
-    parsed = _parse_usage_timestamp(value)
-    if parsed is None:
-        return str(value or "")
-    return parsed.date().isoformat()
-
-
 def _format_usage_number(value: object) -> str:
     number = jsonshape.as_float(value)
     if number.is_integer():
@@ -53,10 +41,10 @@ def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
 
 
 def _window_label(item: Mapping[str, object]) -> str:
-    start = _parse_usage_timestamp(item.get("start_timestamp"))
-    end = _parse_usage_timestamp(item.get("end_timestamp"))
+    start = timeparse.parse_iso_utc(item.get("start_timestamp"))
+    end = timeparse.parse_iso_utc(item.get("end_timestamp"))
     if start is None or end is None:
-        return _format_usage_day(item.get("start_timestamp"))
+        return timeparse.format_utc_day(item.get("start_timestamp"))
     if end.date() == start.date() + timedelta(days=1):
         return start.date().isoformat()
     return f"{start.date().isoformat()} to {end.date().isoformat()}"
@@ -163,21 +151,21 @@ def usage(
                 else [item for item in items if jsonshape.as_float(item.get("total"))]
             )
             total = sum(jsonshape.as_float(item.get("total")) for item in items)
-            range_label = f"{_format_usage_day(start_date)} to {_format_usage_day(end_date)} (UTC)"
+            range_label = (
+                f"{timeparse.format_utc_day(start_date)} to "
+                f"{timeparse.format_utc_day(end_date)} (UTC)"
+            )
             summary = Text(
                 f"Usage total: {_format_usage_number(total)} for {range_label}",
                 style="aai.heading",
             )
             if not shown:
-                if items:
-                    return Group(
-                        summary,
-                        Text("No usage in this range.", style="aai.muted"),
-                    )
-                return Group(
-                    summary,
-                    Text("No usage windows returned for this range.", style="aai.muted"),
+                message = (
+                    "No usage in this range."
+                    if items
+                    else "No usage windows returned for this range."
                 )
+                return output.stack(summary, output.muted(message))
 
             shown_with_breakdown = [(item, _line_items_summary(item)) for item in shown]
             show_breakdown = any(summary for _, summary in shown_with_breakdown)
@@ -195,16 +183,14 @@ def usage(
                 if show_breakdown:
                     row.append(escape(breakdown))
                 table.add_row(*row)
-            if hidden_count:
-                return Group(
-                    summary,
-                    table,
-                    Text(
-                        f"Hidden: {hidden_count} zero-usage window(s). Use --all to show them.",
-                        style="aai.muted",
-                    ),
+            hidden_note = (
+                output.muted(
+                    f"Hidden: {hidden_count} zero-usage window(s). Use --all to show them."
                 )
-            return Group(summary, table)
+                if hidden_count
+                else None
+            )
+            return output.stack(summary, table, hidden_note)
 
         output.emit(data, render, json_mode=json_mode)
 

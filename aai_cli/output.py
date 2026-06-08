@@ -8,8 +8,10 @@ from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING
 
 from rich import box
+from rich.console import Group, RenderableType
 from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 
 from aai_cli import choices, theme
 
@@ -125,6 +127,26 @@ def detail_table() -> Table:
     table.add_column(style="aai.muted")
     table.add_column()
     return table
+
+
+def muted(text: str) -> Text:
+    """A dim secondary line — empty-state messages and "Hidden: …" footnotes.
+
+    Returns a Rich ``Text`` (not markup) so it composes into a `stack` alongside a
+    table, the way listing commands (`usage`, `audit`) tack a quiet note onto a view.
+    """
+    return Text(text, style="aai.muted")
+
+
+def stack(*items: RenderableType | None) -> RenderableType:
+    """Stack renderables top-to-bottom, dropping any ``None``.
+
+    A lone surviving item is returned bare so a single table or line isn't wrapped in
+    a redundant `Group`. Lets a command assemble "summary + table + optional footnote"
+    without re-deriving the same `Group`/None branching each time.
+    """
+    present = [item for item in items if item is not None]
+    return present[0] if len(present) == 1 else Group(*present)
 
 
 def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:

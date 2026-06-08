@@ -108,10 +108,6 @@ def test_audit_helpers_format_edge_cases():
     assert audit._format_action("custom_event.name") == "Custom event name"
     assert audit._format_action(None) == "Unknown"
     assert audit._is_login({"action_taken": "login.succeeded"}) is True
-    assert audit._parse_time(None) is None
-    assert audit._parse_time("bad") is None
-    assert audit._format_time("2026-06-01T12:00:00") == "2026-06-01 12:00:00"
-    assert audit._format_time("bad") == "bad"
     assert audit._actor_label({"actor_type": "system"}) == "system"
     assert audit._actor_label({"actor_type": "system", "actor_id": 1}) == "system #1"
     assert audit._resource_label({}) == ""

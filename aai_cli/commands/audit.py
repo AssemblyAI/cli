@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
 
 import typer
-from rich.console import Group
 from rich.markup import escape
-from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, output, timeparse
 from aai_cli.auth import ams
@@ -53,18 +50,6 @@ def _format_action(action: object) -> str:
 def _is_login(entry: Mapping[str, object]) -> bool:
     raw = str(entry.get("action_taken") or "")
     return raw in _LOGIN_ACTIONS or _normalize_action(raw) in _LOGIN_ACTIONS
-
-
-def _parse_time(value: object) -> datetime | None:
-    parsed = timeparse.parse_iso_utc(value)
-    return None if parsed is None else parsed.replace(tzinfo=None)
-
-
-def _format_time(value: object) -> str:
-    parsed = _parse_time(value)
-    if parsed is None:
-        return str(value or "")
-    return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _actor_label(entry: Mapping[str, object]) -> str:
@@ -119,39 +104,30 @@ def audit(
             hide_logins = not include_logins and action is None
             shown = [entry for entry in data if not (hide_logins and _is_login(entry))]
             hidden_logins = len(data) - len(shown)
+            hidden_note = (
+                output.muted(
+                    f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them."
+                )
+                if hidden_logins
+                else None
+            )
             if not shown:
                 message = (
                     "No notable audit events in the recent log."
                     if hidden_logins
                     else "No audit events found."
                 )
-                if hidden_logins:
-                    return Group(
-                        Text(message, style="aai.muted"),
-                        Text(
-                            f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them.",
-                            style="aai.muted",
-                        ),
-                    )
-                return Text(message, style="aai.muted")
+                return output.stack(output.muted(message), hidden_note)
 
             table = output.data_table("when (UTC)", "event", "resource", "actor")
             for entry in shown:
                 table.add_row(
-                    escape(_format_time(entry.get("log_time"))),
+                    escape(timeparse.format_utc_datetime(entry.get("log_time"))),
                     escape(_format_action(entry.get("action_taken"))),
                     escape(_resource_label(entry)),
                     escape(_actor_label(entry)),
                 )
-            if hidden_logins:
-                return Group(
-                    table,
-                    Text(
-                        f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them.",
-                        style="aai.muted",
-                    ),
-                )
-            return table
+            return output.stack(table, hidden_note)
 
         output.emit(rows, render, json_mode=json_mode)
 
