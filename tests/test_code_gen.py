@@ -278,7 +278,7 @@ class _Stub:
     content_safety: ClassVar[object] = type("CS", (), {"summary": {"profanity": 0.1}})()
 
 
-def test_every_snippet_execs_against_a_realistic_transcript():
+def test_every_snippet_execs_against_a_realistic_transcript() -> None:
     # Enable every feature so result_handling emits all snippets, then exec them.
     all_on: dict[str, object] = {
         "speaker_labels": True,

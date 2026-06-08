@@ -430,7 +430,7 @@ def test_run_session_file_driven_stops_after_reply():
     assert ("user_final", "SHOULD NOT BE SEEN") not in finals  # stopped after the reply
 
 
-def test_run_session_ws_url_follows_active_environment():
+def test_run_session_ws_url_follows_active_environment() -> None:
     # The Voice Agent socket must target the active environment's host, not a
     # hardcoded production URL. Capture the URL connect() is handed, short-
     # circuiting with a benign close once we've seen it.

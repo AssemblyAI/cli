@@ -1,7 +1,7 @@
 from aai_cli import steps
 
 
-def test_render_steps_includes_name_status_detail():
+def test_render_steps_includes_name_status_detail() -> None:
     data: list[steps.Step] = [
         {"name": "scaffold", "status": "created", "detail": "./my-app"},
         {"name": "install", "status": "skipped", "detail": "--no-install"},

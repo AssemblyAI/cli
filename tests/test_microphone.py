@@ -162,7 +162,7 @@ def test_rate_query_resolves_capture_rate_when_not_given():
     assert seen["rate"] == 32000
 
 
-def test_device_default_rate_reads_device(monkeypatch):
+def test_device_default_rate_reads_device(monkeypatch) -> None:
     fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.query_devices = lambda device, kind: {"default_samplerate": 44100.0}
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
@@ -182,7 +182,7 @@ def test_resample_pcm16_uses_16bit_mono_params():
     assert out != chunk  # 48k -> 24k actually changes the data
 
 
-def test_device_default_rate_falls_back_on_query_error(monkeypatch):
+def test_device_default_rate_falls_back_on_query_error(monkeypatch) -> None:
     fake_sd: Any = types.ModuleType("sounddevice")
 
     def boom(*a, **k):
@@ -193,7 +193,7 @@ def test_device_default_rate_falls_back_on_query_error(monkeypatch):
     assert _device_default_rate(None) == _FALLBACK_RATE
 
 
-def test_device_default_rate_falls_back_on_non_numeric_rate(monkeypatch):
+def test_device_default_rate_falls_back_on_non_numeric_rate(monkeypatch) -> None:
     fake_sd: Any = types.ModuleType("sounddevice")
     fake_sd.query_devices = lambda device, kind: {"default_samplerate": object()}
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
@@ -210,7 +210,7 @@ def test_sounddevice_mic_yields_bytes_then_stops_and_closes():
     assert stream.stopped and stream.closed
 
 
-def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch):
+def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch) -> None:
     created = {}
 
     def raw_input_stream(**kwargs):

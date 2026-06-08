@@ -159,7 +159,7 @@ def test_null_player_is_a_noop_player():
     p.close()  # none of these raise or open a device
 
 
-def test_default_duplex_stream_opens_started_rawstream(monkeypatch):
+def test_default_duplex_stream_opens_started_rawstream(monkeypatch) -> None:
     created = {}
 
     class FakeRaw:
@@ -188,7 +188,7 @@ def test_default_duplex_stream_missing_sounddevice_raises_mic_missing(monkeypatc
     assert exc.value.error_type == "mic_missing"
 
 
-def test_default_duplex_stream_open_failure_raises_audio_output_error(monkeypatch):
+def test_default_duplex_stream_open_failure_raises_audio_output_error(monkeypatch) -> None:
     def boom(**kw):
         raise OSError("device busy")
 

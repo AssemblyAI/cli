@@ -162,7 +162,7 @@ def test_probe_input_devices_counts_integer_input_channels(monkeypatch):
     assert doctor._probe_input_devices() == 1
 
 
-def test_render_ok_payload_shows_ready():
+def test_render_ok_payload_shows_ready() -> None:
     payload: doctor.DoctorResult = {
         "ok": True,
         "checks": [
@@ -174,7 +174,7 @@ def test_render_ok_payload_shows_ready():
     assert "Everything looks good." in text
 
 
-def test_render_problem_payload_shows_fix_and_problem_banner():
+def test_render_problem_payload_shows_fix_and_problem_banner() -> None:
     payload: doctor.DoctorResult = {
         "ok": False,
         "checks": [
