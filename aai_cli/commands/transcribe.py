@@ -148,6 +148,7 @@ def transcribe(
         None,
         "--speakers-expected",
         help="Hint speaker count.",
+        min=1,
         rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     multichannel: bool | None = typer.Option(
@@ -197,12 +198,16 @@ def transcribe(
         None,
         "--content-safety-confidence",
         help="Content-safety confidence threshold (25-100).",
+        min=25,
+        max=100,
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     speech_threshold: float | None = typer.Option(
         None,
         "--speech-threshold",
         help="Minimum proportion of speech required (0-1).",
+        min=0.0,
+        max=1.0,
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     # analysis

@@ -157,6 +157,8 @@ def stream(
         None,
         "--end-of-turn-confidence-threshold",
         help="End-of-turn confidence (0-1).",
+        min=0.0,
+        max=1.0,
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     min_turn_silence: int | None = typer.Option(
@@ -174,7 +176,9 @@ def stream(
     vad_threshold: float | None = typer.Option(
         None,
         "--vad-threshold",
-        help="Voice-activity threshold.",
+        help="Voice-activity threshold (0-1).",
+        min=0.0,
+        max=1.0,
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     format_turns: bool | None = typer.Option(
@@ -194,7 +198,11 @@ def stream(
         None, "--speaker-labels", help="Label speakers.", rich_help_panel=help_panels.OPT_SPEAKERS
     ),
     max_speakers: int | None = typer.Option(
-        None, "--max-speakers", help="Max speakers.", rich_help_panel=help_panels.OPT_SPEAKERS
+        None,
+        "--max-speakers",
+        help="Max speakers.",
+        min=1,
+        rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     # features
     voice_focus: NoiseSuppressionModel | None = typer.Option(
@@ -206,7 +214,9 @@ def stream(
     voice_focus_threshold: float | None = typer.Option(
         None,
         "--voice-focus-threshold",
-        help="Voice-focus threshold.",
+        help="Voice-focus threshold (0-1).",
+        min=0.0,
+        max=1.0,
         rich_help_panel=help_panels.OPT_FEATURES,
     ),
     inactivity_timeout: int | None = typer.Option(
