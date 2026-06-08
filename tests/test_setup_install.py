@@ -22,6 +22,14 @@ def _isolate_home(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _force_json(monkeypatch):
+    """These tests pin the structured step/status JSON. The CLI now defaults to human
+    text everywhere (JSON is opt-in), so force the machine output the assertions parse —
+    the equivalent of invoking each command with --json."""
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: True)
+
+
 # --- install: all three steps ------------------------------------------------
 
 

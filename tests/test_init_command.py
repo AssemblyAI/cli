@@ -71,7 +71,9 @@ def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
 
 def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
+    # --json: human output always prints a "run it with uvicorn" next-step hint, so the
+    # launch-skipped row only shows up as a distinct step in the structured output.
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--json"])
     env = (tmp_path / "myapp" / ".env").read_text()
     assert "your_assemblyai_api_key_here" in env
     # --no-install means no deps were installed, so there's no launch-skipped row even
@@ -122,7 +124,7 @@ def test_init_appears_in_help():
 def test_init_prints_cli_banner_in_human_mode(tmp_path, monkeypatch):
     # Vercel-style header at the top of an interactive run (human output only).
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["init", TEMPLATE, "x", "--no-install"])
     assert result.exit_code == 0, result.output
     assert "AssemblyAI CLI" in result.output
@@ -227,7 +229,9 @@ def test_init_launches_when_key_present(tmp_path, monkeypatch):
     # Key present + install succeeds -> the server is launched and the browser opens.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-real-key")
-    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)  # exercise human banner
+    monkeypatch.setattr(
+        "aai_cli.output.resolve_json", lambda *, explicit: False
+    )  # exercise human banner
     monkeypatch.setattr(
         "aai_cli.init.runner.run_setup",
         lambda *a, **k: subprocess.CompletedProcess([], 0, "ok", ""),

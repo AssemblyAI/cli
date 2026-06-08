@@ -66,7 +66,7 @@ def test_whoami_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     with patch("aai_cli.commands.login.client.validate_key", return_value=True) as validate:
         result = runner.invoke(app, ["whoami", "--json"])
-    assert result.exit_code == 2
+    assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
     validate.assert_not_called()
     assert "Run the same command again" in result.output
@@ -202,27 +202,18 @@ def test_root_callback_sandbox_overrides_profile_env():
 
 
 def test_unknown_env_exits_2():
-    import json
-
-    result = runner.invoke(app, ["--env", "bogus", "whoami"])
-    assert result.exit_code == 2
-    # Routed through the standard error path: JSON shape (piped/agentic) + a suggestion,
-    # not a bare echo of the message.
-    payload = json.loads(result.output.strip().splitlines()[-1])
-    assert payload["error"]["type"] == "invalid_environment"
-    assert "unset AAI_ENV" in payload["error"]["suggestion"]
-
-
-def test_unknown_env_human_output_when_interactive():
-    # For an interactive human (not piped/agentic) the callback emits the human
-    # "Error:" + "Suggestion:" pair, not JSON — pinning that resolve_json(explicit=False)
-    # actually consults the auto-detection rather than always forcing JSON.
-    with patch("aai_cli.output._is_agentic", return_value=False):
-        result = runner.invoke(app, ["--env", "bogus", "whoami"])
-    assert result.exit_code == 2
-    assert "Error:" in result.output
-    assert "Suggestion:" in result.output
-    assert '"error"' not in result.output  # not the JSON shape
+    # Routed through the standard error path. Output is human-by-default (the root
+    # callback can't see a per-command --json, and we never auto-switch to JSON on a
+    # pipe/agent), so it's the "Error:" + "Suggestion:" pair on stderr, not a JSON blob —
+    # regardless of whether stdout is a TTY.
+    for agentic in (True, False):
+        with patch("aai_cli.output._is_agentic", return_value=agentic):
+            result = runner.invoke(app, ["--env", "bogus", "whoami"])
+        assert result.exit_code == 2
+        assert "Error:" in result.output
+        assert "Suggestion:" in result.output
+        assert "unset AAI_ENV" in result.output
+        assert '"error"' not in result.output  # never the JSON shape
 
 
 def test_env_override_prints_warning_to_stderr():
@@ -276,7 +267,7 @@ def test_whoami_renders_human_table_reachable():
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
     with (
-        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.output.resolve_json", return_value=False),
         patch("aai_cli.commands.login.client.validate_key", return_value=True),
     ):
         result = runner.invoke(app, ["whoami"])
@@ -294,7 +285,7 @@ def test_whoami_renders_human_table_rejected_key():
     # account/session "none" fallbacks (the em-dash placeholder).
     config.set_api_key("default", "sk_1234567890")
     with (
-        patch("aai_cli.output._is_agentic", return_value=False),
+        patch("aai_cli.output.resolve_json", return_value=False),
         patch("aai_cli.commands.login.client.validate_key", return_value=False),
     ):
         result = runner.invoke(app, ["whoami"])

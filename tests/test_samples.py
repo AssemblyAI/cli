@@ -18,7 +18,7 @@ def test_samples_list_shows_transcribe():
 def test_samples_list_human_mode_renders_bullets(monkeypatch):
     # Force human (non-agentic) rendering so the bullet-list branch runs; pins the
     # string concatenation in the human renderer (a `-` there would raise TypeError).
-    monkeypatch.setattr("aai_cli.output._is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["samples", "list"])
     assert result.exit_code == 0
     assert "Available samples:" in result.output
