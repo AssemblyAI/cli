@@ -42,11 +42,17 @@ def test_quiet_suppresses_env_override_warning(monkeypatch):
     assert "may be rejected" not in quiet.output
 
 
-def test_shell_completion_is_available():
+def test_shell_completion_is_available(monkeypatch):
     # add_completion=True ships `--show-completion` (and --install-completion), the
-    # discoverability affordance gh/kubectl/docker users reach for.
+    # discoverability affordance gh/kubectl/docker users reach for. Typer detects the
+    # active shell via shellingham, which needs a controlling TTY — absent under
+    # CliRunner/CI — so pin it to a known shell to test the affordance deterministically.
+    import typer.completion
+
+    monkeypatch.setattr(typer.completion, "_get_shell_name", lambda: "zsh")
     result = runner.invoke(app, ["--show-completion"])
     assert result.exit_code == 0
+    assert "_aai_completion" in result.output  # the emitted zsh completion script
 
 
 def test_global_flags_parse():

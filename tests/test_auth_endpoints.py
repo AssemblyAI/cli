@@ -6,9 +6,9 @@ def test_redirect_uri_is_fixed_loopback():
 
 
 def test_env_specific_values_come_from_active_environment():
-    # With no active env set, helpers fall back to the default (sandbox000).
-    assert endpoints.ams_base() == "https://ams.sandbox000.assemblyai-labs.com"
-    assert endpoints.stytch_domain() == "https://test.stytch.com"
+    # With no active env set, helpers fall back to the default (production).
+    assert endpoints.ams_base() == "https://ams.internal.assemblyai-labs.com"
+    assert endpoints.stytch_domain() == "https://api.stytch.com"
     assert endpoints.stytch_public_token().startswith("public-token-")
     assert endpoints.signup_url().startswith("https://")
 

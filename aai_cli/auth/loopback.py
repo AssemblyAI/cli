@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -9,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from aai_cli.auth import endpoints
 from aai_cli.errors import APIError
 
-# The callback URL carries the single-use OAuth token (and the state nonce) in its
+# The callback URL carries the single-use OAuth token in its
 # query string, so it would otherwise linger in the browser's history and address
 # bar. Scrub it from the current history entry with replaceState the moment the page
 # loads — no extra request to race the server shutdown, unlike a redirect. The token
@@ -32,16 +31,14 @@ class CallbackResult:
 
 
 def capture_callback(
-    expected_state: str,
     timeout: float = 120.0,  # pragma: no mutate (default window; tests pass explicit timeouts)
 ) -> CallbackResult:
     """Bind the fixed loopback port, capture one OAuth callback, return its token.
 
-    Only a callback whose `state` query parameter equals `expected_state` is
-    accepted; any other request (wrong/missing state, or a different path) gets a
-    4xx and the server keeps waiting, so a forged callback can't complete someone
-    else's login. Returns a CallbackResult; `error="timeout"` if no matching
-    callback arrives in time.
+    Only a callback to the registered path that carries a `token` is accepted; any
+    other request (a different path, or no token) gets a 4xx and the server keeps
+    waiting, so a stray request can't end the capture early. Returns a
+    CallbackResult; `error="timeout"` if no matching callback arrives in time.
     """
     result = CallbackResult()
     done = threading.Event()
@@ -54,15 +51,15 @@ def capture_callback(
                 self.end_headers()
                 return
             qs = parse_qs(parsed.query)
-            state = next(iter(qs.get("state", [])), None)
-            # Constant-time compare so a forged callback can't probe the nonce by
-            # timing. A mismatch is rejected without ending the capture: the real
-            # callback can still arrive (otherwise it falls through to timeout).
-            if state is None or not secrets.compare_digest(state, expected_state):
+            token = next(iter(qs.get("token", [])), None)
+            # A callback with no token (a stray or preflight request) is rejected
+            # without ending the capture: the genuine callback can still arrive
+            # (otherwise it falls through to timeout).
+            if token is None:
                 self.send_response(400)
                 self.end_headers()
                 return
-            result.token = next(iter(qs.get("token", [])), None)
+            result.token = token
             result.token_type = next(iter(qs.get("stytch_token_type", [])), None)
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
