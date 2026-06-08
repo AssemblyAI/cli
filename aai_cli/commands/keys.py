@@ -27,6 +27,20 @@ def _project_id(project: dict[str, object]) -> int | None:
     return None
 
 
+def _default_project_id(account_id: int, jwt: str) -> int:
+    """The id of the account's first project, for `keys create` without ``--project``.
+
+    No projects, an unparseable first entry, and a missing/invalid id are the same
+    failure — there's nothing to create a key in — so they share one error.
+    """
+    projects = ams.list_projects(account_id, jwt)
+    project = jsonshape.as_mapping(projects[0].get("project")) if projects else None
+    pid = _project_id(project) if project is not None else None
+    if pid is None:
+        raise APIError("Your account has no project to create a key in.")
+    return pid
+
+
 @app.command(
     name="list",
     epilog=examples_epilog(
@@ -97,17 +111,7 @@ def create(
 
     def body(state: AppState, json_mode: bool) -> None:
         account_id, jwt = resolve_session(state)
-        pid = project_id
-        if pid is None:
-            projects = ams.list_projects(account_id, jwt)
-            if not projects:
-                raise APIError("Your account has no project to create a key in.")
-            project = jsonshape.as_mapping(projects[0].get("project"))
-            if project is None:
-                raise APIError("Your account has no project to create a key in.")
-            pid = _project_id(project)
-            if pid is None:
-                raise APIError("Your account has no project to create a key in.")
+        pid = project_id if project_id is not None else _default_project_id(account_id, jwt)
         created = ams.create_token(account_id, pid, name, jwt)
         output.emit(
             created,
