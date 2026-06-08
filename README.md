@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://github.com/AssemblyAI/cli"><img alt="Python" src="https://img.shields.io/badge/python-3.12+-D6402E?style=flat-square"></a>
-  <a href="https://github.com/AssemblyAI/cli/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/AssemblyAI/cli?style=flat-square&color=D6402E"></a>
+  <a href="https://github.com/AssemblyAI/cli/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-D6402E?style=flat-square"></a>
   <a href="https://www.assemblyai.com/docs"><img alt="Docs" src="https://img.shields.io/badge/docs-assemblyai-D6402E?style=flat-square"></a>
 </p>
 
@@ -65,7 +65,7 @@ aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 
 ## Build An App
 
-`aai init` is how you **build a new app** — it copies a small, self-contained FastAPI + HTML project you can run locally and deploy to Vercel as-is. This is the starting point whenever you want to *create* something, including a voice agent app:
+`aai init` is how you **build a new app** — it copies a small, self-contained FastAPI + HTML project you can run locally and deploy to Vercel as-is, the starting point whenever you want to *create* something, including a voice agent app:
 
 ```sh
 aai init                            # pick a template, scaffold, install deps, open the browser
@@ -92,7 +92,7 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | `aai samples create <name>` | Scaffold a runnable starter script. |
 | `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
-Every command prints human-readable text by default — in a terminal, a pipe, CI, or under an agent alike. Add `--json` for machine-readable output (it never switches on you just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob). Errors go to **stderr**, so stdout stays clean for pipelines.
+Every command prints human-readable text by default — terminal, pipe, CI, or agent alike. Add `--json` for machine-readable output; it never switches on just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob. Errors go to **stderr**, so stdout stays clean for pipelines.
 
 > **Tip:** Quote URLs that contain `?` (most YouTube links do) — in zsh the `?` is a glob character: `aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"`.
 
@@ -149,7 +149,7 @@ aai stream -o text | aai llm -f --system "You are a meeting scribe" "summarize a
 
 ## Voice Agent
 
-Have a live, two-way voice conversation — full-duplex, so you can interrupt mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself. (To **build** a voice agent *app*, use `aai init voice-agent` instead — this command just runs a conversation in the terminal.)
+Have a live, two-way voice conversation — full-duplex, so you can interrupt mid-sentence (barge-in). **Use headphones**, otherwise the agent hears itself. (This only *runs* a conversation; to **build** a voice-agent app, use `aai init voice-agent`.)
 
 ```sh
 aai agent                                    # talk; the agent talks back. Ctrl-C to stop.

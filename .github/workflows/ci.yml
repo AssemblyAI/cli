@@ -280,4 +280,4 @@ jobs:
           cp Formula/aai.rb "$(brew --repository aai/local)/Formula/aai.rb"
           brew install --build-from-source --formula aai/local/aai
           aai version
-          brew test --formula aai/local/aai
+          brew test aai/local/aai
