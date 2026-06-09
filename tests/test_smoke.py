@@ -79,6 +79,7 @@ def test_help_lists_commands_in_workflow_order():
     # Setup & Tools, Transcription & AI, History, then Account.
     assert names == [
         # Quick Start
+        "onboard",
         "init",
         # Setup & Tools
         "samples",
