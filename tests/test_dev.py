@@ -42,6 +42,8 @@ def test_dev_launches_with_reload(tmp_path, monkeypatch):
     assert captured["reload"] is True
     assert captured["open_browser"] is False
     assert captured["port"] == 3000
+    assert "Starting" in result.output
+    assert "localhost:3000" in result.output
 
 
 def test_dev_opens_browser_by_default(tmp_path, monkeypatch):
@@ -86,6 +88,7 @@ def test_dev_install_failure_exits(tmp_path, monkeypatch):
     result = runner.invoke(app, ["dev"])
     assert result.exit_code == 1
     assert captured == {}  # install failed -> no launch
+    assert "boom" in result.output
 
 
 def test_dev_server_nonzero_exit_propagates(tmp_path, monkeypatch):
@@ -104,3 +107,23 @@ def test_dev_json_emits_install_step(tmp_path, monkeypatch):
     result = runner.invoke(app, ["dev", "--no-open", "--json"])
     assert result.exit_code == 0, result.output
     assert '"name": "install"' in result.output
+    assert '"detail": "uv"' in result.output
+
+
+def test_dev_venv_path_when_no_uv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_app(tmp_path)
+    captured = _stub_runner(monkeypatch, use_uv=False)
+    result = runner.invoke(app, ["dev", "--no-open", "--json"])
+    assert result.exit_code == 0, result.output
+    assert captured["use_uv"] is False
+    assert '"detail": "venv + pip"' in result.output
+
+
+def test_dev_custom_port_flows_through(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_app(tmp_path)
+    captured = _stub_runner(monkeypatch)
+    result = runner.invoke(app, ["dev", "--port", "8123", "--no-open"])
+    assert result.exit_code == 0, result.output
+    assert captured["port"] == 8123
