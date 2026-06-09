@@ -457,3 +457,27 @@ def test_run_session_ws_url_follows_active_environment() -> None:
                 connect=capture,
             )
         assert seen["url"] == expected
+
+
+def test_run_session_defaults_to_websockets_sync_connect(monkeypatch):
+    # With no injected connect, run_session lazily imports websockets' sync client
+    # (pins the `connect is None` default-import branch). Patch the import target so
+    # no real socket is opened; an empty message stream ends the loop immediately.
+    class _CleanWS:
+        def send(self, _msg):
+            pass
+
+        def __iter__(self):
+            return iter(())
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("websockets.sync.client.connect", lambda url, **kwargs: _CleanWS())
+    run_session(
+        "sk_live",
+        renderer=FakeRenderer(),
+        player=FakePlayer(),
+        mic=[],
+        config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
+    )

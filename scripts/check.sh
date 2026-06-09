@@ -168,7 +168,11 @@ echo "==> pytest (with branch-coverage gate)"
 #   uv run pytest -m e2e
 #   uv run pytest -m install
 #   uv run pytest -m install_script
-uv run pytest -q --strict-config --strict-markers -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+# -n auto parallelizes across CPUs (pytest-xdist); pytest-cov combines per-worker
+# data, and the per-test --cov-context=test contexts the mutation gate below relies
+# on survive that combine. The suite is order-independent (pytest-randomly), so
+# splitting it across workers is safe.
+uv run pytest -q --strict-config --strict-markers -n auto -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and

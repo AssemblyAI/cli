@@ -290,3 +290,20 @@ def test_unknown_voice_suggests_list_voices():
     assert result.exit_code == 2
     # JSON error on stderr carries the structured suggestion.
     assert "--list-voices" in result.output
+
+
+def test_resolve_system_prompt_unreadable_file_raises_clierror(tmp_path):
+    # An unreadable --system-prompt-file surfaces a clean CLIError (exit 2), not a
+    # raw OSError traceback.
+    from pathlib import Path
+
+    import pytest
+
+    from aai_cli.commands import agent
+    from aai_cli.errors import CLIError
+
+    missing = Path(tmp_path) / "does-not-exist.txt"
+    with pytest.raises(CLIError) as exc:
+        agent._resolve_system_prompt("fallback prompt", missing)
+    assert exc.value.exit_code == 2
+    assert "system-prompt-file" in exc.value.message
