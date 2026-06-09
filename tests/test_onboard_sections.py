@@ -8,6 +8,7 @@ import typer
 from aai_cli import client, config, transcribe_render
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
+from aai_cli.commands import transcribe as transcribe_cmd
 from aai_cli.context import AppState
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
@@ -62,16 +63,57 @@ def test_auth_skips_when_key_already_present(
     assert sections.auth(NonInteractivePrompter(), ctx) is SectionResult.SKIPPED
 
 
-def test_first_request_transcribes_sample_and_counts(
+def test_first_request_uses_sample_on_empty_input(
     ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
-    monkeypatch.setattr(client, "transcribe", lambda *a, **k: _FakeTranscript())
-    # Stub the rich render so a minimal fake transcript suffices; we're testing the
-    # counter + result, not rendering.
+    seen: dict[str, object] = {}
+
+    def _fake(
+        api_key: str, source: object, *, sample: bool, transcription_config: object
+    ) -> _FakeTranscript:
+        seen["source"] = source
+        seen["sample"] = sample
+        return _FakeTranscript()
+
+    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
+    # NonInteractivePrompter.text returns its default ("") → Enter → sample.
     assert sections.first_request(NonInteractivePrompter(), ctx) is SectionResult.DONE
-    assert config.get_requests_made("default") == 1
+    assert seen["source"] is None
+    assert seen["sample"] is True
+
+
+def test_first_request_uses_custom_source(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    seen: dict[str, object] = {}
+
+    def _fake(
+        api_key: str, source: object, *, sample: bool, transcription_config: object
+    ) -> _FakeTranscript:
+        seen["source"] = source
+        seen["sample"] = sample
+        return _FakeTranscript()
+
+    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
+    monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
+    assert sections.first_request(_ScriptedPrompter(text="meeting.mp3"), ctx) is SectionResult.DONE
+    assert seen["source"] == "meeting.mp3"
+    assert seen["sample"] is False
+
+
+def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    from aai_cli.errors import APIError
+
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+
+    def _boom(*a: object, **k: object) -> _FakeTranscript:
+        raise APIError("nope")
+
+    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _boom)
+    assert sections.first_request(_ScriptedPrompter(text="bad.mp3"), ctx) is SectionResult.FAILED
 
 
 def test_environment_is_non_blocking(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,13 +146,8 @@ def test_build_path_skip_choice_does_nothing(
     assert called is False
 
 
-def test_next_steps_renders_progress(ctx: WizardContext) -> None:
+def test_next_steps(ctx: WizardContext) -> None:
     assert sections.next_steps(NonInteractivePrompter(), ctx) is SectionResult.DONE
-
-
-def test_welcome_returning_user(ctx: WizardContext) -> None:
-    config.record_request("default")
-    assert sections.welcome(NonInteractivePrompter(), ctx) is SectionResult.DONE
 
 
 def test_welcome_cold_start(ctx: WizardContext) -> None:

@@ -17,7 +17,7 @@ from aai_cli import (
     output,
     youtube,
 )
-from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
@@ -387,6 +387,5 @@ def stream(
             max_tokens=max_tokens,
         )
         _dispatch(session, opts)
-        config.record_request(resolve_profile(state))
 
     run_command(ctx, body, json=json_out)

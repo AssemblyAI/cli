@@ -20,7 +20,7 @@ from aai_cli import (
     transcribe_render,
     youtube,
 )
-from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
@@ -421,7 +421,6 @@ def transcribe(
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode):
             transcript = _transcribe_audio(api_key, source, sample=sample, transcription_config=tc)
-        config.record_request(resolve_profile(state))
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).

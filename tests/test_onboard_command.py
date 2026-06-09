@@ -3,18 +3,9 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.commands import onboard as onboard_cmd
 from aai_cli.main import app
 from aai_cli.onboard.prompter import InteractivePrompter, NonInteractivePrompter
-
-
-def test_status_shows_progress_without_running_wizard() -> None:
-    config.record_request("default")
-    config.record_request("default")
-    result = CliRunner().invoke(app, ["onboard", "--status"])
-    assert result.exit_code == 0, result.output
-    assert "2 of 100" in result.output
 
 
 def test_onboard_is_listed_in_help() -> None:

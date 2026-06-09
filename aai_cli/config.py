@@ -33,7 +33,6 @@ class Profile(BaseModel):
 
     env: str | None = None
     account_id: int | None = None
-    requests_made: int | None = None
 
 
 class Config(BaseModel):
@@ -229,26 +228,6 @@ def get_account_id(profile: str) -> int | None:
     """The AMS account id recorded at login for a profile, if any."""
     prof = _load().profiles.get(profile)
     return prof.account_id if prof else None
-
-
-def get_requests_made(profile: str) -> int:
-    """How many billable API requests this profile has made through the CLI."""
-    prof = _load().profiles.get(profile)
-    return prof.requests_made or 0 if prof else 0
-
-
-def record_request(profile: str) -> int:
-    """Increment and persist this profile's CLI request count; return the new total.
-
-    Powers the 'N of 100 requests' onboarding nudge. Counts only requests made
-    through the CLI; `aai usage` is the authoritative account-wide figure.
-    """
-    _validate_profile(profile)
-    cfg = _load()
-    prof = cfg.profiles.setdefault(profile, Profile())
-    prof.requests_made = (prof.requests_made or 0) + 1
-    _dump(cfg)
-    return prof.requests_made
 
 
 def clear_session(profile: str) -> None:

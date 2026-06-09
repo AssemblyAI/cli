@@ -10,9 +10,9 @@ from aai_cli import client, config, environments, output, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
+from aai_cli.commands import transcribe as transcribe_cmd
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import CLIError, NotAuthenticated
-from aai_cli.onboard import progress
 from aai_cli.onboard.prompter import Prompter
 
 
@@ -37,12 +37,7 @@ def _has_key(profile: str) -> bool:
     return True
 
 
-def welcome(prompter: Prompter, ctx: WizardContext) -> SectionResult:
-    count = config.get_requests_made(ctx.profile)
-    if count:
-        prompter.section("Welcome back to AssemblyAI")
-        output.console.print(progress.render_progress(count))
-        return SectionResult.DONE
+def welcome(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     prompter.section("Welcome to AssemblyAI")
     prompter.note("This wizard signs you in, runs your first transcription, and helps you build.")
     return SectionResult.DONE
@@ -75,13 +70,22 @@ def auth(prompter: Prompter, ctx: WizardContext) -> SectionResult:
 def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     prompter.section("Your first transcription")
     api_key = config.resolve_api_key(profile=ctx.profile)
-    with output.status("Transcribing the sample clip…", json_mode=ctx.json_mode):
-        transcript = client.transcribe(
-            api_key, client.SAMPLE_AUDIO_URL, config=aai.TranscriptionConfig()
-        )
-    count = config.record_request(ctx.profile)
+    source = prompter.text(
+        "Audio file path or YouTube URL (press Enter for the sample)", default=""
+    ).strip()
+    label = source or "the sample clip"
+    try:
+        with output.status(f"Transcribing {label}…", json_mode=ctx.json_mode):
+            transcript = transcribe_cmd._transcribe_audio(  # pyright: ignore[reportPrivateUsage]
+                api_key,
+                source or None,
+                sample=not source,
+                transcription_config=aai.TranscriptionConfig(),
+            )
+    except CLIError as exc:
+        output.error_console.print(output.fail(f"Transcription failed: {exc.message}"))
+        return SectionResult.FAILED
     transcribe_render.render_transcript_result(transcript, output.console)
-    output.console.print(progress.render_progress(count))
     return SectionResult.DONE
 
 
@@ -148,9 +152,8 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     return SectionResult.DONE
 
 
-def next_steps(prompter: Prompter, ctx: WizardContext) -> SectionResult:
+def next_steps(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     prompter.section("You're set up")
-    output.console.print(progress.render_progress(config.get_requests_made(ctx.profile)))
     output.console.print(output.hint("Transcribe a file:  aai transcribe <file>"))
     output.console.print(output.hint("Stream live audio:  aai stream"))
     output.console.print(output.hint("Build an app:       aai init"))
