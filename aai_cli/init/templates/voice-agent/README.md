@@ -18,9 +18,10 @@ The Voice Agent API requires a plan with access enabled.
 ## Deploy to Vercel
 
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY` as a
-Vercel environment variable (the local `.env` is git-ignored). The backend is just the
-`/api/token` function; the WebSocket runs browser → AssemblyAI, so nothing long-running
-is needed.
+Vercel environment variable (the local `.env` is git-ignored). No extra config is needed
+(no `vercel.json`): Vercel runs `api/index.py` as the function, and that FastAPI app
+serves the page and assets (from `static/`) plus the `/api/token` route. The WebSocket
+runs browser → AssemblyAI, so nothing long-running is needed.
 
 ## Deploy elsewhere
 
@@ -35,6 +36,6 @@ uvicorn api.index:app --host 0.0.0.0 --port $PORT
 
 ## Ideas to extend
 
-- Change the `greeting`, `systemPrompt`, or `voice` in `SESSION_CONFIG` (`public/static/app.js`).
+- Change the `greeting`, `systemPrompt`, or `voice` in `SESSION_CONFIG` (`static/app.js`).
 - Add tools (function calling) so the agent can look things up or take actions.
 - Tune `input.turn_detection` (`min_silence`/`max_silence`) inside `SESSION_CONFIG`.

@@ -32,7 +32,7 @@ def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
     assert (target / "api" / "index.py").exists()
-    assert (target / "public" / "index.html").exists()
+    assert (target / "static" / "index.html").exists()
     assert not (target / "vercel.json").exists()
     # dotfile templates are renamed to their dotted names
     assert (target / ".gitignore").exists()

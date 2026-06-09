@@ -21,14 +21,14 @@ from fastapi.staticfiles import StaticFiles
 from api import settings
 
 ROOT = Path(__file__).resolve().parent.parent
-PUBLIC = ROOT / "public"
+STATIC = ROOT / "static"
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=PUBLIC / "static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(PUBLIC / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 @app.post("/api/token")

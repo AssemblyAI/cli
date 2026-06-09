@@ -76,7 +76,7 @@ def test_serves_root_and_static_assets(template: str) -> None:
         assert "text/html" in root.headers["content-type"]
         assert root.text.strip()
 
-        static_dir = TEMPLATES_ROOT / template / "public" / "static"
+        static_dir = TEMPLATES_ROOT / template / "static"
         assets = sorted(p for p in static_dir.glob("*") if p.is_file())
         assert assets, f"{template}: no static assets to serve"
         for asset in assets:

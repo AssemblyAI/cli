@@ -16,8 +16,9 @@ aai dev   # installs deps if needed, starts the server, opens http://localhost:3
 
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY`
 as a Vercel environment variable (the local `.env` is git-ignored and not deployed).
-No extra config is needed: Vercel serves the static page and discovers the
-FastAPI app in `api/index.py`.
+No extra config is needed (no `vercel.json`): Vercel runs `api/index.py` as the
+function, and that FastAPI app serves both the page and assets (from `static/`)
+and the API.
 
 ## Deploy elsewhere
 
@@ -35,4 +36,4 @@ uvicorn api.index:app --host 0.0.0.0 --port $PORT
 - Show chapter summaries and highlight timestamps.
 - Add a waveform / audio player synced to the transcript.
 - Swap the analysis features in `TRANSCRIPTION_CONFIG_KWARGS` (`api/settings.py`).
-- Change transcript rendering in `public/static/app.js`.
+- Change transcript rendering in `static/app.js`.

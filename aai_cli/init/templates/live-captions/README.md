@@ -17,9 +17,10 @@ aai dev   # opens http://localhost:3000 (allow microphone access)
 ## Deploy to Vercel
 
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY` as a
-Vercel environment variable (the local `.env` is git-ignored). The backend is just the
-`/api/token` function; the WebSocket runs browser → AssemblyAI, so nothing long-running
-is needed.
+Vercel environment variable (the local `.env` is git-ignored). No extra config is needed
+(no `vercel.json`): Vercel runs `api/index.py` as the function, and that FastAPI app
+serves the page and assets (from `static/`) plus the `/api/token` route. The WebSocket
+runs browser → AssemblyAI, so nothing long-running is needed.
 
 ## Deploy elsewhere
 
