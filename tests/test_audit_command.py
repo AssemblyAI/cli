@@ -102,6 +102,8 @@ def test_audit_human_mode_renders_table(monkeypatch, mocker):
 
 
 def test_audit_helpers_format_edge_cases():
+    # A raw action that is already a known dotted key is mapped directly (no normalize).
+    assert audit._format_action("token.create") == "API key created"
     assert audit._format_action("account__created") == "Account created"
     assert audit._format_action("account__tos.accepted") == "Terms accepted"
     assert audit._format_action("custom_event.name") == "Custom event name"
