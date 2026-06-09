@@ -52,7 +52,7 @@ def login(
             lambda _d: (
                 output.success(f"Signed in as {escape(profile)} ({escape(env)}).")
                 + "\n"
-                + output.hint("Run `aai transcribe <file>` to make your first transcript.")
+                + output.hint("Run `aai onboard` to finish setup, or `aai transcribe <file>`.")
             ),
             json_mode=json_mode,
         )

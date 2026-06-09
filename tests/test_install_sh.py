@@ -123,4 +123,4 @@ def test_next_steps_when_aai_present(tmp_path):
     _pipx_shim(tmp_path)
     _shim(tmp_path / "aai", "exit 0\n")
     result = _run(tmp_path)
-    assert "Installed. Next: run 'aai login'" in result.stdout
+    assert "Installed. Next: run 'aai onboard'" in result.stdout
