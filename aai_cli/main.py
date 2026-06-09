@@ -4,7 +4,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import typer
-from typer import rich_utils
+from typer import completion, rich_utils
 from typer.core import TyperGroup
 
 if TYPE_CHECKING:
@@ -23,7 +23,6 @@ from aai_cli.commands import (
     llm,
     login,
     onboard,
-    samples,
     sessions,
     setup,
     stream,
@@ -44,11 +43,9 @@ _COMMAND_ORDER = (
     # Quick Start — zero-to-running onboarding
     "onboard",
     "init",
-    # Setup & Tools — get set up & maintain; `version` last
-    "samples",
+    # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
-    "version",
     # Transcription & AI — the verbs you run
     "transcribe",
     "stream",
@@ -73,7 +70,7 @@ class _OrderedGroup(TyperGroup):
     """Lists commands in `_COMMAND_ORDER` rather than registration order.
 
     Typer renders all direct commands before sub-typer groups, so registration
-    order alone can't place `version` last; sorting here controls help output.
+    order alone can't control the panel layout; sorting here drives help output.
     """
 
     def list_commands(self, ctx: ClickContext) -> list[str]:
@@ -88,6 +85,15 @@ class _OrderedGroup(TyperGroup):
 # the CLI. Set before the app renders any help.
 rich_utils.STYLE_OPTION = f"bold {theme.BRAND}"
 rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {theme.BRAND}"
+
+# Typer's built-in `--show-completion` help is long enough to wrap several lines in
+# the options panel. Trim it so it fits on fewer rows. The OptionInfo objects live on
+# the completion placeholder's parameter defaults; reach the (underscore-prefixed)
+# placeholder through the module dict so it isn't flagged as private-attribute use.
+_completion_placeholder = vars(completion)["_install_completion_placeholder_function"]
+for _opt in _completion_placeholder.__defaults__ or ():
+    if isinstance(_opt.help, str) and _opt.help.startswith("Show completion"):
+        _opt.help = "Show completion for the current shell."
 
 
 app = typer.Typer(
@@ -129,13 +135,12 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     `--help` (Click handles that eagerly before the callback)."""
     if not state.quiet:
         output.print_banner()
-    if (
-        _interactive_session()
-        and not _profile_has_key(state)
-        and typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True)
-    ):
-        wiz_ctx = WizardContext(state=state, profile=state.resolve_profile(), json_mode=False)
-        raise typer.Exit(code=wizard.run_onboarding(onboard.build_prompter(), wiz_ctx))
+    if _interactive_session() and not _profile_has_key(state):
+        if not state.quiet:
+            output.console.print()  # blank line so the prompt isn't flush against the banner
+        if typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True):
+            wiz_ctx = WizardContext(state=state, profile=state.resolve_profile(), json_mode=False)
+            raise typer.Exit(code=wizard.run_onboarding(onboard.build_prompter(), wiz_ctx))
     typer.echo(ctx.get_help())
     raise typer.Exit()
 
@@ -207,17 +212,10 @@ app.add_typer(llm.app)
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
-app.add_typer(samples.app, name="samples", rich_help_panel=help_panels.SETUP)
 app.add_typer(init.app)
 app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
-
-
-@app.command(rich_help_panel=help_panels.SETUP)
-def version() -> None:
-    """Show the CLI version."""
-    typer.echo(__version__)
 
 
 def run() -> None:

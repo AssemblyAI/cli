@@ -53,7 +53,7 @@ A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app,
 
 ### Command layer
 
-Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `transcripts`, `agent`, `llm`, `login`, `doctor`, `samples`, `init`, `claude`). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
+Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `transcripts`, `agent`, `llm`, `login`, `doctor`, `init`, `claude`). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
 
 ### Cross-cutting state (resolution order matters)
 

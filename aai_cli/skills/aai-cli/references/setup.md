@@ -36,41 +36,6 @@ aai init audio-transcription my-app
 aai init audio-transcription --here
 ```
 
-## `aai samples` — scaffold runnable starter scripts
-
-Sub-app for listing and scaffolding single-file Python starter scripts that read
-`ASSEMBLYAI_API_KEY` from the environment.
-
-### `aai samples list`
-
-List the available sample script names.
-
-Key options:
-
-- `--json` — machine-readable output.
-
-Examples:
-
-```bash
-aai samples list
-```
-
-### `aai samples create NAME`
-
-Scaffold a named starter script into the current directory.
-
-Key options:
-
-- `--force` — overwrite an existing file.
-- `--json` — machine-readable output.
-
-Examples:
-
-```bash
-aai samples create transcribe
-aai samples create transcribe --force
-```
-
 ## `aai doctor` — environment health check
 
 Verifies that your environment is ready to use AssemblyAI (checks credentials,
@@ -143,12 +108,12 @@ Examples:
 aai setup remove
 ```
 
-## `aai version` — show CLI version
+## `aai --version` — show CLI version
 
-Prints the installed `aai` version string.
+Prints the installed `aai` version string and exits.
 
 Examples:
 
 ```bash
-aai version
+aai --version
 ```

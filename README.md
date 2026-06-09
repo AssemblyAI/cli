@@ -89,7 +89,6 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | `aai agent` | *Run* a live two-way voice conversation (to **build** a voice agent app, use `aai init voice-agent`). |
 | `aai llm <prompt>` | Prompt the LLM Gateway (`--transcript-id`, or `--follow` for a live stream). |
 | `aai setup install` | Set up your coding agent for AssemblyAI (docs MCP + skills). |
-| `aai samples create <name>` | Scaffold a runnable starter script. |
 | `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
 Every command prints human-readable text by default — terminal, pipe, CI, or agent alike. Add `--json` for machine-readable output; it never switches on just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob. Errors go to **stderr**, so stdout stays clean for pipelines.

@@ -43,7 +43,6 @@ modules =
     aai_cli.commands.keys
     aai_cli.commands.llm
     aai_cli.commands.login
-    aai_cli.commands.samples
     aai_cli.commands.sessions
     aai_cli.commands.setup
     aai_cli.commands.stream

@@ -136,8 +136,7 @@
   
    Usage: aai init [OPTIONS] [TEMPLATE] [DIRECTORY]
   
-   Build a new app: pick a template, scaffold it, install deps, launch it, open
-   the browser.
+   Scaffold and launch a starter app from a template.
   
    This is the starting point for creating an app — including a voice agent app
    ('aai init voice-agent'). The 'aai agent' command only runs a live mic
@@ -368,53 +367,6 @@
    Examples
    Run the guided setup
    $ aai onboard
-  
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[samples_create]
-  '''
-  
-   Usage: aai samples create [OPTIONS] NAME
-  
-   Scaffold a runnable starter script (reads ASSEMBLYAI_API_KEY from the
-   environment).
-  
-  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    name      TEXT  Sample name. [required]                                 │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --force          Overwrite an existing sample file.                          │
-  │ --json           Output raw JSON.                                            │
-  │ --help           Show this message and exit.                                 │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Scaffold a transcribe starter script
-   $ aai samples create transcribe
-   Overwrite an existing script
-   $ aai samples create transcribe --force
-  
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[samples_list]
-  '''
-  
-   Usage: aai samples list [OPTIONS]
-  
-   List available sample scripts.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   List available starter scripts
-   $ aai samples list
   
   
   
@@ -855,20 +807,6 @@
    A specific date range
    $ aai usage --start 2026-05-01 --end 2026-06-01
   
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[version]
-  '''
-  
-   Usage: aai version [OPTIONS]
-  
-   Show the CLI version.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --help          Show this message and exit.                                  │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
   
   
   '''

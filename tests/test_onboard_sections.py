@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from aai_cli import client, config, output, transcribe_render
+from aai_cli import output, transcribe_render
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.commands import transcribe as transcribe_cmd
@@ -174,21 +174,9 @@ def test_welcome_cold_start(ctx: WizardContext) -> None:
 
 
 def test_auth_browser_path(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Onboarding signs in via the browser only — there is no API-key paste path.
     monkeypatch.setattr(sections, "persist_browser_login", lambda *a, **k: None)
-    assert sections.auth(_ScriptedPrompter(select="browser"), ctx) is SectionResult.DONE
-
-
-def test_auth_key_path_valid(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client, "validate_key", lambda *a, **k: True)
-    result = sections.auth(_ScriptedPrompter(select="key", text="sk_good"), ctx)
-    assert result is SectionResult.DONE
-    assert config.get_api_key("default") == "sk_good"
-
-
-def test_auth_key_path_rejected(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client, "validate_key", lambda *a, **k: False)
-    result = sections.auth(_ScriptedPrompter(select="key", text="sk_bad"), ctx)
-    assert result is SectionResult.FAILED
+    assert sections.auth(_ScriptedPrompter(), ctx) is SectionResult.DONE
 
 
 def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

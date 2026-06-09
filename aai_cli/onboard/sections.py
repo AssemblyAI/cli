@@ -6,7 +6,7 @@ from enum import Enum
 import assemblyai as aai
 import typer
 
-from aai_cli import client, config, environments, output, transcribe_render
+from aai_cli import config, environments, output, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
@@ -48,22 +48,10 @@ def auth(prompter: Prompter, ctx: WizardContext) -> SectionResult:
         prompter.note("Already signed in.")
         return SectionResult.SKIPPED
     prompter.section("Sign in")
-    method = prompter.select(
-        "How do you want to sign in?",
-        [("browser", "Sign in with your browser (recommended)"), ("key", "Paste an API key")],
-        default="browser",
-    )
-    env = environments.active().name
-    if method == "key":
-        key = prompter.text("Paste your AssemblyAI API key")
-        if not client.validate_key(key):
-            output.error_console.print(output.fail("That key was rejected."))
-            return SectionResult.FAILED
-        config.set_api_key(ctx.profile, key)
-        config.set_profile_env(ctx.profile, env)
-        return SectionResult.DONE
+    # Browser sign-in only: we deliberately don't offer an API-key paste here so a
+    # secret never lands in the terminal scrollback or shell history.
     prompter.note(f"No account yet? Create one at {environments.active().signup_url}")
-    persist_browser_login(ctx.profile, env)
+    persist_browser_login(ctx.profile, environments.active().name)
     return SectionResult.DONE
 
 
@@ -71,7 +59,8 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     prompter.section("Your first transcription")
     api_key = config.resolve_api_key(profile=ctx.profile)
     source = prompter.text(
-        "Audio file path or YouTube URL (press Enter for the sample)", default=""
+        "Audio file path or YouTube URL (or press Enter to transcribe a sample clip)",
+        default="",
     ).strip()
     label = source or "the sample clip"
     try:
@@ -90,20 +79,23 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
 
 
 _BUILD_CHOICES = [
-    ("audio-transcription", "Transcribe audio files (web app)"),
-    ("live-captions", "Live captions from streaming audio"),
-    ("voice-agent", "A two-way voice agent"),
-    ("skip", "Just the CLI for now"),
+    ("audio-transcription", "Audio transcription web app"),
+    ("live-captions", "Live captions web app"),
+    ("voice-agent", "Voice agent web app"),
+    ("skip", "Skip — just the CLI for now"),
 ]
 
 
 def environment(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
-    prompter.section("Environment check")
     checks = [
         doctor_cmd._check_python(),  # pyright: ignore[reportPrivateUsage]
         doctor_cmd._check_ffmpeg(),  # pyright: ignore[reportPrivateUsage]
         doctor_cmd._check_audio(),  # pyright: ignore[reportPrivateUsage]
     ]
+    # `_render` already prints its own "Environment check" heading, so we don't call
+    # prompter.section here (that would show the title twice); just space it from the
+    # previous section with a blank line.
+    output.console.print()
     output.console.print(doctor_cmd._render({"ok": True, "checks": checks}))  # pyright: ignore[reportPrivateUsage]
     prompter.note("Warnings here only affect live streaming and the voice agent.")
     return SectionResult.DONE
@@ -111,7 +103,7 @@ def environment(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
 
 def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     prompter.section("What do you want to build?")
-    choice = prompter.select("Pick a starting point", _BUILD_CHOICES, default="skip")
+    choice = prompter.select("Pick a starting point (or skip)", _BUILD_CHOICES, default="skip")
     if choice == "skip":
         return SectionResult.SKIPPED
     if not prompter.confirm(f"Scaffold the '{choice}' app now?", default=True):

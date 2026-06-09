@@ -45,7 +45,7 @@ def test_python_dash_m_entrypoint_runs():
 
 def test_python_dash_m_version():
     result = subprocess.run(
-        [sys.executable, "-m", "aai_cli", "version"],
+        [sys.executable, "-m", "aai_cli", "--version"],
         capture_output=True,
         text=True,
     )

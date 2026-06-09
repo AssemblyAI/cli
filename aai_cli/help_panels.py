@@ -16,7 +16,7 @@ QUICK_START = "Quick Start"  # zero-to-running onboarding: onboard, init
 TRANSCRIPTION = "Transcription & AI"  # the verbs you run: transcribe, stream, agent, llm
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
-SETUP = "Setup & Tools"  # get set up & maintain: samples, doctor, claude, version
+SETUP = "Setup & Tools"  # get set up & maintain: doctor, setup
 
 # Option panels group a single command's flags within its own ``--help``. The
 # `transcribe` command exposes 40+ options; without panels they render as one
