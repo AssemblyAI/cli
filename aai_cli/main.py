@@ -17,6 +17,7 @@ from aai_cli.commands import (
     account,
     agent,
     audit,
+    dev,
     doctor,
     init,
     keys,
@@ -44,6 +45,7 @@ _COMMAND_ORDER = (
     "onboard",
     # Build an App — scaffold a new project
     "init",
+    "dev",
     # Run AssemblyAI — use AssemblyAI directly from the terminal
     "transcribe",
     "stream",
@@ -250,6 +252,7 @@ app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(init.app)
+app.add_typer(dev.app)
 app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)

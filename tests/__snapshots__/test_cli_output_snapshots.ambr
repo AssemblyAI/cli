@@ -123,6 +123,39 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[dev]
+  '''
+  
+   Usage: aai dev [OPTIONS]
+  
+   Launch the dev server for the app in the current directory.
+  
+   Run this from inside a project created by `aai init`. It installs dependencies
+   if needed, then starts the FastAPI server with live reload and opens the
+   browser.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port              INTEGER  Local server port. [default: 3000]              │
+  │ --no-open                    Launch, but don't open the browser.             │
+  │ --no-install                 Skip dependency install; launch directly.       │
+  │ --json                       Output raw JSON.                                │
+  │ --help                       Show this message and exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Launch the app in the current directory
+   $ aai dev
+   Use a specific port
+   $ aai dev --port 8000
+   Launch without opening a browser
+   $ aai dev --no-open
+   Skip the dependency install step
+   $ aai dev --no-install
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[doctor]
   '''
   
