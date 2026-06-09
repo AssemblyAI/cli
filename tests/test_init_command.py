@@ -57,7 +57,7 @@ def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypat
     assert "aai login" in result.output
     # Deps installed but no key -> a launch-skipped row with the manual run command
     # (pins `not no_install and api_key is None`).
-    assert "uvicorn api.index" in result.output
+    assert "aai dev" in result.output
 
 
 def test_init_logged_out_install_emits_launch_skipped_step_json(tmp_path, monkeypatch):
@@ -94,7 +94,7 @@ def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):
     assert "your_assemblyai_api_key_here" in env
     # --no-install means no deps were installed, so there's no launch-skipped row even
     # without a key (pins the `not no_install` half of the launch guard).
-    assert "uvicorn api.index" not in result.output
+    assert "aai dev" not in result.output
 
 
 def test_init_unknown_template_errors(tmp_path, monkeypatch):
