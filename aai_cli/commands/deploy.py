@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -15,23 +16,46 @@ from aai_cli.help_text import examples_epilog
 # Flattened single-command sub-typer (same pattern as `aai dev`).
 app = typer.Typer()
 
-VERCEL = "vercel"
+
+@dataclass(frozen=True)
+class Target:
+    name: str  # human label, e.g. "Vercel"
+    bin: str  # executable resolved via shutil.which
+    install: str  # install hint shown when the CLI is missing
+
+    def command(self, *, prod: bool) -> list[str]:
+        if self.bin == "vercel":
+            return ["vercel", "deploy", *(["--prod"] if prod else [])]
+        return ["railway", "up"]  # Railway has no preview/prod split here
 
 
-def _require_vercel() -> None:
-    if shutil.which(VERCEL) is None:
+VERCEL = Target(name="Vercel", bin="vercel", install="npm i -g vercel")
+RAILWAY = Target(name="Railway", bin="railway", install="npm i -g @railway/cli")
+
+
+def _resolve_target(*, vercel: bool, railway: bool) -> Target:
+    if vercel and railway:
         raise CLIError(
-            "The Vercel CLI is required to deploy. Install it with `npm i -g vercel`.",
+            "Pass either --vercel or --railway, not both.",
+            error_type="usage_error",
+            exit_code=1,
+        )
+    return RAILWAY if railway else VERCEL  # Vercel is the default
+
+
+def _require_cli(target: Target) -> None:
+    if shutil.which(target.bin) is None:
+        raise CLIError(
+            f"The {target.name} CLI is required to deploy. Install it with `{target.install}`.",
             error_type="missing_dependency",
             exit_code=1,
         )
 
 
-def _confirmed(*, assume_yes: bool) -> bool:
+def _confirmed(target: Target, *, assume_yes: bool) -> bool:
     """True when the deploy should proceed: --yes, or an interactive yes.
 
-    Refuses to guess in a non-interactive/agent session (would otherwise hang or
-    deploy unintentionally)."""
+    Refuses to guess in a non-interactive/agent session."""
     if assume_yes:
         return True
     if output.is_agentic():
@@ -41,17 +65,16 @@ def _confirmed(*, assume_yes: bool) -> bool:
             error_type="usage_error",
             exit_code=1,
         )
-    return typer.confirm("Deploy this project to Vercel?")
+    return typer.confirm(f"Deploy this project to {target.name}?")
 
 
-def run_deploy(*, prod: bool, assume_yes: bool) -> None:
-    """Confirm, then run `vercel deploy` in the current directory."""
-    _require_vercel()
-    if not _confirmed(assume_yes=assume_yes):
+def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
+    """Confirm, then run the target's deploy command in the current directory."""
+    _require_cli(target)
+    if not _confirmed(target, assume_yes=assume_yes):
         output.console.print("Aborted.")
         return
-    cmd = [VERCEL, "deploy", *(["--prod"] if prod else [])]
-    result = subprocess.run(cmd, cwd=Path.cwd(), check=False)
+    result = subprocess.run(target.command(prod=prod), cwd=Path.cwd(), check=False)
     if result.returncode:
         raise typer.Exit(code=result.returncode)
 
@@ -61,22 +84,29 @@ def run_deploy(*, prod: bool, assume_yes: bool) -> None:
     epilog=examples_epilog(
         [
             ("Deploy a preview to Vercel (asks first)", "aai deploy"),
-            ("Deploy to production without prompting", "aai deploy --prod --yes"),
+            ("Deploy to production on Vercel", "aai deploy --prod --yes"),
+            ("Deploy to Railway", "aai deploy --railway"),
         ]
     ),
 )
 def deploy(
     ctx: typer.Context,
-    prod: bool = typer.Option(False, "--prod", help="Deploy to production."),
+    prod: bool = typer.Option(False, "--prod", help="Deploy to production (Vercel only)."),
+    vercel: bool = typer.Option(False, "--vercel", help="Deploy to Vercel (the default)."),
+    railway: bool = typer.Option(False, "--railway", help="Deploy to Railway."),
     assume_yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
-    """Deploy the current project to Vercel.
+    """Deploy the current project to Vercel (default) or Railway.
 
-    Asks for confirmation first, then runs `vercel deploy` (pass `--prod` to promote
-    to production). Requires the Vercel CLI (`npm i -g vercel`).
+    Asks for confirmation first, then runs the target's CLI (`vercel deploy` or
+    `railway up`). Requires that target's CLI to be installed.
     """
 
     def body(_state: AppState, _json_mode: bool) -> None:
-        run_deploy(prod=prod, assume_yes=assume_yes)
+        run_deploy(
+            target=_resolve_target(vercel=vercel, railway=railway),
+            prod=prod,
+            assume_yes=assume_yes,
+        )
 
     run_command(ctx, body)

@@ -1,30 +1,53 @@
 from __future__ import annotations
 
+import dataclasses
 import types
-from typing import Any
+from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from aai_cli.commands.deploy import RAILWAY, VERCEL, Target
 from aai_cli.main import app
 
 runner = CliRunner()
 
 
+def test_targets_are_frozen() -> None:
+    # The default and Railway targets are module-level singletons; freezing them
+    # guards against accidental in-place mutation of shared deploy config.
+    # Route the assignment through an object-typed alias and a runtime attribute
+    # name so the frozen-ness is checked at runtime, not statically.
+    field = "name"
+    for target in (VERCEL, RAILWAY):
+        opaque: object = target
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(opaque, field, "tampered")
+    assert isinstance(VERCEL, Target)
+
+
 def _stub(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    has_vercel: bool = True,
+    available: Sequence[str] = ("vercel",),
     agentic: bool = False,
     confirm: bool = True,
     returncode: int = 0,
-) -> dict[str, Any]:
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/vercel" if has_vercel else None)
+) -> dict[str, object]:
+    monkeypatch.setattr(
+        "shutil.which", lambda name: f"/usr/bin/{name}" if name in available else None
+    )
     monkeypatch.setattr("aai_cli.output.is_agentic", lambda: agentic)
-    monkeypatch.setattr("typer.confirm", lambda *a, **k: confirm)
-    calls: dict[str, Any] = {}
+    calls: dict[str, object] = {}
 
-    def fake_run(cmd: list[str], **kwargs: Any) -> types.SimpleNamespace:
+    def fake_confirm(prompt: str, *a: object, **k: object) -> bool:
+        calls["prompt"] = prompt
+        return confirm
+
+    monkeypatch.setattr("typer.confirm", fake_confirm)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> types.SimpleNamespace:
         calls["cmd"] = cmd
         calls["cwd"] = kwargs.get("cwd")
         calls["check"] = kwargs.get("check")
@@ -34,69 +57,108 @@ def _stub(
     return calls
 
 
-def test_deploy_missing_vercel_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stub(monkeypatch, has_vercel=False)
+def test_deploy_defaults_to_vercel(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("vercel",))
     result = runner.invoke(app, ["deploy"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["vercel", "deploy"]
+    assert calls["check"] is False
+    assert calls["cwd"] == Path.cwd()
+    assert calls["prompt"] == "Deploy this project to Vercel?"
+
+
+def test_deploy_vercel_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("vercel",))
+    result = runner.invoke(app, ["deploy", "--vercel", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["vercel", "deploy"]
+
+
+def test_deploy_railway_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("railway",))
+    result = runner.invoke(app, ["deploy", "--railway", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["railway", "up"]
+
+
+def test_deploy_railway_prompt_names_railway(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("railway",), confirm=False)
+    result = runner.invoke(app, ["deploy", "--railway"])
+    assert result.exit_code == 0, result.output
+    assert calls["prompt"] == "Deploy this project to Railway?"
+    assert "cmd" not in calls  # declined
+
+
+def test_deploy_both_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("vercel", "railway"))
+    result = runner.invoke(app, ["deploy", "--vercel", "--railway", "--yes"])
     assert result.exit_code == 1
-    assert "npm i -g vercel" in result.output
+    assert "not both" in result.output
+    assert "cmd" not in calls  # never deployed
+
+
+def test_deploy_missing_vercel_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--yes"])
+    assert result.exit_code == 1
+    assert "Vercel CLI" in result.output
+    assert "npm i -g vercel" in " ".join(result.output.split())
+
+
+def test_deploy_missing_railway_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--railway", "--yes"])
+    assert result.exit_code == 1
+    assert "Railway CLI" in result.output
+    # Console may soft-wrap the hint, so normalize whitespace before matching.
+    assert "npm i -g @railway/cli" in " ".join(result.output.split())
 
 
 def test_deploy_confirm_no_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, agentic=False, confirm=False)
+    calls = _stub(monkeypatch, available=("vercel",), confirm=False)
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 0, result.output
     assert "Aborted" in result.output
-    assert calls == {}  # vercel never invoked
+    assert "cmd" not in calls
 
 
-def test_deploy_confirm_yes_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, agentic=False, confirm=True)
-    result = runner.invoke(app, ["deploy"])
-    assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["vercel", "deploy"]
-
-
-def test_deploy_yes_flag_skips_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    # confirm=False would abort if the prompt were consulted; --yes must bypass it.
-    calls = _stub(monkeypatch, agentic=False, confirm=False)
+def test_deploy_yes_skips_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("vercel",), confirm=False)
     result = runner.invoke(app, ["deploy", "--yes"])
     assert result.exit_code == 0, result.output
     assert calls["cmd"] == ["vercel", "deploy"]
+    assert "prompt" not in calls  # --yes bypassed typer.confirm
 
 
-def test_deploy_prod_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, confirm=True)
-    result = runner.invoke(app, ["deploy", "--yes", "--prod"])
+def test_deploy_prod_flag_vercel(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("vercel",))
+    result = runner.invoke(app, ["deploy", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
     assert calls["cmd"] == ["vercel", "deploy", "--prod"]
 
 
-def test_deploy_runs_in_cwd(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, confirm=True)
-    result = runner.invoke(app, ["deploy", "--yes"])
+def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("railway",))
+    result = runner.invoke(app, ["deploy", "--railway", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    from pathlib import Path
-
-    assert calls["cwd"] == Path.cwd()
-    # We handle the exit code ourselves; subprocess must not raise on failure.
-    assert calls["check"] is False
+    assert calls["cmd"] == ["railway", "up"]
 
 
 def test_deploy_nonzero_exit_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stub(monkeypatch, confirm=True, returncode=2)
+    _stub(monkeypatch, available=("vercel",), returncode=2)
     result = runner.invoke(app, ["deploy", "--yes"])
     assert result.exit_code == 2
 
 
 def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, agentic=True, confirm=True)
+    calls = _stub(monkeypatch, available=("vercel",), agentic=True)
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 1
     assert "--yes" in result.output
-    assert calls == {}  # never deployed
+    assert "cmd" not in calls
 
 
-@pytest.mark.parametrize("flag", ["--prod", "--yes"])
+@pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--yes"])
 def test_deploy_help_lists_flags(flag: str) -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0
