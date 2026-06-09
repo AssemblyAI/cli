@@ -1,6 +1,9 @@
-fastapi>=0.115.0
+fastapi>=0.136.3
 uvicorn>=0.30.0
 assemblyai>=0.64,<1
-python-dotenv>=1.0.0
-python-multipart>=0.0.9
+python-dotenv>=1.2.2
+python-multipart>=0.0.32
 openai>=2.41.0
+# Pin starlette directly: FastAPI's own floor (starlette>=0.46.0) still admits
+# versions with known CVEs, so raise the transitive floor above them.
+starlette>=1.2.1
