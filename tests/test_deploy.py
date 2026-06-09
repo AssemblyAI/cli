@@ -8,19 +8,19 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.commands.deploy import RAILWAY, VERCEL, Target
+from aai_cli.commands.deploy import FLY, RAILWAY, RENDER, VERCEL, Target
 from aai_cli.main import app
 
 runner = CliRunner()
 
 
 def test_targets_are_frozen() -> None:
-    # The default and Railway targets are module-level singletons; freezing them
-    # guards against accidental in-place mutation of shared deploy config.
+    # Every deploy target is a module-level singleton; freezing them guards
+    # against accidental in-place mutation of shared deploy config.
     # Route the assignment through an object-typed alias and a runtime attribute
     # name so the frozen-ness is checked at runtime, not statically.
     field = "name"
-    for target in (VERCEL, RAILWAY):
+    for target in (VERCEL, RAILWAY, RENDER, FLY):
         opaque: object = target
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(opaque, field, "tampered")
@@ -89,11 +89,13 @@ def test_deploy_railway_prompt_names_railway(monkeypatch: pytest.MonkeyPatch) ->
     assert "cmd" not in calls  # declined
 
 
-def test_deploy_both_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_multiple_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel", "railway"))
     result = runner.invoke(app, ["deploy", "--vercel", "--railway", "--yes"])
     assert result.exit_code == 1
-    assert "not both" in result.output
+    assert "at most one" in result.output
+    # The error lists every target flag, including the new ones.
+    assert "--fly" in result.output
     assert "cmd" not in calls  # never deployed
 
 
@@ -144,6 +146,58 @@ def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> Non
     assert calls["cmd"] == ["railway", "up"]
 
 
+def test_deploy_render_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("render",))
+    result = runner.invoke(app, ["deploy", "--render", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["render", "deploys", "create"]
+
+
+def test_deploy_render_prompt_names_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("render",), confirm=False)
+    result = runner.invoke(app, ["deploy", "--render"])
+    assert result.exit_code == 0, result.output
+    assert calls["prompt"] == "Deploy this project to Render?"
+    assert "cmd" not in calls  # declined
+
+
+def test_deploy_prod_ignored_for_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("render",))
+    result = runner.invoke(app, ["deploy", "--render", "--prod", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["render", "deploys", "create"]
+
+
+def test_deploy_missing_render_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--render", "--yes"])
+    assert result.exit_code == 1
+    assert "Render CLI" in result.output
+    assert "render.com/docs/cli" in " ".join(result.output.split())
+
+
+def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("fly",))
+    result = runner.invoke(app, ["deploy", "--fly", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["fly", "deploy"]
+
+
+def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _stub(monkeypatch, available=("fly",))
+    result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert calls["cmd"] == ["fly", "deploy"]
+
+
+def test_deploy_missing_fly_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--fly", "--yes"])
+    assert result.exit_code == 1
+    assert "Fly CLI" in result.output
+    assert "brew install flyctl" in " ".join(result.output.split())
+
+
 def test_deploy_nonzero_exit_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub(monkeypatch, available=("vercel",), returncode=2)
     result = runner.invoke(app, ["deploy", "--yes"])
@@ -158,7 +212,7 @@ def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatc
     assert "cmd" not in calls
 
 
-@pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--yes"])
+@pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--render", "--fly", "--yes"])
 def test_deploy_help_lists_flags(flag: str) -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0

@@ -128,15 +128,19 @@
   
    Usage: aai deploy [OPTIONS]
   
-   Deploy the current project to Vercel (default) or Railway.
+   Deploy the current project to Vercel (default), Railway, Render, or Fly.io.
   
-   Asks for confirmation first, then runs the target's CLI (`vercel deploy` or
-   `railway up`). Requires that target's CLI to be installed.
+   Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
+   `railway up`, `render deploys create`, or `fly deploy`). Requires that
+   target's
+   CLI to be installed.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --prod               Deploy to production (Vercel only).                     │
   │ --vercel             Deploy to Vercel (the default).                         │
   │ --railway            Deploy to Railway.                                      │
+  │ --render             Deploy to Render.                                       │
+  │ --fly                Deploy to Fly.io.                                       │
   │ --yes      -y        Skip the confirmation prompt.                           │
   │ --help               Show this message and exit.                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -148,6 +152,10 @@
    $ aai deploy --prod --yes
    Deploy to Railway
    $ aai deploy --railway
+   Deploy to Render
+   $ aai deploy --render
+   Deploy to Fly.io
+   $ aai deploy --fly
   
   
   

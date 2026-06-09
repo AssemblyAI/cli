@@ -21,32 +21,66 @@ app = typer.Typer()
 class Target:
     name: str  # human label, e.g. "Vercel"
     bin: str  # executable resolved via shutil.which
-    install: str  # install hint shown when the CLI is missing
+    flag: str  # CLI selector, e.g. "--vercel"
+    install: str  # full hint sentence shown when the CLI is missing
+    deploy_args: tuple[str, ...]  # subcommand(s) appended after `bin`
+    supports_prod: bool = False  # whether `--prod` adds a production flag
 
     def command(self, *, prod: bool) -> list[str]:
-        if self.bin == "vercel":
-            return ["vercel", "deploy", *(["--prod"] if prod else [])]
-        return ["railway", "up"]  # Railway has no preview/prod split here
+        argv = [self.bin, *self.deploy_args]
+        if prod and self.supports_prod:
+            argv.append("--prod")
+        return argv
 
 
-VERCEL = Target(name="Vercel", bin="vercel", install="npm i -g vercel")
-RAILWAY = Target(name="Railway", bin="railway", install="npm i -g @railway/cli")
+VERCEL = Target(
+    name="Vercel",
+    bin="vercel",
+    flag="--vercel",
+    install="Install it with `npm i -g vercel`.",
+    deploy_args=("deploy",),
+    supports_prod=True,
+)
+RAILWAY = Target(
+    name="Railway",
+    bin="railway",
+    flag="--railway",
+    install="Install it with `npm i -g @railway/cli`.",
+    deploy_args=("up",),
+)
+RENDER = Target(
+    name="Render",
+    bin="render",
+    flag="--render",
+    install="Install it from https://render.com/docs/cli.",
+    deploy_args=("deploys", "create"),
+)
+FLY = Target(
+    name="Fly",
+    bin="fly",
+    flag="--fly",
+    install="Install it with `brew install flyctl`.",
+    deploy_args=("deploy",),
+)
+
+TARGETS = (VERCEL, RAILWAY, RENDER, FLY)
 
 
-def _resolve_target(*, vercel: bool, railway: bool) -> Target:
-    if vercel and railway:
+def _resolve_target(selected: list[Target]) -> Target:
+    if len(selected) > 1:
+        flags = " / ".join(t.flag for t in TARGETS)
         raise CLIError(
-            "Pass either --vercel or --railway, not both.",
+            f"Pass at most one deploy target ({flags}).",
             error_type="usage_error",
             exit_code=1,
         )
-    return RAILWAY if railway else VERCEL  # Vercel is the default
+    return selected[0] if selected else VERCEL  # Vercel is the default
 
 
 def _require_cli(target: Target) -> None:
     if shutil.which(target.bin) is None:
         raise CLIError(
-            f"The {target.name} CLI is required to deploy. Install it with `{target.install}`.",
+            f"The {target.name} CLI is required to deploy. {target.install}",
             error_type="missing_dependency",
             exit_code=1,
         )
@@ -86,6 +120,8 @@ def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
             ("Deploy a preview to Vercel (asks first)", "aai deploy"),
             ("Deploy to production on Vercel", "aai deploy --prod --yes"),
             ("Deploy to Railway", "aai deploy --railway"),
+            ("Deploy to Render", "aai deploy --render"),
+            ("Deploy to Fly.io", "aai deploy --fly"),
         ]
     ),
 )
@@ -94,19 +130,23 @@ def deploy(
     prod: bool = typer.Option(False, "--prod", help="Deploy to production (Vercel only)."),
     vercel: bool = typer.Option(False, "--vercel", help="Deploy to Vercel (the default)."),
     railway: bool = typer.Option(False, "--railway", help="Deploy to Railway."),
+    render: bool = typer.Option(False, "--render", help="Deploy to Render."),
+    fly: bool = typer.Option(False, "--fly", help="Deploy to Fly.io."),
     assume_yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
-    """Deploy the current project to Vercel (default) or Railway.
+    """Deploy the current project to Vercel (default), Railway, Render, or Fly.io.
 
-    Asks for confirmation first, then runs the target's CLI (`vercel deploy` or
-    `railway up`). Requires that target's CLI to be installed.
+    Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
+    `railway up`, `render deploys create`, or `fly deploy`). Requires that target's
+    CLI to be installed.
     """
 
     def body(_state: AppState, _json_mode: bool) -> None:
-        run_deploy(
-            target=_resolve_target(vercel=vercel, railway=railway),
-            prod=prod,
-            assume_yes=assume_yes,
-        )
+        selected = [
+            t
+            for t, on in ((VERCEL, vercel), (RAILWAY, railway), (RENDER, render), (FLY, fly))
+            if on
+        ]
+        run_deploy(target=_resolve_target(selected), prod=prod, assume_yes=assume_yes)
 
     run_command(ctx, body)
