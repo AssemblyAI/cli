@@ -44,14 +44,14 @@ _COMMAND_ORDER = (
     "onboard",
     # Build an app — scaffold a new project
     "init",
-    # Setup & Tools — get set up & maintain
-    "doctor",
-    "setup",
     # Run AssemblyAI — use AssemblyAI directly from the terminal
     "transcribe",
     "stream",
     "agent",
     "llm",
+    # Setup & Tools — get set up & maintain
+    "doctor",
+    "setup",
     # History — browse past work
     "transcripts",
     "sessions",
