@@ -44,59 +44,64 @@ _SYMBOL = {
 }
 
 
+def _check(
+    name: str,
+    status: str,
+    detail: str,
+    *,
+    fix: str | None = None,
+    affects: list[str] | None = None,
+) -> Check:
+    """Assemble a Check. ``affects`` defaults to empty — an 'ok' check blocks nothing."""
+    return {"name": name, "status": status, "affects": affects or [], "detail": detail, "fix": fix}
+
+
 def check_python() -> Check:
     v = sys.version_info
     version = f"{v.major}.{v.minor}.{v.micro}"
     if v >= (3, 12):
-        return {"name": "python", "status": "ok", "affects": [], "detail": version, "fix": None}
-    return {
-        "name": "python",
-        "status": "fail",
-        "affects": ["everything"],
-        "detail": f"Python {version} is too old; the CLI needs 3.12+",
-        "fix": "Install Python 3.12 or newer, then reinstall the CLI.",
-    }
+        return _check("python", "ok", version)
+    return _check(
+        "python",
+        "fail",
+        f"Python {version} is too old; the CLI needs 3.12+",
+        fix="Install Python 3.12 or newer, then reinstall the CLI.",
+        affects=["everything"],
+    )
 
 
 def _check_api_key(profile: str) -> Check:
-    affects = ["everything"]
     try:
         key = config.resolve_api_key(profile=profile)
     except NotAuthenticated:
-        return {
-            "name": "api-key",
-            "status": "fail",
-            "affects": affects,
-            "detail": "No API key found.",
-            "fix": "Run 'aai login' (or set ASSEMBLYAI_API_KEY).",
-        }
+        return _check(
+            "api-key",
+            "fail",
+            "No API key found.",
+            fix="Run 'aai login' (or set ASSEMBLYAI_API_KEY).",
+            affects=["everything"],
+        )
     # validate_key doubles as the connectivity probe: it makes one cheap authed call,
     # so a pass means the key is valid AND api.assemblyai.com is reachable.
     try:
         valid = client.validate_key(key)
     except CLIError as exc:
-        return {
-            "name": "api-key",
-            "status": "fail",
-            "affects": affects,
-            "detail": f"Could not reach AssemblyAI: {exc.message}",
-            "fix": "Check your network/proxy and that api.assemblyai.com is reachable.",
-        }
+        return _check(
+            "api-key",
+            "fail",
+            f"Could not reach AssemblyAI: {exc.message}",
+            fix="Check your network/proxy and that api.assemblyai.com is reachable.",
+            affects=["everything"],
+        )
     if valid:
-        return {
-            "name": "api-key",
-            "status": "ok",
-            "affects": [],
-            "detail": "API key is valid and AssemblyAI is reachable.",
-            "fix": None,
-        }
-    return {
-        "name": "api-key",
-        "status": "fail",
-        "affects": affects,
-        "detail": "API key was rejected (HTTP 401).",
-        "fix": "Run 'aai login' with a valid key.",
-    }
+        return _check("api-key", "ok", "API key is valid and AssemblyAI is reachable.")
+    return _check(
+        "api-key",
+        "fail",
+        "API key was rejected (HTTP 401).",
+        fix="Run 'aai login' with a valid key.",
+        affects=["everything"],
+    )
 
 
 def check_ffmpeg() -> Check:
@@ -104,20 +109,19 @@ def check_ffmpeg() -> Check:
     # decodes them to 16 kHz mono PCM on the fly. Plain `transcribe` (including
     # YouTube URLs) uploads the file to AssemblyAI and never invokes ffmpeg, so it is
     # not required for transcription.
-    affects = ["stream/agent (non-WAV file or URL input)"]
     if shutil.which("ffmpeg"):
-        return {"name": "ffmpeg", "status": "ok", "affects": [], "detail": "found", "fix": None}
-    return {
-        "name": "ffmpeg",
-        "status": "warn",
-        "affects": affects,
-        "detail": (
+        return _check("ffmpeg", "ok", "found")
+    return _check(
+        "ffmpeg",
+        "warn",
+        (
             "ffmpeg not found. Only needed to stream non-WAV files or URLs; "
             "transcription (including YouTube) works without it, as does streaming a "
             "16 kHz mono WAV."
         ),
-        "fix": "Install ffmpeg (macOS: brew install ffmpeg; Debian/Ubuntu: apt-get install ffmpeg).",
-    }
+        fix="Install ffmpeg (macOS: brew install ffmpeg; Debian/Ubuntu: apt-get install ffmpeg).",
+        affects=["stream/agent (non-WAV file or URL input)"],
+    )
 
 
 def _probe_input_devices() -> int:
@@ -144,59 +148,50 @@ def check_audio() -> Check:
     try:
         inputs = _probe_input_devices()
     except ImportError:
-        return {
-            "name": "audio",
-            "status": "warn",
-            "affects": affects,
-            "detail": "sounddevice is not importable; the microphone can't be used.",
-            "fix": "pip install --force-reinstall sounddevice",
-        }
+        return _check(
+            "audio",
+            "warn",
+            "sounddevice is not importable; the microphone can't be used.",
+            fix="pip install --force-reinstall sounddevice",
+            affects=affects,
+        )
     except Exception as exc:  # noqa: BLE001 - any PortAudio/device failure is a soft warning
-        return {
-            "name": "audio",
-            "status": "warn",
-            "affects": affects,
-            "detail": f"audio system unavailable: {exc}",
-            "fix": "On Linux install PortAudio: sudo apt-get install libportaudio2",
-        }
+        return _check(
+            "audio",
+            "warn",
+            f"audio system unavailable: {exc}",
+            fix="On Linux install PortAudio: sudo apt-get install libportaudio2",
+            affects=affects,
+        )
     if inputs == 0:
-        return {
-            "name": "audio",
-            "status": "warn",
-            "affects": affects,
-            "detail": "No microphone (input device) found.",
-            "fix": "Connect a microphone; live mic input is needed for stream/agent.",
-        }
-    return {
-        "name": "audio",
-        "status": "ok",
-        "affects": [],
-        "detail": f"{inputs} microphone input device(s) available.",
-        "fix": None,
-    }
+        return _check(
+            "audio",
+            "warn",
+            "No microphone (input device) found.",
+            fix="Connect a microphone; live mic input is needed for stream/agent.",
+            affects=affects,
+        )
+    return _check("audio", "ok", f"{inputs} microphone input device(s) available.")
 
 
 def _check_coding_agent() -> Check:
-    affects = ["aai setup install"]
     missing = [tool for tool in ("claude", "npx") if shutil.which(tool) is None]
     if not missing:
-        return {
-            "name": "coding-agent",
-            "status": "ok",
-            "affects": [],
-            "detail": "claude and npx found; run 'aai setup install' to wire up the docs MCP + skills.",
-            "fix": None,
-        }
-    return {
-        "name": "coding-agent",
-        "status": "warn",
-        "affects": affects,
-        "detail": f"not found: {', '.join(missing)}.",
-        "fix": (
+        return _check(
+            "coding-agent",
+            "ok",
+            "claude and npx found; run 'aai setup install' to wire up the docs MCP + skills.",
+        )
+    return _check(
+        "coding-agent",
+        "warn",
+        f"not found: {', '.join(missing)}.",
+        fix=(
             "Install Claude Code (https://claude.com/claude-code) and Node.js, "
             "then run 'aai setup install'."
         ),
-    }
+        affects=["aai setup install"],
+    )
 
 
 def render(data: DoctorResult) -> str:

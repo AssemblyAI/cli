@@ -136,6 +136,7 @@ def test_check_python_flags_old_interpreter(monkeypatch):
     check = doctor.check_python()
     assert check["status"] == "fail"
     assert "3.9.0" in check["detail"]
+    assert check["affects"] == ["everything"]
 
 
 def test_check_audio_handles_portaudio_failure(monkeypatch):

@@ -3,7 +3,6 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 from rich.table import Table
-from rich.text import Text
 
 from aai_cli import jsonshape, output, theme
 from aai_cli.auth import ams
@@ -72,10 +71,9 @@ def list_(
                 "model",
             )
             for s in data:
-                status_str = str(s["status"])
                 table.add_row(
                     escape(str(s["session_id"])),
-                    Text(status_str, style=theme.status_style(status_str)),
+                    theme.status_text(str(s["status"])),
                     escape(str(s.get("created_at") or "")),
                     escape(str(s.get("audio_duration_sec") or "")),
                     escape(str(s.get("speech_model") or "")),
