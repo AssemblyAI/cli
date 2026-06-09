@@ -67,8 +67,9 @@ def _window_label(item: Mapping[str, object]) -> str:
     return f"{start.date().isoformat()} to {end.date().isoformat()}"
 
 
-def _line_item_label(line_item: Mapping[str, object]) -> str:
-    label = next(
+def _line_item_name(line_item: Mapping[str, object]) -> str:
+    """The product/feature label for a usage line item, or ``""`` if it carries none."""
+    return next(
         (
             str(value)
             for key in ("name", "product", "service", "feature", "model", "type", "description")
@@ -76,30 +77,25 @@ def _line_item_label(line_item: Mapping[str, object]) -> str:
         ),
         "",
     )
-    value = next(
-        (
-            line_item[key]
-            for key in ("total", "quantity", "amount", "usage", "count")
-            if key in line_item
-        ),
-        None,
-    )
-    if label and value is not None:
-        return f"{label}: {_format_usage_number(value)}"
-    if label:
-        return label
-    if value is not None:
-        return _format_usage_number(value)
-    return ""
 
 
 def _line_items_summary(item: Mapping[str, object]) -> str:
-    labels = [
-        label
-        for line_item in jsonshape.mapping_list(item.get("line_items"))
-        if (label := _line_item_label(line_item))
-    ]
-    return ", ".join(labels)
+    """Per-product spend for a window, in dollars, aggregated by product and ordered
+    biggest-first.
+
+    Both this and the window total derive from ``line_items[].price`` (cents), so the
+    breakdown is shown in the same unit as the ``total`` column and the products sum to
+    that total — they reconcile, instead of mixing dollars with raw quantities. Products
+    are aggregated by name (the AMS endpoint can return several rows for one product),
+    a row with no recognizable product is grouped under ``other``, and zero-dollar
+    products are dropped as noise (they don't affect the reconciliation).
+    """
+    totals: dict[str, float] = {}
+    for line_item in jsonshape.mapping_list(item.get("line_items")):
+        name = _line_item_name(line_item) or "other"
+        totals[name] = totals.get(name, 0.0) + jsonshape.as_float(line_item.get("price"))
+    ordered = sorted(((n, c) for n, c in totals.items() if c), key=lambda nc: (-nc[1], nc[0]))
+    return ", ".join(f"{name}: {_format_dollars(cents)}" for name, cents in ordered)
 
 
 app = typer.Typer(help="Account billing, usage, and limits.")
@@ -233,7 +229,9 @@ def limits(
         def render(d: dict[str, object]) -> object:
             limits = jsonshape.mapping_list(d.get("rate_limits"))
             if not limits:
-                return output.muted("No custom rate limits configured for this account.")
+                return output.muted(
+                    "No custom rate limits — this account uses AssemblyAI's standard limits."
+                )
             table = output.data_table("service", "limit")
             for limit in limits:
                 table.add_row(

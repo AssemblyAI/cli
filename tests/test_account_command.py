@@ -142,10 +142,38 @@ def test_usage_helpers_format_windows_and_line_items():
         )
         == "2026-01-01"
     )
-    assert account._line_item_label({"name": "minutes", "total": "12.500"}) == "minutes: 12.5"
-    assert account._line_item_label({"product": "streaming"}) == "streaming"
-    assert account._line_item_label({"quantity": 3}) == "3"
-    assert account._line_item_label({}) == ""
+    # Every recognized label key resolves (pins each entry in the lookup tuple).
+    for key in ("name", "product", "service", "feature", "model", "type", "description"):
+        assert account._line_item_name({key: "X"}) == "X"
+    assert account._line_item_name({"name": "minutes", "total": "12.500"}) == "minutes"
+    assert account._line_item_name({"product": "streaming"}) == "streaming"
+    assert account._line_item_name({"quantity": 3}) == ""
+    assert account._line_item_name({}) == ""
+    # Breakdown aggregates by product and shows dollars (from `price` cents), biggest
+    # first, so the line items sum to the window total and reconcile with it.
+    assert (
+        account._line_items_summary(
+            {
+                "line_items": [
+                    {"name": "minutes", "price": 1000.0},
+                    {"name": "streaming", "price": 2500.0},
+                    {"name": "minutes", "price": 250.0},
+                ]
+            }
+        )
+        == "streaming: $25.00, minutes: $12.50"
+    )
+    # Equal-dollar products break the tie by name (pins the nc[0] secondary sort key).
+    assert (
+        account._line_items_summary(
+            {"line_items": [{"name": "zeta", "price": 500.0}, {"name": "alpha", "price": 500.0}]}
+        )
+        == "alpha: $5.00, zeta: $5.00"
+    )
+    # A line item with no recognizable product label is grouped under "other".
+    assert account._line_items_summary({"line_items": [{"price": 500.0}]}) == "other: $5.00"
+    # Zero-dollar products are dropped (they only add noise and still reconcile to 0).
+    assert account._line_items_summary({"line_items": [{"name": "free", "price": 0.0}]}) == ""
     assert account._line_items_summary({"line_items": "bad"}) == ""
 
 
@@ -166,9 +194,9 @@ def test_usage_human_renders_breakdown(monkeypatch):
         result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "breakdown" in result.output
-    # The breakdown shows each product's quantity (units), distinct from the
-    # dollar total derived from price.
-    assert "minutes: 10" in result.output
+    # The breakdown shows each product's spend in dollars (1000 cents = $10.00), the
+    # same unit as the `total` column, so the two reconcile.
+    assert "minutes: $10.00" in result.output
 
 
 def test_usage_human_summarizes_empty_range(monkeypatch):

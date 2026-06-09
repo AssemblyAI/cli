@@ -55,20 +55,26 @@ class AppState:
         return account_id, session["jwt"]
 
     def env_override_warning(self) -> str | None:
-        """A warning when an explicit --env contradicts the profile's stored env.
+        """A warning when the selected environment contradicts the profile's stored env.
 
-        The stored key was minted against the profile's environment, so forcing a
-        different --env points the client at hosts that key won't authenticate to.
+        The stored key was minted against the profile's environment, so pointing the
+        client at a different one sends it to hosts that key won't authenticate to. This
+        catches both an explicit ``--env`` and the easier-to-miss case of an inherited
+        ``AAI_ENV`` silently swapping the environment, and names which source selected it.
         """
-        if self.env is None:
+        if self.env is not None:
+            source, selected = "--env", self.env
+        elif (from_env := os.environ.get("AAI_ENV")) is not None:
+            source, selected = "AAI_ENV", from_env
+        else:
             return None
         profile = self.resolve_profile()
         profile_env = config.get_profile_env(profile)
-        if profile_env is None or profile_env == self.env:
+        if profile_env is None or profile_env == selected:
             return None
         return (
-            f"Using --env {self.env}, but profile '{profile}' was set up for "
-            f"{profile_env}; its stored key may be rejected by {self.env}."
+            f"Using {source} {selected}, but profile '{profile}' was set up for "
+            f"{profile_env}; its stored key may be rejected by {selected}."
         )
 
 

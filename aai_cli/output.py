@@ -212,7 +212,7 @@ def print_banner() -> None:
     console.print(
         f"[aai.brand]🎙️  AssemblyAI CLI[/aai.brand] "
         f"[aai.muted]{__version__} — {_TAGLINE}[/aai.muted]",
-        highlight=False,
+        highlight=False,  # pragma: no mutate (purely cosmetic: toggles Rich repr coloring, not text)
     )
     console.print()
     console.print(Text(_BANNER, style="aai.brand"))

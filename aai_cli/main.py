@@ -80,6 +80,14 @@ class _OrderedGroup(TyperGroup):
             super().list_commands(ctx), key=lambda name: (rank.get(name, len(rank)), name)
         )
 
+    def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:
+        # Stash the full token list before anything is parsed, so the root callback can
+        # tell whether the (not-yet-parsed) subcommand opted into JSON — see
+        # `_command_line_requests_json`. Recorded here because Click clears the pending
+        # args off the context before the group callback runs.
+        ctx.meta[_RAW_ARGS_META_KEY] = list(args)
+        return super().parse_args(ctx, args)
+
 
 # Typer renders option flags and command names in "bold cyan" by default; retint
 # both to the brand accent (the logo blue) so the help screen matches the rest of
@@ -130,6 +138,27 @@ def _interactive_session() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+_RAW_ARGS_META_KEY = "aai_raw_args"
+
+
+def _command_line_requests_json(raw_args: list[str]) -> bool:
+    """Whether the token list opts into JSON (``--json``, ``-o json``, ``--output json``,
+    or their glued forms).
+
+    The root callback runs before the subcommand parses its own ``--json``, so a failure
+    raised here (e.g. a bad ``--env``) would otherwise always render human text — leaving a
+    ``… --json`` pipeline without the uniform ``{"error": …}`` shape it relies on. The group
+    stashes the raw token list in ``ctx.meta`` (see ``_OrderedGroup.parse_args``) before the
+    callback runs, so sniffing it lets every failure class honor the request.
+    """
+    for index, token in enumerate(raw_args):
+        if token in ("--json", "--output=json", "-ojson"):
+            return True
+        if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
+            return True
+    return False
+
+
 def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     """No subcommand given: offer guided setup to a credential-less, interactive user;
     otherwise print help. Never prompts in a non-interactive session, and never on
@@ -153,6 +182,7 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
             ("Guided setup (start here)", "aai onboard"),
             ("Transcribe a file", "aai transcribe call.mp3"),
             ("Scaffold a starter app", "aai init"),
+            ("Global options go before the command", "aai --sandbox transcribe call.mp3"),
         ]
     ),
 )
@@ -184,9 +214,11 @@ def main(
         env = "sandbox000"
     state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
-    # The command's own --json flag isn't parsed yet, and output is human-by-default, so a
-    # root-callback (e.g. bad --env) error renders as human text on stderr.
-    json_mode = output.resolve_json(explicit=False)
+    # The command's own --json flag isn't parsed yet, so sniff the pending command line:
+    # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
+    # invocation opted into JSON, and renders human text on stderr otherwise.
+    raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
+    json_mode = output.resolve_json(explicit=_command_line_requests_json(raw_args))
     try:
         environments.set_active(resolve_environment(state))
     except CLIError as err:

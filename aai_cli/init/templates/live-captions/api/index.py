@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# httpx2 is Pydantic's maintained fork of httpx (API-identical, just renamed) — not a
+# typo. Keep the "2"; see requirements.txt.
 import httpx2
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse

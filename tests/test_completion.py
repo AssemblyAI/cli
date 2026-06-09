@@ -16,6 +16,18 @@ def test_shell_completion_is_enabled():
     assert "--install-completion" in option_names
 
 
+def test_show_completion_help_is_trimmed_and_scoped():
+    # main.py trims the long built-in --show-completion help to one line; that trim must
+    # actually fire (the `for … or ()` loop) and target only --show-completion, not
+    # --install-completion (the `isinstance(...) and startswith(...)` guard).
+    command = typer.main.get_command(app)
+    help_by_opt = {
+        opt: getattr(param, "help", None) for param in command.params for opt in param.opts
+    }
+    assert help_by_opt.get("--show-completion") == "Show completion for the current shell."
+    assert help_by_opt.get("--install-completion") != "Show completion for the current shell."
+
+
 def test_complete_model_filters_by_prefix():
     suggestions = complete_model("gpt")
     assert suggestions  # at least one gpt-* model is known

@@ -6,8 +6,12 @@
   
    Have a live two-way voice conversation with an AssemblyAI voice agent.
   
-   Pass an audio file/URL (or --sample) to speak a recorded clip to the agent
-   instead of the microphone; the session then ends after the agent's reply.
+   Use headphones: the mic stays open while the agent speaks, so on speakers it
+   would
+   hear itself and loop. Pass an audio file/URL (or --sample) to speak a recorded
+   clip to
+   the agent instead of the microphone; the session then ends after the agent's
+   reply.
   
    This only runs a conversation in the terminal — it writes no code. To build
    a voice agent app, run 'aai init voice-agent' instead.
@@ -424,7 +428,14 @@
   
    Usage: aai setup install [OPTIONS]
   
-   Install the AssemblyAI docs MCP server and skills into your coding agent.
+   Set up your coding agent for AssemblyAI by installing three things:
+  
+   the assemblyai-docs MCP server (live API docs, via `claude mcp add`), the
+   AssemblyAI
+   skill (via `npx skills add`), and the bundled aai-cli skill (copied from this
+   package,
+   no network). Each step is idempotent and skipped if already present unless
+   --force.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --scope        [user|project|local]  Config scope to register the MCP under. │
@@ -494,15 +505,21 @@
   
    Usage: aai stream [OPTIONS] [SOURCE]
   
-   Transcribe live audio in real time — from your mic, a file, or a URL.
+   Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
   
-   --prompt biases the speech model. --llm runs a prompt over the live transcript
-   through LLM Gateway, refreshing the answer on every finalized turn (e.g.
-   "summarize action items").
+   Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
+   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -. --prompt biases
+   the
+   speech model. --llm runs a prompt over the live transcript in-process,
+   refreshing the
+   answer on every finalized turn; for a separate step instead, pipe the text out
+   with
+   -o text | aai llm -f "…".
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Omit │
-  │                         to use the microphone.                               │
+  │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Use  │
+  │                         - for raw PCM16/mono/16k on stdin. Omit to use the   │
+  │                         microphone.                                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                          Stream the hosted wildfires.mp3 sample.    │
@@ -598,6 +615,8 @@
    $ aai stream --system-audio
    Stream the hosted sample
    $ aai stream --sample
+   Stream raw PCM from a pipe (16 kHz mono s16le)
+   $ ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -
    Summarize action items live as you talk
    $ aai stream --llm "summarize action items"
    Print equivalent Python instead of running
@@ -614,11 +633,13 @@
   
    Transcribe an audio file, URL, or YouTube link.
   
-   A YouTube URL is downloaded first, then transcribed. Curated flags cover
-   common
-   features; --config KEY=VALUE and --config-file reach every other field.
-   Analysis
-   results (summary, chapters, sentiment, ...) render automatically in human
+   Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
+   Save with
+   --out FILE, or pipe one field with -o text. A YouTube URL is downloaded first,
+   then
+   transcribed. Curated flags cover common features; --config KEY=VALUE and
+   --config-file
+   reach every other field. Analysis (summary, chapters, ...) renders in human
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
@@ -627,9 +648,18 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                         Use the hosted              │
   │                                                  wildfires.mp3 sample.       │
-  │ --json                                           Output raw JSON.            │
-  │ --output     -o      [text|id|status|utterances  Print one field of the      │
-  │                      |srt|json]                  result.                     │
+  │ --json                                           Output the full result as   │
+  │                                                  JSON. Text stays the        │
+  │                                                  default even when piped;    │
+  │                                                  opt in here (same as -o     │
+  │                                                  json).                      │
+  │ --output     -o      [text|id|status|utterances  Print one field: text, id,  │
+  │                      |srt|json]                  status, utterances, srt     │
+  │                                                  (captions), or json.        │
+  │ --out                FILE                        Save the result to a file   │
+  │                                                  instead of printing it      │
+  │                                                  (clean text; pairs with     │
+  │                                                  -o).                        │
   │ --show-code                                      Print the equivalent Python │
   │                                                  SDK code and exit (does not │
   │                                                  transcribe).                │
@@ -839,8 +869,9 @@
 # ---
 # name: test_error_human_render_matches_snapshot[not_authenticated]
   '''
-  Error: Not authenticated.
-  Suggestion: Run 'aai login'.
+  Error: You're not signed in.
+  Suggestion: Run 'aai onboard' for guided setup, or 'aai login' if you have an
+  account.
   
   '''
 # ---
@@ -872,7 +903,7 @@
 # ---
 # name: test_error_json_render_matches_snapshot[not_authenticated]
   '''
-  {"error": {"type": "not_authenticated", "message": "Not authenticated.", "suggestion": "Run 'aai login'."}}
+  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."}}
   
   '''
 # ---

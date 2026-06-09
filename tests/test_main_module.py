@@ -6,6 +6,24 @@ import pytest
 import aai_cli.main as main_mod
 
 
+def test_command_line_requests_json_recognizes_every_form():
+    f = main_mod._command_line_requests_json
+    assert f(["whoami", "--json"])
+    assert f(["transcribe", "a.mp3", "-o", "json"])
+    assert f(["transcribe", "a.mp3", "--output", "json"])
+    assert f(["transcribe", "a.mp3", "--output=json"])
+    assert f(["transcribe", "a.mp3", "-ojson"])
+    # `-o json` is detected even when more tokens follow (pins the 1-element slice width).
+    assert f(["transcribe", "-o", "json", "--speaker-labels"])
+
+
+def test_command_line_requests_json_false_for_text_and_bare():
+    f = main_mod._command_line_requests_json
+    assert not f(["transcribe", "a.mp3", "-o", "text"])
+    assert not f(["transcribe", "a.mp3"])
+    assert not f([])
+
+
 def test_run_exits_clean_on_broken_pipe(monkeypatch):
     """A closed downstream pipe (`| head`) is success, not an error traceback."""
 
