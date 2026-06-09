@@ -609,7 +609,10 @@
   │                                                            turns.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
-  │ --speaker-labels                              Label speakers.                │
+  │ --speaker-labels                              Diarize speakers. With system  │
+  │                                               audio the mic stays "You";     │
+  │                                               only the system audio is split │
+  │                                               into speakers.                 │
   │ --max-speakers          INTEGER RANGE [x>=1]  Max speakers.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Features ───────────────────────────────────────────────────────────────────╮
@@ -632,13 +635,20 @@
   │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
-  │ --llm               TEXT     Run a prompt over the live transcript through   │
-  │                              LLM Gateway, refreshing the answer on every     │
-  │                              finalized turn. Repeatable: each prompt runs on │
-  │                              the previous one's response (a chain).          │
-  │ --model             TEXT     LLM Gateway model.                              │
-  │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
+  │ --llm                 TEXT                  Run a prompt over the live       │
+  │                                             transcript through LLM Gateway,  │
+  │                                             refreshing the answer on every   │
+  │                                             finalized turn. Repeatable: each │
+  │                                             prompt runs on the previous      │
+  │                                             one's response (a chain).        │
+  │ --llm-interval        FLOAT RANGE [x>=0.0]  Seconds between --llm summary    │
+  │                                             refreshes (0 refreshes on every  │
+  │                                             turn).                           │
+  │                                             [default: 30.0]                  │
+  │ --model               TEXT                  LLM Gateway model.               │
+  │                                             [default:                        │
+  │                                             claude-haiku-4-5-20251001]       │
+  │ --max-tokens          INTEGER               Max tokens. [default: 1000]      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any StreamingParameters field as         │

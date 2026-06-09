@@ -8,7 +8,7 @@ from rich.theme import Theme
 # AssemblyAI brand accent. Defined once so the whole CLI can be re-tinted here.
 BRAND = "#2545D3"
 # Secondary accent — a darker blue used where a second hue is needed (agent label,
-# links, the second speaker), kept in the blue family rather than the old cyan.
+# links), kept in the blue family rather than the old cyan.
 DARK_BLUE = "#1E3A8A"
 
 # A fixed affordance vocabulary used across all human-facing output, mirroring the
@@ -20,7 +20,9 @@ SYMBOL_ERROR = "✗"
 SYMBOL_WARN = "!"
 SYMBOL_HINT = "›"  # noqa: RUF001 — deliberate angle-quote glyph, not a '>' typo
 
-# Per-speaker label colors, rotated deterministically by speaker_style().
+# Per-speaker label colors, rotated deterministically by speaker_style(). Deliberately
+# excludes the brand blue: that hue is reserved for "you" (aai.you) so a diarized system
+# speaker can never be tinted the same color as your own mic.
 SPEAKER_STYLES: tuple[str, ...] = (
     "aai.speaker.0",
     "aai.speaker.1",
@@ -34,8 +36,9 @@ THEME = Theme(
         "aai.brand": f"bold {BRAND}",
         "aai.heading": f"bold {BRAND}",
         "aai.label": BRAND,
-        # Conversation labels: the human keeps the brand accent, the agent gets a
-        # distinct hue so "you:" and "agent:" are easy to tell apart at a glance.
+        # Conversation labels: the human keeps the brand accent (reserved — never reused
+        # for a diarized speaker, see SPEAKER_STYLES), the agent gets a distinct hue so
+        # "you:" and "agent:" are easy to tell apart at a glance.
         "aai.you": BRAND,
         "aai.agent": DARK_BLUE,
         # Links/URLs in the dark-blue secondary accent so a clickable target stands out
@@ -48,8 +51,8 @@ THEME = Theme(
         "aai.error": "bold red",
         "aai.warn": "yellow",
         "aai.muted": "dim",
-        "aai.speaker.0": BRAND,
-        "aai.speaker.1": DARK_BLUE,
+        "aai.speaker.0": "dark_orange",
+        "aai.speaker.1": "cyan",
         "aai.speaker.2": "magenta",
         "aai.speaker.3": "green",
         "aai.speaker.4": "yellow",

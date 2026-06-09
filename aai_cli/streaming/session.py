@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,7 +12,7 @@ import typer
 from aai_cli import client, config_builder, llm
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.follow import FollowRenderer
-from aai_cli.streaming.render import StreamRenderer
+from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 
 # Sources that can be transcribed in parallel sessions: (label, audio chunks, sample rate).
 _ParallelStreams = list[tuple[str, Iterable[bytes], int]]
@@ -96,10 +97,18 @@ class StreamSession:
     llm_prompts: list[str]
     model: str
     max_tokens: int
+    # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
+    llm_interval: float = 0.0
+    # Monotonic clock, injectable so the interval throttle is deterministic in tests.
+    clock: Callable[[], float] = time.monotonic
     transcript: list[str] = field(default_factory=list[str])
     _callback_lock: threading.RLock = field(default_factory=threading.RLock)
     _listening_lock: threading.Lock = field(default_factory=threading.Lock)
     _listening_started: bool = False
+    # How many turns the last refresh covered, and when it ran (monotonic seconds).
+    # -inf so the very first finalized turn always produces an immediate summary.
+    _summarized_len: int = 0
+    _last_summary_at: float = float("-inf")
 
     @property
     def on_open(self) -> Callable[[], None]:
@@ -115,39 +124,70 @@ class StreamSession:
         self.renderer.listening()
 
     def on_turn(self, event: object, *, source_label: str | None = None) -> None:
-        with self._callback_lock:
-            if self.follow is None:
+        if self.follow is None:
+            with self._callback_lock:
                 self.renderer.turn(event, source=source_label)
-            else:
-                self._refresh_answer(event, source_label)
+        else:
+            # --llm mode locks only to record the turn; the chain re-runs (network) are
+            # left unlocked so the other source's turns keep flowing during a refresh.
+            self._record_turn(event, source_label)
 
-    def _refresh_answer(self, event: object, source_label: str | None) -> None:
-        """Live --llm mode: re-run the prompt chain over the growing transcript on every
-        finalized turn, refreshing one evolving answer (partials are ignored)."""
-        follow = self.follow
-        if follow is None or not getattr(event, "end_of_turn", False):
-            return
+    def _record_turn(self, event: object, source_label: str | None) -> None:
+        """Append a finalized turn to the running transcript, then refresh the --llm
+        answer if a refresh is due (every turn, or once per ``llm_interval`` seconds)."""
+        if not getattr(event, "end_of_turn", False):
+            return  # partials don't change the transcript
         text = getattr(event, "transcript", "") or ""
         if not text:
             return
-        if source_label is not None:
-            display_source = {"system": "System", "you": "You"}.get(source_label, source_label)
-            text = f"{display_source}: {text}"
-        self.transcript.append(text)
+        prefix = speaker_prefix(source_label, getattr(event, "speaker_label", None))
+        line = f"{prefix[0]}: {text}" if prefix is not None else text
+        with self._callback_lock:
+            self.transcript.append(line)
+        self._maybe_summarize()
+
+    def _maybe_summarize(self, *, final: bool = False) -> None:
+        """Re-run the prompt chain over the transcript so far and refresh the answer.
+
+        Claims the work under the lock — bumping ``_summarized_len``/``_last_summary_at``
+        before releasing — so concurrent source threads never double-run the chain or
+        race the throttle. No-op when nothing new has been transcribed, or (unless
+        ``final``) when fewer than ``llm_interval`` seconds have elapsed since the last
+        refresh. ``final`` forces the closing flush so the tail turns aren't lost."""
+        follow = self.follow
+        if follow is None:
+            return
+        with self._callback_lock:
+            turns = len(self.transcript)
+            if turns <= self._summarized_len:
+                return  # nothing new since the last refresh
+            now = self.clock()
+            throttled = self.llm_interval > 0 and now - self._last_summary_at < self.llm_interval
+            if throttled and not final:
+                return
+            transcript_text = " ".join(self.transcript)
+            self._summarized_len = turns
+            self._last_summary_at = now
         answer = llm.run_chain(
             self.api_key,
             self.llm_prompts,
-            transcript_text=" ".join(self.transcript),
+            transcript_text=transcript_text,
             model=self.model,
             max_tokens=self.max_tokens,
         )
-        follow(answer, len(self.transcript))
+        follow(answer, turns)
 
     def stream_one(
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
+        flags = self.base_flags | {"sample_rate": rate}
+        if source_label == "you":
+            # The microphone captures you alone, so never diarize it into separate
+            # speakers — force speaker_labels off so the mic stays labeled "You" even
+            # when --speaker-labels splits the system audio into speakers.
+            flags = flags | {"speaker_labels": False, "max_speakers": None}
         merged = config_builder.merge_streaming_params(
-            flags=self.base_flags | {"sample_rate": rate},
+            flags=flags,
             overrides=self.overrides,
             config_file=self.config_file,
         )
@@ -176,7 +216,12 @@ class StreamSession:
         try:
             if self.follow is not None:
                 with self.follow:
-                    work()
+                    try:
+                        work()
+                    finally:
+                        # Flush a closing summary (incl. on Ctrl-C) so turns since the
+                        # last interval tick are reflected, while the panel's still live.
+                        self._maybe_summarize(final=True)
             else:
                 work()
         except KeyboardInterrupt:

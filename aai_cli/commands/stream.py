@@ -201,7 +201,11 @@ def stream(
     ),
     # speakers
     speaker_labels: bool | None = typer.Option(
-        None, "--speaker-labels", help="Label speakers.", rich_help_panel=help_panels.OPT_SPEAKERS
+        None,
+        "--speaker-labels",
+        help='Diarize speakers. With system audio the mic stays "You"; only the system '
+        "audio is split into speakers.",
+        rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     max_speakers: int | None = typer.Option(
         None,
@@ -274,6 +278,13 @@ def stream(
         help="Run a prompt over the live transcript through LLM Gateway, refreshing the "
         "answer on every finalized turn. Repeatable: each prompt runs on the previous "
         "one's response (a chain).",
+        rich_help_panel=help_panels.OPT_LLM,
+    ),
+    llm_interval: float = typer.Option(
+        30.0,
+        "--llm-interval",
+        help="Seconds between --llm summary refreshes (0 refreshes on every turn).",
+        min=0.0,
         rich_help_panel=help_panels.OPT_LLM,
     ),
     model: str = typer.Option(
@@ -375,7 +386,9 @@ def stream(
                 overrides=config_kv,
                 config_file=config_file,
             )
-            gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
+            gateway = code_gen.gateway_options(
+                list(llm_prompt or []), model, max_tokens, interval=llm_interval
+            )
             output.print_code(code_gen.stream(merged, llm=gateway))
             return
 
@@ -393,6 +406,7 @@ def stream(
             llm_prompts=llm_prompts,
             model=model,
             max_tokens=max_tokens,
+            llm_interval=llm_interval,
         )
         _dispatch(session, opts)
 

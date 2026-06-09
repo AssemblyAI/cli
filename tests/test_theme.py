@@ -46,6 +46,15 @@ def test_speaker_style_deterministic_and_in_palette():
     assert theme.speaker_style("A") != theme.speaker_style("B")
 
 
+def test_you_color_reserved_outside_speaker_palette():
+    # "You" keeps the brand accent; no diarized speaker may resolve to that same color,
+    # so the mic is always visually distinct from a system speaker.
+    console = theme.make_console()
+    you_color = console.get_style("aai.you").color
+    speaker_colors = {console.get_style(name).color for name in theme.SPEAKER_STYLES}
+    assert you_color not in speaker_colors
+
+
 def test_output_console_is_themed_and_error_is_styled(monkeypatch):
     from aai_cli import output, theme
     from aai_cli.errors import CLIError

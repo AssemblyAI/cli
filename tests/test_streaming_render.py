@@ -9,8 +9,10 @@ from aai_cli import theme
 from aai_cli.streaming.render import StreamRenderer
 
 
-def _turn(transcript, end_of_turn):
-    return types.SimpleNamespace(transcript=transcript, end_of_turn=end_of_turn)
+def _turn(transcript, end_of_turn, speaker_label=None):
+    return types.SimpleNamespace(
+        transcript=transcript, end_of_turn=end_of_turn, speaker_label=speaker_label
+    )
 
 
 def _human(width=80, color_system=None):
@@ -49,6 +51,53 @@ def test_human_turn_labels_parallel_sources():
     assert "System:" in out
     assert "hello from audio" in out
     assert "\x1b[" in out
+
+
+def test_human_turn_labels_system_speaker_with_source():
+    # --speaker-labels diarizes the system audio: each system turn carries a
+    # speaker_label, rendered as "System (A):" alongside the source.
+    r, buf = _human(color_system="truecolor")
+    r.turn(_turn("first speaker", True, speaker_label="A"), source="system")
+    r.turn(_turn("second speaker", True, speaker_label="B"), source="system")
+    r.close()
+    out = buf.getvalue()
+    assert "System (A):" in out
+    assert "System (B):" in out
+
+
+def test_speaker_prefix_tints_each_speaker_distinctly():
+    from aai_cli import theme
+    from aai_cli.streaming.render import speaker_prefix
+
+    # A speaker label is colored by theme.speaker_style, so different speakers in the
+    # same source render in different colors; an unlabeled sourced turn keeps the
+    # source's own style.
+    prefix_a = speaker_prefix("system", "A")
+    prefix_b = speaker_prefix("system", "B")
+    assert prefix_a is not None and prefix_b is not None
+    assert (prefix_a[0], prefix_b[0]) == ("System (A)", "System (B)")
+    assert prefix_a[1] == theme.speaker_style("A")
+    assert prefix_b[1] == theme.speaker_style("B")
+    assert prefix_a[1] != prefix_b[1]
+    assert speaker_prefix("system", None) == ("System", "aai.agent")
+    assert speaker_prefix("you", None) == ("You", "aai.you")
+
+
+def test_human_turn_keeps_you_label_without_speaker():
+    # The mic session never diarizes, so a "you" turn has no speaker_label and
+    # stays "You:" even while the system audio is split into speakers.
+    r, buf = _human(color_system="truecolor")
+    r.turn(_turn("hello from me", True), source="you")
+    r.close()
+    assert "You:" in buf.getvalue()
+
+
+def test_human_turn_labels_bare_speaker_without_source():
+    # Single-stream diarization (no source label) shows "Speaker A:".
+    r, buf = _human()
+    r.turn(_turn("solo", True, speaker_label="A"))
+    r.close()
+    assert "Speaker A:" in buf.getvalue()
 
 
 def test_text_mode_labels_sources_and_statuses_to_stderr():
@@ -124,6 +173,26 @@ def test_json_mode_emits_source_when_labeled():
         "end_of_turn": True,
         "source": "you",
     }
+
+
+def test_json_mode_emits_speaker_when_diarized():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.turn(_turn("hi", True, speaker_label="A"), source="system")
+    assert json.loads(out.getvalue()) == {
+        "type": "turn",
+        "transcript": "hi",
+        "end_of_turn": True,
+        "speaker": "A",
+        "source": "system",
+    }
+
+
+def test_text_mode_labels_system_speaker():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=False, text_mode=True, out=out, err=io.StringIO())
+    r.turn(_turn("hi", True, speaker_label="A"), source="system")
+    assert out.getvalue() == "System (A): hi\n"
 
 
 def test_termination_json_emits_duration():

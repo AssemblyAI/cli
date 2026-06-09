@@ -335,9 +335,10 @@ def test_transcribe_show_code_chains_multiple_llm_gateway_prompts():
     assert "'summarize'," in code
     assert "'translate the summary to Spanish'," in code
     assert "for i, prompt in enumerate(prompts):" in code
-    # First step uses the transcript; later steps chain on the previous result.
+    # First step uses the transcript; later steps chain on the previous result,
+    # wrapped under the same "Transcript:" label the CLI's run_chain_steps uses.
     assert '"transcript_id": transcript.id' in code
-    assert 'content = prompt + "\\n\\n" + result' in code
+    assert 'content = prompt + "\\n\\nTranscript:\\n" + result' in code
 
 
 def test_transcribe_show_code_without_gateway_has_no_openai_import():
@@ -365,6 +366,7 @@ def test_stream_show_code_includes_llm_follow_loop():
             "prompts": ["summarize", "translate to french"],
             "model": "claude-haiku-4-5-20251001",
             "max_tokens": 500,
+            "interval": 30.0,
         },
     )
     ast.parse(code)
@@ -372,10 +374,41 @@ def test_stream_show_code_includes_llm_follow_loop():
     assert "llm-gateway.assemblyai.com" in code
     # Both prompts appear, in order, for the chain.
     assert code.index("summarize") < code.index("translate to french")
-    # Still streams from the mic, refreshing the answer on each finalized turn.
+    # Still streams from the mic, refreshing the answer on the interval.
     assert "MicrophoneStream" in code
     assert "end_of_turn" in code
     assert "claude-haiku-4-5-20251001" in code
+    # The generated loop mirrors --llm-interval: a baked-in throttle plus a closing flush.
+    assert "LLM_INTERVAL = 30.0" in code
+    assert "now - _last_summary < LLM_INTERVAL" in code
+    assert "summarize(final=True)" in code
+
+
+def test_gateway_options_defaults_interval_to_per_turn():
+    # Called without an explicit interval (transcribe's path), the baked-in cadence is
+    # per-turn (0.0); pins the default so it can't drift.
+    opts = code_gen.gateway_options(["summarize"], "m", 100)
+    assert opts is not None
+    assert opts["interval"] == 0.0
+
+
+def test_stream_show_code_defaults_interval_when_absent():
+    # An llm dict with no "interval" key falls back to per-turn (LLM_INTERVAL = 0.0).
+    code = code_gen.stream({}, llm={"prompts": ["s"], "model": "m", "max_tokens": 1})
+    ast.parse(code)
+    assert "LLM_INTERVAL = 0.0" in code
+
+
+def test_stream_show_code_llm_interval_zero_is_per_turn():
+    # --llm-interval 0 bakes in the legacy per-turn cadence (LLM_INTERVAL = 0.0 makes the
+    # throttle a no-op), while still emitting the closing flush.
+    code = code_gen.stream(
+        {},
+        llm=code_gen.gateway_options(["summarize"], "m", 100, interval=0.0),
+    )
+    ast.parse(code)
+    assert "LLM_INTERVAL = 0.0" in code
+    assert "summarize(final=True)" in code
 
 
 def test_stream_show_code_without_llm_is_plain_scaffold():
