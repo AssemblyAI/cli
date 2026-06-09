@@ -10,35 +10,11 @@ from rich.markup import escape
 from aai_cli import help_panels, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
-from aai_cli.init import procfile, runner
+from aai_cli.init import devserver, procfile, runner
 
 # Flattened single-command sub-typer (same pattern as `aai init`): one
 # @app.command() registered via app.add_typer(dev.app) with no name.
 app = typer.Typer()
-
-
-def _install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
-    """Install deps (unless --no-install) and return the report row."""
-    if no_install:
-        return {"name": "install", "status": "skipped", "detail": "--no-install"}
-    setup = runner.run_setup(target, use_uv=use_uv)
-    if setup.returncode != 0:
-        return {
-            "name": "install",
-            "status": "failed",
-            "detail": (setup.stderr or setup.stdout).strip()[:300],
-        }
-    return {"name": "install", "status": "installed", "detail": "uv" if use_uv else "venv + pip"}
-
-
-def _dev_command(target: Path, web: list[str], *, use_uv: bool) -> list[str]:
-    """The Procfile web process, run in the project venv with live reload.
-
-    In the no-uv branch `web[0]` must be a `python -m`-runnable module; every current
-    template's `web:` line starts with `uvicorn`.
-    """
-    prefix = ["uv", "run"] if use_uv else [str(runner.venv_python(target)), "-m"]
-    return [*prefix, *web, "--reload"]
 
 
 def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> None:
@@ -51,12 +27,14 @@ def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> N
     # Resolves the start command AND validates we're inside a scaffolded project.
     web = procfile.web_argv(target, env=env)
 
-    report: list[steps.Step] = [_install_step(target, no_install=no_install, use_uv=use_uv)]
+    report: list[steps.Step] = [
+        devserver.install_step(target, no_install=no_install, use_uv=use_uv)
+    ]
     output.emit(report, lambda d: steps.render_steps(d, heading="Dev"), json_mode=json_mode)
     if any(s["status"] == "failed" for s in report):
         raise typer.Exit(code=1)
 
-    command = _dev_command(target, web, use_uv=use_uv)
+    command = devserver.dev_command(target, web, use_uv=use_uv)
     url = f"http://localhost:{chosen_port}"
     if not json_mode:
         output.console.print(
