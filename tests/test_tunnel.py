@@ -43,3 +43,16 @@ def test_await_url_polls_until_written(tmp_path):
     url = tunnel.await_url(log, timeout=5.0, sleep=fake_sleep)
     assert url == "https://later-slug.trycloudflare.com"
     assert calls["n"] == 1
+
+
+def test_await_url_polls_at_default_interval(tmp_path):
+    log = tmp_path / "cf.log"
+    log.write_text("")
+    seen: list[float] = []
+
+    def fake_sleep(seconds):
+        seen.append(seconds)
+        log.write_text("https://now-here.trycloudflare.com")
+
+    tunnel.await_url(log, timeout=5.0, sleep=fake_sleep)
+    assert seen == [0.2]  # the default poll interval was used

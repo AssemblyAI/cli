@@ -27,7 +27,7 @@ def find_url(text: str) -> str | None:
 def await_url(
     log_path: Path,
     *,
-    timeout: float = 30.0,
+    timeout: float = 30.0,  # pragma: no mutate -- tuning constant; no unit-observable behavior
     interval: float = 0.2,
     sleep: Callable[[float], None] = time.sleep,
 ) -> str | None:
