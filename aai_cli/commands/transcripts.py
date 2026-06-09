@@ -17,6 +17,8 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
     epilog=examples_epilog(
         [
             ("Fetch a transcript's text by id", "aai transcripts get 5551234-abcd"),
+            ("Speaker-labeled turns", "aai transcripts get 5551234-abcd -o utterances"),
+            ("Save SRT subtitles", "aai transcripts get 5551234-abcd -o srt > captions.srt"),
             ("Get the raw JSON", "aai transcripts get 5551234-abcd --json"),
         ]
     )
@@ -60,6 +62,13 @@ def get(
     epilog=examples_epilog(
         [
             ("List your recent transcripts", "aai transcripts list"),
+            ("Show more at once", "aai transcripts list --limit 50"),
+            ("Grab the latest transcript id", "aai transcripts list --json | jq -r '.[0].id'"),
+            (
+                "Summarize your latest transcript",
+                'aai llm "summarize" --transcript-id '
+                "$(aai transcripts list --json | jq -r '.[0].id')",
+            ),
         ]
     ),
 )

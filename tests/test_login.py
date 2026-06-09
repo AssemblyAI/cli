@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -14,7 +15,6 @@ def _fake_login_result(key="sk_from_oauth"):
 
 
 def test_login_with_api_key_flag_stores_key():
-    import json
 
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
         result = runner.invoke(app, ["login", "--api-key", "sk_flag", "--json"])
@@ -38,7 +38,6 @@ def test_login_stores_under_named_profile():
 
 
 def test_whoami_reports_authenticated():
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
@@ -73,7 +72,6 @@ def test_whoami_unauthenticated_runs_login(monkeypatch):
 
 
 def test_logout_clears_key():
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     result = runner.invoke(app, ["logout", "--json"])
@@ -163,7 +161,6 @@ def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
 
 
 def test_whoami_reports_env():
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):
@@ -176,7 +173,6 @@ def test_whoami_reports_env():
 def test_root_callback_keeps_profile_env_without_sandbox():
     # Without --sandbox the profile's own env must stand (pins `sandbox and env is
     # None`: an `or` would force sandbox000 onto every default invocation).
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     config.set_profile_env("default", "production")
@@ -189,7 +185,6 @@ def test_root_callback_keeps_profile_env_without_sandbox():
 def test_root_callback_sandbox_overrides_profile_env():
     # --sandbox forces sandbox000 even when the profile is bound elsewhere (pins the
     # `env is None` arm: an `is not None` would leave the profile env in place).
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     config.set_profile_env("default", "production")
@@ -216,6 +211,20 @@ def test_unknown_env_exits_2():
         assert '"error"' not in result.output  # never the JSON shape
 
 
+def test_root_callback_error_honors_json_request():
+    # A callback-level failure (bad --env) runs before the subcommand parses its own
+    # --json, but a `… --json` pipeline still expects the uniform {"error": …} shape, so
+    # the callback sniffs the pending command line and emits JSON for every failure class.
+    for args in (
+        ["--env", "bogus", "whoami", "--json"],
+        ["--env", "bogus", "transcripts", "list", "--json"],
+    ):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 2
+        payload = json.loads(result.output)
+        assert payload["error"]["type"] == "invalid_environment"
+
+
 def test_env_override_prints_warning_to_stderr():
     # The root callback warns when an explicit --env contradicts the profile's stored
     # env (the stored key was minted for a different environment).
@@ -237,7 +246,6 @@ def test_rejected_api_key_has_suggestion(monkeypatch):
 
 
 def test_whoami_reports_session_and_account():
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
@@ -250,7 +258,6 @@ def test_whoami_reports_session_and_account():
 
 
 def test_whoami_session_none_without_browser_login():
-    import json
 
     config.set_api_key("default", "sk_1234567890")
     with patch("aai_cli.commands.login.client.validate_key", return_value=True):

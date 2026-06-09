@@ -78,7 +78,7 @@ def built_wheel(tmp_path_factory) -> Path:
 
 def _assert_aai_runs(aai_bin: Path) -> None:
     assert aai_bin.is_file(), f"install.sh did not produce {aai_bin}"
-    result = subprocess.run([str(aai_bin), "version"], capture_output=True, text=True)
+    result = subprocess.run([str(aai_bin), "--version"], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == __version__
 

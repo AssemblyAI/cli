@@ -5,7 +5,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import typer
 from rich.markup import escape
-from rich.table import Table
 from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, output, timeparse
@@ -40,6 +39,24 @@ def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
     return jsonshape.mapping_list(data.get("usage_items"))
 
 
+def _format_dollars(cents: float) -> str:
+    return f"${cents / 100:,.2f}"
+
+
+def _window_total_cents(item: Mapping[str, object]) -> float:
+    """Sum a window's spend (cents) from its ``line_items``.
+
+    The AMS usage endpoint returns ``total: 0.0`` on every window; the real
+    spend lives in each window's ``line_items[].price`` (cents, like
+    ``balance_in_cents``), so the window total is derived from them rather than
+    the dead top-level ``total``.
+    """
+    return sum(
+        jsonshape.as_float(line_item.get("price"))
+        for line_item in jsonshape.mapping_list(item.get("line_items"))
+    )
+
+
 def _window_label(item: Mapping[str, object]) -> str:
     start = timeparse.parse_iso_utc(item.get("start_timestamp"))
     end = timeparse.parse_iso_utc(item.get("end_timestamp"))
@@ -50,8 +67,9 @@ def _window_label(item: Mapping[str, object]) -> str:
     return f"{start.date().isoformat()} to {end.date().isoformat()}"
 
 
-def _line_item_label(line_item: Mapping[str, object]) -> str:
-    label = next(
+def _line_item_name(line_item: Mapping[str, object]) -> str:
+    """The product/feature label for a usage line item, or ``""`` if it carries none."""
+    return next(
         (
             str(value)
             for key in ("name", "product", "service", "feature", "model", "type", "description")
@@ -59,30 +77,25 @@ def _line_item_label(line_item: Mapping[str, object]) -> str:
         ),
         "",
     )
-    value = next(
-        (
-            line_item[key]
-            for key in ("total", "quantity", "amount", "usage", "count")
-            if key in line_item
-        ),
-        None,
-    )
-    if label and value is not None:
-        return f"{label}: {_format_usage_number(value)}"
-    if label:
-        return label
-    if value is not None:
-        return _format_usage_number(value)
-    return ""
 
 
 def _line_items_summary(item: Mapping[str, object]) -> str:
-    labels = [
-        label
-        for line_item in jsonshape.mapping_list(item.get("line_items"))
-        if (label := _line_item_label(line_item))
-    ]
-    return ", ".join(labels)
+    """Per-product spend for a window, in dollars, aggregated by product and ordered
+    biggest-first.
+
+    Both this and the window total derive from ``line_items[].price`` (cents), so the
+    breakdown is shown in the same unit as the ``total`` column and the products sum to
+    that total — they reconcile, instead of mixing dollars with raw quantities. Products
+    are aggregated by name (the AMS endpoint can return several rows for one product),
+    a row with no recognizable product is grouped under ``other``, and zero-dollar
+    products are dropped as noise (they don't affect the reconciliation).
+    """
+    totals: dict[str, float] = {}
+    for line_item in jsonshape.mapping_list(item.get("line_items")):
+        name = _line_item_name(line_item) or "other"
+        totals[name] = totals.get(name, 0.0) + jsonshape.as_float(line_item.get("price"))
+    ordered = sorted(((n, c) for n, c in totals.items() if c), key=lambda nc: (-nc[1], nc[0]))
+    return ", ".join(f"{name}: {_format_dollars(cents)}" for name, cents in ordered)
 
 
 app = typer.Typer(help="Account billing, usage, and limits.")
@@ -93,6 +106,7 @@ app = typer.Typer(help="Account billing, usage, and limits.")
     epilog=examples_epilog(
         [
             ("Show your remaining balance", "aai balance"),
+            ("Get the raw cents for scripting", "aai balance --json | jq '.balance_in_cents'"),
         ]
     ),
 )
@@ -121,6 +135,11 @@ def balance(
         [
             ("Usage over the last 30 days", "aai usage"),
             ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
+            ("Break spend down by month", "aai usage --window month"),
+            (
+                "Total spend in cents for scripting",
+                "aai usage --json | jq '[.usage_items[].line_items[].price] | add'",
+            ),
         ]
     ),
 )
@@ -144,41 +163,39 @@ def usage(
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, object]) -> object:
-            items = _usage_items(d)
-            shown = (
-                items
-                if include_zero
-                else [item for item in items if jsonshape.as_float(item.get("total"))]
-            )
-            total = sum(jsonshape.as_float(item.get("total")) for item in items)
+            windows = [(item, _window_total_cents(item)) for item in _usage_items(d)]
+            shown = windows if include_zero else [w for w in windows if w[1]]
+            total = sum(cents for _, cents in windows)
             range_label = (
                 f"{timeparse.format_utc_day(start_date)} to "
                 f"{timeparse.format_utc_day(end_date)} (UTC)"
             )
             summary = Text(
-                f"Usage total: {_format_usage_number(total)} for {range_label}",
+                f"Usage total: {_format_dollars(total)} for {range_label}",
                 style="aai.heading",
             )
             if not shown:
                 message = (
                     "No usage in this range."
-                    if items
+                    if windows
                     else "No usage windows returned for this range."
                 )
                 return output.stack(summary, output.muted(message))
 
-            shown_with_breakdown = [(item, _line_items_summary(item)) for item in shown]
-            show_breakdown = any(summary for _, summary in shown_with_breakdown)
+            shown_with_breakdown = [
+                (item, cents, _line_items_summary(item)) for item, cents in shown
+            ]
+            show_breakdown = any(breakdown for _, _, breakdown in shown_with_breakdown)
             table = (
                 output.data_table("period", "total", "breakdown")
                 if show_breakdown
                 else output.data_table("period", "total")
             )
-            hidden_count = len(items) - len(shown)
-            for item, breakdown in shown_with_breakdown:
+            hidden_count = len(windows) - len(shown)
+            for item, cents, breakdown in shown_with_breakdown:
                 row = [
                     escape(_window_label(item)),
-                    _format_usage_number(item.get("total")),
+                    _format_dollars(cents),
                 ]
                 if show_breakdown:
                     row.append(escape(breakdown))
@@ -202,6 +219,7 @@ def usage(
     epilog=examples_epilog(
         [
             ("Show rate limits per service", "aai limits"),
+            ("As JSON for scripting", "aai limits --json"),
         ]
     ),
 )
@@ -215,9 +233,14 @@ def limits(
         account_id, jwt = resolve_session(state)
         data = ams.get_rate_limits(account_id, jwt)
 
-        def render(d: dict[str, object]) -> Table:
+        def render(d: dict[str, object]) -> object:
+            limits = jsonshape.mapping_list(d.get("rate_limits"))
+            if not limits:
+                return output.muted(
+                    "No custom rate limits — this account uses AssemblyAI's standard limits."
+                )
             table = output.data_table("service", "limit")
-            for limit in jsonshape.mapping_list(d.get("rate_limits")):
+            for limit in limits:
                 table.add_row(
                     escape(str(limit.get("service", ""))),
                     _format_usage_number(limit.get("magnitude")),

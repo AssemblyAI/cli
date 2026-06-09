@@ -1,7 +1,7 @@
 import io
 
 from aai_cli import theme
-from aai_cli.commands.setup import _render
+from aai_cli.commands.setup import render
 from aai_cli.steps import Step
 
 
@@ -12,7 +12,7 @@ def test_render_steps_colors_status() -> None:
             {"name": "skill", "status": "failed", "detail": "nope"},
         ]
     }
-    rendered = _render(data)
+    rendered = render(data)
     # The markup string carries the semantic style tags per status...
     assert "[aai.success]installed[/aai.success]" in rendered
     assert "[aai.error]failed[/aai.error]" in rendered

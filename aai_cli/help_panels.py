@@ -12,11 +12,12 @@ decorator would otherwise silently spawn a duplicate panel.
 
 from __future__ import annotations
 
-QUICK_START = "Quick Start"  # zero-to-running onboarding: init
-TRANSCRIPTION = "Transcription & AI"  # the verbs you run: transcribe, stream, agent, llm
+QUICK_START = "Quick Start"  # zero-to-running onboarding: onboard
+BUILD = "Build an App"  # scaffold a new project: init
+TRANSCRIPTION = "Run AssemblyAI"  # use AssemblyAI directly: transcribe, stream, agent, llm
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
-SETUP = "Setup & Tools"  # get set up & maintain: samples, doctor, claude, version
+SETUP = "Setup & Tools"  # get set up & maintain: doctor, setup
 
 # Option panels group a single command's flags within its own ``--help``. The
 # `transcribe` command exposes 40+ options; without panels they render as one

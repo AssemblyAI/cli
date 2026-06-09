@@ -263,6 +263,6 @@ class Aai < Formula
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/aai version")
+    assert_match version.to_s, shell_output("#{bin}/aai --version")
   end
 end

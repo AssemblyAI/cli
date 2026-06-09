@@ -1,6 +1,6 @@
 ---
 name: aai-cli
-description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold starter apps and SDK samples (init/samples); diagnose setup (doctor); and set up your coding agent's AssemblyAI docs MCP + skills (setup). Use whenever an agent is invoking the `aai` command.
+description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold a starter app (init); diagnose setup (doctor); and set up your coding agent's AssemblyAI docs MCP + skills (setup). Use whenever an agent is invoking the `aai` command.
 ---
 
 # AssemblyAI CLI (`aai`)
@@ -77,8 +77,8 @@ agent," reach for `aai init voice-agent`, not `aai agent`.
 - **Browse past transcripts or streaming sessions** → `references/history.md`
 - **Sign in/out, identity, balance, usage, rate limits, API keys, audit log** →
   `references/account.md`
-- **Scaffold apps/samples (`init`, `samples`), diagnose setup (`doctor`), set up
-  your coding agent's MCP + skills (`setup`), version** → `references/setup.md`
+- **Scaffold a starter app (`init`), diagnose setup (`doctor`), set up
+  your coding agent's MCP + skills (`setup`)** → `references/setup.md`
 
 ## Anti-patterns
 

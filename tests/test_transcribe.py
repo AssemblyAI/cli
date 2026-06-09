@@ -356,7 +356,7 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path
     _auth()
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
-    monkeypatch.setattr("aai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", lambda url, d: fake)
     with patch(
         "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
@@ -378,6 +378,22 @@ def test_transcribe_show_code_prints_without_transcribing(monkeypatch):
     assert "import assemblyai as aai" in result.output
     assert "TranscriptionConfig(" in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+    # --sample resolves to the hosted sample URL (not the no-source placeholder).
+    assert "wildfires" in result.output
+    assert "your-audio-file.mp3" not in result.output
+
+
+def test_transcribe_show_code_without_source_uses_placeholder(monkeypatch):
+    # --show-code never transcribes, so it must not demand a source/--sample; it emits
+    # runnable code with a clearly-marked placeholder path instead of erroring.
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--show-code"])
+    assert result.exit_code == 0
+    assert "import assemblyai as aai" in result.output
+    assert "your-audio-file.mp3" in result.output
 
 
 def test_transcribe_show_code_ignores_json_flag(monkeypatch):

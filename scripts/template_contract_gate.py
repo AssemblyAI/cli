@@ -108,6 +108,27 @@ def _requirements_cover_imports(template: str, path: Path) -> None:
             _fail(f"{template}: import {package!r} ({dist}) missing from requirements.txt")
 
 
+_SPECIFIER = re.compile(r"(===|==|~=|!=|>=|<=|>|<)")
+
+
+def _requirements_pin_versions(template: str, path: Path) -> None:
+    """Every requirement must carry a version specifier.
+
+    SCA scanners read a starter app's requirements.txt as a lockfile; an unpinned
+    line like ``fastapi`` reports as a missing version and blocks vulnerability
+    analysis. Require a specifier (``>=`` floor, ``==`` pin, ...) on every line.
+    """
+    unpinned: list[str] = []
+    for raw in (path / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if not _SPECIFIER.search(line.split(";", 1)[0]):  # ignore any env marker
+            unpinned.append(line)
+    if unpinned:
+        _fail(f"{template}: requirements.txt has unpinned dependencies {unpinned}")
+
+
 @contextmanager
 def _template_import_path(path: Path):
     old_path = list(sys.path)
@@ -173,6 +194,7 @@ def main() -> int:
         _html_static_refs(template, path)
         _frontend_routes(template, path)
         _requirements_cover_imports(template, path)
+        _requirements_pin_versions(template, path)
         _parse_python_files(path)
         _import_api(template, path)
     sys.stdout.write(f"validated {len(templates.TEMPLATE_ORDER)} init templates\n")

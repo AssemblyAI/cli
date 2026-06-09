@@ -11,14 +11,6 @@ def test_help_runs():
     assert "AssemblyAI" in result.output
 
 
-def test_version_command():
-    from aai_cli import __version__
-
-    result = runner.invoke(app, ["version"])
-    assert result.exit_code == 0
-    assert result.output.strip() == __version__
-
-
 def test_version_flag_prints_and_exits():
     # `aai --version` / `-V` is the reflex every CLI answers; the eager callback prints
     # the version and exits before any command runs.
@@ -36,8 +28,10 @@ def test_quiet_suppresses_env_override_warning(monkeypatch):
 
     config.set_api_key("default", "sk_live")
     config.set_profile_env("default", "production")
-    noisy = runner.invoke(app, ["--env", "sandbox000", "version"])
-    quiet = runner.invoke(app, ["--quiet", "--env", "sandbox000", "version"])
+    # The warning is emitted by the root callback (before any subcommand), so a bare
+    # invocation that falls through to the help screen exercises it without network.
+    noisy = runner.invoke(app, ["--env", "sandbox000"])
+    quiet = runner.invoke(app, ["--quiet", "--env", "sandbox000"])
     assert "may be rejected" in noisy.output
     assert "may be rejected" not in quiet.output
 
@@ -56,8 +50,8 @@ def test_shell_completion_is_available(monkeypatch):
 
 
 def test_global_flags_parse():
-    # --profile is a global option accepted before a subcommand
-    assert runner.invoke(app, ["--profile", "staging", "version"]).exit_code == 0
+    # --profile is a global option accepted before the eager --version flag
+    assert runner.invoke(app, ["--profile", "staging", "--version"]).exit_code == 0
 
 
 def test_stream_registered_top_level():
@@ -75,21 +69,21 @@ def test_help_lists_commands_in_workflow_order():
     assert isinstance(cmd, TyperGroup)
     ctx = cmd.make_context("aai", [], resilient_parsing=True)
     names = cmd.list_commands(ctx)  # the order shown under --help
-    # Grouped into Rich help panels (see help_panels.py): Quick Start,
-    # Setup & Tools, Transcription & AI, History, then Account.
+    # Grouped into Rich help panels (see help_panels.py): Quick Start, Build an App,
+    # Run AssemblyAI, Setup & Tools, History, then Account.
     assert names == [
         # Quick Start
+        "onboard",
+        # Build an App
         "init",
-        # Setup & Tools
-        "samples",
-        "doctor",
-        "setup",
-        "version",
-        # Transcription & AI
+        # Run AssemblyAI
         "transcribe",
         "stream",
         "agent",
         "llm",
+        # Setup & Tools
+        "doctor",
+        "setup",
         # History
         "transcripts",
         "sessions",

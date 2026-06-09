@@ -163,6 +163,31 @@ def test_env_override_warning_none_when_profile_has_no_env():
     assert env_override_warning(AppState(env="production")) is None
 
 
+def test_env_override_warning_when_aai_env_contradicts_profile(monkeypatch):
+    # A silent AAI_ENV swap points a profile's key at the wrong hosts just like --env
+    # does, so it must warn too — and name AAI_ENV as the source.
+    config.set_profile_env("default", "sandbox000")
+    monkeypatch.setenv("AAI_ENV", "production")
+    warning = env_override_warning(AppState(env=None))
+    assert warning is not None
+    assert "AAI_ENV" in warning
+
+
+def test_env_override_warning_flag_beats_aai_env(monkeypatch):
+    # An explicit --env wins precedence and is the named source, not AAI_ENV.
+    config.set_profile_env("default", "sandbox000")
+    monkeypatch.setenv("AAI_ENV", "sandbox000")
+    warning = env_override_warning(AppState(env="production"))
+    assert warning is not None
+    assert "--env" in warning
+
+
+def test_env_override_warning_none_when_aai_env_matches_profile(monkeypatch):
+    config.set_profile_env("default", "sandbox000")
+    monkeypatch.setenv("AAI_ENV", "sandbox000")
+    assert env_override_warning(AppState(env=None)) is None
+
+
 def test_resolve_session_returns_account_and_jwt():
     from aai_cli import config
     from aai_cli.context import AppState, resolve_session

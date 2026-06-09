@@ -77,9 +77,11 @@ def _audit_rows(payload: Mapping[str, object]) -> list[dict[str, object]]:
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Recent audit-log entries", "aai audit --limit 20"),
+            ("Recent audit-log entries", "aai audit"),
+            ("Show more entries", "aai audit --limit 100"),
             ("Include login events", "aai audit --include-logins"),
             ("Filter by action", "aai audit --action token.create"),
+            ("Filter by resource, as JSON", "aai audit --resource token --json"),
         ]
     ),
 )

@@ -203,7 +203,7 @@ def test_install_cli_skill_fails_when_bundle_missing(monkeypatch, tmp_path):
     from aai_cli.commands import setup
 
     monkeypatch.setattr(setup, "_bundled_cli_skill", lambda: tmp_path / "nonexistent")
-    step = setup._install_cli_skill(force=False)
+    step = setup.install_cli_skill(force=False)
     assert step["status"] == "failed"
     assert "packaging bug" in step["detail"]
 
@@ -214,7 +214,7 @@ def test_install_cli_skill_fails_when_copy_lacks_skill_md(monkeypatch, tmp_path)
     empty = tmp_path / "emptybundle"
     empty.mkdir()
     monkeypatch.setattr(setup, "_bundled_cli_skill", lambda: empty)
-    step = setup._install_cli_skill(force=False)
+    step = setup.install_cli_skill(force=False)
     assert step["status"] == "failed"
     assert "SKILL.md" in step["detail"]
 
