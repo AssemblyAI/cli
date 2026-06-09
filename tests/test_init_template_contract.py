@@ -24,9 +24,9 @@ def test_required_files_present(template_dir):
         "api/index.py",
         "api/__init__.py",
         "api/settings.py",
-        "public/index.html",
-        "public/static/app.js",
-        "public/static/styles.css",
+        "static/index.html",
+        "static/app.js",
+        "static/styles.css",
         "requirements.txt",
         "README.md",
         "AGENTS.md",
@@ -38,25 +38,27 @@ def test_required_files_present(template_dir):
 
 def test_realtime_templates_have_audio_helpers(template_dir):
     if template_dir.name in {"live-captions", "voice-agent"}:
-        assert (template_dir / "public" / "static" / "audio.js").exists()
+        assert (template_dir / "static" / "audio.js").exists()
 
 
 def test_static_assets_referenced_by_html_exist(template_dir):
-    html = (template_dir / "public" / "index.html").read_text()
+    html = (template_dir / "static" / "index.html").read_text()
     refs = set(re.findall(r'(?:href|src)=["\'](/static/[^"\']+)', html))
-    assert refs, f"{template_dir.name}: public/index.html should load static assets"
+    assert refs, f"{template_dir.name}: static/index.html should load static assets"
     for ref in refs:
-        assert (template_dir / "public" / ref.lstrip("/")).exists(), (
-            f"{template_dir.name}: public/index.html references missing asset {ref!r}"
+        # /static/* is mounted on the static/ dir itself, so the URL path maps
+        # directly to a file under the template root (/static/app.js -> static/app.js).
+        assert (template_dir / ref.lstrip("/")).exists(), (
+            f"{template_dir.name}: static/index.html references missing asset {ref!r}"
         )
 
 
 def test_codex_edit_points_are_explicit(template_dir):
     notes = (template_dir / "AGENTS.md").read_text()
-    app_js = (template_dir / "public" / "static" / "app.js").read_text()
+    app_js = (template_dir / "static" / "app.js").read_text()
     assert "ASSEMBLYAI_API_KEY" in notes
     assert "buildless" in notes
-    assert "public/static/app.js" in notes
+    assert "static/app.js" in notes
     assert "_CONFIG" in app_js
 
 
@@ -67,10 +69,8 @@ def test_no_committed_dotenv_or_real_key(template_dir):
 
 def test_frontend_routes_exist_in_backend(template_dir):
     """Every /api path the page fetches must be a route the backend registers."""
-    frontend = (template_dir / "public" / "index.html").read_text()
-    frontend += "\n".join(
-        path.read_text() for path in (template_dir / "public" / "static").glob("*.js")
-    )
+    frontend = (template_dir / "static" / "index.html").read_text()
+    frontend += "\n".join(path.read_text() for path in (template_dir / "static").glob("*.js"))
     fetched = set(re.findall(r'fetch\(\s*["\'`](/api/[^"\'`?]+)', frontend))
     # Also catch template-literal paths like fetch(`/api/status/${id}`) and "/api/x/" + id
     fetched |= set(re.findall(r'["\'`](/api/[A-Za-z0-9_\-/]+?)(?:/?\$\{|/?["\'`]\s*\+)', frontend))
@@ -80,7 +80,7 @@ def test_frontend_routes_exist_in_backend(template_dir):
     for path in fetched:
         base = path.rstrip("/")
         assert any(base == r or base.startswith(r + "/") for r in registered_bases), (
-            f"{template_dir.name}: public/index.html fetches {path!r}, "
+            f"{template_dir.name}: static/index.html fetches {path!r}, "
             f"not registered in api/index.py (routes: {sorted(registered_bases)})"
         )
 

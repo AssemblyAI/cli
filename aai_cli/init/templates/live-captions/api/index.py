@@ -21,14 +21,17 @@ from fastapi.staticfiles import StaticFiles
 from api import settings
 
 ROOT = Path(__file__).resolve().parent.parent
-PUBLIC = ROOT / "public"
+# Front-end assets live in static/, NOT public/: Vercel auto-serves a public/ dir
+# from its CDN and omits it from the function bundle, so FastAPI couldn't read these
+# files. A plain static/ dir ships with the function and lets FastAPI own all routing.
+STATIC = ROOT / "static"
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=PUBLIC / "static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(PUBLIC / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 @app.post("/api/token")

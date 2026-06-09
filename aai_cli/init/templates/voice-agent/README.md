@@ -25,6 +25,6 @@ is needed.
 
 ## Ideas to extend
 
-- Change the `greeting`, `systemPrompt`, or `voice` in `SESSION_CONFIG` (`public/static/app.js`).
+- Change the `greeting`, `systemPrompt`, or `voice` in `SESSION_CONFIG` (`static/app.js`).
 - Add tools (function calling) so the agent can look things up or take actions.
 - Tune `input.turn_detection` (`min_silence`/`max_silence`) inside `SESSION_CONFIG`.
