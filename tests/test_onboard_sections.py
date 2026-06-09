@@ -142,7 +142,7 @@ def test_environment_is_non_blocking(ctx: WizardContext, monkeypatch: pytest.Mon
         seen.update(payload)
         return ""
 
-    monkeypatch.setattr("aai_cli.commands.doctor._render", _capture_render)
+    monkeypatch.setattr("aai_cli.commands.doctor.render", _capture_render)
     assert sections.environment(NonInteractivePrompter(), ctx) is SectionResult.DONE
     # The environment section always renders as a non-fatal report (ok=True).
     assert seen["ok"] is True
@@ -256,9 +256,9 @@ def test_claude_code_done(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -
         forces["cli_skill"] = force
         return _passing_step()
 
-    monkeypatch.setattr(setup_cmd, "_install_mcp", _mcp)
-    monkeypatch.setattr(setup_cmd, "_install_skill", _skill)
-    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _cli_skill)
+    monkeypatch.setattr(setup_cmd, "install_mcp", _mcp)
+    monkeypatch.setattr(setup_cmd, "install_skill", _skill)
+    monkeypatch.setattr(setup_cmd, "install_cli_skill", _cli_skill)
     assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.DONE
     # The wizard never force-overwrites existing installs (force=False everywhere).
     assert forces == {"mcp": False, "skill": False, "cli_skill": False}
@@ -268,7 +268,7 @@ def test_claude_code_failed(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch)
     def _failing_step(*a: object, **k: object) -> Step:
         return {"name": "x", "status": "failed", "detail": "no npx"}
 
-    monkeypatch.setattr(setup_cmd, "_install_mcp", _passing_step)
-    monkeypatch.setattr(setup_cmd, "_install_skill", _failing_step)
-    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _passing_step)
+    monkeypatch.setattr(setup_cmd, "install_mcp", _passing_step)
+    monkeypatch.setattr(setup_cmd, "install_skill", _failing_step)
+    monkeypatch.setattr(setup_cmd, "install_cli_skill", _passing_step)
     assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.FAILED

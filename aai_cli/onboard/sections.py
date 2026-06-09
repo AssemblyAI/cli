@@ -87,15 +87,15 @@ _BUILD_CHOICES = [
 
 def environment(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     checks = [
-        doctor_cmd._check_python(),  # pyright: ignore[reportPrivateUsage]
-        doctor_cmd._check_ffmpeg(),  # pyright: ignore[reportPrivateUsage]
-        doctor_cmd._check_audio(),  # pyright: ignore[reportPrivateUsage]
+        doctor_cmd.check_python(),
+        doctor_cmd.check_ffmpeg(),
+        doctor_cmd.check_audio(),
     ]
-    # `_render` already prints its own "Environment check" heading, so we don't call
+    # `render` already prints its own "Environment check" heading, so we don't call
     # prompter.section here (that would show the title twice); just space it from the
     # previous section with a blank line.
     output.console.print()
-    output.console.print(doctor_cmd._render({"ok": True, "checks": checks}))  # pyright: ignore[reportPrivateUsage]
+    output.console.print(doctor_cmd.render({"ok": True, "checks": checks}))
     prompter.note("Warnings here only affect live streaming and the voice agent.")
     return SectionResult.DONE
 
@@ -133,11 +133,11 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     if not prompter.confirm("Wire up Claude Code (docs MCP + skills)?", default=False):
         return SectionResult.SKIPPED
     steps = [
-        setup_cmd._install_mcp("user", force=False),  # pyright: ignore[reportPrivateUsage]
-        setup_cmd._install_skill(force=False),  # pyright: ignore[reportPrivateUsage]
-        setup_cmd._install_cli_skill(force=False),  # pyright: ignore[reportPrivateUsage]
+        setup_cmd.install_mcp("user", force=False),
+        setup_cmd.install_skill(force=False),
+        setup_cmd.install_cli_skill(force=False),
     ]
-    output.console.print(setup_cmd._render({"steps": steps}))  # pyright: ignore[reportPrivateUsage]
+    output.console.print(setup_cmd.render({"steps": steps}))
     if any(s["status"] == "failed" for s in steps):
         return SectionResult.FAILED
     return SectionResult.DONE

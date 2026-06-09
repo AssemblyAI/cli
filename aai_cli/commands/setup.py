@@ -71,7 +71,7 @@ def _mcp_present() -> bool:
     return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
 
 
-def _install_mcp(scope: str, force: bool) -> Step:
+def install_mcp(scope: str, force: bool) -> Step:
     if shutil.which("claude") is None:
         return {
             "name": "mcp",
@@ -140,7 +140,7 @@ def _skill_installed() -> bool:
     return (_skill_dir() / "SKILL.md").exists()
 
 
-def _install_skill(force: bool) -> Step:
+def install_skill(force: bool) -> Step:
     if shutil.which("npx") is None:
         return {
             "name": "skill",
@@ -235,7 +235,7 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
             out.write_bytes(child.read_bytes())
 
 
-def _install_cli_skill(force: bool) -> Step:
+def install_cli_skill(force: bool) -> Step:
     # Bundled in the package, so no network/npx — just copy it into the agent's
     # skills dir. Idempotent: skip the copy when already present and not --force.
     dest = _cli_skill_dir()
@@ -284,7 +284,7 @@ def _remove_cli_skill() -> Step:
     return {"name": "aai-cli skill", "status": "removed", "detail": str(dest)}
 
 
-def _render(data: dict[str, list[Step]]) -> str:
+def render(data: dict[str, list[Step]]) -> str:
     return render_steps(data["steps"], heading=_STEPS_HEADING)
 
 
@@ -315,8 +315,8 @@ def install(
     """
 
     def body(_state: AppState, json_mode: bool) -> None:
-        steps = [_install_mcp(scope, force), _install_skill(force), _install_cli_skill(force)]
-        output.emit({"steps": steps}, _render, json_mode=json_mode)
+        steps = [install_mcp(scope, force), install_skill(force), install_cli_skill(force)]
+        output.emit({"steps": steps}, render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
 
@@ -339,7 +339,7 @@ def status(
 
     def body(_state: AppState, json_mode: bool) -> None:
         steps = [_mcp_status(), _skill_status(), _cli_skill_status()]
-        output.emit({"steps": steps}, _render, json_mode=json_mode)
+        output.emit({"steps": steps}, render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
 
@@ -368,7 +368,7 @@ def remove(
 
     def body(_state: AppState, json_mode: bool) -> None:
         steps = [_remove_mcp(scope), _remove_skill(), _remove_cli_skill()]
-        output.emit({"steps": steps}, _render, json_mode=json_mode)
+        output.emit({"steps": steps}, render, json_mode=json_mode)
         if any(s["status"] == "failed" for s in steps):
             raise typer.Exit(code=1)
 

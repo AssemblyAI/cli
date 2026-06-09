@@ -133,7 +133,7 @@ def test_doctor_listed_in_help():
 def test_check_python_flags_old_interpreter(monkeypatch):
     VI = namedtuple("VI", "major minor micro releaselevel serial")
     monkeypatch.setattr(doctor.sys, "version_info", VI(3, 9, 0, "final", 0))
-    check = doctor._check_python()
+    check = doctor.check_python()
     assert check["status"] == "fail"
     assert "3.9.0" in check["detail"]
 
@@ -143,7 +143,7 @@ def test_check_audio_handles_portaudio_failure(monkeypatch):
         raise OSError("PortAudio library not found")
 
     monkeypatch.setattr(doctor, "_probe_input_devices", boom)
-    check = doctor._check_audio()
+    check = doctor.check_audio()
     assert check["status"] == "warn"
     assert "PortAudio" in check["detail"]
 
@@ -169,7 +169,7 @@ def test_render_ok_payload_shows_ready() -> None:
             {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
         ],
     }
-    text = doctor._render(payload)
+    text = doctor.render(payload)
     assert "python" in text
     assert "Everything looks good." in text
 
@@ -187,7 +187,7 @@ def test_render_problem_payload_shows_fix_and_problem_banner() -> None:
             }
         ],
     }
-    text = doctor._render(payload)
+    text = doctor.render(payload)
     assert "fix:" in text
     assert "Run 'aai login'." in text
     assert "1 problem found" in text

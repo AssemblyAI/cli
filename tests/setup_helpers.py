@@ -25,7 +25,7 @@ class FakeRun:
     `returncodes` maps a command prefix tuple (the first N argv tokens) to a
     return code; the longest matching prefix wins, default 0. To mimic the real
     `skills` CLI, a successful `npx … add` materializes the assemblyai skill under
-    HOME (so `_install_skill`'s filesystem check passes) and `npx … remove`
+    HOME (so `install_skill`'s filesystem check passes) and `npx … remove`
     deletes it — toggle with `creates_skill` / `removes_skill`. The aai-cli skill
     is bundled and copied directly (no subprocess), so it never goes through here.
     """
