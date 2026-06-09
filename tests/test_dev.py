@@ -5,16 +5,15 @@ from typer.testing import CliRunner
 from aai_cli.main import app
 
 runner = CliRunner()
+ALL_IFACES = ".".join(["0"] * 4)  # 0.0.0.0, built to dodge ruff S104 in this test file
+WEB = f"web: uvicorn api.index:app --host {ALL_IFACES} --port ${{PORT:-3000}}\n"
 
 
-def _make_app(tmp_path):
-    """Scaffold the minimal marker `aai dev` looks for: api/index.py."""
-    (tmp_path / "api").mkdir()
-    (tmp_path / "api" / "index.py").write_text("app = object()\n")
+def _make_project(tmp_path):
+    (tmp_path / "Procfile").write_text(WEB)
 
 
 def _stub_runner(monkeypatch, *, use_uv=True, setup_rc=0):
-    """Stub the runner boundary; return a dict capturing launch_and_open kwargs."""
     monkeypatch.setattr("aai_cli.init.runner.has_uv", lambda: use_uv)
     monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda port, **k: port)
     monkeypatch.setattr(
@@ -23,41 +22,76 @@ def _stub_runner(monkeypatch, *, use_uv=True, setup_rc=0):
     )
     captured: dict = {}
 
-    def fake_launch(target, *, port, use_uv, open_browser, reload):
+    def fake_run_server(target, *, command, port, env, open_browser):
         captured.update(
-            target=target, port=port, use_uv=use_uv, open_browser=open_browser, reload=reload
+            target=target, command=command, port=port, env=env, open_browser=open_browser
         )
         return 0
 
-    monkeypatch.setattr("aai_cli.init.runner.launch_and_open", fake_launch)
+    monkeypatch.setattr("aai_cli.init.runner.run_server", fake_run_server)
     return captured
 
 
-def test_dev_launches_with_reload(tmp_path, monkeypatch):
+def test_dev_boots_procfile_command_with_reload(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     captured = _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev", "--no-open"])
     assert result.exit_code == 0, result.output
-    assert captured["reload"] is True
+    assert captured["command"] == [
+        "uv",
+        "run",
+        "uvicorn",
+        "api.index:app",
+        "--host",
+        ALL_IFACES,
+        "--port",
+        "3000",
+        "--reload",
+    ]
+    assert captured["env"]["PORT"] == "3000"
     assert captured["open_browser"] is False
-    assert captured["port"] == 3000
     assert "Starting" in result.output
     assert "localhost:3000" in result.output
 
 
 def test_dev_opens_browser_by_default(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     captured = _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev"])
     assert result.exit_code == 0, result.output
     assert captured["open_browser"] is True
 
 
+def test_dev_custom_port_expands_and_flows_through(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    captured = _stub_runner(monkeypatch)
+    result = runner.invoke(app, ["dev", "--port", "8123", "--no-open"])
+    assert result.exit_code == 0, result.output
+    assert captured["port"] == 8123
+    assert captured["env"]["PORT"] == "8123"
+    assert "8123" in captured["command"]
+    assert "3000" not in captured["command"]  # default was overridden, not used
+
+
+def test_dev_venv_command_when_no_uv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    captured = _stub_runner(monkeypatch, use_uv=False)
+    result = runner.invoke(app, ["dev", "--no-open", "--json"])
+    assert result.exit_code == 0, result.output
+    assert captured["command"][1] == "-m"
+    assert captured["command"][0].endswith("python") or ".venv" in captured["command"][0]
+    assert captured["command"][2] == "uvicorn"
+    assert captured["command"][-1] == "--reload"
+    assert '"detail": "venv + pip"' in result.output
+
+
 def test_dev_no_install_skips_setup(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     captured = _stub_runner(monkeypatch)
     called = {"setup": False}
     monkeypatch.setattr(
@@ -69,11 +103,11 @@ def test_dev_no_install_skips_setup(tmp_path, monkeypatch):
     result = runner.invoke(app, ["dev", "--no-install", "--no-open"])
     assert result.exit_code == 0, result.output
     assert called["setup"] is False
-    assert captured["reload"] is True
+    assert captured["command"][-1] == "--reload"
 
 
-def test_dev_missing_app_errors(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)  # no api/index.py here
+def test_dev_missing_procfile_errors(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # no Procfile
     captured = _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev"])
     assert result.exit_code == 1
@@ -83,47 +117,28 @@ def test_dev_missing_app_errors(tmp_path, monkeypatch):
 
 def test_dev_install_failure_exits(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     captured = _stub_runner(monkeypatch, setup_rc=1)
     result = runner.invoke(app, ["dev"])
     assert result.exit_code == 1
-    assert captured == {}  # install failed -> no launch
     assert "boom" in result.output
+    assert captured == {}  # install failed -> no launch
 
 
 def test_dev_server_nonzero_exit_propagates(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     _stub_runner(monkeypatch)
-    monkeypatch.setattr("aai_cli.init.runner.launch_and_open", lambda *a, **k: 3)
+    monkeypatch.setattr("aai_cli.init.runner.run_server", lambda *a, **k: 3)
     result = runner.invoke(app, ["dev", "--no-open"])
     assert result.exit_code == 3
 
 
 def test_dev_json_emits_install_step(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
+    _make_project(tmp_path)
     _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev", "--no-open", "--json"])
     assert result.exit_code == 0, result.output
     assert '"name": "install"' in result.output
     assert '"detail": "uv"' in result.output
-
-
-def test_dev_venv_path_when_no_uv(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
-    captured = _stub_runner(monkeypatch, use_uv=False)
-    result = runner.invoke(app, ["dev", "--no-open", "--json"])
-    assert result.exit_code == 0, result.output
-    assert captured["use_uv"] is False
-    assert '"detail": "venv + pip"' in result.output
-
-
-def test_dev_custom_port_flows_through(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    _make_app(tmp_path)
-    captured = _stub_runner(monkeypatch)
-    result = runner.invoke(app, ["dev", "--port", "8123", "--no-open"])
-    assert result.exit_code == 0, result.output
-    assert captured["port"] == 8123

@@ -1,6 +1,7 @@
 # aai_cli/commands/dev.py
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -8,26 +9,12 @@ from rich.markup import escape
 
 from aai_cli import help_panels, output, steps
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
-from aai_cli.init import runner
+from aai_cli.init import procfile, runner
 
 # Flattened single-command sub-typer (same pattern as `aai init`): one
 # @app.command() registered via app.add_typer(dev.app) with no name.
 app = typer.Typer()
-
-
-def _require_app_dir() -> Path:
-    """The current directory, if it holds a scaffolded FastAPI app (`api/index.py`)."""
-    cwd = Path.cwd()
-    if not (cwd / "api" / "index.py").exists():
-        raise CLIError(
-            "No app found here (expected api/index.py). cd into a project created by "
-            "`aai init`, or run `aai init` to scaffold one.",
-            error_type="usage_error",
-            exit_code=1,
-        )
-    return cwd
 
 
 def _install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
@@ -44,25 +31,36 @@ def _install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step
     return {"name": "install", "status": "installed", "detail": "uv" if use_uv else "venv + pip"}
 
 
+def _dev_command(target: Path, web: list[str], *, use_uv: bool) -> list[str]:
+    """The Procfile web process, run in the project venv with live reload."""
+    prefix = ["uv", "run"] if use_uv else [str(runner.venv_python(target)), "-m"]
+    return [*prefix, *web, "--reload"]
+
+
 def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> None:
-    """Install deps if needed, then launch the dev server with live reload."""
-    target = _require_app_dir()
+    """Boot the project's Procfile `web:` process locally, with live reload."""
+    target = Path.cwd()
     use_uv = runner.has_uv()
+
+    chosen_port = runner.find_free_port(port)
+    env = {**os.environ, "PORT": str(chosen_port)}
+    # Resolves the start command AND validates we're inside a scaffolded project.
+    web = procfile.web_argv(target, env=env)
 
     report: list[steps.Step] = [_install_step(target, no_install=no_install, use_uv=use_uv)]
     output.emit(report, lambda d: steps.render_steps(d, heading="Dev"), json_mode=json_mode)
     if any(s["status"] == "failed" for s in report):
         raise typer.Exit(code=1)
 
-    chosen_port = runner.find_free_port(port)
+    command = _dev_command(target, web, use_uv=use_uv)
     url = f"http://localhost:{chosen_port}"
     if not json_mode:
         output.console.print(
             f"[aai.heading]Starting[/aai.heading] [aai.url]{escape(url)}[/aai.url]"
             "  [aai.muted](Ctrl-C to stop)[/aai.muted]"
         )
-    code = runner.launch_and_open(
-        target, port=chosen_port, use_uv=use_uv, open_browser=not no_open, reload=True
+    code = runner.run_server(
+        target, command=command, port=chosen_port, env=env, open_browser=not no_open
     )
     if code:
         raise typer.Exit(code=code)
