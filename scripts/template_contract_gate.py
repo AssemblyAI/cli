@@ -30,6 +30,8 @@ _REQUIRED_FILES = (
     "env.example",
     "Procfile",
     "runtime.txt",
+    "Dockerfile",
+    "dockerignore",
 )
 _LOCAL_IMPORTS = {"api"}
 _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
@@ -194,6 +196,32 @@ def _web_command(template: str, path: Path) -> str:
     raise AssertionError  # unreachable; _fail raises. Satisfies the type checker.
 
 
+def _dockerfile_runs_uvicorn(template: str, path: Path) -> None:
+    """The Dockerfile's start command must run the app on the platform's port.
+
+    Fly.io / Railway / Render(Docker) / Cloudflare-Containers build this image instead
+    of `fly launch`'s broken auto-generated Dockerfile. It must run uvicorn on the app,
+    bind 0.0.0.0 so the platform can reach it, and honor the injected ${PORT}.
+    """
+    dockerfile = (path / "Dockerfile").read_text(encoding="utf-8")
+    for token in ("uvicorn api.index:app", "--host 0.0.0.0", "${PORT"):
+        if token not in dockerfile:
+            _fail(f"{template}: Dockerfile must contain {token!r}")
+
+
+def _dockerignore_excludes_env(template: str, path: Path) -> None:
+    """`.env` (the real API key) must be excluded from the build context.
+
+    The Dockerfile does `COPY . .` and Fly/Railway upload the local dir as build
+    context, so without this the key would be baked into the image.
+    """
+    lines = {
+        line.strip() for line in (path / "dockerignore").read_text(encoding="utf-8").splitlines()
+    }
+    if ".env" not in lines:
+        _fail(f"{template}: dockerignore must list .env so the API key isn't baked into the image")
+
+
 def _free_port() -> int:
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as probe:
         probe.bind(("127.0.0.1", 0))
@@ -293,6 +321,8 @@ def main() -> int:
         _parse_python_files(path)
         _import_api(template, path)
         _runtime_supported(template, path)
+        _dockerfile_runs_uvicorn(template, path)
+        _dockerignore_excludes_env(template, path)
         _procfile_boots(template, path)
     sys.stdout.write(f"validated {len(templates.TEMPLATE_ORDER)} init templates\n")
     return 0

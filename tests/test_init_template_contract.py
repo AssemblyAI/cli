@@ -34,8 +34,34 @@ def test_required_files_present(template_dir):
         "env.example",
         "Procfile",
         "runtime.txt",
+        "Dockerfile",
+        "dockerignore",
     ):
         assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
+
+
+def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
+    """Fly/Railway/Render(Docker)/Cloudflare-Containers build this image. It must run
+    uvicorn on the app, bind 0.0.0.0, and honor the platform's injected ${PORT}."""
+    dockerfile = (template_dir / "Dockerfile").read_text()
+    assert "uvicorn api.index:app" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must run uvicorn api.index:app"
+    )
+    assert "--host 0.0.0.0" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must bind --host 0.0.0.0"
+    )
+    assert "${PORT" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must honor the platform's ${{PORT}}"
+    )
+
+
+def test_dockerignore_excludes_env(template_dir):
+    """`.env` holds the real API key; the Dockerfile does COPY . . so it must be
+    excluded from the build context or the key gets baked into the image."""
+    lines = {line.strip() for line in (template_dir / "dockerignore").read_text().splitlines()}
+    assert ".env" in lines, (
+        f"{template_dir.name}: dockerignore must list .env so the API key isn't baked in"
+    )
 
 
 def test_template_ships_no_public_dir(template_dir):
