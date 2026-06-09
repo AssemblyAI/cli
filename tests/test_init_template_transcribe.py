@@ -11,8 +11,11 @@ def _load_app(monkeypatch, mocker):
     """Import the template's api/index.py as a module and return its FastAPI app.
 
     The template is a standalone project (not part of aai_cli's import graph), so we
-    load it by file path. The assemblyai SDK is stubbed so no network/key is needed.
+    load it by file path. The assemblyai SDK is stubbed so no network is needed; a dummy
+    key is injected so the endpoints' ``_require_key`` guard passes and they reach the
+    stubbed SDK (isolate_env strips any ambient key).
     """
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "test-key")
     fake_aai = mocker.MagicMock()
     fake_aai.TranscriptStatus.completed = "completed"
     fake_aai.TranscriptStatus.error = "error"

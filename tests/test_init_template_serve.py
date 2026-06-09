@@ -19,6 +19,7 @@ we can assert against, rather than letting it bubble out of the route.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -49,7 +50,10 @@ def serve(template: str) -> Iterator[tuple[ModuleType, TestClient]]:
     The three templates ship an identically-named ``api`` package, so evict any cached
     ``api``/``api.*`` before and after to keep imports collision-free and order-independent
     (safe under pytest-xdist / pytest-randomly). The app reads ``ASSEMBLYAI_API_KEY`` at
-    import; the autouse ``isolate_env`` fixture has already stripped it, so it boots keyless.
+    import; the autouse ``isolate_env`` fixture strips it, so we inject a dummy key before
+    import so endpoints clear the ``_require_key`` guard and reach their mocked backends.
+    (Tests that want to exercise the missing-key guard clear ``module.settings.API_KEY``
+    after import — the guard re-reads it at request time.)
     """
     path = (TEMPLATES_ROOT / template).resolve()
     saved_path = list(sys.path)
@@ -57,11 +61,17 @@ def serve(template: str) -> Iterator[tuple[ModuleType, TestClient]]:
     for name in list(saved_modules):
         sys.modules.pop(name, None)
     sys.path.insert(0, str(path))
+    saved_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    os.environ["ASSEMBLYAI_API_KEY"] = "test-key"
     try:
         module = importlib.import_module("api.index")
         client = TestClient(module.app, raise_server_exceptions=False)
         yield module, client
     finally:
+        if saved_key is None:
+            os.environ.pop("ASSEMBLYAI_API_KEY", None)
+        else:
+            os.environ["ASSEMBLYAI_API_KEY"] = saved_key
         for name in [n for n in sys.modules if n == "api" or n.startswith("api.")]:
             sys.modules.pop(name, None)
         sys.modules.update(saved_modules)
@@ -249,3 +259,33 @@ def test_token_failure_is_graceful(template: str, monkeypatch: pytest.MonkeyPatc
         result = client.post("/api/token")
         assert result.status_code == HTTP_BAD_GATEWAY
         assert "detail" in result.json()
+
+
+# --- missing API key: every template fails fast with an actionable message ----------
+
+HTTP_INTERNAL_ERROR = 500
+
+# (template, method, path, json body) for one representative key-using endpoint each.
+MISSING_KEY_CASES = [
+    ("voice-agent", "post", "/api/token", None),
+    ("live-captions", "post", "/api/token", None),
+    ("audio-transcription", "post", "/api/transcribe-url", {"url": "https://example.com/a.mp3"}),
+]
+
+
+@pytest.mark.parametrize(("template", "method", "path", "body"), MISSING_KEY_CASES)
+def test_missing_key_returns_clear_error(
+    template: str,
+    method: str,
+    path: str,
+    body: dict[str, str] | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unset key yields a clear 500 (not a cryptic Bearer/SDK failure) before any call."""
+    with serve(template) as (module, client):
+        # serve() injects a dummy key at import; clear it so _require_key() trips at
+        # request time (the guard re-reads settings.API_KEY on each request).
+        monkeypatch.setattr(module.settings, "API_KEY", "")
+        resp = client.request(method, path, json=body)
+        assert resp.status_code == HTTP_INTERNAL_ERROR
+        assert "ASSEMBLYAI_API_KEY is not set" in resp.json()["detail"]

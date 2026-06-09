@@ -41,6 +41,15 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+def _require_key() -> None:
+    """Fail fast with an actionable message when the API key isn't configured."""
+    if not settings.API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="ASSEMBLYAI_API_KEY is not set — configure it in your deployment's environment variables.",
+        )
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
@@ -61,6 +70,7 @@ def _submit(audio: str) -> dict[str, str]:
 
 @app.post("/api/transcribe")
 async def transcribe(file: UploadFile) -> dict[str, str]:
+    _require_key()
     suffix = Path(file.filename or "audio").suffix
     tmp = Path(tempfile.gettempdir()) / f"aai-{uuid.uuid4().hex}{suffix}"
     tmp.write_bytes(await file.read())
@@ -72,6 +82,7 @@ async def transcribe(file: UploadFile) -> dict[str, str]:
 
 @app.post("/api/transcribe-url")
 def transcribe_url(url: str = Body(default=settings.SAMPLE_URL, embed=True)) -> dict[str, str]:
+    _require_key()
     # AssemblyAI transcribes a public URL directly — no upload step needed.
     return _submit(url.strip() or settings.SAMPLE_URL)
 
@@ -79,6 +90,7 @@ def transcribe_url(url: str = Body(default=settings.SAMPLE_URL, embed=True)) -> 
 @app.post("/api/ask")
 def ask(transcript_id: str = Body(...), question: str = Body(...)) -> dict[str, str]:
     """Answer a question about a transcript via the LLM Gateway."""
+    _require_key()
     client = OpenAI(api_key=settings.API_KEY, base_url=settings.LLM_GATEWAY_URL)
     try:
         resp = client.chat.completions.create(
@@ -94,6 +106,7 @@ def ask(transcript_id: str = Body(...), question: str = Body(...)) -> dict[str, 
 
 @app.get("/api/status/{transcript_id}")
 def status(transcript_id: str) -> dict[str, object]:
+    _require_key()
     # One non-blocking GET. NOTE: aai.Transcript.get_by_id() BLOCKS until the job
     # finishes (it calls wait_for_completion), which is wrong for a poll endpoint.
     try:

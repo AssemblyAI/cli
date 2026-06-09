@@ -1,4 +1,5 @@
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -8,6 +9,10 @@ TEMPLATE_DIR = Path("aai_cli/init/templates/voice-agent")
 
 
 def _load_app(monkeypatch):
+    # Inject a dummy key (unless a test already set its own) so the token endpoint's
+    # _require_key guard passes and reaches the mocked httpx2 call (isolate_env strips
+    # any ambient key).
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", os.environ.get("ASSEMBLYAI_API_KEY", "test-key"))
     for name in ("api.index", "api.settings", "api"):
         sys.modules.pop(name, None)
     monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
