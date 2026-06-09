@@ -18,6 +18,11 @@ def test_noninteractive_confirm_returns_default() -> None:
     assert p.confirm("Run setup?", default=False) is False
 
 
+def test_noninteractive_confirm_defaults_to_true() -> None:
+    # No explicit default: the parameter default (True) decides.
+    assert NonInteractivePrompter().confirm("Run setup?") is True
+
+
 def test_noninteractive_select_returns_default_or_first() -> None:
     p = NonInteractivePrompter()
     options = [("a", "Option A"), ("b", "Option B")]
@@ -39,16 +44,18 @@ def test_interactive_section_and_note() -> None:
 
 
 def test_interactive_confirm_delegates_to_typer(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aai_cli.onboard.prompter as pm
-
-    monkeypatch.setattr(pm.typer, "confirm", lambda *a, **k: True)
+    monkeypatch.setattr("aai_cli.onboard.prompter.typer.confirm", lambda *a, **k: True)
     assert InteractivePrompter().confirm("ok?", default=True) is True
 
 
-def test_interactive_text_delegates_to_typer(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aai_cli.onboard.prompter as pm
+def test_interactive_confirm_passes_default_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Called without an explicit default, confirm() must forward default=True to typer.
+    monkeypatch.setattr("aai_cli.onboard.prompter.typer.confirm", lambda title, *, default: default)
+    assert InteractivePrompter().confirm("ok?") is True
 
-    monkeypatch.setattr(pm.typer, "prompt", lambda *a, **k: "typed")
+
+def test_interactive_text_delegates_to_typer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("aai_cli.onboard.prompter.typer.prompt", lambda *a, **k: "typed")
     assert InteractivePrompter().text("name", default="d") == "typed"
 
 

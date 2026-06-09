@@ -8,6 +8,13 @@ def test_requests_made_starts_at_zero() -> None:
     assert config.get_requests_made("default") == 0
 
 
+def test_requests_made_is_zero_for_existing_profile_with_no_count() -> None:
+    # A profile can exist (e.g. created by login) before any request is recorded;
+    # its count must read 0, not the `or 1` fallback a mutant would introduce.
+    config.set_profile_env("default", "production")
+    assert config.get_requests_made("default") == 0
+
+
 def test_record_request_increments_and_persists() -> None:
     assert config.record_request("default") == 1
     assert config.record_request("default") == 2

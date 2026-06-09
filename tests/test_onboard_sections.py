@@ -29,6 +29,7 @@ class _ScriptedPrompter:
         self._select = select
         self._confirm = confirm
         self._text = text
+        self.confirm_defaults: list[bool] = []
 
     def section(self, title: str) -> None:
         pass
@@ -37,6 +38,7 @@ class _ScriptedPrompter:
         pass
 
     def confirm(self, title: str, *, default: bool = True) -> bool:
+        self.confirm_defaults.append(default)
         return self._confirm
 
     def select(
@@ -72,9 +74,18 @@ def test_first_request_transcribes_sample_and_counts(
     assert config.get_requests_made("default") == 1
 
 
-def test_environment_is_non_blocking(ctx: WizardContext) -> None:
+def test_environment_is_non_blocking(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
     # Even if checks warn/fail, the section never blocks the wizard.
+    seen: dict[str, object] = {}
+
+    def _capture_render(payload: dict[str, object]) -> str:
+        seen.update(payload)
+        return ""
+
+    monkeypatch.setattr("aai_cli.commands.doctor._render", _capture_render)
     assert sections.environment(NonInteractivePrompter(), ctx) is SectionResult.DONE
+    # The environment section always renders as a non-fatal report (ok=True).
+    assert seen["ok"] is True
 
 
 def test_build_path_skip_choice_does_nothing(
@@ -126,16 +137,32 @@ def test_auth_key_path_rejected(ctx: WizardContext, monkeypatch: pytest.MonkeyPa
 
 def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
+    seen: dict[str, object] = {}
 
     def _fake_run_init(*a: object, **k: object) -> Path:
         nonlocal calls
         calls += 1
+        seen.update(k)
         return Path()
 
     monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
-    result = sections.build_path(_ScriptedPrompter(select="audio-transcription", confirm=True), ctx)
+    prompter = _ScriptedPrompter(select="audio-transcription", confirm=True)
+    result = sections.build_path(prompter, ctx)
     assert result is SectionResult.DONE
     assert calls == 1
+    # The scaffold confirmation defaults to Yes (a False mutant would change the prompt).
+    assert prompter.confirm_defaults == [True]
+    # Pin the exact run_init kwargs the wizard relies on (each is a mutated literal):
+    # a non-blocking, non-opening scaffold of the chosen template on the default port.
+    assert seen["template"] == "audio-transcription"
+    assert seen["directory"] is None
+    assert seen["no_install"] is False
+    assert seen["no_open"] is True
+    assert seen["force"] is False
+    assert seen["here"] is False
+    assert seen["port"] == 3000
+    assert seen["json_mode"] is False
+    assert seen["launch"] is False
 
 
 def test_build_path_declined_after_select(
@@ -172,10 +199,26 @@ def _passing_step(*a: object, **k: object) -> Step:
 
 
 def test_claude_code_done(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(setup_cmd, "_install_mcp", _passing_step)
-    monkeypatch.setattr(setup_cmd, "_install_skill", _passing_step)
-    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _passing_step)
+    forces: dict[str, object] = {}
+
+    def _mcp(scope: str, *, force: bool) -> Step:
+        forces["mcp"] = force
+        return _passing_step()
+
+    def _skill(*, force: bool) -> Step:
+        forces["skill"] = force
+        return _passing_step()
+
+    def _cli_skill(*, force: bool) -> Step:
+        forces["cli_skill"] = force
+        return _passing_step()
+
+    monkeypatch.setattr(setup_cmd, "_install_mcp", _mcp)
+    monkeypatch.setattr(setup_cmd, "_install_skill", _skill)
+    monkeypatch.setattr(setup_cmd, "_install_cli_skill", _cli_skill)
     assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.DONE
+    # The wizard never force-overwrites existing installs (force=False everywhere).
+    assert forces == {"mcp": False, "skill": False, "cli_skill": False}
 
 
 def test_claude_code_failed(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

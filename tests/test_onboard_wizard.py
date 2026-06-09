@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from aai_cli import output
 from aai_cli.context import AppState
 from aai_cli.onboard import sections, wizard
 from aai_cli.onboard.prompter import NonInteractivePrompter, WizardCancelled
@@ -51,3 +52,17 @@ def test_cancel_returns_130(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(sections, "auth", _cancel)
     assert wizard.run_onboarding(NonInteractivePrompter(), ctx) == 130
+
+
+def test_cursor_is_always_restored(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The finally block must re-show the cursor (show=True), even on cancellation.
+    shown: list[bool] = []
+    monkeypatch.setattr(output.console, "show_cursor", lambda *, show: shown.append(show))
+    monkeypatch.setattr(sections, "welcome", lambda p, c: SectionResult.DONE)
+
+    def _cancel(p: object, c: object) -> SectionResult:
+        raise WizardCancelled
+
+    monkeypatch.setattr(sections, "auth", _cancel)
+    wizard.run_onboarding(NonInteractivePrompter(), ctx)
+    assert shown == [True]
