@@ -463,6 +463,8 @@ def transcribe(
 
         if out is not None:
             # Write a clean file artifact and confirm on stderr; stdout stays empty.
+            if ".." in str(out):
+                raise Exception("Invalid file path")
             out.write_text(_out_payload(transcript, output_field, json_mode=json_mode) + "\n")
             if not state.quiet:
                 output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
