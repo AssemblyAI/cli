@@ -1,7 +1,40 @@
 # `aai dev` — launch a scaffolded template's dev server
 
 **Date:** 2026-06-09
-**Status:** Approved (design)
+**Status:** Approved (design) — revised mid-implementation (see "Revision" below)
+
+## Revision (2026-06-09): boot from the template's Procfile
+
+Every template already ships a `Procfile`
+(`web: uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}`) — the start
+command for non-Vercel hosts (Render/Railway/Heroku/Cloud Run), otherwise only
+exercised in a real deploy. Rather than hardcode a second copy of the start
+command, **`aai dev` boots the Procfile's `web:` process**, so the command users
+run locally is the command hosts run in production, and every `aai dev`
+smoke-tests the deploy artifact.
+
+Scope: **dev only.** `aai init`'s internal launch keeps its existing
+`runner.serve_command` path (unchanged). Concretely this revises the design below:
+
+- The cwd marker becomes the **`Procfile`** (not `api/index.py`).
+- A new module `aai_cli/init/procfile.py` parses the `web:` line into an argv,
+  expanding `${PORT:-3000}` / `${VAR}` / `$VAR` against a supplied env.
+- `aai dev` sets `PORT` to the chosen free port, runs the parsed command through
+  the project venv (`uv run …` or `.venv/bin/python -m …`), and **appends
+  `--reload`** for dev ergonomics.
+- `runner.serve_command` / `launch_and_open` keep their **original (no-`reload`)**
+  signatures; the orchestration (Popen + wait-for-port + browser + Ctrl-C) is
+  extracted into `runner.run_server(target, *, command, port, env, open_browser)`,
+  which both `launch_and_open` (init) and `aai dev` call. The `reload` param that
+  an earlier revision added to `serve_command`/`launch_and_open` is removed
+  (dev no longer routes through `serve_command`, so it would be dead).
+
+The sections below describe the original (pre-revision) design; where they
+mention `api/index.py` detection or `reload` on `serve_command`, the revision
+above supersedes them.
+
+---
+
 
 ## Problem
 
