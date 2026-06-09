@@ -26,8 +26,6 @@ class Target:
     deploy_args: tuple[str, ...]  # subcommand(s) appended after `bin`
     supports_prod: bool = False  # whether `--prod` adds a production flag
     post_deploy_args: tuple[str, ...] | None = None  # command run after a successful deploy
-    requires_file: str | None = None  # a file that must exist in cwd before deploying
-    setup_hint: str | None = None  # how to create `requires_file`
 
     def command(self, *, prod: bool) -> list[str]:
         argv = [self.bin, *self.deploy_args]
@@ -57,9 +55,9 @@ FLY = Target(
     bin="fly",
     flag="--fly",
     install="Install it with `brew install flyctl`.",
-    deploy_args=("deploy",),
-    requires_file="fly.toml",
-    setup_hint="Run `fly launch` first to create your Fly app.",
+    # `fly launch` does it all: creates the app, generates fly.toml (detecting the
+    # shipped Dockerfile), and deploys — so no fly.toml needs to exist beforehand.
+    deploy_args=("launch",),
 )
 
 TARGETS = (VERCEL, RAILWAY, FLY)
@@ -85,15 +83,6 @@ def _require_cli(target: Target) -> None:
         )
 
 
-def _require_setup(target: Target) -> None:
-    if target.requires_file is not None and not (Path.cwd() / target.requires_file).exists():
-        raise CLIError(
-            f"No {target.requires_file} in this directory. {target.setup_hint}",
-            error_type="usage_error",
-            exit_code=1,
-        )
-
-
 def _confirmed(target: Target, *, assume_yes: bool) -> bool:
     """True when the deploy should proceed: --yes, or an interactive yes.
 
@@ -113,7 +102,6 @@ def _confirmed(target: Target, *, assume_yes: bool) -> bool:
 def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
     """Confirm, then run the target's deploy command in the current directory."""
     _require_cli(target)
-    _require_setup(target)
     if not _confirmed(target, assume_yes=assume_yes):
         output.console.print("Aborted.")
         return
@@ -146,7 +134,7 @@ def deploy(
     """Deploy the current project to Vercel (default), Railway, or Fly.io.
 
     Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
-    `railway up`, or `fly deploy`). Requires that target's CLI to be installed.
+    `railway up`, or `fly launch`). Requires that target's CLI to be installed.
     (Render deploys from a connected Git repo — see the project README.)
     """
 

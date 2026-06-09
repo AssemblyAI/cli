@@ -199,34 +199,20 @@ def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _cmds(calls)[0] == ["railway", "up"]
 
 
-def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "fly.toml").write_text("app = 'x'\n")
+def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `fly launch` creates the app, generates fly.toml (detecting the shipped
+    # Dockerfile), and deploys — one command, no fly.toml needed beforehand.
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--yes"])
     assert result.exit_code == 0, result.output
-    assert _cmds(calls) == [["fly", "deploy"]]
+    assert _cmds(calls) == [["fly", "launch"]]
 
 
-def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "fly.toml").write_text("app = 'x'\n")
+def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    assert _cmds(calls)[0] == ["fly", "deploy"]
-
-
-def test_deploy_fly_without_toml_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    # Without a fly.toml, the preflight fails early with a `fly launch` hint and
-    # never shells out to `fly deploy`.
-    monkeypatch.chdir(tmp_path)
-    calls = _stub(monkeypatch, available=("fly",))
-    result = runner.invoke(app, ["deploy", "--fly", "--yes"])
-    assert result.exit_code == 1
-    assert "fly.toml" in result.output
-    assert "fly launch" in result.output
-    assert _cmds(calls) == []  # never deployed
+    assert _cmds(calls)[0] == ["fly", "launch"]
 
 
 def test_deploy_missing_fly_errors(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -131,7 +131,7 @@
    Deploy the current project to Vercel (default), Railway, or Fly.io.
   
    Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
-   `railway up`, or `fly deploy`). Requires that target's CLI to be installed.
+   `railway up`, or `fly launch`). Requires that target's CLI to be installed.
    (Render deploys from a connected Git repo — see the project README.)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
