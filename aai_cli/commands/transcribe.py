@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import assemblyai as aai
 import typer
@@ -18,65 +15,14 @@ from aai_cli import (
     help_panels,
     llm,
     output,
-    stdio,
+    transcribe_exec,
     transcribe_render,
-    youtube,
 )
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
-
-
-def _render_transform_steps(d: dict[str, Any]) -> str:
-    """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
-    steps = d["transform"]["steps"]
-    if len(steps) == 1:
-        return str(steps[0]["output"])
-    return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
-
-
-def _out_payload(
-    transcript: aai.Transcript,
-    output_field: choices.TranscriptOutput | None,
-    *,
-    json_mode: bool,
-) -> str:
-    """The text to write for ``--out``: the chosen ``-o`` field, the ``--json`` payload,
-    or the plain transcript text — the same content stdout would get, as a file artifact."""
-    if output_field is not None:
-        return client.select_transcript_field(transcript, output_field)
-    if json_mode:
-        return json.dumps(client.transcript_json_payload(transcript), default=str)
-    return client.select_transcript_field(transcript, choices.TranscriptOutput.text)
-
-
-def _transcribe_audio(
-    api_key: str,
-    source: str | None,
-    *,
-    sample: bool,
-    transcription_config: aai.TranscriptionConfig,
-) -> aai.Transcript:
-    if source == "-":
-        # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
-        # The SDK uploads a path, so buffer the bytes to a temp file first.
-        data = stdio.read_binary_stdin()
-        if not data:
-            raise UsageError("No audio received on stdin.")
-        with tempfile.TemporaryDirectory(prefix="aai-stdin-") as td:
-            local = Path(td) / "audio"
-            local.write_bytes(data)
-            return client.transcribe(api_key, str(local), config=transcription_config)
-
-    audio = client.resolve_audio_source(source, sample=sample)
-    if youtube.is_youtube_url(audio):
-        # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
-        with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(audio, Path(td))
-            return client.transcribe(api_key, str(local), config=transcription_config)
-    return client.transcribe(api_key, audio, config=transcription_config)
 
 
 @app.command(
@@ -459,13 +405,17 @@ def transcribe(
 
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode):
-            transcript = _transcribe_audio(api_key, source, sample=sample, transcription_config=tc)
+            transcript = transcribe_exec.run_transcription(
+                api_key, source, sample=sample, transcription_config=tc
+            )
 
         if out is not None:
             # Write a clean file artifact and confirm on stderr; stdout stays empty.
-            if ".." in str(out):
-                raise Exception("Invalid file path")
-            out.write_text(_out_payload(transcript, output_field, json_mode=json_mode) + "\n")
+            if ".." in out.parts:  # reject path-traversal segments in --out
+                raise UsageError(f"--out path can't contain '..': {out}")
+            out.write_text(
+                transcribe_exec.out_payload(transcript, output_field, json_mode=json_mode) + "\n"
+            )
             if not state.quiet:
                 output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
             return
@@ -488,7 +438,7 @@ def transcribe(
             output.emit(
                 client.transcript_summary(transcript)
                 | {"transform": {"model": model, "steps": steps}},
-                _render_transform_steps,
+                transcribe_exec.render_transform_steps,
                 json_mode=json_mode,
             )
             return

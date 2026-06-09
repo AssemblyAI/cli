@@ -6,11 +6,10 @@ from enum import Enum
 import assemblyai as aai
 import typer
 
-from aai_cli import config, environments, output, transcribe_render
+from aai_cli import config, environments, output, transcribe_exec, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
-from aai_cli.commands import transcribe as transcribe_cmd
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.onboard.prompter import Prompter
@@ -65,7 +64,7 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     label = source or "the sample clip"
     try:
         with output.status(f"Transcribing {label}…", json_mode=ctx.json_mode):
-            transcript = transcribe_cmd._transcribe_audio(  # pyright: ignore[reportPrivateUsage]
+            transcript = transcribe_exec.run_transcription(
                 api_key,
                 source or None,
                 sample=not source,

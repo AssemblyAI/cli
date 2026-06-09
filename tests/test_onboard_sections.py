@@ -7,10 +7,9 @@ from pathlib import Path
 import pytest
 import typer
 
-from aai_cli import output, transcribe_render
+from aai_cli import output, transcribe_exec, transcribe_render
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
-from aai_cli.commands import transcribe as transcribe_cmd
 from aai_cli.context import AppState
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
@@ -91,7 +90,7 @@ def test_first_request_uses_sample_on_empty_input(
         seen["sample"] = sample
         return _FakeTranscript()
 
-    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
+    monkeypatch.setattr(transcribe_exec, "run_transcription", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
     status_messages = _capture_status(monkeypatch)
     # NonInteractivePrompter.text returns its default ("") → Enter → sample.
@@ -114,7 +113,7 @@ def test_first_request_uses_custom_source(
         seen["sample"] = sample
         return _FakeTranscript()
 
-    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
+    monkeypatch.setattr(transcribe_exec, "run_transcription", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
     status_messages = _capture_status(monkeypatch)
     assert sections.first_request(_ScriptedPrompter(text="meeting.mp3"), ctx) is SectionResult.DONE
@@ -131,7 +130,7 @@ def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.M
     def _boom(*a: object, **k: object) -> _FakeTranscript:
         raise APIError("nope")
 
-    monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _boom)
+    monkeypatch.setattr(transcribe_exec, "run_transcription", _boom)
     assert sections.first_request(_ScriptedPrompter(text="bad.mp3"), ctx) is SectionResult.FAILED
 
 

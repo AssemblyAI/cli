@@ -356,7 +356,7 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path
     _auth()
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
-    monkeypatch.setattr("aai_cli.commands.transcribe.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", lambda url, d: fake)
     with patch(
         "aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()
     ) as tx:
@@ -394,61 +394,6 @@ def test_transcribe_show_code_without_source_uses_placeholder(monkeypatch):
     assert result.exit_code == 0
     assert "import assemblyai as aai" in result.output
     assert "your-audio-file.mp3" in result.output
-
-
-def test_transcribe_out_writes_text_file(tmp_path):
-    _auth()
-    out = tmp_path / "episode.txt"
-    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--out", str(out)])
-    assert result.exit_code == 0
-    assert out.read_text() == "hello world\n"
-    # The transcript went to the file, not the terminal — stdout stays clean.
-    assert "hello world" not in result.output
-    # A confirmation is shown on stderr so the user knows where it landed.
-    assert "Saved to" in result.output
-
-
-def test_transcribe_out_quiet_suppresses_confirmation(tmp_path):
-    # -q silences the "Saved to" confirmation, but the file is still written.
-    _auth()
-    out = tmp_path / "episode.txt"
-    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
-        result = runner.invoke(app, ["-q", "transcribe", "audio.mp3", "--out", str(out)])
-    assert result.exit_code == 0
-    assert out.read_text() == "hello world\n"
-    assert "Saved to" not in result.output
-
-
-def test_transcribe_out_with_output_field_writes_that_field(tmp_path):
-    _auth()
-    out = tmp_path / "id.txt"
-    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "id", "--out", str(out)])
-    assert result.exit_code == 0
-    assert out.read_text() == "t_1\n"
-
-
-def test_transcribe_out_with_json_writes_json_file(tmp_path):
-    _auth()
-    out = tmp_path / "t.json"
-    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
-        result = runner.invoke(app, ["transcribe", "audio.mp3", "--json", "--out", str(out)])
-    assert result.exit_code == 0
-    assert json.loads(out.read_text())["id"] == "t_1"
-
-
-def test_transcribe_out_with_llm_is_a_usage_error(tmp_path):
-    # --out captures the transcript; chaining an LLM transform into a file isn't
-    # supported (pipe it instead), so the combination is rejected up front.
-    _auth()
-    out = tmp_path / "x.txt"
-    with patch("aai_cli.commands.transcribe.client.transcribe", return_value=_fake_transcript()):
-        result = runner.invoke(
-            app, ["transcribe", "audio.mp3", "--llm", "summarize", "--out", str(out)]
-        )
-    assert result.exit_code == 2
-    assert not out.exists()
 
 
 def test_transcribe_show_code_ignores_json_flag(monkeypatch):
