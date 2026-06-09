@@ -66,6 +66,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-mock>=3.14.0",
     "pytest-randomly>=3.16.0",
+    "pytest-xdist>=3.6.0",
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
     "mypy>=2.1.0",
