@@ -11,6 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as a non-root user (container hardening; the app only reads its files and binds
+# a non-privileged port, so it needs no elevated privileges). python:3.13-slim is
+# Debian-based, so `useradd` is available.
+RUN useradd --create-home appuser
+USER appuser
+
 # Fly reads EXPOSE to set its fly.toml internal_port; keep it in sync with the CMD
 # default so the proxy and the app agree on the port.
 EXPOSE 8080

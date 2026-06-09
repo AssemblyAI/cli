@@ -221,6 +221,12 @@ def _dockerfile_runs_uvicorn(template: str, path: Path) -> None:
             f"{template}: Dockerfile must EXPOSE 8080 and default CMD to ${{PORT:-8080}}; "
             f"got EXPOSE {exposed.group(1)} and ${{PORT:-{cmd_default.group(1)}}}"
         )
+    # Container hardening: the image must drop root (Aikido/Checkov CKV_DOCKER_3).
+    user = re.search(r"^USER\s+(\S+)\s*$", dockerfile, re.MULTILINE)
+    if user is None:
+        _fail(f"{template}: Dockerfile must declare a non-root USER (CKV_DOCKER_3)")
+    if user.group(1) in {"root", "0"}:
+        _fail(f"{template}: Dockerfile USER must not be root; got {user.group(1)!r} (CKV_DOCKER_3)")
 
 
 def _dockerignore_excludes_env(template: str, path: Path) -> None:

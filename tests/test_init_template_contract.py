@@ -67,6 +67,15 @@ def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
         f"{template_dir.name}: EXPOSE {exposed.group(1)} must match "
         f"CMD default ${{PORT:-{cmd_default.group(1)}}}"
     )
+    # Container hardening: the image must drop root (Aikido/Checkov CKV_DOCKER_3).
+    user = re.search(r"^USER\s+(\S+)\s*$", dockerfile, re.MULTILINE)
+    assert user is not None, (
+        f"{template_dir.name}: Dockerfile must declare a non-root USER (CKV_DOCKER_3)"
+    )
+    assert user.group(1) not in {"root", "0"}, (
+        f"{template_dir.name}: Dockerfile USER must not be root; "
+        f"got {user.group(1)!r} (CKV_DOCKER_3)"
+    )
 
 
 def test_dockerignore_excludes_env(template_dir):
