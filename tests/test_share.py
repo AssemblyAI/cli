@@ -37,7 +37,7 @@ def _stub(
     has_cloudflared=True,
     setup_rc=0,
     port_up=True,
-    url="https://happy-slug.trycloudflare.com",
+    url: str | None = "https://happy-slug.trycloudflare.com",
     server=None,
     proxy=None,
 ):
