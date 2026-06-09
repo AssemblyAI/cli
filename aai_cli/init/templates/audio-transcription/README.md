@@ -7,8 +7,7 @@ highlights. Built with FastAPI + static HTML/CSS/JS. There is no frontend build 
 ## Run locally
 
 ```sh
-uvicorn api.index:app --reload --port 3000
-# open http://localhost:3000
+aai dev   # installs deps if needed, starts the server, opens http://localhost:3000
 ```
 
 `ASSEMBLYAI_API_KEY` is read from `.env` (already created for you if you ran `aai init`).

@@ -9,8 +9,7 @@ HTML/CSS/JS with no frontend build step.
 ## Run locally
 
 ```sh
-uvicorn api.index:app --reload --port 3000
-# open http://localhost:3000  (allow microphone access)
+aai dev   # opens http://localhost:3000 (allow microphone access)
 ```
 
 `ASSEMBLYAI_API_KEY` is read from `.env` (created for you if you ran `aai init`).

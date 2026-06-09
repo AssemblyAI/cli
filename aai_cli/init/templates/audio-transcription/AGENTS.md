@@ -3,7 +3,7 @@
 This is a buildless FastAPI + static HTML starter. Run it with:
 
 ```sh
-uvicorn api.index:app --reload --port 3000
+aai dev
 ```
 
 ## Map
