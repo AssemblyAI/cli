@@ -123,6 +123,33 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[deploy]
+  '''
+  
+   Usage: aai deploy [OPTIONS]
+  
+   Deploy the current project to Vercel.
+  
+   Asks for confirmation first, then runs `vercel deploy` (pass `--prod` to
+   promote
+   to production). Requires the Vercel CLI (`npm i -g vercel`).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --prod            Deploy to production.                                      │
+  │ --yes   -y        Skip the confirmation prompt.                              │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Deploy a preview to Vercel (asks first)
+   $ aai deploy
+   Deploy to production without prompting
+   $ aai deploy --prod --yes
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[dev]
   '''
   

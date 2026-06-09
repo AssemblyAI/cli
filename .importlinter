@@ -38,6 +38,7 @@ modules =
     aai_cli.commands.account
     aai_cli.commands.agent
     aai_cli.commands.audit
+    aai_cli.commands.deploy
     aai_cli.commands.dev
     aai_cli.commands.doctor
     aai_cli.commands.init
