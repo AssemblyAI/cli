@@ -25,6 +25,7 @@ class Target:
     install: str  # full hint sentence shown when the CLI is missing
     deploy_args: tuple[str, ...]  # subcommand(s) appended after `bin`
     supports_prod: bool = False  # whether `--prod` adds a production flag
+    post_deploy_args: tuple[str, ...] | None = None  # extra command run after a successful deploy
 
     def command(self, *, prod: bool) -> list[str]:
         argv = [self.bin, *self.deploy_args]
@@ -47,6 +48,7 @@ RAILWAY = Target(
     flag="--railway",
     install="Install it with `npm i -g @railway/cli`.",
     deploy_args=("up",),
+    post_deploy_args=("domain",),
 )
 RENDER = Target(
     name="Render",
@@ -111,6 +113,8 @@ def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
     result = subprocess.run(target.command(prod=prod), cwd=Path.cwd(), check=False)
     if result.returncode:
         raise typer.Exit(code=result.returncode)
+    if target.post_deploy_args is not None:
+        subprocess.run([target.bin, *target.post_deploy_args], cwd=Path.cwd(), check=False)
 
 
 @app.command(

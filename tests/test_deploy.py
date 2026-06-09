@@ -48,22 +48,44 @@ def _stub(
     monkeypatch.setattr("typer.confirm", fake_confirm)
 
     def fake_run(cmd: list[str], **kwargs: object) -> types.SimpleNamespace:
-        calls["cmd"] = cmd
-        calls["cwd"] = kwargs.get("cwd")
-        calls["check"] = kwargs.get("check")
+        runs = calls.setdefault("runs", [])
+        assert isinstance(runs, list)
+        runs.append({"cmd": cmd, "cwd": kwargs.get("cwd"), "check": kwargs.get("check")})
         return types.SimpleNamespace(returncode=returncode)
 
     monkeypatch.setattr("aai_cli.commands.deploy.subprocess.run", fake_run)
     return calls
 
 
+def _runs(calls: dict[str, object]) -> list[dict[str, object]]:
+    """Every captured subprocess.run call, in order."""
+    runs = calls.get("runs", [])
+    assert isinstance(runs, list)
+    out: list[dict[str, object]] = []
+    for run in runs:
+        assert isinstance(run, dict)
+        out.append(run)
+    return out
+
+
+def _cmds(calls: dict[str, object]) -> list[list[str]]:
+    """The command argv for every captured subprocess.run, in call order."""
+    out: list[list[str]] = []
+    for run in _runs(calls):
+        cmd = run["cmd"]
+        assert isinstance(cmd, list)
+        out.append(cmd)
+    return out
+
+
 def test_deploy_defaults_to_vercel(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel",))
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["vercel", "deploy"]
-    assert calls["check"] is False
-    assert calls["cwd"] == Path.cwd()
+    run = _runs(calls)[0]
+    assert run["cmd"] == ["vercel", "deploy"]
+    assert run["check"] is False
+    assert run["cwd"] == Path.cwd()
     assert calls["prompt"] == "Deploy this project to Vercel?"
 
 
@@ -71,14 +93,44 @@ def test_deploy_vercel_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel",))
     result = runner.invoke(app, ["deploy", "--vercel", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["vercel", "deploy"]
+    assert _cmds(calls) == [["vercel", "deploy"]]
+
+
+def test_deploy_vercel_no_post_deploy(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Vercel has no post_deploy_args, so exactly one subprocess.run fires.
+    calls = _stub(monkeypatch, available=("vercel",))
+    result = runner.invoke(app, ["deploy", "--vercel", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert len(_runs(calls)) == 1
+    assert _runs(calls)[0]["cmd"] == ["vercel", "deploy"]
 
 
 def test_deploy_railway_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("railway",))
     result = runner.invoke(app, ["deploy", "--railway", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["railway", "up"]
+    assert _cmds(calls)[0] == ["railway", "up"]
+
+
+def test_deploy_railway_generates_domain(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A successful railway deploy chases the deploy with `railway domain` so the
+    # public URL is surfaced (railway up alone prints no URL).
+    calls = _stub(monkeypatch, available=("railway",), returncode=0)
+    result = runner.invoke(app, ["deploy", "--railway", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert _cmds(calls) == [["railway", "up"], ["railway", "domain"]]
+    # The post-deploy step is best-effort: its non-zero exit must not propagate,
+    # so it too runs with check=False.
+    assert _runs(calls)[1]["check"] is False
+
+
+def test_deploy_railway_failed_skips_domain(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A non-zero deploy raises before the post-deploy step, so `railway domain`
+    # never runs and the deploy's exit code propagates.
+    calls = _stub(monkeypatch, available=("railway",), returncode=2)
+    result = runner.invoke(app, ["deploy", "--railway", "--yes"])
+    assert result.exit_code == 2
+    assert _cmds(calls) == [["railway", "up"]]
 
 
 def test_deploy_railway_prompt_names_railway(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,7 +138,7 @@ def test_deploy_railway_prompt_names_railway(monkeypatch: pytest.MonkeyPatch) ->
     result = runner.invoke(app, ["deploy", "--railway"])
     assert result.exit_code == 0, result.output
     assert calls["prompt"] == "Deploy this project to Railway?"
-    assert "cmd" not in calls  # declined
+    assert _cmds(calls) == []  # declined
 
 
 def test_deploy_multiple_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +148,7 @@ def test_deploy_multiple_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None
     assert "at most one" in result.output
     # The error lists every target flag, including the new ones.
     assert "--fly" in result.output
-    assert "cmd" not in calls  # never deployed
+    assert _cmds(calls) == []  # never deployed
 
 
 def test_deploy_missing_vercel_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,14 +173,14 @@ def test_deploy_confirm_no_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 0, result.output
     assert "Aborted" in result.output
-    assert "cmd" not in calls
+    assert _cmds(calls) == []
 
 
 def test_deploy_yes_skips_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel",), confirm=False)
     result = runner.invoke(app, ["deploy", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["vercel", "deploy"]
+    assert _cmds(calls)[0] == ["vercel", "deploy"]
     assert "prompt" not in calls  # --yes bypassed typer.confirm
 
 
@@ -136,21 +188,21 @@ def test_deploy_prod_flag_vercel(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel",))
     result = runner.invoke(app, ["deploy", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["vercel", "deploy", "--prod"]
+    assert _cmds(calls)[0] == ["vercel", "deploy", "--prod"]
 
 
 def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("railway",))
     result = runner.invoke(app, ["deploy", "--railway", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["railway", "up"]
+    assert _cmds(calls)[0] == ["railway", "up"]
 
 
 def test_deploy_render_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("render",))
     result = runner.invoke(app, ["deploy", "--render", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["render", "deploys", "create"]
+    assert _cmds(calls) == [["render", "deploys", "create"]]
 
 
 def test_deploy_render_prompt_names_render(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,14 +210,14 @@ def test_deploy_render_prompt_names_render(monkeypatch: pytest.MonkeyPatch) -> N
     result = runner.invoke(app, ["deploy", "--render"])
     assert result.exit_code == 0, result.output
     assert calls["prompt"] == "Deploy this project to Render?"
-    assert "cmd" not in calls  # declined
+    assert _cmds(calls) == []  # declined
 
 
 def test_deploy_prod_ignored_for_render(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("render",))
     result = runner.invoke(app, ["deploy", "--render", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["render", "deploys", "create"]
+    assert _cmds(calls)[0] == ["render", "deploys", "create"]
 
 
 def test_deploy_missing_render_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,14 +232,14 @@ def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["fly", "deploy"]
+    assert _cmds(calls) == [["fly", "deploy"]]
 
 
 def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
-    assert calls["cmd"] == ["fly", "deploy"]
+    assert _cmds(calls)[0] == ["fly", "deploy"]
 
 
 def test_deploy_missing_fly_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -209,7 +261,7 @@ def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatc
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 1
     assert "--yes" in result.output
-    assert "cmd" not in calls
+    assert _cmds(calls) == []
 
 
 @pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--render", "--fly", "--yes"])
