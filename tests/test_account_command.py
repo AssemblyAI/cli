@@ -1,5 +1,4 @@
 import json
-from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -25,32 +24,34 @@ def _human(monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
 
 
-def test_balance_formats_dollars(monkeypatch):
+def test_balance_formats_dollars(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
-    with patch(
+    mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
+        autospec=True,
         return_value={"account_id": 42, "balance_in_cents": 2575},
-    ):
-        result = runner.invoke(app, ["balance"])
+    )
+    result = runner.invoke(app, ["balance"])
     assert result.exit_code == 0
     assert "$25.75" in result.output
 
 
-def test_balance_without_session_runs_login(monkeypatch):
+def test_balance_without_session_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
-    with patch(
+    get_balance = mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
+        autospec=True,
         return_value={"account_id": 42, "balance_in_cents": 2575},
-    ) as get_balance:
-        result = runner.invoke(app, ["balance", "--json"])
+    )
+    result = runner.invoke(app, ["balance", "--json"])
     assert result.exit_code == 4
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     get_balance.assert_not_called()
     assert "Run the same command again" in result.output
 
 
-def test_usage_defaults_date_range_and_renders(monkeypatch):
+def test_usage_defaults_date_range_and_renders(mocker):
     _auth()
     captured = {}
 
@@ -67,8 +68,8 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
             ]
         }
 
-    with patch("aai_cli.commands.account.ams.get_usage", side_effect=fake_usage):
-        result = runner.invoke(app, ["usage", "--json"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, side_effect=fake_usage)
+    result = runner.invoke(app, ["usage", "--json"])
     assert result.exit_code == 0
     # both bounds are tz-aware UTC ISO-8601 timestamps, defaulted when not passed
     # (AMS rejects naive datetimes with a 400).
@@ -86,7 +87,7 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
     assert data["usage_items"][0]["line_items"][0]["price"] == 1250.0
 
 
-def test_usage_renders_table_human(monkeypatch):
+def test_usage_renders_table_human(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -99,8 +100,8 @@ def test_usage_renders_table_human(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
-        result = runner.invoke(app, ["usage"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     # price (cents) is summed per window and shown as dollars, mirroring `aai balance`.
     assert "2026-05-01" in result.output and "$12.50" in result.output
@@ -177,7 +178,7 @@ def test_usage_helpers_format_windows_and_line_items():
     assert account._line_items_summary({"line_items": "bad"}) == ""
 
 
-def test_usage_human_renders_breakdown(monkeypatch):
+def test_usage_human_renders_breakdown(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -190,8 +191,8 @@ def test_usage_human_renders_breakdown(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
-        result = runner.invoke(app, ["usage"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "breakdown" in result.output
     # The breakdown shows each product's spend in dollars (1000 cents = $10.00), the
@@ -199,16 +200,18 @@ def test_usage_human_renders_breakdown(monkeypatch):
     assert "minutes: $10.00" in result.output
 
 
-def test_usage_human_summarizes_empty_range(monkeypatch):
+def test_usage_human_summarizes_empty_range(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
-    with patch("aai_cli.commands.account.ams.get_usage", return_value={"usage_items": []}):
-        result = runner.invoke(app, ["usage"])
+    mocker.patch(
+        "aai_cli.commands.account.ams.get_usage", autospec=True, return_value={"usage_items": []}
+    )
+    result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "No usage windows returned" in result.output
 
 
-def test_usage_human_hides_zero_windows_by_default(monkeypatch):
+def test_usage_human_hides_zero_windows_by_default(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -227,8 +230,8 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch):
             },
         ]
     }
-    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
-        result = runner.invoke(app, ["usage"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "Usage total: $12.50" in result.output
     assert "2026-01-01" not in result.output
@@ -236,7 +239,7 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch):
     assert "Hidden: 1 zero-usage window" in result.output
 
 
-def test_usage_human_can_include_zero_windows(monkeypatch):
+def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -249,14 +252,14 @@ def test_usage_human_can_include_zero_windows(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
-        result = runner.invoke(app, ["usage", "--all"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage", "--all"])
     assert result.exit_code == 0
     assert "2026-01-01" in result.output
     assert "No usage in this range" not in result.output
 
 
-def test_usage_human_summarizes_all_zero_range(monkeypatch):
+def test_usage_human_summarizes_all_zero_range(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -269,20 +272,20 @@ def test_usage_human_summarizes_all_zero_range(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
-        result = runner.invoke(app, ["usage"])
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "Usage total: $0.00" in result.output
     assert "No usage in this range" in result.output
     assert "2026-01-01" not in result.output
 
 
-def test_usage_passes_explicit_dates():
+def test_usage_passes_explicit_dates(mocker):
     _auth()
-    with patch(
-        "aai_cli.commands.account.ams.get_usage", return_value={"usage_items": []}
-    ) as get_usage:
-        result = runner.invoke(app, ["usage", "--start", "2026-01-01", "--end", "2026-02-01"])
+    get_usage = mocker.patch(
+        "aai_cli.commands.account.ams.get_usage", autospec=True, return_value={"usage_items": []}
+    )
+    result = runner.invoke(app, ["usage", "--start", "2026-01-01", "--end", "2026-02-01"])
     assert result.exit_code == 0
     # Dates are normalized to tz-aware UTC timestamps before hitting AMS.
     get_usage.assert_called_once_with(
@@ -290,47 +293,50 @@ def test_usage_passes_explicit_dates():
     )
 
 
-def test_usage_rejects_invalid_date():
+def test_usage_rejects_invalid_date(mocker):
     _auth()
-    with patch("aai_cli.commands.account.ams.get_usage") as get_usage:
-        result = runner.invoke(app, ["usage", "--start", "not-a-date"])
+    get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
+    result = runner.invoke(app, ["usage", "--start", "not-a-date"])
     assert result.exit_code == 2
     assert "Invalid date" in result.output
     get_usage.assert_not_called()
 
 
-def test_limits_renders_services(monkeypatch):
+def test_limits_renders_services(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
-    with patch(
+    mocker.patch(
         "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
         return_value={"rate_limits": ["bad", {"service": "transcript", "magnitude": 200}]},
-    ):
-        result = runner.invoke(app, ["limits"])
+    )
+    result = runner.invoke(app, ["limits"])
     assert result.exit_code == 0
     assert "transcript" in result.output and "200" in result.output
 
 
-def test_limits_human_summarizes_empty(monkeypatch):
+def test_limits_human_summarizes_empty(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     # The AMS endpoint returns an empty array when no custom rate limits are
     # configured; show a clear message instead of a bare header-only table.
-    with patch(
+    mocker.patch(
         "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
         return_value={"rate_limits": []},
-    ):
-        result = runner.invoke(app, ["limits"])
+    )
+    result = runner.invoke(app, ["limits"])
     assert result.exit_code == 0
     assert "No custom rate limits" in result.output
 
 
-def test_limits_json_passthrough_when_empty(monkeypatch):
+def test_limits_json_passthrough_when_empty(mocker):
     _auth()
-    with patch(
+    mocker.patch(
         "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
         return_value={"rate_limits": []},
-    ):
-        result = runner.invoke(app, ["limits", "--json"])
+    )
+    result = runner.invoke(app, ["limits", "--json"])
     assert result.exit_code == 0
     assert json.loads(result.output) == {"rate_limits": []}
