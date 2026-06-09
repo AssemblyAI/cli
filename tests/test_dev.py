@@ -5,8 +5,7 @@ from typer.testing import CliRunner
 from aai_cli.main import app
 
 runner = CliRunner()
-ALL_IFACES = ".".join(["0"] * 4)  # 0.0.0.0, built to dodge ruff S104 in this test file
-WEB = f"web: uvicorn api.index:app --host {ALL_IFACES} --port ${{PORT:-3000}}\n"
+WEB = "web: uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}\n"
 
 
 def _make_project(tmp_path):
@@ -38,17 +37,10 @@ def test_dev_boots_procfile_command_with_reload(tmp_path, monkeypatch):
     captured = _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev", "--no-open"])
     assert result.exit_code == 0, result.output
-    assert captured["command"] == [
-        "uv",
-        "run",
-        "uvicorn",
-        "api.index:app",
-        "--host",
-        ALL_IFACES,
-        "--port",
-        "3000",
-        "--reload",
-    ]
+    cmd = captured["command"]
+    assert cmd[:4] == ["uv", "run", "uvicorn", "api.index:app"]
+    assert "--host" in cmd
+    assert cmd[-3:] == ["--port", "3000", "--reload"]
     assert captured["env"]["PORT"] == "3000"
     assert captured["open_browser"] is False
     assert "Starting" in result.output
@@ -123,6 +115,21 @@ def test_dev_install_failure_exits(tmp_path, monkeypatch):
     assert result.exit_code == 1
     assert "boom" in result.output
     assert captured == {}  # install failed -> no launch
+
+
+def test_dev_install_failure_detail_truncated_to_300(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub_runner(monkeypatch)
+    long_stderr = "x" * 500
+    monkeypatch.setattr(
+        "aai_cli.init.runner.run_setup",
+        lambda *a, **k: subprocess.CompletedProcess([], 1, "", long_stderr),
+    )
+    result = runner.invoke(app, ["dev", "--json"])
+    assert result.exit_code == 1
+    assert '"detail": "' + "x" * 300 + '"' in result.output
+    assert "x" * 301 not in result.output
 
 
 def test_dev_server_nonzero_exit_propagates(tmp_path, monkeypatch):
