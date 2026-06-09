@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import IO, Any
 
 from rich.console import Console
+from rich.text import Text
 from rich.theme import Theme
 
 # AssemblyAI brand accent. Defined once so the whole CLI can be re-tinted here.
@@ -87,3 +88,8 @@ def status_style(status: str) -> str:
     if normalized in _WARN:
         return "aai.warn"
     return "aai.muted"
+
+
+def status_text(status: str) -> Text:
+    """A status string rendered in its semantic status color (see ``status_style``)."""
+    return Text(status, style=status_style(status))

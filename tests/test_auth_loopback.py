@@ -9,6 +9,23 @@ from aai_cli.auth import endpoints, loopback
 from aai_cli.errors import APIError
 
 
+@pytest.fixture(autouse=True)
+def _unique_loopback_port(monkeypatch):
+    """Give every test its own OS-assigned loopback port.
+
+    Production binds the single fixed ``LOOPBACK_PORT`` (one login at a time), but the
+    suite runs many capture cycles back-to-back. Sharing one fixed port makes the tests
+    flaky under load/random ordering: if one test's server is still bound when the next
+    starts, the bind raises inside the worker thread (surfacing as an unhandled-thread
+    warning) and cascades into the neighbours. A fresh port per test removes that
+    coupling without changing what `capture_callback` does.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind((endpoints.LOOPBACK_HOST, 0))
+        port = probe.getsockname()[1]
+    monkeypatch.setattr(endpoints, "LOOPBACK_PORT", port)
+
+
 def _hit(path: str) -> int | None:
     """Request `path` against the loopback server, returning the HTTP status code.
 

@@ -300,3 +300,13 @@ def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = No
     if stored:
         return stored
     raise NotAuthenticated()
+
+
+def resolve_api_key_optional(*, profile: str | None = None) -> str | None:
+    """The same key chain as ``resolve_api_key`` (env -> keyring), but ``None`` instead
+    of raising when no key is configured — for callers that work without one
+    (``aai init`` scaffolding, the onboarding wizard's signed-in check)."""
+    try:
+        return resolve_api_key(profile=profile)
+    except NotAuthenticated:
+        return None

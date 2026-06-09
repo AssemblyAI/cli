@@ -11,7 +11,7 @@ from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState, persist_browser_login
-from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.errors import CLIError
 from aai_cli.onboard.prompter import Prompter
 
 
@@ -29,11 +29,7 @@ class WizardContext:
 
 
 def _has_key(profile: str) -> bool:
-    try:
-        config.resolve_api_key(profile=profile)
-    except NotAuthenticated:
-        return False
-    return True
+    return config.resolve_api_key_optional(profile=profile) is not None
 
 
 def welcome(prompter: Prompter, _ctx: WizardContext) -> SectionResult:

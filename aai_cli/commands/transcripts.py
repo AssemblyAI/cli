@@ -3,7 +3,6 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 from rich.table import Table
-from rich.text import Text
 
 from aai_cli import choices, client, config, output, theme
 from aai_cli.context import AppState, run_command
@@ -86,10 +85,9 @@ def list_(
         def render(data: list[dict[str, object]]) -> Table:
             table = output.data_table("id", "status", "created")
             for row in data:
-                status = str(row["status"])
                 table.add_row(
                     escape(str(row["id"])),
-                    Text(status, style=theme.status_style(status)),
+                    theme.status_text(str(row["status"])),
                     escape(str(row.get("created", ""))),
                 )
             return table
