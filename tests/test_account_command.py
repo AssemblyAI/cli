@@ -61,8 +61,8 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
                 {
                     "start_timestamp": "2026-05-01",
                     "end_timestamp": "2026-05-02",
-                    "total": 12.5,
-                    "line_items": [],
+                    "total": 0.0,
+                    "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
                 }
             ]
         }
@@ -80,8 +80,10 @@ def test_usage_defaults_date_range_and_renders(monkeypatch):
     start_day = _dt.fromisoformat(captured["start"]).date()
     end_day = _dt.fromisoformat(captured["end"]).date()
     assert (end_day - start_day).days == 30
+    # --json is a raw passthrough of the AMS response (the dead top-level `total`
+    # included), so downstream tooling sees exactly what the endpoint returned.
     data = json.loads(result.output)
-    assert data["usage_items"][0]["total"] == 12.5
+    assert data["usage_items"][0]["line_items"][0]["price"] == 1250.0
 
 
 def test_usage_renders_table_human(monkeypatch):
@@ -92,20 +94,30 @@ def test_usage_renders_table_human(monkeypatch):
             {
                 "start_timestamp": "2026-05-01",
                 "end_timestamp": "2026-05-02",
-                "total": 12.5,
-                "line_items": [],
+                "total": 0.0,
+                "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
             }
         ]
     }
     with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
         result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "2026-05-01" in result.output and "12.5" in result.output
+    # price (cents) is summed per window and shown as dollars, mirroring `aai balance`.
+    assert "2026-05-01" in result.output and "$12.50" in result.output
 
 
 def test_usage_helpers_format_windows_and_line_items():
     assert account._usage_items({"usage_items": "bad"}) == []
     assert account._usage_items({"usage_items": [{"total": 1}, "bad"]}) == [{"total": 1}]
+    # Window total is the sum of line-item `price` (cents); the dead top-level
+    # `total` field the AMS endpoint returns is ignored.
+    assert (
+        account._window_total_cents(
+            {"total": 0.0, "line_items": [{"price": 1250.0}, {"price": 0.5}]}
+        )
+        == 1250.5
+    )
+    assert account._window_total_cents({"total": 99.0, "line_items": []}) == 0.0
     assert account._window_label({"start_timestamp": "bad"}) == "bad"
     assert (
         account._window_label(
@@ -145,8 +157,8 @@ def test_usage_human_renders_breakdown(monkeypatch):
             {
                 "start_timestamp": "2026-01-01T00:00:00Z",
                 "end_timestamp": "2026-01-02T00:00:00Z",
-                "total": 10,
-                "line_items": [{"name": "minutes", "total": 10}],
+                "total": 0.0,
+                "line_items": [{"name": "minutes", "price": 1000.0, "quantity": 10}],
             }
         ]
     }
@@ -154,6 +166,8 @@ def test_usage_human_renders_breakdown(monkeypatch):
         result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "breakdown" in result.output
+    # The breakdown shows each product's quantity (units), distinct from the
+    # dollar total derived from price.
     assert "minutes: 10" in result.output
 
 
@@ -180,15 +194,15 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch):
             {
                 "start_timestamp": "2026-01-02T00:00:00Z",
                 "end_timestamp": "2026-01-03T00:00:00Z",
-                "total": 12.5,
-                "line_items": [],
+                "total": 0.0,
+                "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
             },
         ]
     }
     with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
         result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "Usage total: 12.5" in result.output
+    assert "Usage total: $12.50" in result.output
     assert "2026-01-01" not in result.output
     assert "2026-01-02" in result.output
     assert "Hidden: 1 zero-usage window" in result.output
@@ -230,7 +244,7 @@ def test_usage_human_summarizes_all_zero_range(monkeypatch):
     with patch("aai_cli.commands.account.ams.get_usage", return_value=payload):
         result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "Usage total: 0" in result.output
+    assert "Usage total: $0.00" in result.output
     assert "No usage in this range" in result.output
     assert "2026-01-01" not in result.output
 
@@ -267,3 +281,28 @@ def test_limits_renders_services(monkeypatch):
         result = runner.invoke(app, ["limits"])
     assert result.exit_code == 0
     assert "transcript" in result.output and "200" in result.output
+
+
+def test_limits_human_summarizes_empty(monkeypatch):
+    _auth()
+    _human(monkeypatch)
+    # The AMS endpoint returns an empty array when no custom rate limits are
+    # configured; show a clear message instead of a bare header-only table.
+    with patch(
+        "aai_cli.commands.account.ams.get_rate_limits",
+        return_value={"rate_limits": []},
+    ):
+        result = runner.invoke(app, ["limits"])
+    assert result.exit_code == 0
+    assert "No custom rate limits" in result.output
+
+
+def test_limits_json_passthrough_when_empty(monkeypatch):
+    _auth()
+    with patch(
+        "aai_cli.commands.account.ams.get_rate_limits",
+        return_value={"rate_limits": []},
+    ):
+        result = runner.invoke(app, ["limits", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"rate_limits": []}

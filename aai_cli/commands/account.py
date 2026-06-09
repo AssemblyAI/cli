@@ -5,7 +5,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import typer
 from rich.markup import escape
-from rich.table import Table
 from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, output, timeparse
@@ -38,6 +37,24 @@ def _format_usage_number(value: object) -> str:
 
 def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
     return jsonshape.mapping_list(data.get("usage_items"))
+
+
+def _format_dollars(cents: float) -> str:
+    return f"${cents / 100:,.2f}"
+
+
+def _window_total_cents(item: Mapping[str, object]) -> float:
+    """Sum a window's spend (cents) from its ``line_items``.
+
+    The AMS usage endpoint returns ``total: 0.0`` on every window; the real
+    spend lives in each window's ``line_items[].price`` (cents, like
+    ``balance_in_cents``), so the window total is derived from them rather than
+    the dead top-level ``total``.
+    """
+    return sum(
+        jsonshape.as_float(line_item.get("price"))
+        for line_item in jsonshape.mapping_list(item.get("line_items"))
+    )
 
 
 def _window_label(item: Mapping[str, object]) -> str:
@@ -144,41 +161,39 @@ def usage(
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, object]) -> object:
-            items = _usage_items(d)
-            shown = (
-                items
-                if include_zero
-                else [item for item in items if jsonshape.as_float(item.get("total"))]
-            )
-            total = sum(jsonshape.as_float(item.get("total")) for item in items)
+            windows = [(item, _window_total_cents(item)) for item in _usage_items(d)]
+            shown = windows if include_zero else [w for w in windows if w[1]]
+            total = sum(cents for _, cents in windows)
             range_label = (
                 f"{timeparse.format_utc_day(start_date)} to "
                 f"{timeparse.format_utc_day(end_date)} (UTC)"
             )
             summary = Text(
-                f"Usage total: {_format_usage_number(total)} for {range_label}",
+                f"Usage total: {_format_dollars(total)} for {range_label}",
                 style="aai.heading",
             )
             if not shown:
                 message = (
                     "No usage in this range."
-                    if items
+                    if windows
                     else "No usage windows returned for this range."
                 )
                 return output.stack(summary, output.muted(message))
 
-            shown_with_breakdown = [(item, _line_items_summary(item)) for item in shown]
-            show_breakdown = any(summary for _, summary in shown_with_breakdown)
+            shown_with_breakdown = [
+                (item, cents, _line_items_summary(item)) for item, cents in shown
+            ]
+            show_breakdown = any(breakdown for _, _, breakdown in shown_with_breakdown)
             table = (
                 output.data_table("period", "total", "breakdown")
                 if show_breakdown
                 else output.data_table("period", "total")
             )
-            hidden_count = len(items) - len(shown)
-            for item, breakdown in shown_with_breakdown:
+            hidden_count = len(windows) - len(shown)
+            for item, cents, breakdown in shown_with_breakdown:
                 row = [
                     escape(_window_label(item)),
-                    _format_usage_number(item.get("total")),
+                    _format_dollars(cents),
                 ]
                 if show_breakdown:
                     row.append(escape(breakdown))
@@ -215,9 +230,12 @@ def limits(
         account_id, jwt = resolve_session(state)
         data = ams.get_rate_limits(account_id, jwt)
 
-        def render(d: dict[str, object]) -> Table:
+        def render(d: dict[str, object]) -> object:
+            limits = jsonshape.mapping_list(d.get("rate_limits"))
+            if not limits:
+                return output.muted("No custom rate limits configured for this account.")
             table = output.data_table("service", "limit")
-            for limit in jsonshape.mapping_list(d.get("rate_limits")):
+            for limit in limits:
                 table.add_row(
                     escape(str(limit.get("service", ""))),
                     _format_usage_number(limit.get("magnitude")),
