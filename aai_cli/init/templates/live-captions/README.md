@@ -9,8 +9,7 @@ HTML/CSS/JS with no frontend build step.
 ## Run locally
 
 ```sh
-uvicorn api.index:app --reload --port 3000
-# open http://localhost:3000  (allow microphone access)
+aai dev   # opens http://localhost:3000 (allow microphone access)
 ```
 
 `ASSEMBLYAI_API_KEY` is read from `.env` (created for you if you ran `aai init`).
@@ -18,9 +17,25 @@ uvicorn api.index:app --reload --port 3000
 ## Deploy to Vercel
 
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY` as a
-Vercel environment variable (the local `.env` is git-ignored). The backend is just the
-`/api/token` function; the WebSocket runs browser → AssemblyAI, so nothing long-running
-is needed.
+Vercel environment variable (the local `.env` is git-ignored). No extra config is needed
+(no `vercel.json`): Vercel runs `api/index.py` as the function, and that FastAPI app
+serves the page and assets (from `static/`) plus the `/api/token` route. The WebSocket
+runs browser → AssemblyAI, so nothing long-running is needed.
+
+## Deploy elsewhere
+
+The included `Procfile` and `runtime.txt` make this run as a plain Python web app
+on Render, Railway, Heroku, Google Cloud Run (`gcloud run deploy --source .`), and
+anything else that reads a `Procfile`. Point the platform at this repo and set
+`ASSEMBLYAI_API_KEY`; the start command is already declared:
+
+```sh
+uvicorn api.index:app --host 0.0.0.0 --port $PORT
+```
+
+On Render, create a **Web Service** connected to your Git repo — it installs
+`requirements.txt` and starts via the `Procfile`. (There's no local-directory
+deploy; `aai deploy` covers Vercel/Railway/Fly.)
 
 ## Ideas to extend
 

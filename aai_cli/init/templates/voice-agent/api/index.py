@@ -21,19 +21,29 @@ from fastapi.staticfiles import StaticFiles
 from api import settings
 
 ROOT = Path(__file__).resolve().parent.parent
-PUBLIC = ROOT / "public"
+STATIC = ROOT / "static"
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=PUBLIC / "static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+def _require_key() -> None:
+    """Fail fast with an actionable message when the API key isn't configured."""
+    if not settings.API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="ASSEMBLYAI_API_KEY is not set — configure it in your deployment's environment variables.",
+        )
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(PUBLIC / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 @app.post("/api/token")
 def token() -> dict[str, str]:
     """Mint a one-time Voice Agent token. The browser uses it to open the WebSocket."""
+    _require_key()
     # NOTE: the Voice Agent token uses Bearer auth (unlike the streaming token).
     try:
         resp = httpx2.get(

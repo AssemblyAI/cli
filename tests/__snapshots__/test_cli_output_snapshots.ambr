@@ -123,6 +123,73 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[deploy]
+  '''
+  
+   Usage: aai deploy [OPTIONS]
+  
+   Deploy the current project to Vercel (default), Railway, or Fly.io.
+  
+   Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
+   `railway up`, or `fly launch`). Requires that target's CLI to be installed.
+   (Render deploys from a connected Git repo — see the project README.)
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --prod               Deploy to production (Vercel only).                     │
+  │ --vercel             Deploy to Vercel (the default).                         │
+  │ --railway            Deploy to Railway.                                      │
+  │ --fly                Deploy to Fly.io.                                       │
+  │ --yes      -y        Skip the confirmation prompt.                           │
+  │ --help               Show this message and exit.                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Deploy a preview to Vercel (asks first)
+   $ aai deploy
+   Deploy to production on Vercel
+   $ aai deploy --prod --yes
+   Deploy to Railway
+   $ aai deploy --railway
+   Deploy to Fly.io
+   $ aai deploy --fly
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[dev]
+  '''
+  
+   Usage: aai dev [OPTIONS]
+  
+   Launch the dev server for the app in the current directory.
+  
+   Run this from inside a project created by `aai init`. It installs dependencies
+   if needed, then starts the FastAPI server with live reload and opens the
+   browser.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port              INTEGER  Local server port. [default: 3000]              │
+  │ --no-open                    Launch, but don't open the browser.             │
+  │ --no-install                 Skip dependency install; launch directly.       │
+  │ --json                       Output raw JSON.                                │
+  │ --help                       Show this message and exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Launch the app in the current directory
+   $ aai dev
+   Use a specific port
+   $ aai dev --port 8000
+   Launch without opening a browser
+   $ aai dev --no-open
+   Skip the dependency install step
+   $ aai dev --no-install
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[doctor]
   '''
   
@@ -388,8 +455,10 @@
    Guided setup: sign in, run your first transcription, and start building.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json                     Output raw JSON.                                  │
+  │ --non-interactive          Run without interactive prompts (default when     │
+  │                            agent detected).                                  │
+  │ --help                     Show this message and exit.                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -533,6 +602,38 @@
    $ aai setup status
    Print status as JSON
    $ aai setup status --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[share]
+  '''
+  
+   Usage: aai share [OPTIONS]
+  
+   Boot the app and expose it on a public URL via a cloudflared tunnel.
+  
+   Run this from inside a project created by `aai init`. It starts the dev server
+   and
+   opens a cloudflared quick tunnel, printing a shareable
+   https://*.trycloudflare.com
+   URL. Requires cloudflared (`brew install cloudflared`).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port              INTEGER  Local server port. [default: 3000]              │
+  │ --no-install                 Skip dependency install; launch directly.       │
+  │ --json                       Output raw JSON.                                │
+  │ --help                       Show this message and exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Share the running app on a public URL
+   $ aai share
+   Use a specific local port
+   $ aai share --port 8000
+   Skip the dependency install step
+   $ aai share --no-install
   
   
   

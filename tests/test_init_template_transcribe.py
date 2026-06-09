@@ -11,8 +11,11 @@ def _load_app(monkeypatch, mocker):
     """Import the template's api/index.py as a module and return its FastAPI app.
 
     The template is a standalone project (not part of aai_cli's import graph), so we
-    load it by file path. The assemblyai SDK is stubbed so no network/key is needed.
+    load it by file path. The assemblyai SDK is stubbed so no network is needed; a dummy
+    key is injected so the endpoints' ``_require_key`` guard passes and they reach the
+    stubbed SDK (isolate_env strips any ambient key).
     """
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "test-key")
     fake_aai = mocker.MagicMock()
     fake_aai.TranscriptStatus.completed = "completed"
     fake_aai.TranscriptStatus.error = "error"
@@ -42,9 +45,9 @@ def test_required_files_exist():
     for rel in (
         "api/index.py",
         "api/settings.py",
-        "public/index.html",
-        "public/static/app.js",
-        "public/static/styles.css",
+        "static/index.html",
+        "static/app.js",
+        "static/styles.css",
         "requirements.txt",
         "README.md",
         "AGENTS.md",
@@ -68,8 +71,8 @@ def test_base_url_env_is_applied(monkeypatch, mocker):
 
 def test_page_explores_all_features_and_speakers():
     # Guard the UI surface: each audio-intelligence view + per-speaker coloring stay wired.
-    html = (TEMPLATE_DIR / "public" / "index.html").read_text()
-    app_js = (TEMPLATE_DIR / "public" / "static" / "app.js").read_text()
+    html = (TEMPLATE_DIR / "static" / "index.html").read_text()
+    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
     ui_src = html + app_js
     for token in (
         "chapters",

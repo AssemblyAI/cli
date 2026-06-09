@@ -32,7 +32,7 @@ def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
     assert (target / "api" / "index.py").exists()
-    assert (target / "public" / "index.html").exists()
+    assert (target / "static" / "index.html").exists()
     assert not (target / "vercel.json").exists()
     # dotfile templates are renamed to their dotted names
     assert (target / ".gitignore").exists()
@@ -40,6 +40,12 @@ def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     # the plain-named source files are NOT copied verbatim
     assert not (target / "gitignore").exists()
     assert not (target / "env.example").exists()
+    # the container build ships, and dockerignore is renamed to its dotted name
+    assert (target / "Dockerfile").exists()
+    assert (target / ".dockerignore").exists()
+    assert not (target / "dockerignore").exists()
+    # .dockerignore must exclude .env so the real key isn't baked into the image
+    assert ".env" in (target / ".dockerignore").read_text().splitlines()
 
 
 def test_scaffold_writes_env_with_key(tmp_path):

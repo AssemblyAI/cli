@@ -38,6 +38,8 @@ modules =
     aai_cli.commands.account
     aai_cli.commands.agent
     aai_cli.commands.audit
+    aai_cli.commands.deploy
+    aai_cli.commands.dev
     aai_cli.commands.doctor
     aai_cli.commands.init
     aai_cli.commands.keys
@@ -45,6 +47,7 @@ modules =
     aai_cli.commands.login
     aai_cli.commands.sessions
     aai_cli.commands.setup
+    aai_cli.commands.share
     aai_cli.commands.stream
     aai_cli.commands.transcribe
     aai_cli.commands.transcripts

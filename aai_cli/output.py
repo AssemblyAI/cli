@@ -30,7 +30,7 @@ def _stdout_is_tty() -> bool:
     return sys.stdout.isatty()
 
 
-def _is_agentic() -> bool:
+def is_agentic() -> bool:
     """True when there's no interactive human at stdout: piped/redirected, or a CI/agent
     env var is set. Used to suppress *interactivity* (the spinner) — never to change the
     output *shape*; `resolve_json` keeps text the default regardless (see its docstring).
@@ -175,7 +175,7 @@ def status(message: str, *, json_mode: bool) -> Generator[None]:
     stderr console so even an interactive `aai transcribe x -o text` keeps stdout
     pristine.
     """
-    if json_mode or _is_agentic():
+    if json_mode or is_agentic():
         yield
         return
     with error_console.status(message):

@@ -20,7 +20,11 @@ if TYPE_CHECKING:
 PLACEHOLDER_KEY = "your_assemblyai_api_key_here"
 
 # Template files stored under plain names -> their real dotted names on copy.
-_DOTFILE_RENAMES = {"gitignore": ".gitignore", "env.example": ".env.example"}
+_DOTFILE_RENAMES = {
+    "gitignore": ".gitignore",
+    "env.example": ".env.example",
+    "dockerignore": ".dockerignore",
+}
 
 # Never copy build/test detritus into the user's fresh project. (Loading a template's
 # api/index.py during our own tests leaves a __pycache__ next to it.)

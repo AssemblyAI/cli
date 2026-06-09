@@ -71,6 +71,30 @@ def wait_for_port(port: int, *, timeout: float = 30.0) -> bool:
     return False
 
 
+def spawn(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    log_path: Path | None = None,
+) -> subprocess.Popen[str]:
+    """Start a process without blocking.
+
+    With `log_path`, the process's stdout+stderr are written to that file (text mode) —
+    used to capture cloudflared's output for URL discovery. Without it, stdio is inherited.
+    """
+    if log_path is not None:
+        return subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            stdout=log_path.open("w"),
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    return subprocess.Popen(command, cwd=cwd, env=env, text=True)
+
+
 def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]:
     """Run env-setup commands in order; return the first failure or the last success."""
     last = subprocess.CompletedProcess[str](args=[], returncode=0, stdout="", stderr="")
@@ -81,12 +105,20 @@ def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]
     return last
 
 
-def launch_and_open(target: Path, *, port: int, use_uv: bool, open_browser: bool) -> int:
-    """Start the dev server, wait for it, open the browser, and block until Ctrl-C.
+def run_server(
+    target: Path,
+    *,
+    command: list[str],
+    port: int,
+    env: dict[str, str] | None = None,
+    open_browser: bool,
+) -> int:
+    """Run a prebuilt server command, wait for the port, open the browser, block until Ctrl-C.
 
-    Returns the process exit code (0 on a clean Ctrl-C shutdown).
+    Returns the process exit code (0 on a clean Ctrl-C shutdown). `env=None` inherits
+    the current environment; pass a full dict (e.g. `{**os.environ, "PORT": ...}`) to override.
     """
-    proc = subprocess.Popen(serve_command(target, port=port, use_uv=use_uv), cwd=target)
+    proc = subprocess.Popen(command, cwd=target, env=env)
     try:
         if wait_for_port(port) and open_browser:
             webbrowser.open(f"http://localhost:{port}")
@@ -96,3 +128,13 @@ def launch_and_open(target: Path, *, port: int, use_uv: bool, open_browser: bool
         proc.wait()
         return 0
     return proc.returncode
+
+
+def launch_and_open(target: Path, *, port: int, use_uv: bool, open_browser: bool) -> int:
+    """Start the (init) dev server and open the browser; block until Ctrl-C."""
+    return run_server(
+        target,
+        command=serve_command(target, port=port, use_uv=use_uv),
+        port=port,
+        open_browser=open_browser,
+    )

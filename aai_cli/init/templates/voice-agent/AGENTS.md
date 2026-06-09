@@ -3,30 +3,30 @@
 This is a buildless FastAPI + browser voice-agent starter. Run it with:
 
 ```sh
-uvicorn api.index:app --reload --port 3000
+aai dev
 ```
 
 ## Map
 
 - `api/settings.py`: backend token host, token path, WebSocket path, and token expiry.
 - `api/index.py`: `/api/token` route. Keep `ASSEMBLYAI_API_KEY` here on the server.
-- `public/static/app.js`: Voice Agent session config, WebSocket lifecycle, UI state, and event handling.
-- `public/static/audio.js`: microphone pipeline, PCM conversion, playback queue, and barge-in helpers.
-- `public/static/styles.css`: visual styling only; the top `:root` block is the primary theme/layout edit point.
-- `public/index.html`: page structure and static asset links. IDs are JavaScript hooks; classes are styling hooks.
+- `static/app.js`: Voice Agent session config, WebSocket lifecycle, UI state, and event handling.
+- `static/audio.js`: microphone pipeline, PCM conversion, playback queue, and barge-in helpers.
+- `static/styles.css`: visual styling only; the top `:root` block is the primary theme/layout edit point.
+- `static/index.html`: page structure and static asset links. IDs are JavaScript hooks; classes are styling hooks.
 
 ## Change Points
 
-- Agent prompt, greeting, voice, audio formats, and microphone constraints: edit `SESSION_CONFIG` in `public/static/app.js`.
+- Agent prompt, greeting, voice, audio formats, and microphone constraints: edit `SESSION_CONFIG` in `static/app.js`.
 - Backend token lifetime or non-production hosts: edit `api/settings.py`.
-- Transcript log rendering: edit `addTurn` in `public/static/app.js`.
-- Playback, barge-in, or PCM conversion: edit `public/static/audio.js`.
-- Visual theme/layout: edit the monotone Vercel-style tokens in `public/static/styles.css` before changing component rules.
+- Transcript log rendering: edit `addTurn` in `static/app.js`.
+- Playback, barge-in, or PCM conversion: edit `static/audio.js`.
+- Visual theme/layout: edit the monotone Vercel-style tokens in `static/styles.css` before changing component rules.
 - UI state styling: connection, status, and speaker state use `data-state` or `data-speaker`; prefer CSS changes over JS class rewrites.
 
 ## Invariants
 
-- Never expose `ASSEMBLYAI_API_KEY` or any server secret in `public/index.html` or `public/static/`.
+- Never expose `ASSEMBLYAI_API_KEY` or any server secret in `static/index.html` or `static/`.
 - Voice Agent token auth uses `Authorization: Bearer ...` in the backend. This differs from Streaming token auth.
 - Voice Agent `greeting` is spoken literally by TTS; write the exact words the user should hear.
 - `reply.audio` carries base64 PCM on the `data` field.

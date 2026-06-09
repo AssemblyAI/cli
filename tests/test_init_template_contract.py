@@ -24,39 +24,123 @@ def test_required_files_present(template_dir):
         "api/index.py",
         "api/__init__.py",
         "api/settings.py",
-        "public/index.html",
-        "public/static/app.js",
-        "public/static/styles.css",
+        "static/index.html",
+        "static/app.js",
+        "static/styles.css",
         "requirements.txt",
         "README.md",
         "AGENTS.md",
         "gitignore",
         "env.example",
+        "Procfile",
+        "runtime.txt",
+        "Dockerfile",
+        "dockerignore",
     ):
         assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
 
 
+def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
+    """Fly/Railway/Render(Docker)/Cloudflare-Containers build this image. It must run
+    uvicorn on the app, bind 0.0.0.0, and honor the platform's injected ${PORT}."""
+    dockerfile = (template_dir / "Dockerfile").read_text()
+    assert "uvicorn api.index:app" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must run uvicorn api.index:app"
+    )
+    assert "--host 0.0.0.0" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must bind --host 0.0.0.0"
+    )
+    assert "${PORT" in dockerfile, (
+        f"{template_dir.name}: Dockerfile must honor the platform's ${{PORT}}"
+    )
+    # Fly auto-detects internal_port from EXPOSE; it must match the CMD's default
+    # port or Fly's proxy hits a port the app never binds (connection refused).
+    exposed = re.search(r"^EXPOSE\s+(\d+)\s*$", dockerfile, re.MULTILINE)
+    cmd_default = re.search(r"--port \$\{PORT:-(\d+)\}", dockerfile)
+    assert exposed is not None and exposed.group(1) == "8080", (
+        f"{template_dir.name}: Dockerfile must declare EXPOSE 8080"
+    )
+    assert cmd_default is not None and cmd_default.group(1) == "8080", (
+        f"{template_dir.name}: Dockerfile CMD must default to ${{PORT:-8080}}"
+    )
+    assert exposed.group(1) == cmd_default.group(1), (
+        f"{template_dir.name}: EXPOSE {exposed.group(1)} must match "
+        f"CMD default ${{PORT:-{cmd_default.group(1)}}}"
+    )
+    # Container hardening: the image must drop root (Aikido/Checkov CKV_DOCKER_3).
+    user = re.search(r"^USER\s+(\S+)\s*$", dockerfile, re.MULTILINE)
+    assert user is not None, (
+        f"{template_dir.name}: Dockerfile must declare a non-root USER (CKV_DOCKER_3)"
+    )
+    assert user.group(1) not in {"root", "0"}, (
+        f"{template_dir.name}: Dockerfile USER must not be root; "
+        f"got {user.group(1)!r} (CKV_DOCKER_3)"
+    )
+
+
+def test_dockerignore_excludes_env(template_dir):
+    """`.env` holds the real API key; the Dockerfile does COPY . . so it must be
+    excluded from the build context or the key gets baked into the image."""
+    lines = {line.strip() for line in (template_dir / "dockerignore").read_text().splitlines()}
+    assert ".env" in lines, (
+        f"{template_dir.name}: dockerignore must list .env so the API key isn't baked in"
+    )
+
+
+def test_template_ships_no_public_dir(template_dir):
+    # Vercel serves a top-level public/** from its CDN and omits it from the Python
+    # lambda, so a FastAPI app that reads from public/ crashes at import on deploy.
+    assert not (template_dir / "public").exists(), (
+        f"{template_dir.name}: ships a public/ dir; Vercel drops it from the function "
+        f"bundle and the app crashes (FUNCTION_INVOCATION_FAILED). Use static/."
+    )
+
+
+def test_procfile_starts_the_app(template_dir):
+    """The Procfile gives non-Vercel hosts (Render/Railway/Heroku/Cloud Run) a start
+    command. The contract gate boots it for real; here we pin its shape."""
+    web = [
+        line.split("web:", 1)[1].strip()
+        for line in (template_dir / "Procfile").read_text().splitlines()
+        if line.strip().startswith("web:")
+    ]
+    assert web, f"{template_dir.name}: Procfile has no web: process"
+    assert "uvicorn" in web[0] and "api.index:app" in web[0], (
+        f"{template_dir.name}: Procfile must launch uvicorn api.index:app, got {web[0]!r}"
+    )
+    assert "$PORT" in web[0] or "${PORT" in web[0], (
+        f"{template_dir.name}: Procfile must bind the platform's $PORT, got {web[0]!r}"
+    )
+
+
+def test_runtime_pins_supported_python(template_dir):
+    pin = (template_dir / "runtime.txt").read_text().strip()
+    assert re.fullmatch(r"python-3\.(12|13)(\.\d+)?", pin), (
+        f"{template_dir.name}: runtime.txt pins {pin!r}; must be python-3.12 or python-3.13"
+    )
+
+
 def test_realtime_templates_have_audio_helpers(template_dir):
     if template_dir.name in {"live-captions", "voice-agent"}:
-        assert (template_dir / "public" / "static" / "audio.js").exists()
+        assert (template_dir / "static" / "audio.js").exists()
 
 
 def test_static_assets_referenced_by_html_exist(template_dir):
-    html = (template_dir / "public" / "index.html").read_text()
+    html = (template_dir / "static" / "index.html").read_text()
     refs = set(re.findall(r'(?:href|src)=["\'](/static/[^"\']+)', html))
-    assert refs, f"{template_dir.name}: public/index.html should load static assets"
+    assert refs, f"{template_dir.name}: static/index.html should load static assets"
     for ref in refs:
-        assert (template_dir / "public" / ref.lstrip("/")).exists(), (
-            f"{template_dir.name}: public/index.html references missing asset {ref!r}"
+        assert (template_dir / ref.lstrip("/")).exists(), (
+            f"{template_dir.name}: static/index.html references missing asset {ref!r}"
         )
 
 
 def test_codex_edit_points_are_explicit(template_dir):
     notes = (template_dir / "AGENTS.md").read_text()
-    app_js = (template_dir / "public" / "static" / "app.js").read_text()
+    app_js = (template_dir / "static" / "app.js").read_text()
     assert "ASSEMBLYAI_API_KEY" in notes
     assert "buildless" in notes
-    assert "public/static/app.js" in notes
+    assert "static/app.js" in notes
     assert "_CONFIG" in app_js
 
 
@@ -67,10 +151,8 @@ def test_no_committed_dotenv_or_real_key(template_dir):
 
 def test_frontend_routes_exist_in_backend(template_dir):
     """Every /api path the page fetches must be a route the backend registers."""
-    frontend = (template_dir / "public" / "index.html").read_text()
-    frontend += "\n".join(
-        path.read_text() for path in (template_dir / "public" / "static").glob("*.js")
-    )
+    frontend = (template_dir / "static" / "index.html").read_text()
+    frontend += "\n".join(path.read_text() for path in (template_dir / "static").glob("*.js"))
     fetched = set(re.findall(r'fetch\(\s*["\'`](/api/[^"\'`?]+)', frontend))
     # Also catch template-literal paths like fetch(`/api/status/${id}`) and "/api/x/" + id
     fetched |= set(re.findall(r'["\'`](/api/[A-Za-z0-9_\-/]+?)(?:/?\$\{|/?["\'`]\s*\+)', frontend))
@@ -80,7 +162,7 @@ def test_frontend_routes_exist_in_backend(template_dir):
     for path in fetched:
         base = path.rstrip("/")
         assert any(base == r or base.startswith(r + "/") for r in registered_bases), (
-            f"{template_dir.name}: public/index.html fetches {path!r}, "
+            f"{template_dir.name}: static/index.html fetches {path!r}, "
             f"not registered in api/index.py (routes: {sorted(registered_bases)})"
         )
 

@@ -29,12 +29,12 @@ def test_is_agentic_true_for_agent_env_var_even_with_tty(monkeypatch):
     # when a CI/agent env var is set — independent of resolve_json, which stays text.
     monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
     monkeypatch.setenv("CLAUDECODE", "1")
-    assert output._is_agentic() is True
+    assert output.is_agentic() is True
 
 
 def test_is_agentic_false_for_plain_interactive_tty(monkeypatch):
     monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
-    assert output._is_agentic() is False
+    assert output.is_agentic() is False
 
 
 def test_mask_secret_preserves_only_short_edges():
@@ -224,7 +224,7 @@ def test_emit_ndjson_writes_one_flushed_line(monkeypatch):
 
 def test_status_is_noop_in_json_mode(monkeypatch):
     # JSON mode must never enter the spinner (it would render to stderr unnecessarily).
-    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    monkeypatch.setattr(output, "is_agentic", lambda: False)
     entered = {"status": False}
     monkeypatch.setattr(
         output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
@@ -235,7 +235,7 @@ def test_status_is_noop_in_json_mode(monkeypatch):
 
 
 def test_status_is_noop_when_agentic(monkeypatch):
-    monkeypatch.setattr(output, "_is_agentic", lambda: True)
+    monkeypatch.setattr(output, "is_agentic", lambda: True)
     entered = {"status": False}
     monkeypatch.setattr(
         output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
@@ -246,7 +246,7 @@ def test_status_is_noop_when_agentic(monkeypatch):
 
 
 def test_status_shows_spinner_for_interactive_human(monkeypatch):
-    monkeypatch.setattr(output, "_is_agentic", lambda: False)
+    monkeypatch.setattr(output, "is_agentic", lambda: False)
     calls = []
     with output.error_console.capture():
         with output.status("Transcribing…", json_mode=False):

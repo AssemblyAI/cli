@@ -116,7 +116,7 @@ echo "==> shellcheck (install.sh)"
 # Static-lint the public install script and this gate script. CI's ubuntu runner ships shellcheck;
 # locally it's skipped with a notice if not installed.
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck install.sh scripts/check.sh
+  shellcheck install.sh scripts/check.sh scripts/docker_build_check.sh
 else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi

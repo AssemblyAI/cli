@@ -44,6 +44,7 @@ class MemoryKeyring(KeyringBackend):
 def isolate_env(monkeypatch):
     for var in (
         "ASSEMBLYAI_API_KEY",
+        "ASSEMBLYAI_BASE_URL",
         "AAI_ENV",
         "CI",
         "CLAUDECODE",

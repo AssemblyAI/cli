@@ -205,7 +205,7 @@ def run_init(
             {
                 "name": "launch",
                 "status": "skipped",
-                "detail": f"no API key; run `aai login`, then: cd {target} && uv run uvicorn api.index:app",
+                "detail": f"no API key; run `aai login`, then: cd {target} && aai dev",
             }
         )
 
@@ -218,9 +218,7 @@ def run_init(
     elif not json_mode:
         # Scaffolded but not launched (no key, or --no-install, or launch=False): leave the
         # user with the one command that starts their app, the way `vercel`/`supabase` sign off.
-        output.console.print(
-            output.hint(f"Run `cd {escape(str(target))} && uv run uvicorn api.index:app`.")
-        )
+        output.console.print(output.hint(f"Run `cd {escape(str(target))} && aai dev`."))
     return target
 
 

@@ -1,4 +1,5 @@
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -8,6 +9,9 @@ TEMPLATE_DIR = Path("aai_cli/init/templates/live-captions")
 
 
 def _load_app(monkeypatch):
+    # Boot with a key so the endpoint's missing-key guard passes and reaches the mock;
+    # preserve a key a test set before calling us (e.g. the raw-auth-header test).
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", os.environ.get("ASSEMBLYAI_API_KEY") or "test-key")
     for name in ("api.index", "api.settings", "api"):
         sys.modules.pop(name, None)
     monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
