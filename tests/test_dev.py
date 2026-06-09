@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 from aai_cli.main import app
 
 runner = CliRunner()
-WEB = "web: uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}\n"
+WEB = "web: python -m uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}\n"
 
 
 def _make_project(tmp_path):
@@ -38,7 +38,8 @@ def test_dev_boots_procfile_command_with_reload(tmp_path, monkeypatch):
     result = runner.invoke(app, ["dev", "--no-open"])
     assert result.exit_code == 0, result.output
     cmd = captured["command"]
-    assert cmd[:4] == ["uv", "run", "uvicorn", "api.index:app"]
+    assert cmd[:5] == ["uv", "run", "python", "-m", "uvicorn"]
+    assert "api.index:app" in cmd
     assert "--host" in cmd
     assert cmd[-3:] == ["--port", "3000", "--reload"]
     assert captured["env"]["PORT"] == "3000"

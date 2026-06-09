@@ -47,15 +47,29 @@ def test_install_step_failed_truncates_detail(monkeypatch):
 
 
 def test_dev_command_uv():
-    cmd = devserver.dev_command(Path("/proj"), ["uvicorn", "api.index:app"], use_uv=True)
-    assert cmd == ["uv", "run", "uvicorn", "api.index:app", "--reload"]
+    cmd = devserver.dev_command(
+        Path("/proj"), ["python", "-m", "uvicorn", "api.index:app"], use_uv=True
+    )
+    assert cmd == ["uv", "run", "python", "-m", "uvicorn", "api.index:app", "--reload"]
 
 
-def test_dev_command_venv():
+def test_dev_command_venv_swaps_python():
     from aai_cli.init import runner
 
+    cmd = devserver.dev_command(
+        Path("/proj"), ["python", "-m", "uvicorn", "api.index:app"], use_uv=False
+    )
+    assert cmd == [
+        str(runner.venv_python(Path("/proj"))),
+        "-m",
+        "uvicorn",
+        "api.index:app",
+        "--reload",
+    ]
+
+
+def test_dev_command_venv_leaves_non_python_first_token():
+    # The `python`-swap only fires on a leading `python`; anything else passes through
+    # (covers the False branch of the swap condition).
     cmd = devserver.dev_command(Path("/proj"), ["uvicorn", "api.index:app"], use_uv=False)
-    assert cmd[0] == str(runner.venv_python(Path("/proj")))
-    assert cmd[1] == "-m"
-    assert cmd[2] == "uvicorn"
-    assert cmd[-1] == "--reload"
+    assert cmd == ["uvicorn", "api.index:app", "--reload"]

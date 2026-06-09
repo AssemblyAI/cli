@@ -24,8 +24,13 @@ def install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
 def dev_command(target: Path, web: list[str], *, use_uv: bool) -> list[str]:
     """The Procfile web process, run in the project venv with live reload.
 
-    In the no-uv branch `web[0]` must be a `python -m`-runnable module; every current
-    template's `web:` line starts with `uvicorn`.
+    The Procfile's `web:` line starts with `python -m uvicorn …`. With uv, run it
+    verbatim under `uv run`; without uv, swap a leading `python` for the project's
+    venv interpreter so it runs inside the scaffolded `.venv`.
     """
-    prefix = ["uv", "run"] if use_uv else [str(runner.venv_python(target)), "-m"]
-    return [*prefix, *web, "--reload"]
+    if use_uv:
+        return ["uv", "run", *web, "--reload"]
+    argv = list(web)
+    if argv and argv[0] == "python":
+        argv[0] = str(runner.venv_python(target))
+    return [*argv, "--reload"]
