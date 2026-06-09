@@ -88,12 +88,17 @@ configuration:
 ### Spec-driven auth
 
 The loader reads each spec's `components.securitySchemes`, and the command applies
-the scheme rather than hardcoding per-API branches:
+the scheme rather than hardcoding per-API branches. Verified against the live specs,
+**both** REST and LLM-gateway declare the identical scheme:
 
-- REST (apiKey scheme) → `Authorization: <key>`
-- LLM-gateway (http/bearer scheme) → `Authorization: Bearer <key>`
+```jsonc
+"ApiKey": { "type": "apiKey", "in": "header", "name": "Authorization" }
+```
 
-If a future spec changes its scheme, the header follows the spec, not a code edit.
+So both send a raw `Authorization: <key>` header (no `Bearer` prefix) — the apiKey
+header name and value come straight from the spec. Reading the scheme rather than
+hardcoding means that if a future spec adds a `Bearer` http scheme or renames the
+header, the request follows the spec without a code edit.
 
 ## Module layout (fits the import-linter contracts)
 
