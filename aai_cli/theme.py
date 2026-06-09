@@ -7,6 +7,9 @@ from rich.theme import Theme
 
 # AssemblyAI brand accent. Defined once so the whole CLI can be re-tinted here.
 BRAND = "#2545D3"
+# Secondary accent — a darker blue used where a second hue is needed (agent label,
+# links, the second speaker), kept in the blue family rather than the old cyan.
+DARK_BLUE = "#1E3A8A"
 
 # A fixed affordance vocabulary used across all human-facing output, mirroring the
 # Vercel/Supabase convention of a small, consistent status alphabet: one glyph per
@@ -34,10 +37,10 @@ THEME = Theme(
         # Conversation labels: the human keeps the brand accent, the agent gets a
         # distinct hue so "you:" and "agent:" are easy to tell apart at a glance.
         "aai.you": BRAND,
-        "aai.agent": "cyan",
-        # Links/URLs in cyan, the convention both the Vercel and Supabase CLIs use so
-        # a clickable target stands out from prose without shouting.
-        "aai.url": "cyan",
+        "aai.agent": DARK_BLUE,
+        # Links/URLs in the dark-blue secondary accent so a clickable target stands out
+        # from prose without shouting (Vercel/Supabase use a cool accent for the same).
+        "aai.url": DARK_BLUE,
         # Semantic status colors. Success is bold so the ✓ reads as a confident "done"
         # (Supabase-style); error/warn follow the universal red/yellow; muted secondary
         # text stays dim so it recedes (the Vercel "quiet by default" look).
@@ -46,7 +49,7 @@ THEME = Theme(
         "aai.warn": "yellow",
         "aai.muted": "dim",
         "aai.speaker.0": BRAND,
-        "aai.speaker.1": "cyan",
+        "aai.speaker.1": DARK_BLUE,
         "aai.speaker.2": "magenta",
         "aai.speaker.3": "green",
         "aai.speaker.4": "yellow",

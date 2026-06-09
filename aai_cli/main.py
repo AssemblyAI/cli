@@ -4,6 +4,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import typer
+from typer import rich_utils
 from typer.core import TyperGroup
 
 if TYPE_CHECKING:
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, config, environments, help_panels, output, stdio
+from aai_cli import __version__, config, environments, help_panels, output, stdio, theme
 from aai_cli.commands import (
     account,
     agent,
@@ -82,9 +83,17 @@ class _OrderedGroup(TyperGroup):
         )
 
 
+# Typer renders option flags and command names in "bold cyan" by default; retint
+# both to the brand accent (the logo blue) so the help screen matches the rest of
+# the CLI. Set before the app renders any help.
+rich_utils.STYLE_OPTION = f"bold {theme.BRAND}"
+rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {theme.BRAND}"
+
+
 app = typer.Typer(
     name="aai",
-    help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
+    # No top-level `help=`: the bare-`aai` welcome banner already carries the
+    # "AssemblyAI from your terminal" tagline, so a description here would duplicate it.
     # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
     # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
@@ -118,6 +127,8 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     """No subcommand given: offer guided setup to a credential-less, interactive user;
     otherwise print help. Never prompts in a non-interactive session, and never on
     `--help` (Click handles that eagerly before the callback)."""
+    if not state.quiet:
+        output.print_banner()
     if (
         _interactive_session()
         and not _profile_has_key(state)

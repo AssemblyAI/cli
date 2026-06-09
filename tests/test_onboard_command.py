@@ -87,6 +87,24 @@ def test_bare_aai_with_key_shows_help_no_offer(monkeypatch: pytest.MonkeyPatch) 
     assert "Usage" in result.output or "Commands" in result.output
 
 
+def test_bare_aai_prints_wordmark_banner(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The welcome screen leads with the `aai` wordmark; its block glyphs are present.
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    result = CliRunner().invoke(app, [])
+    assert result.exit_code == 0, result.output
+    assert "▄▀█ ▄▀█" in result.output
+
+
+def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `--quiet` drops the decorative banner but still prints help. A mutant that
+    # ignores `quiet` (always banners) would leave the wordmark in the output.
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    result = CliRunner().invoke(app, ["--quiet"])
+    assert result.exit_code == 0, result.output
+    assert "▄▀█ ▄▀█" not in result.output
+    assert "Usage" in result.output or "Commands" in result.output
+
+
 def test_bare_aai_offers_wizard_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     from aai_cli import main as main_mod
     from aai_cli.onboard.sections import WizardContext
