@@ -34,19 +34,10 @@ def env_setup_commands(target: Path, *, use_uv: bool) -> list[list[str]]:
     ]
 
 
-def serve_command(target: Path, *, port: int, use_uv: bool, reload: bool = False) -> list[str]:
-    extra = ["--reload"] if reload else []
+def serve_command(target: Path, *, port: int, use_uv: bool) -> list[str]:
     if use_uv:
-        return ["uv", "run", "uvicorn", "api.index:app", "--port", str(port), *extra]
-    return [
-        str(venv_python(target)),
-        "-m",
-        "uvicorn",
-        "api.index:app",
-        "--port",
-        str(port),
-        *extra,
-    ]
+        return ["uv", "run", "uvicorn", "api.index:app", "--port", str(port)]
+    return [str(venv_python(target)), "-m", "uvicorn", "api.index:app", "--port", str(port)]
 
 
 def _port_open(port: int) -> bool:
@@ -90,16 +81,20 @@ def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]
     return last
 
 
-def launch_and_open(
-    target: Path, *, port: int, use_uv: bool, open_browser: bool, reload: bool = False
+def run_server(
+    target: Path,
+    *,
+    command: list[str],
+    port: int,
+    env: dict[str, str] | None = None,
+    open_browser: bool,
 ) -> int:
-    """Start the dev server, wait for it, open the browser, and block until Ctrl-C.
+    """Run a prebuilt server command, wait for the port, open the browser, block until Ctrl-C.
 
-    Returns the process exit code (0 on a clean Ctrl-C shutdown).
+    Returns the process exit code (0 on a clean Ctrl-C shutdown). `env=None` inherits
+    the current environment; pass a full dict (e.g. `{**os.environ, "PORT": ...}`) to override.
     """
-    proc = subprocess.Popen(
-        serve_command(target, port=port, use_uv=use_uv, reload=reload), cwd=target
-    )
+    proc = subprocess.Popen(command, cwd=target, env=env)
     try:
         if wait_for_port(port) and open_browser:
             webbrowser.open(f"http://localhost:{port}")
@@ -109,3 +104,13 @@ def launch_and_open(
         proc.wait()
         return 0
     return proc.returncode
+
+
+def launch_and_open(target: Path, *, port: int, use_uv: bool, open_browser: bool) -> int:
+    """Start the (init) dev server and open the browser; block until Ctrl-C."""
+    return run_server(
+        target,
+        command=serve_command(target, port=port, use_uv=use_uv),
+        port=port,
+        open_browser=open_browser,
+    )

@@ -60,29 +60,6 @@ def test_serve_command_uv_and_venv():
     ]
 
 
-def test_serve_command_appends_reload():
-    target = Path("/proj")
-    assert runner.serve_command(target, port=3000, use_uv=True, reload=True) == [
-        "uv",
-        "run",
-        "uvicorn",
-        "api.index:app",
-        "--port",
-        "3000",
-        "--reload",
-    ]
-    py = str(runner.venv_python(target))
-    assert runner.serve_command(target, port=3000, use_uv=False, reload=True) == [
-        py,
-        "-m",
-        "uvicorn",
-        "api.index:app",
-        "--port",
-        "3000",
-        "--reload",
-    ]
-
-
 def test_find_free_port_returns_preferred_when_open():
     port = runner.find_free_port(0)  # 0 -> OS assigns a free port
     assert isinstance(port, int) and port > 0
@@ -208,29 +185,23 @@ def test_launch_and_open_handles_keyboard_interrupt(monkeypatch):
     assert proc.terminated is True
 
 
-def test_launch_and_open_defaults_to_no_reload(monkeypatch):
+def test_run_server_passes_command_and_env(monkeypatch):
     captured = {}
     proc = _FakeProc(returncode=0)
 
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env")
+        captured["cwd"] = kwargs.get("cwd")
         return proc
 
     monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
-    runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
-    assert "--reload" not in captured["cmd"]
-
-
-def test_launch_and_open_forwards_reload(monkeypatch):
-    captured = {}
-    proc = _FakeProc(returncode=0)
-
-    def fake_popen(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return proc
-
-    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
-    runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False, reload=True)
-    assert "--reload" in captured["cmd"]
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: None)
+    rc = runner.run_server(
+        Path("/proj"), command=["uvicorn", "x"], port=3000, env={"PORT": "3000"}, open_browser=False
+    )
+    assert rc == 0
+    assert captured["cmd"] == ["uvicorn", "x"]
+    assert captured["env"] == {"PORT": "3000"}
+    assert captured["cwd"] == Path("/proj")
