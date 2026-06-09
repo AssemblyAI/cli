@@ -71,6 +71,30 @@ def wait_for_port(port: int, *, timeout: float = 30.0) -> bool:
     return False
 
 
+def spawn(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    log_path: Path | None = None,
+) -> subprocess.Popen[str]:
+    """Start a process without blocking.
+
+    With `log_path`, the process's stdout+stderr are written to that file (text mode) —
+    used to capture cloudflared's output for URL discovery. Without it, stdio is inherited.
+    """
+    if log_path is not None:
+        return subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            stdout=log_path.open("w"),
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    return subprocess.Popen(command, cwd=cwd, env=env, text=True)
+
+
 def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]:
     """Run env-setup commands in order; return the first failure or the last success."""
     last = subprocess.CompletedProcess[str](args=[], returncode=0, stdout="", stderr="")

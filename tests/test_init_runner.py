@@ -185,6 +185,40 @@ def test_launch_and_open_handles_keyboard_interrupt(monkeypatch):
     assert proc.terminated is True
 
 
+def test_spawn_inherits_stdio_without_log(monkeypatch):
+    captured = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return _FakeProc(returncode=0)
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+    runner.spawn(["echo", "hi"], cwd=Path("/proj"), env={"A": "B"})
+    assert captured["cmd"] == ["echo", "hi"]
+    assert captured["kwargs"]["cwd"] == Path("/proj")
+    assert captured["kwargs"]["env"] == {"A": "B"}
+    assert captured["kwargs"]["text"] is True
+    assert "stdout" not in captured["kwargs"]  # inherited
+
+
+def test_spawn_writes_to_log_when_given(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["kwargs"] = kwargs
+        return _FakeProc(returncode=0)
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+    log = tmp_path / "cf.log"
+    runner.spawn(["cloudflared"], cwd=tmp_path, log_path=log)
+    assert captured["kwargs"]["stderr"] is runner.subprocess.STDOUT
+    assert captured["kwargs"]["text"] is True
+    # stdout is an open writable handle to the log file
+    assert captured["kwargs"]["stdout"].writable()
+    captured["kwargs"]["stdout"].close()
+
+
 def test_run_server_passes_command_and_env(monkeypatch):
     captured = {}
     proc = _FakeProc(returncode=0)
