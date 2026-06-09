@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.commands.deploy import FLY, RAILWAY, RENDER, VERCEL, Target
+from aai_cli.commands.deploy import FLY, RAILWAY, VERCEL, Target
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -20,7 +20,7 @@ def test_targets_are_frozen() -> None:
     # Route the assignment through an object-typed alias and a runtime attribute
     # name so the frozen-ness is checked at runtime, not statically.
     field = "name"
-    for target in (VERCEL, RAILWAY, RENDER, FLY):
+    for target in (VERCEL, RAILWAY, FLY):
         opaque: object = target
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(opaque, field, "tampered")
@@ -148,6 +148,7 @@ def test_deploy_multiple_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None
     assert "at most one" in result.output
     # The error lists every target flag, including the new ones.
     assert "--fly" in result.output
+    assert "--render" not in result.output
     assert _cmds(calls) == []  # never deployed
 
 
@@ -198,48 +199,34 @@ def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _cmds(calls)[0] == ["railway", "up"]
 
 
-def test_deploy_render_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, available=("render",))
-    result = runner.invoke(app, ["deploy", "--render", "--yes"])
-    assert result.exit_code == 0, result.output
-    assert _cmds(calls) == [["render", "deploys", "create"]]
-
-
-def test_deploy_render_prompt_names_render(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, available=("render",), confirm=False)
-    result = runner.invoke(app, ["deploy", "--render"])
-    assert result.exit_code == 0, result.output
-    assert calls["prompt"] == "Deploy this project to Render?"
-    assert _cmds(calls) == []  # declined
-
-
-def test_deploy_prod_ignored_for_render(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, available=("render",))
-    result = runner.invoke(app, ["deploy", "--render", "--prod", "--yes"])
-    assert result.exit_code == 0, result.output
-    assert _cmds(calls)[0] == ["render", "deploys", "create"]
-
-
-def test_deploy_missing_render_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stub(monkeypatch, available=())
-    result = runner.invoke(app, ["deploy", "--render", "--yes"])
-    assert result.exit_code == 1
-    assert "Render CLI" in result.output
-    assert "render.com/docs/cli" in " ".join(result.output.split())
-
-
-def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fly.toml").write_text("app = 'x'\n")
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--yes"])
     assert result.exit_code == 0, result.output
     assert _cmds(calls) == [["fly", "deploy"]]
 
 
-def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fly.toml").write_text("app = 'x'\n")
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
     assert result.exit_code == 0, result.output
     assert _cmds(calls)[0] == ["fly", "deploy"]
+
+
+def test_deploy_fly_without_toml_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Without a fly.toml, the preflight fails early with a `fly launch` hint and
+    # never shells out to `fly deploy`.
+    monkeypatch.chdir(tmp_path)
+    calls = _stub(monkeypatch, available=("fly",))
+    result = runner.invoke(app, ["deploy", "--fly", "--yes"])
+    assert result.exit_code == 1
+    assert "fly.toml" in result.output
+    assert "fly launch" in result.output
+    assert _cmds(calls) == []  # never deployed
 
 
 def test_deploy_missing_fly_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -264,7 +251,7 @@ def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatc
     assert _cmds(calls) == []
 
 
-@pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--render", "--fly", "--yes"])
+@pytest.mark.parametrize("flag", ["--prod", "--vercel", "--railway", "--fly", "--yes"])
 def test_deploy_help_lists_flags(flag: str) -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0

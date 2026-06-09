@@ -33,6 +33,10 @@ anything else that reads a `Procfile`. Point the platform at this repo and set
 uvicorn api.index:app --host 0.0.0.0 --port $PORT
 ```
 
+On Render, create a **Web Service** connected to your Git repo — it installs
+`requirements.txt` and starts via the `Procfile`. (There's no local-directory
+deploy; `aai deploy` covers Vercel/Railway/Fly.)
+
 ## Ideas to extend
 
 - Add `keyterms_prompt` or a `prompt` for domain vocabulary in `STREAMING_CONFIG`.
