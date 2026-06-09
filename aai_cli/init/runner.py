@@ -34,10 +34,19 @@ def env_setup_commands(target: Path, *, use_uv: bool) -> list[list[str]]:
     ]
 
 
-def serve_command(target: Path, *, port: int, use_uv: bool) -> list[str]:
+def serve_command(target: Path, *, port: int, use_uv: bool, reload: bool = False) -> list[str]:
+    extra = ["--reload"] if reload else []
     if use_uv:
-        return ["uv", "run", "uvicorn", "api.index:app", "--port", str(port)]
-    return [str(venv_python(target)), "-m", "uvicorn", "api.index:app", "--port", str(port)]
+        return ["uv", "run", "uvicorn", "api.index:app", "--port", str(port), *extra]
+    return [
+        str(venv_python(target)),
+        "-m",
+        "uvicorn",
+        "api.index:app",
+        "--port",
+        str(port),
+        *extra,
+    ]
 
 
 def _port_open(port: int) -> bool:
@@ -81,12 +90,16 @@ def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]
     return last
 
 
-def launch_and_open(target: Path, *, port: int, use_uv: bool, open_browser: bool) -> int:
+def launch_and_open(
+    target: Path, *, port: int, use_uv: bool, open_browser: bool, reload: bool = False
+) -> int:
     """Start the dev server, wait for it, open the browser, and block until Ctrl-C.
 
     Returns the process exit code (0 on a clean Ctrl-C shutdown).
     """
-    proc = subprocess.Popen(serve_command(target, port=port, use_uv=use_uv), cwd=target)
+    proc = subprocess.Popen(
+        serve_command(target, port=port, use_uv=use_uv, reload=reload), cwd=target
+    )
     try:
         if wait_for_port(port) and open_browser:
             webbrowser.open(f"http://localhost:{port}")
