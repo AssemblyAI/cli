@@ -1,5 +1,4 @@
 import json
-from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -25,7 +24,7 @@ def _human(monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
 
 
-def test_audit_renders_rows():
+def test_audit_renders_rows(mocker):
     _auth()
     payload = {
         "page_details": {"has_more": False},
@@ -41,8 +40,8 @@ def test_audit_renders_rows():
             }
         ],
     }
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
-        result = runner.invoke(app, ["audit", "--json"])
+    mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["audit", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data[0]["action_taken"] == "token.create"
@@ -55,19 +54,19 @@ def test_audit_rows_filter_invalid_items():
     ]
 
 
-def test_audit_passes_filters():
+def test_audit_passes_filters(mocker):
     _auth()
-    with patch(
-        "aai_cli.commands.audit.ams.list_audit_logs", return_value={"data": []}
-    ) as list_logs:
-        result = runner.invoke(app, ["audit", "--limit", "5", "--action", "token.create"])
+    list_logs = mocker.patch(
+        "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["audit", "--limit", "5", "--action", "token.create"])
     assert result.exit_code == 0
     list_logs.assert_called_once_with(
         "jwt", limit=5, action_taken="token.create", resource_type=None
     )
 
 
-def test_audit_human_mode_renders_table(monkeypatch):
+def test_audit_human_mode_renders_table(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -91,8 +90,8 @@ def test_audit_human_mode_renders_table(monkeypatch):
             },
         ]
     }
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
-        result = runner.invoke(app, ["audit"])
+    mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["audit"])
     assert result.exit_code == 0
     assert "API key created" in result.output
     assert "2026-06-01 12:00:00" in result.output
@@ -115,16 +114,18 @@ def test_audit_helpers_format_edge_cases():
     assert audit._audit_rows({"data": "bad"}) == []
 
 
-def test_audit_human_empty_result(monkeypatch):
+def test_audit_human_empty_result(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value={"data": []}):
-        result = runner.invoke(app, ["audit"])
+    mocker.patch(
+        "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["audit"])
     assert result.exit_code == 0
     assert "No audit events found" in result.output
 
 
-def test_audit_can_include_login_events(monkeypatch):
+def test_audit_can_include_login_events(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -140,14 +141,14 @@ def test_audit_can_include_login_events(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
-        result = runner.invoke(app, ["audit", "--include-logins"])
+    mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["audit", "--include-logins"])
     assert result.exit_code == 0
     assert "Login succeeded" in result.output
     assert "Hidden:" not in result.output
 
 
-def test_audit_summarizes_all_login_rows(monkeypatch):
+def test_audit_summarizes_all_login_rows(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)
     payload = {
@@ -163,17 +164,19 @@ def test_audit_summarizes_all_login_rows(monkeypatch):
             }
         ]
     }
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value=payload):
-        result = runner.invoke(app, ["audit"])
+    mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["audit"])
     assert result.exit_code == 0
     assert "No notable audit events" in result.output
     assert "Hidden: 1 login event" in result.output
 
 
-def test_audit_without_session_runs_login(monkeypatch):
+def test_audit_without_session_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
-    with patch("aai_cli.commands.audit.ams.list_audit_logs", return_value={"data": []}) as logs:
-        result = runner.invoke(app, ["audit", "--json"])
+    logs = mocker.patch(
+        "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["audit", "--json"])
     assert result.exit_code == 4
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     logs.assert_not_called()

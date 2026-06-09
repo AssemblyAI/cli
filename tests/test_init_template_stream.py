@@ -1,7 +1,6 @@
 import importlib
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
@@ -15,16 +14,16 @@ def _load_app(monkeypatch):
     return importlib.import_module("api.index")
 
 
-def _ok_response(token="tok-123"):
-    resp = MagicMock()
+def _ok_response(mocker, token="tok-123"):
+    resp = mocker.MagicMock()
     resp.json.return_value = {"token": token}
     resp.raise_for_status.return_value = None
     return resp
 
 
-def test_token_returns_token_and_streaming_ws_url(monkeypatch):
+def test_token_returns_token_and_streaming_ws_url(monkeypatch, mocker):
     mod = _load_app(monkeypatch)
-    monkeypatch.setattr(mod.httpx2, "get", lambda *a, **k: _ok_response())
+    monkeypatch.setattr(mod.httpx2, "get", lambda *a, **k: _ok_response(mocker))
     resp = TestClient(mod.app).post("/api/token")
     assert resp.status_code == 200
     body = resp.json()
@@ -32,7 +31,7 @@ def test_token_returns_token_and_streaming_ws_url(monkeypatch):
     assert body["ws_url"].startswith("wss://") and body["ws_url"].endswith("/v3/ws")
 
 
-def test_token_uses_raw_authorization_header(monkeypatch):
+def test_token_uses_raw_authorization_header(monkeypatch, mocker):
     # The streaming token uses the raw key as Authorization (NOT Bearer).
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-test")
     mod = _load_app(monkeypatch)
@@ -40,7 +39,7 @@ def test_token_uses_raw_authorization_header(monkeypatch):
 
     def fake_get(url, params=None, headers=None):
         captured.update(url=url, headers=headers)
-        return _ok_response()
+        return _ok_response(mocker)
 
     monkeypatch.setattr(mod.httpx2, "get", fake_get)
     TestClient(mod.app).post("/api/token")
