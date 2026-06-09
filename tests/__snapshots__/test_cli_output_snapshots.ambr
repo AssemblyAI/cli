@@ -361,16 +361,13 @@
    Guided setup: sign in, run your first transcription, and start building.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --status          Show request progress and exit.                            │
-  │ --json            Output raw JSON.                                           │
-  │ --help            Show this message and exit.                                │
+  │ --json          Output raw JSON.                                             │
+  │ --help          Show this message and exit.                                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Run the guided setup
    $ aai onboard
-   Show your progress toward 100 requests
-   $ aai onboard --status
   
   
   

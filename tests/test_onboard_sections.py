@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 import typer
 
-from aai_cli import client, config, transcribe_render
+from aai_cli import client, config, output, transcribe_render
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.commands import transcribe as transcribe_cmd
@@ -51,6 +53,19 @@ class _ScriptedPrompter:
         return self._text
 
 
+def _capture_status(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record the messages passed to output.status (the transcription label)."""
+    messages: list[str] = []
+
+    @contextlib.contextmanager
+    def _fake_status(message: str, *, json_mode: bool) -> Generator[None]:
+        messages.append(message)
+        yield
+
+    monkeypatch.setattr(output, "status", _fake_status)
+    return messages
+
+
 @pytest.fixture
 def ctx() -> WizardContext:
     return WizardContext(state=AppState(), profile="default", json_mode=False)
@@ -78,10 +93,12 @@ def test_first_request_uses_sample_on_empty_input(
 
     monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
+    status_messages = _capture_status(monkeypatch)
     # NonInteractivePrompter.text returns its default ("") → Enter → sample.
     assert sections.first_request(NonInteractivePrompter(), ctx) is SectionResult.DONE
     assert seen["source"] is None
     assert seen["sample"] is True
+    assert status_messages == ["Transcribing the sample clip…"]
 
 
 def test_first_request_uses_custom_source(
@@ -99,9 +116,11 @@ def test_first_request_uses_custom_source(
 
     monkeypatch.setattr(transcribe_cmd, "_transcribe_audio", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
+    status_messages = _capture_status(monkeypatch)
     assert sections.first_request(_ScriptedPrompter(text="meeting.mp3"), ctx) is SectionResult.DONE
     assert seen["source"] == "meeting.mp3"
     assert seen["sample"] is False
+    assert status_messages == ["Transcribing meeting.mp3…"]
 
 
 def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
