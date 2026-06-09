@@ -20,6 +20,17 @@ as a Vercel environment variable (the local `.env` is git-ignored and not deploy
 No extra config is needed: Vercel serves the static page and discovers the
 FastAPI app in `api/index.py`.
 
+## Deploy elsewhere
+
+The included `Procfile` and `runtime.txt` make this run as a plain Python web app
+on Render, Railway, Heroku, Google Cloud Run (`gcloud run deploy --source .`), and
+anything else that reads a `Procfile`. Point the platform at this repo and set
+`ASSEMBLYAI_API_KEY`; the start command is already declared:
+
+```sh
+uvicorn api.index:app --host 0.0.0.0 --port $PORT
+```
+
 ## Ideas to extend
 
 - Show chapter summaries and highlight timestamps.

@@ -32,8 +32,34 @@ def test_required_files_present(template_dir):
         "AGENTS.md",
         "gitignore",
         "env.example",
+        "Procfile",
+        "runtime.txt",
     ):
         assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
+
+
+def test_procfile_starts_the_app(template_dir):
+    """The Procfile gives non-Vercel hosts (Render/Railway/Heroku/Cloud Run) a start
+    command. The contract gate boots it for real; here we pin its shape."""
+    web = [
+        line.split("web:", 1)[1].strip()
+        for line in (template_dir / "Procfile").read_text().splitlines()
+        if line.strip().startswith("web:")
+    ]
+    assert web, f"{template_dir.name}: Procfile has no web: process"
+    assert "uvicorn" in web[0] and "api.index:app" in web[0], (
+        f"{template_dir.name}: Procfile must launch uvicorn api.index:app, got {web[0]!r}"
+    )
+    assert "$PORT" in web[0] or "${PORT" in web[0], (
+        f"{template_dir.name}: Procfile must bind the platform's $PORT, got {web[0]!r}"
+    )
+
+
+def test_runtime_pins_supported_python(template_dir):
+    pin = (template_dir / "runtime.txt").read_text().strip()
+    assert re.fullmatch(r"python-3\.(12|13)(\.\d+)?", pin), (
+        f"{template_dir.name}: runtime.txt pins {pin!r}; must be python-3.12 or python-3.13"
+    )
 
 
 def test_realtime_templates_have_audio_helpers(template_dir):

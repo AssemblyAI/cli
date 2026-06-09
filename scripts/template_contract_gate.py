@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import ast
+import http.client
 import importlib
+import os
 import re
+import signal
+import socket
 import subprocess
 import sys
-from contextlib import contextmanager
+import time
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from aai_cli.init import templates
@@ -23,6 +28,8 @@ _REQUIRED_FILES = (
     "AGENTS.md",
     "gitignore",
     "env.example",
+    "Procfile",
+    "runtime.txt",
 )
 _LOCAL_IMPORTS = {"api"}
 _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
@@ -165,6 +172,97 @@ def _parse_python_files(path: Path) -> None:
         ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
 
 
+# Supported interpreters (see pyproject `requires-python`). runtime.txt tells
+# buildpack platforms (Render/Railway/Heroku/Cloud Run) which Python to provision.
+_RUNTIME = re.compile(r"^python-3\.(12|13)(\.\d+)?$")
+
+
+def _runtime_supported(template: str, path: Path) -> None:
+    pin = (path / "runtime.txt").read_text(encoding="utf-8").strip()
+    if not _RUNTIME.match(pin):
+        _fail(f"{template}: runtime.txt pins {pin!r}; must be python-3.12 or python-3.13")
+
+
+def _web_command(template: str, path: Path) -> str:
+    """The Procfile's `web:` process command — the start command every non-Vercel host runs."""
+    for raw in (path / "Procfile").read_text(encoding="utf-8").splitlines():
+        if raw.strip().startswith("web:"):
+            command = raw.split("web:", 1)[1].strip()
+            if "uvicorn" not in command or "api.index:app" not in command:
+                _fail(
+                    f"{template}: Procfile web command must run `uvicorn api.index:app`: {command!r}"
+                )
+            return command
+    _fail(f"{template}: Procfile has no `web:` process")
+    raise AssertionError  # unreachable; _fail raises. Satisfies the type checker.
+
+
+def _free_port() -> int:
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def _terminate(proc: subprocess.Popen[str]) -> str:
+    """Kill the process group (uvicorn + its shell) and return whatever it logged."""
+    if proc.poll() is None:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait(timeout=5)
+    return proc.stdout.read() if proc.stdout else ""
+
+
+_HTTP_OK = 200
+
+
+def _serves_root(port: int) -> bool:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+    try:
+        conn.request("GET", "/")
+        return conn.getresponse().status == _HTTP_OK
+    finally:
+        conn.close()
+
+
+def _procfile_boots(template: str, path: Path) -> None:
+    """Run the Procfile's web command for real and confirm the app answers GET / with 200.
+
+    The other checks are static; this is the one that proves a `git push` to Render,
+    Railway, Heroku, or Cloud Run actually starts a serving app. PORT is injected the way
+    those platforms inject it; the key is unused at boot (settings default it to "").
+    """
+    command = _web_command(template, path)
+    port = _free_port()
+    env = {**os.environ, "PORT": str(port), "ASSEMBLYAI_API_KEY": ""}
+    # `/bin/sh -c` so the Procfile's ${PORT:-3000} expands as it would on the host;
+    # a fresh session group lets _terminate reap the shell and uvicorn together.
+    proc = subprocess.Popen(
+        ["/bin/sh", "-c", command],
+        cwd=path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                _fail(f"{template}: Procfile process exited before serving:\n{_terminate(proc)}")
+            try:
+                if _serves_root(port):
+                    return
+            except OSError:
+                time.sleep(0.25)  # not up yet; poll again
+        _fail(f"{template}: Procfile app did not serve / within 30s:\n{_terminate(proc)}")
+    finally:
+        _terminate(proc)
+
+
 def _untracked_template_files() -> None:
     in_worktree = subprocess.run(
         ["git", "rev-parse", "--is-inside-work-tree"],
@@ -197,6 +295,8 @@ def main() -> int:
         _requirements_pin_versions(template, path)
         _parse_python_files(path)
         _import_api(template, path)
+        _runtime_supported(template, path)
+        _procfile_boots(template, path)
     sys.stdout.write(f"validated {len(templates.TEMPLATE_ORDER)} init templates\n")
     return 0
 
