@@ -106,6 +106,7 @@ app = typer.Typer(help="Account billing, usage, and limits.")
     epilog=examples_epilog(
         [
             ("Show your remaining balance", "aai balance"),
+            ("Get the raw cents for scripting", "aai balance --json | jq '.balance_in_cents'"),
         ]
     ),
 )
@@ -134,6 +135,11 @@ def balance(
         [
             ("Usage over the last 30 days", "aai usage"),
             ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
+            ("Break spend down by month", "aai usage --window month"),
+            (
+                "Total spend in cents for scripting",
+                "aai usage --json | jq '[.usage_items[].line_items[].price] | add'",
+            ),
         ]
     ),
 )
@@ -213,6 +219,7 @@ def usage(
     epilog=examples_epilog(
         [
             ("Show rate limits per service", "aai limits"),
+            ("As JSON for scripting", "aai limits --json"),
         ]
     ),
 )

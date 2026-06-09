@@ -223,6 +223,7 @@ def _render(data: DoctorResult) -> str:
     epilog=examples_epilog(
         [
             ("Check your environment is ready", "aai doctor"),
+            ("Output results as JSON", "aai doctor --json"),
         ]
     ),
 )

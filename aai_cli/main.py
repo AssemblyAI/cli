@@ -181,8 +181,12 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
         [
             ("Guided setup (start here)", "aai onboard"),
             ("Transcribe a file", "aai transcribe call.mp3"),
-            ("Scaffold a starter app", "aai init"),
-            ("Global options go before the command", "aai --sandbox transcribe call.mp3"),
+            ("Stream live audio in real time", "aai stream"),
+            ("Talk to a voice agent", "aai agent"),
+            (
+                "Summarize while transcribing",
+                'aai transcribe call.mp3 --llm "summarize action items"',
+            ),
         ]
     ),
 )

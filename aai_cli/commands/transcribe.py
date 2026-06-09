@@ -85,12 +85,11 @@ def _transcribe_audio(
         [
             ("Transcribe a local file", "aai transcribe call.mp3"),
             ("Try it with the hosted sample", "aai transcribe --sample"),
-            (
-                "Diarize two speakers and redact PII",
-                "aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii",
-            ),
-            ("Get just the text for a pipeline", "aai transcribe call.mp3 -o text"),
-            ("Print equivalent Python instead of running", "aai transcribe call.mp3 --show-code"),
+            ("Transcribe a YouTube video", "aai transcribe https://youtu.be/dtp6b76pMak"),
+            ("Label who said what", "aai transcribe call.mp3 --speaker-labels"),
+            ("Redact PII for compliance", "aai transcribe call.mp3 --redact-pii"),
+            ("Summarize a recording", "aai transcribe call.mp3 --summarization"),
+            ("Ask about the transcript", 'aai transcribe call.mp3 --llm "List the action items"'),
         ]
     ),
 )

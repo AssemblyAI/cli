@@ -47,6 +47,7 @@ def _default_project_id(account_id: int, jwt: str) -> int:
         [
             ("List your API keys (masked)", "aai keys list"),
             ("As JSON for scripting", "aai keys list --json"),
+            ("Get key ids to use with rename", "aai keys list --json | jq '.[].id'"),
         ]
     ),
 )
@@ -96,6 +97,10 @@ def list_(
         [
             ("Create a key in your default project", "aai keys create --name ci-pipeline"),
             ("Create a key in a specific project", "aai keys create --name prod --project 7"),
+            (
+                "Capture the new key into an env var",
+                "export ASSEMBLYAI_API_KEY=$(aai keys create --name ci --json | jq -r '.api_key')",
+            ),
         ]
     )
 )

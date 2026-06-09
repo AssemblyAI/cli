@@ -233,7 +233,12 @@ def run_init(
                 "Scaffold an audio transcription app into ./my-app",
                 "aai init audio-transcription my-app",
             ),
+            ("Scaffold a voice agent app", "aai init voice-agent"),
             ("Scaffold into the current directory", "aai init audio-transcription --here"),
+            (
+                "Scaffold only, without installing or launching",
+                "aai init audio-transcription --no-install",
+            ),
         ]
     ),
 )

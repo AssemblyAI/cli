@@ -70,6 +70,7 @@ def _open_audio(
         [
             ("Start a live voice conversation", "aai agent"),
             ("Pick a voice and opening line", 'aai agent --voice james --greeting "Hi there"'),
+            ("Give the agent a persona", 'aai agent --system-prompt "You are a terse pirate."'),
             ("See available voices", "aai agent --list-voices"),
             ("Print equivalent Python instead of running", "aai agent --show-code"),
         ]

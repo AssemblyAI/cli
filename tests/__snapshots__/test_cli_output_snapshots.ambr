@@ -58,6 +58,8 @@
    $ aai agent
    Pick a voice and opening line
    $ aai agent --voice james --greeting "Hi there"
+   Give the agent a persona
+   $ aai agent --system-prompt "You are a terse pirate."
    See available voices
    $ aai agent --list-voices
    Print equivalent Python instead of running
@@ -85,11 +87,15 @@
   
    Examples
    Recent audit-log entries
-   $ aai audit --limit 20
+   $ aai audit
+   Show more entries
+   $ aai audit --limit 100
    Include login events
    $ aai audit --include-logins
    Filter by action
    $ aai audit --action token.create
+   Filter by resource, as JSON
+   $ aai audit --resource token --json
   
   
   
@@ -110,6 +116,8 @@
    Examples
    Show your remaining balance
    $ aai balance
+   Get the raw cents for scripting
+   $ aai balance --json | jq '.balance_in_cents'
   
   
   
@@ -130,6 +138,8 @@
    Examples
    Check your environment is ready
    $ aai doctor
+   Output results as JSON
+   $ aai doctor --json
   
   
   
@@ -166,8 +176,12 @@
    $ aai init
    Scaffold an audio transcription app into ./my-app
    $ aai init audio-transcription my-app
+   Scaffold a voice agent app
+   $ aai init voice-agent
    Scaffold into the current directory
    $ aai init audio-transcription --here
+   Scaffold only, without installing or launching
+   $ aai init audio-transcription --no-install
   
   
   
@@ -193,6 +207,9 @@
    $ aai keys create --name ci-pipeline
    Create a key in a specific project
    $ aai keys create --name prod --project 7
+   Capture the new key into an env var
+   $ export ASSEMBLYAI_API_KEY=$(aai keys create --name ci --json | jq -r
+   '.api_key')
   
   
   
@@ -215,6 +232,8 @@
    $ aai keys list
    As JSON for scripting
    $ aai keys list --json
+   Get key ids to use with rename
+   $ aai keys list --json | jq '.[].id'
   
   
   
@@ -259,6 +278,8 @@
    Examples
    Show rate limits per service
    $ aai limits
+   As JSON for scripting
+   $ aai limits --json
   
   
   
@@ -302,10 +323,13 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Summarize a past transcript
-   $ aai llm "summarize" --transcript-id 5551234-abcd
+   Ask about a past transcript
+   $ aai llm "summarize the key decisions" --transcript-id 5551234-abcd
    Pipe any text in
    $ echo "meeting notes" | aai llm "turn into action items"
+   Pick a model and add a system prompt
+   $ aai llm "draft a follow-up email" --model claude-opus-4-7 --system "Be
+   concise."
    See available models
    $ aai llm --list-models
   
@@ -394,6 +418,10 @@
    Examples
    Show one session's details
    $ aai sessions get <session-id>
+   Raw JSON for one session
+   $ aai sessions get <session-id> --json
+   Drill into the latest session
+   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
   
   
   
@@ -416,8 +444,12 @@
    Examples
    List recent streaming sessions
    $ aai sessions list
-   Only completed sessions
-   $ aai sessions list --status completed
+   Find failed sessions
+   $ aai sessions list --status error
+   Inspect the most recent session
+   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
+   Total audio across recent sessions (seconds)
+   $ aai sessions list --json | jq '[.[].audio_duration_sec] | add'
   
   
   
@@ -451,6 +483,8 @@
    $ aai setup install
    Install for the current project only
    $ aai setup install --scope project
+   Reinstall everything even if already present
+   $ aai setup install --force
   
   
   
@@ -474,6 +508,8 @@
    Examples
    Remove the AssemblyAI MCP server and skills
    $ aai setup remove
+   Remove only from the project scope
+   $ aai setup remove --scope project
   
   
   
@@ -495,6 +531,8 @@
    Examples
    Show what's set up
    $ aai setup status
+   Print status as JSON
+   $ aai setup status --json
   
   
   
@@ -611,12 +649,14 @@
    Examples
    Stream from your microphone
    $ aai stream
-   Stream mic + system audio on macOS
-   $ aai stream --system-audio
+   Stream a file or URL in real time
+   $ aai stream recording.wav
    Stream the hosted sample
    $ aai stream --sample
-   Stream raw PCM from a pipe (16 kHz mono s16le)
-   $ ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -
+   Label speakers in the live transcript
+   $ aai stream --speaker-labels
+   Boost domain terms with keyterm prompts
+   $ aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk
    $ aai stream --llm "summarize action items"
    Print equivalent Python instead of running
@@ -756,12 +796,16 @@
    $ aai transcribe call.mp3
    Try it with the hosted sample
    $ aai transcribe --sample
-   Diarize two speakers and redact PII
-   $ aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
-   Get just the text for a pipeline
-   $ aai transcribe call.mp3 -o text
-   Print equivalent Python instead of running
-   $ aai transcribe call.mp3 --show-code
+   Transcribe a YouTube video
+   $ aai transcribe https://youtu.be/dtp6b76pMak
+   Label who said what
+   $ aai transcribe call.mp3 --speaker-labels
+   Redact PII for compliance
+   $ aai transcribe call.mp3 --redact-pii
+   Summarize a recording
+   $ aai transcribe call.mp3 --summarization
+   Ask about the transcript
+   $ aai transcribe call.mp3 --llm "List the action items"
   
   
   
@@ -787,6 +831,10 @@
    Examples
    Fetch a transcript's text by id
    $ aai transcripts get 5551234-abcd
+   Speaker-labeled turns
+   $ aai transcripts get 5551234-abcd -o utterances
+   Save SRT subtitles
+   $ aai transcripts get 5551234-abcd -o srt > captions.srt
    Get the raw JSON
    $ aai transcripts get 5551234-abcd --json
   
@@ -810,6 +858,13 @@
    Examples
    List your recent transcripts
    $ aai transcripts list
+   Show more at once
+   $ aai transcripts list --limit 50
+   Grab the latest transcript id
+   $ aai transcripts list --json | jq -r '.[0].id'
+   Summarize your latest transcript
+   $ aai llm "summarize" --transcript-id $(aai transcripts list --json | jq -r
+   '.[0].id')
   
   
   
@@ -836,6 +891,10 @@
    $ aai usage
    A specific date range
    $ aai usage --start 2026-05-01 --end 2026-06-01
+   Break spend down by month
+   $ aai usage --window month
+   Total spend in cents for scripting
+   $ aai usage --json | jq '[.usage_items[].line_items[].price] | add'
   
   
   

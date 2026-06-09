@@ -76,11 +76,12 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
     epilog=examples_epilog(
         [
             ("Stream from your microphone", "aai stream"),
-            ("Stream mic + system audio on macOS", "aai stream --system-audio"),
+            ("Stream a file or URL in real time", "aai stream recording.wav"),
             ("Stream the hosted sample", "aai stream --sample"),
+            ("Label speakers in the live transcript", "aai stream --speaker-labels"),
             (
-                "Stream raw PCM from a pipe (16 kHz mono s16le)",
-                "ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -",
+                "Boost domain terms with keyterm prompts",
+                'aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
             ),
             (
                 "Summarize action items live as you talk",

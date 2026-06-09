@@ -293,6 +293,7 @@ def _render(data: dict[str, list[Step]]) -> str:
         [
             ("Set up your coding agent for AssemblyAI", "aai setup install"),
             ("Install for the current project only", "aai setup install --scope project"),
+            ("Reinstall everything even if already present", "aai setup install --force"),
         ]
     )
 )
@@ -326,6 +327,7 @@ def install(
     epilog=examples_epilog(
         [
             ("Show what's set up", "aai setup status"),
+            ("Print status as JSON", "aai setup status --json"),
         ]
     )
 )
@@ -346,6 +348,7 @@ def status(
     epilog=examples_epilog(
         [
             ("Remove the AssemblyAI MCP server and skills", "aai setup remove"),
+            ("Remove only from the project scope", "aai setup remove --scope project"),
         ]
     )
 )

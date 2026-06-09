@@ -46,8 +46,15 @@ def _validate_follow_args(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Summarize a past transcript", 'aai llm "summarize" --transcript-id 5551234-abcd'),
+            (
+                "Ask about a past transcript",
+                'aai llm "summarize the key decisions" --transcript-id 5551234-abcd',
+            ),
             ("Pipe any text in", 'echo "meeting notes" | aai llm "turn into action items"'),
+            (
+                "Pick a model and add a system prompt",
+                'aai llm "draft a follow-up email" --model claude-opus-4-7 --system "Be concise."',
+            ),
             ("See available models", "aai llm --list-models"),
         ]
     ),
