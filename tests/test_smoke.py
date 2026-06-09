@@ -77,6 +77,7 @@ def test_help_lists_commands_in_workflow_order():
         # Build an App
         "init",
         "dev",
+        "share",
         # Run AssemblyAI
         "transcribe",
         "stream",
