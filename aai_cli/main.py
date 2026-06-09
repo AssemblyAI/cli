@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, environments, help_panels, output, stdio
+from aai_cli import __version__, config, environments, help_panels, output, stdio
 from aai_cli.commands import (
     account,
     agent,
@@ -30,8 +30,10 @@ from aai_cli.commands import (
     transcripts,
 )
 from aai_cli.context import AppState, env_override_warning, resolve_environment
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
+from aai_cli.onboard import wizard
+from aai_cli.onboard.sections import WizardContext
 
 # The order commands appear under `aai --help`. Commands are grouped into named
 # Rich panels (see `help_panels.py`); panels render in the order their first
@@ -39,6 +41,7 @@ from aai_cli.help_text import examples_epilog
 # most-common-first. Names not listed fall to the end, sorted alphabetically.
 _COMMAND_ORDER = (
     # Quick Start — zero-to-running onboarding
+    "onboard",
     "init",
     # Setup & Tools — get set up & maintain; `version` last
     "samples",
@@ -82,7 +85,6 @@ class _OrderedGroup(TyperGroup):
 app = typer.Typer(
     name="aai",
     help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
-    no_args_is_help=True,
     # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
     # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
@@ -99,14 +101,43 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _profile_has_key(state: AppState) -> bool:
+    try:
+        config.resolve_api_key(profile=state.profile)
+    except NotAuthenticated:
+        return False
+    return True
+
+
+def _interactive_session() -> bool:
+    """True only when both ends are a real TTY (so we never block a piped/CI run)."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
+    """No subcommand given: offer guided setup to a credential-less, interactive user;
+    otherwise print help. Never prompts in a non-interactive session, and never on
+    `--help` (Click handles that eagerly before the callback)."""
+    if (
+        _interactive_session()
+        and not _profile_has_key(state)
+        and typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True)
+    ):
+        wiz_ctx = WizardContext(state=state, profile=state.resolve_profile(), json_mode=False)
+        raise typer.Exit(code=wizard.run_onboarding(onboard.build_prompter(), wiz_ctx))
+    typer.echo(ctx.get_help())
+    raise typer.Exit()
+
+
 @app.callback(
+    invoke_without_command=True,
     epilog=examples_epilog(
         [
-            ("Sign in with your browser", "aai login"),
+            ("Guided setup (start here)", "aai onboard"),
             ("Transcribe a file", "aai transcribe call.mp3"),
             ("Scaffold a starter app", "aai init"),
         ]
-    )
+    ),
 )
 def main(
     ctx: typer.Context,
@@ -147,6 +178,8 @@ def main(
     warning = env_override_warning(state)
     if warning and not quiet:
         output.error_console.print(output.warn(warning))
+    if ctx.invoked_subcommand is None:
+        _offer_or_help(ctx, state)
 
 
 # Help-panel grouping: named sub-typers carry their panel on `add_typer`; merged

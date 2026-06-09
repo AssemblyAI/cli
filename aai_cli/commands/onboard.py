@@ -14,7 +14,7 @@ from aai_cli.onboard.sections import WizardContext
 app = typer.Typer()
 
 
-def _build_prompter() -> Prompter:
+def build_prompter() -> Prompter:
     """A real prompter only when both ends are a TTY; otherwise never block."""
     if sys.stdin.isatty() and sys.stdout.isatty():
         return InteractivePrompter()
@@ -48,7 +48,7 @@ def onboard(
             )
             return
         wiz_ctx = WizardContext(state=state, profile=profile, json_mode=json_mode)
-        code = wizard.run_onboarding(_build_prompter(), wiz_ctx)
+        code = wizard.run_onboarding(build_prompter(), wiz_ctx)
         if code != 0:
             raise typer.Exit(code=code)
 

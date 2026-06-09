@@ -12,7 +12,7 @@ decorator would otherwise silently spawn a duplicate panel.
 
 from __future__ import annotations
 
-QUICK_START = "Quick Start"  # zero-to-running onboarding: init
+QUICK_START = "Quick Start"  # zero-to-running onboarding: onboard, init
 TRANSCRIPTION = "Transcription & AI"  # the verbs you run: transcribe, stream, agent, llm
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
