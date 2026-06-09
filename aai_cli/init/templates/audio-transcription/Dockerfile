@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Shell form so ${PORT} expands. Railway/Render inject $PORT; Fly uses its
-# fly.toml internal_port (default 8000). Binds 0.0.0.0 so the platform can reach it.
-CMD python -m uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-8000}
+# Fly reads EXPOSE to set its fly.toml internal_port; keep it in sync with the CMD
+# default so the proxy and the app agree on the port.
+EXPOSE 8080
+# Shell form so ${PORT} expands. Railway/Render inject $PORT; Fly maps to 8080.
+CMD python -m uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-8080}

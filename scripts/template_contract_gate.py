@@ -207,6 +207,19 @@ def _dockerfile_runs_uvicorn(template: str, path: Path) -> None:
     for token in ("uvicorn api.index:app", "--host 0.0.0.0", "${PORT"):
         if token not in dockerfile:
             _fail(f"{template}: Dockerfile must contain {token!r}")
+    # Fly auto-detects internal_port from EXPOSE; without a match to the CMD's
+    # default port, Fly's proxy hits a port the app never binds.
+    exposed = re.search(r"^EXPOSE\s+(\d+)\s*$", dockerfile, re.MULTILINE)
+    cmd_default = re.search(r"--port \$\{PORT:-(\d+)\}", dockerfile)
+    if exposed is None:
+        _fail(f"{template}: Dockerfile must declare EXPOSE 8080")
+    if cmd_default is None:
+        _fail(f"{template}: Dockerfile CMD must default to ${{PORT:-8080}}")
+    if exposed.group(1) != "8080" or cmd_default.group(1) != "8080":
+        _fail(
+            f"{template}: Dockerfile must EXPOSE 8080 and default CMD to ${{PORT:-8080}}; "
+            f"got EXPOSE {exposed.group(1)} and ${{PORT:-{cmd_default.group(1)}}}"
+        )
 
 
 def _dockerignore_excludes_env(template: str, path: Path) -> None:

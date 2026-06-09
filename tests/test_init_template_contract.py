@@ -53,6 +53,20 @@ def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
     assert "${PORT" in dockerfile, (
         f"{template_dir.name}: Dockerfile must honor the platform's ${{PORT}}"
     )
+    # Fly auto-detects internal_port from EXPOSE; it must match the CMD's default
+    # port or Fly's proxy hits a port the app never binds (connection refused).
+    exposed = re.search(r"^EXPOSE\s+(\d+)\s*$", dockerfile, re.MULTILINE)
+    cmd_default = re.search(r"--port \$\{PORT:-(\d+)\}", dockerfile)
+    assert exposed is not None and exposed.group(1) == "8080", (
+        f"{template_dir.name}: Dockerfile must declare EXPOSE 8080"
+    )
+    assert cmd_default is not None and cmd_default.group(1) == "8080", (
+        f"{template_dir.name}: Dockerfile CMD must default to ${{PORT:-8080}}"
+    )
+    assert exposed.group(1) == cmd_default.group(1), (
+        f"{template_dir.name}: EXPOSE {exposed.group(1)} must match "
+        f"CMD default ${{PORT:-{cmd_default.group(1)}}}"
+    )
 
 
 def test_dockerignore_excludes_env(template_dir):
