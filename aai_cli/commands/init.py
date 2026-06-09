@@ -163,8 +163,69 @@ def _launch(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: 
         raise typer.Exit(code=code)
 
 
+def run_init(
+    state: AppState,
+    *,
+    template: str | None,
+    directory: str | None,
+    no_install: bool,
+    no_open: bool,
+    force: bool,
+    here: bool,
+    port: int,
+    json_mode: bool,
+    launch: bool = True,
+) -> Path:
+    """Scaffold (and optionally install/launch) a template; return the target dir.
+
+    `launch=False` is for callers like the onboarding wizard that must not block on a
+    running dev server — it stops after install and leaves the run command as a hint.
+    """
+    if not json_mode:
+        # Vercel-style banner at the top of the run.
+        output.console.print(
+            f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
+        )
+    chosen = _resolve_template(template)
+    target = _resolve_target(directory, chosen, here=here, force=force)
+
+    api_key = keys.resolve_optional_api_key(profile=state.profile)
+    report = _scaffold_report(chosen, target, api_key)
+
+    use_uv = runner.has_uv()
+    install_rows, will_launch = _install_step(
+        target, no_install=no_install, api_key=api_key, use_uv=use_uv
+    )
+    report.extend(install_rows)
+
+    # Deps are installed but there's no key, so the server can't start — say so
+    # rather than exiting silently.
+    if not no_install and api_key is None:
+        report.append(
+            {
+                "name": "launch",
+                "status": "skipped",
+                "detail": f"no API key; run `aai login`, then: cd {target} && uv run uvicorn api.index:app",
+            }
+        )
+
+    output.emit(report, lambda d: steps.render_steps(d, heading="Setup"), json_mode=json_mode)
+    if any(s["status"] == "failed" for s in report):
+        raise typer.Exit(code=1)
+
+    if launch and will_launch:
+        _launch(target, port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
+    elif not json_mode:
+        # Scaffolded but not launched (no key, or --no-install, or launch=False): leave the
+        # user with the one command that starts their app, the way `vercel`/`supabase` sign off.
+        output.console.print(
+            output.hint(f"Run `cd {escape(str(target))} && uv run uvicorn api.index:app`.")
+        )
+    return target
+
+
 @app.command(
-    rich_help_panel=help_panels.QUICK_START,
+    rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
             ("Scaffold a new app interactively", "aai init"),
@@ -172,7 +233,12 @@ def _launch(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: 
                 "Scaffold an audio transcription app into ./my-app",
                 "aai init audio-transcription my-app",
             ),
+            ("Scaffold a voice agent app", "aai init voice-agent"),
             ("Scaffold into the current directory", "aai init audio-transcription --here"),
+            (
+                "Scaffold only, without installing or launching",
+                "aai init audio-transcription --no-install",
+            ),
         ]
     ),
 )
@@ -193,7 +259,7 @@ def init(
     port: int = typer.Option(3000, "--port", help="Local server port."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Build a new app: pick a template, scaffold it, install deps, launch it, open the browser.
+    """Scaffold a new project from a template, then launch it.
 
     This is the starting point for creating an app — including a voice agent app
     ('aai init voice-agent'). The 'aai agent' command only runs a live mic
@@ -201,45 +267,16 @@ def init(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        if not json_mode:
-            # Vercel-style banner at the top of the run.
-            output.console.print(
-                f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
-            )
-        chosen = _resolve_template(template)
-        target = _resolve_target(directory, chosen, here=here, force=force)
-
-        api_key = keys.resolve_optional_api_key(profile=state.profile)
-        report = _scaffold_report(chosen, target, api_key)
-
-        use_uv = runner.has_uv()
-        install_rows, will_launch = _install_step(
-            target, no_install=no_install, api_key=api_key, use_uv=use_uv
+        run_init(
+            state,
+            template=template,
+            directory=directory,
+            no_install=no_install,
+            no_open=no_open,
+            force=force,
+            here=here,
+            port=port,
+            json_mode=json_mode,
         )
-        report.extend(install_rows)
-
-        # Deps are installed but there's no key, so the server can't start — say so
-        # rather than exiting silently.
-        if not no_install and api_key is None:
-            report.append(
-                {
-                    "name": "launch",
-                    "status": "skipped",
-                    "detail": f"no API key; run `aai login`, then: cd {target} && uv run uvicorn api.index:app",
-                }
-            )
-
-        output.emit(report, lambda d: steps.render_steps(d, heading="Setup"), json_mode=json_mode)
-        if any(s["status"] == "failed" for s in report):
-            raise typer.Exit(code=1)
-
-        if will_launch:
-            _launch(target, port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
-        elif not json_mode:
-            # Scaffolded but not launched (no key, or --no-install): leave the user with
-            # the one command that starts their app, the way `vercel`/`supabase` sign off.
-            output.console.print(
-                output.hint(f"Run `cd {escape(str(target))} && uv run uvicorn api.index:app`.")
-            )
 
     run_command(ctx, body, json=json_out)

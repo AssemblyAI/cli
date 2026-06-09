@@ -70,6 +70,7 @@ def _open_audio(
         [
             ("Start a live voice conversation", "aai agent"),
             ("Pick a voice and opening line", 'aai agent --voice james --greeting "Hi there"'),
+            ("Give the agent a persona", 'aai agent --system-prompt "You are a terse pirate."'),
             ("See available voices", "aai agent --list-voices"),
             ("Print equivalent Python instead of running", "aai agent --show-code"),
         ]
@@ -117,8 +118,9 @@ def agent(
 ) -> None:
     """Have a live two-way voice conversation with an AssemblyAI voice agent.
 
-    Pass an audio file/URL (or --sample) to speak a recorded clip to the agent
-    instead of the microphone; the session then ends after the agent's reply.
+    Use headphones: the mic stays open while the agent speaks, so on speakers it would
+    hear itself and loop. Pass an audio file/URL (or --sample) to speak a recorded clip to
+    the agent instead of the microphone; the session then ends after the agent's reply.
 
     This only runs a conversation in the terminal — it writes no code. To build
     a voice agent app, run 'aai init voice-agent' instead.

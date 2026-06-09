@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import assemblyai as aai
 import typer
+from rich.markup import escape
 
 from aai_cli import (
     choices,
@@ -16,9 +15,8 @@ from aai_cli import (
     help_panels,
     llm,
     output,
-    stdio,
+    transcribe_exec,
     transcribe_render,
-    youtube,
 )
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -27,53 +25,17 @@ from aai_cli.help_text import examples_epilog
 app = typer.Typer()
 
 
-def _render_transform_steps(d: dict[str, Any]) -> str:
-    """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
-    steps = d["transform"]["steps"]
-    if len(steps) == 1:
-        return str(steps[0]["output"])
-    return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
-
-
-def _transcribe_audio(
-    api_key: str,
-    source: str | None,
-    *,
-    sample: bool,
-    transcription_config: aai.TranscriptionConfig,
-) -> aai.Transcript:
-    if source == "-":
-        # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
-        # The SDK uploads a path, so buffer the bytes to a temp file first.
-        data = stdio.read_binary_stdin()
-        if not data:
-            raise UsageError("No audio received on stdin.")
-        with tempfile.TemporaryDirectory(prefix="aai-stdin-") as td:
-            local = Path(td) / "audio"
-            local.write_bytes(data)
-            return client.transcribe(api_key, str(local), config=transcription_config)
-
-    audio = client.resolve_audio_source(source, sample=sample)
-    if youtube.is_youtube_url(audio):
-        # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
-        with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(audio, Path(td))
-            return client.transcribe(api_key, str(local), config=transcription_config)
-    return client.transcribe(api_key, audio, config=transcription_config)
-
-
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
             ("Transcribe a local file", "aai transcribe call.mp3"),
             ("Try it with the hosted sample", "aai transcribe --sample"),
-            (
-                "Diarize two speakers and redact PII",
-                "aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii",
-            ),
-            ("Get just the text for a pipeline", "aai transcribe call.mp3 -o text"),
-            ("Print equivalent Python instead of running", "aai transcribe call.mp3 --show-code"),
+            ("Transcribe a YouTube video", "aai transcribe https://youtu.be/dtp6b76pMak"),
+            ("Label who said what", "aai transcribe call.mp3 --speaker-labels"),
+            ("Redact PII for compliance", "aai transcribe call.mp3 --redact-pii"),
+            ("Summarize a recording", "aai transcribe call.mp3 --summarization"),
+            ("Ask about the transcript", 'aai transcribe call.mp3 --llm "List the action items"'),
         ]
     ),
 )
@@ -338,12 +300,23 @@ def transcribe(
         help="Max tokens.",
         rich_help_panel=help_panels.OPT_LLM,
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = typer.Option(
+        False,
+        "--json",
+        help="Output the full result as JSON. Text stays the default even when piped; "
+        "opt in here (same as -o json).",
+    ),
     output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Print one field of the result.",
+        help="Print one field: text, id, status, utterances, srt (captions), or json.",
+    ),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Save the result to a file instead of printing it (clean text; pairs with -o).",
+        dir_okay=False,
     ),
     show_code: bool = typer.Option(
         False,
@@ -353,9 +326,10 @@ def transcribe(
 ) -> None:
     """Transcribe an audio file, URL, or YouTube link.
 
-    A YouTube URL is downloaded first, then transcribed. Curated flags cover common
-    features; --config KEY=VALUE and --config-file reach every other field. Analysis
-    results (summary, chapters, sentiment, ...) render automatically in human mode.
+    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo). Save with
+    --out FILE, or pipe one field with -o text. A YouTube URL is downloaded first, then
+    transcribed. Curated flags cover common features; --config KEY=VALUE and --config-file
+    reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -403,15 +377,26 @@ def transcribe(
         }
         flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
+        if out is not None and llm_prompt:
+            # --out captures the transcript itself; an LLM transform is a separate step.
+            raise UsageError(
+                "--out can't be combined with --llm.",
+                suggestion='Pipe the transform instead, e.g. -o text | aai llm -f "…".',
+            )
+
         merged = config_builder.merge_transcribe_config(
             flags=flags, overrides=config_kv, config_file=config_file
         )
 
         if show_code:
-            # Print-only: build the equivalent script from the flags and exit without
-            # transcribing or authenticating. Raw stdout so `--show-code > script.py`
-            # yields a runnable file.
-            audio = client.resolve_audio_source(source, sample=sample)
+            # Print-only: build the equivalent script and exit without transcribing or
+            # authenticating (raw stdout, so `--show-code > script.py` runs). No
+            # source/--sample needed — fall back to a placeholder path for a pure snippet.
+            audio = (
+                client.resolve_audio_source(source, sample=sample)
+                if source or sample
+                else "your-audio-file.mp3"
+            )
             gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
             output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
             return
@@ -420,7 +405,20 @@ def transcribe(
 
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode):
-            transcript = _transcribe_audio(api_key, source, sample=sample, transcription_config=tc)
+            transcript = transcribe_exec.run_transcription(
+                api_key, source, sample=sample, transcription_config=tc
+            )
+
+        if out is not None:
+            # Write a clean file artifact and confirm on stderr; stdout stays empty.
+            if ".." in out.parts:  # reject path-traversal segments in --out
+                raise UsageError(f"--out path can't contain '..': {out}")
+            out.write_text(
+                transcribe_exec.out_payload(transcript, output_field, json_mode=json_mode) + "\n"
+            )
+            if not state.quiet:
+                output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
+            return
 
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json and analysis render).
@@ -440,7 +438,7 @@ def transcribe(
             output.emit(
                 client.transcript_summary(transcript)
                 | {"transform": {"model": model, "steps": steps}},
-                _render_transform_steps,
+                transcribe_exec.render_transform_steps,
                 json_mode=json_mode,
             )
             return

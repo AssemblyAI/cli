@@ -4,6 +4,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import typer
+from typer import completion, rich_utils
 from typer.core import TyperGroup
 
 if TYPE_CHECKING:
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, environments, help_panels, output, stdio
+from aai_cli import __version__, config, environments, help_panels, output, stdio, theme
 from aai_cli.commands import (
     account,
     agent,
@@ -21,7 +22,7 @@ from aai_cli.commands import (
     keys,
     llm,
     login,
-    samples,
+    onboard,
     sessions,
     setup,
     stream,
@@ -29,8 +30,10 @@ from aai_cli.commands import (
     transcripts,
 )
 from aai_cli.context import AppState, env_override_warning, resolve_environment
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
+from aai_cli.onboard import wizard
+from aai_cli.onboard.sections import WizardContext
 
 # The order commands appear under `aai --help`. Commands are grouped into named
 # Rich panels (see `help_panels.py`); panels render in the order their first
@@ -38,17 +41,17 @@ from aai_cli.help_text import examples_epilog
 # most-common-first. Names not listed fall to the end, sorted alphabetically.
 _COMMAND_ORDER = (
     # Quick Start — zero-to-running onboarding
+    "onboard",
+    # Build an App — scaffold a new project
     "init",
-    # Setup & Tools — get set up & maintain; `version` last
-    "samples",
-    "doctor",
-    "setup",
-    "version",
-    # Transcription & AI — the verbs you run
+    # Run AssemblyAI — use AssemblyAI directly from the terminal
     "transcribe",
     "stream",
     "agent",
     "llm",
+    # Setup & Tools — get set up & maintain
+    "doctor",
+    "setup",
     # History — browse past work
     "transcripts",
     "sessions",
@@ -68,7 +71,7 @@ class _OrderedGroup(TyperGroup):
     """Lists commands in `_COMMAND_ORDER` rather than registration order.
 
     Typer renders all direct commands before sub-typer groups, so registration
-    order alone can't place `version` last; sorting here controls help output.
+    order alone can't control the panel layout; sorting here drives help output.
     """
 
     def list_commands(self, ctx: ClickContext) -> list[str]:
@@ -77,11 +80,35 @@ class _OrderedGroup(TyperGroup):
             super().list_commands(ctx), key=lambda name: (rank.get(name, len(rank)), name)
         )
 
+    def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:
+        # Stash the full token list before anything is parsed, so the root callback can
+        # tell whether the (not-yet-parsed) subcommand opted into JSON — see
+        # `_command_line_requests_json`. Recorded here because Click clears the pending
+        # args off the context before the group callback runs.
+        ctx.meta[_RAW_ARGS_META_KEY] = list(args)
+        return super().parse_args(ctx, args)
+
+
+# Typer renders option flags and command names in "bold cyan" by default; retint
+# both to the brand accent (the logo blue) so the help screen matches the rest of
+# the CLI. Set before the app renders any help.
+rich_utils.STYLE_OPTION = f"bold {theme.BRAND}"
+rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {theme.BRAND}"
+
+# Typer's built-in `--show-completion` help is long enough to wrap several lines in
+# the options panel. Trim it so it fits on fewer rows. The OptionInfo objects live on
+# the completion placeholder's parameter defaults; reach the (underscore-prefixed)
+# placeholder through the module dict so it isn't flagged as private-attribute use.
+_completion_placeholder = vars(completion)["_install_completion_placeholder_function"]
+for _opt in _completion_placeholder.__defaults__ or ():
+    if isinstance(_opt.help, str) and _opt.help.startswith("Show completion"):
+        _opt.help = "Show completion for the current shell."
+
 
 app = typer.Typer(
     name="aai",
-    help="AssemblyAI from your terminal — transcribe, stream, and build voice AI.",
-    no_args_is_help=True,
+    # No top-level `help=`: the bare-`aai` welcome banner already carries the
+    # "AssemblyAI from your terminal" tagline, so a description here would duplicate it.
     # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
     # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
@@ -98,14 +125,70 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _profile_has_key(state: AppState) -> bool:
+    try:
+        config.resolve_api_key(profile=state.profile)
+    except NotAuthenticated:
+        return False
+    return True
+
+
+def _interactive_session() -> bool:
+    """True only when both ends are a real TTY (so we never block a piped/CI run)."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+_RAW_ARGS_META_KEY = "aai_raw_args"
+
+
+def _command_line_requests_json(raw_args: list[str]) -> bool:
+    """Whether the token list opts into JSON (``--json``, ``-o json``, ``--output json``,
+    or their glued forms).
+
+    The root callback runs before the subcommand parses its own ``--json``, so a failure
+    raised here (e.g. a bad ``--env``) would otherwise always render human text — leaving a
+    ``… --json`` pipeline without the uniform ``{"error": …}`` shape it relies on. The group
+    stashes the raw token list in ``ctx.meta`` (see ``_OrderedGroup.parse_args``) before the
+    callback runs, so sniffing it lets every failure class honor the request.
+    """
+    for index, token in enumerate(raw_args):
+        if token in ("--json", "--output=json", "-ojson"):
+            return True
+        if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
+            return True
+    return False
+
+
+def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
+    """No subcommand given: offer guided setup to a credential-less, interactive user;
+    otherwise print help. Never prompts in a non-interactive session, and never on
+    `--help` (Click handles that eagerly before the callback)."""
+    if not state.quiet:
+        output.print_banner()
+    if _interactive_session() and not _profile_has_key(state):
+        if not state.quiet:
+            output.console.print()  # blank line so the prompt isn't flush against the banner
+        if typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True):
+            wiz_ctx = WizardContext(state=state, profile=state.resolve_profile(), json_mode=False)
+            raise typer.Exit(code=wizard.run_onboarding(onboard.build_prompter(), wiz_ctx))
+    typer.echo(ctx.get_help())
+    raise typer.Exit()
+
+
 @app.callback(
+    invoke_without_command=True,
     epilog=examples_epilog(
         [
-            ("Sign in with your browser", "aai login"),
+            ("Guided setup (start here)", "aai onboard"),
             ("Transcribe a file", "aai transcribe call.mp3"),
-            ("Scaffold a starter app", "aai init"),
+            ("Stream live audio in real time", "aai stream"),
+            ("Talk to a voice agent", "aai agent"),
+            (
+                "Summarize while transcribing",
+                'aai transcribe call.mp3 --llm "summarize action items"',
+            ),
         ]
-    )
+    ),
 )
 def main(
     ctx: typer.Context,
@@ -135,9 +218,11 @@ def main(
         env = "sandbox000"
     state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
-    # The command's own --json flag isn't parsed yet, and output is human-by-default, so a
-    # root-callback (e.g. bad --env) error renders as human text on stderr.
-    json_mode = output.resolve_json(explicit=False)
+    # The command's own --json flag isn't parsed yet, so sniff the pending command line:
+    # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
+    # invocation opted into JSON, and renders human text on stderr otherwise.
+    raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
+    json_mode = output.resolve_json(explicit=_command_line_requests_json(raw_args))
     try:
         environments.set_active(resolve_environment(state))
     except CLIError as err:
@@ -146,6 +231,8 @@ def main(
     warning = env_override_warning(state)
     if warning and not quiet:
         output.error_console.print(output.warn(warning))
+    if ctx.invoked_subcommand is None:
+        _offer_or_help(ctx, state)
 
 
 # Help-panel grouping: named sub-typers carry their panel on `add_typer`; merged
@@ -162,16 +249,10 @@ app.add_typer(llm.app)
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
-app.add_typer(samples.app, name="samples", rich_help_panel=help_panels.SETUP)
 app.add_typer(init.app)
+app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
-
-
-@app.command(rich_help_panel=help_panels.SETUP)
-def version() -> None:
-    """Show the CLI version."""
-    typer.echo(__version__)
 
 
 def run() -> None:

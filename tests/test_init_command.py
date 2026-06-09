@@ -60,6 +60,22 @@ def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypat
     assert "uvicorn api.index" in result.output
 
 
+def test_init_logged_out_install_emits_launch_skipped_step_json(tmp_path, monkeypatch):
+    # In --json mode the only signal for the no-key launch guard is the structured
+    # "launch"/"skipped" step (human mode prints the uvicorn hint regardless), so this
+    # specifically pins the `api_key is None` half of the guard.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "aai_cli.init.runner.run_setup",
+        lambda *a, **k: subprocess.CompletedProcess([], 0, "", ""),
+    )
+    result = runner.invoke(app, ["init", TEMPLATE, "app", "--json"])  # install, logged out
+    assert result.exit_code == 0, result.output
+    assert '"name": "launch"' in result.output
+    assert '"status": "skipped"' in result.output
+    assert "no API key" in result.output
+
+
 def test_init_writes_base_url_for_active_env(tmp_path, monkeypatch):
     # The generated .env pins the app to the CLI's active environment hosts.
     monkeypatch.chdir(tmp_path)

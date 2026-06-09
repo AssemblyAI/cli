@@ -38,7 +38,7 @@ fi
 
 # --- Next steps -----------------------------------------------------------
 if command -v aai >/dev/null 2>&1; then
-  info "Installed. Next: run 'aai login', then 'aai transcribe --sample'."
+  info "Installed. Next: run 'aai onboard'."
 else
   info "Installed, but 'aai' isn't on your PATH yet."
   info "Run 'pipx ensurepath' (or add ~/.local/bin to PATH), then restart your shell."

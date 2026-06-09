@@ -36,9 +36,11 @@ class NotAuthenticated(CLIError):
     # same split gh uses.
     def __init__(
         self,
-        message: str = "Not authenticated.",
+        message: str = "You're not signed in.",
         *,
-        suggestion: str | None = "Run 'aai login'.",
+        suggestion: str | None = (
+            "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."
+        ),
     ) -> None:
         super().__init__(
             message, error_type="not_authenticated", exit_code=4, suggestion=suggestion

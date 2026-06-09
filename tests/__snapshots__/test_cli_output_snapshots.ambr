@@ -6,8 +6,12 @@
   
    Have a live two-way voice conversation with an AssemblyAI voice agent.
   
-   Pass an audio file/URL (or --sample) to speak a recorded clip to the agent
-   instead of the microphone; the session then ends after the agent's reply.
+   Use headphones: the mic stays open while the agent speaks, so on speakers it
+   would
+   hear itself and loop. Pass an audio file/URL (or --sample) to speak a recorded
+   clip to
+   the agent instead of the microphone; the session then ends after the agent's
+   reply.
   
    This only runs a conversation in the terminal — it writes no code. To build
    a voice agent app, run 'aai init voice-agent' instead.
@@ -54,6 +58,8 @@
    $ aai agent
    Pick a voice and opening line
    $ aai agent --voice james --greeting "Hi there"
+   Give the agent a persona
+   $ aai agent --system-prompt "You are a terse pirate."
    See available voices
    $ aai agent --list-voices
    Print equivalent Python instead of running
@@ -81,11 +87,15 @@
   
    Examples
    Recent audit-log entries
-   $ aai audit --limit 20
+   $ aai audit
+   Show more entries
+   $ aai audit --limit 100
    Include login events
    $ aai audit --include-logins
    Filter by action
    $ aai audit --action token.create
+   Filter by resource, as JSON
+   $ aai audit --resource token --json
   
   
   
@@ -106,6 +116,8 @@
    Examples
    Show your remaining balance
    $ aai balance
+   Get the raw cents for scripting
+   $ aai balance --json | jq '.balance_in_cents'
   
   
   
@@ -126,6 +138,8 @@
    Examples
    Check your environment is ready
    $ aai doctor
+   Output results as JSON
+   $ aai doctor --json
   
   
   
@@ -136,8 +150,7 @@
   
    Usage: aai init [OPTIONS] [TEMPLATE] [DIRECTORY]
   
-   Build a new app: pick a template, scaffold it, install deps, launch it, open
-   the browser.
+   Scaffold a new project from a template, then launch it.
   
    This is the starting point for creating an app — including a voice agent app
    ('aai init voice-agent'). The 'aai agent' command only runs a live mic
@@ -163,8 +176,12 @@
    $ aai init
    Scaffold an audio transcription app into ./my-app
    $ aai init audio-transcription my-app
+   Scaffold a voice agent app
+   $ aai init voice-agent
    Scaffold into the current directory
    $ aai init audio-transcription --here
+   Scaffold only, without installing or launching
+   $ aai init audio-transcription --no-install
   
   
   
@@ -190,6 +207,9 @@
    $ aai keys create --name ci-pipeline
    Create a key in a specific project
    $ aai keys create --name prod --project 7
+   Capture the new key into an env var
+   $ export ASSEMBLYAI_API_KEY=$(aai keys create --name ci --json | jq -r
+   '.api_key')
   
   
   
@@ -212,6 +232,8 @@
    $ aai keys list
    As JSON for scripting
    $ aai keys list --json
+   Get key ids to use with rename
+   $ aai keys list --json | jq '.[].id'
   
   
   
@@ -256,6 +278,8 @@
    Examples
    Show rate limits per service
    $ aai limits
+   As JSON for scripting
+   $ aai limits --json
   
   
   
@@ -299,10 +323,13 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Summarize a past transcript
-   $ aai llm "summarize" --transcript-id 5551234-abcd
+   Ask about a past transcript
+   $ aai llm "summarize the key decisions" --transcript-id 5551234-abcd
    Pipe any text in
    $ echo "meeting notes" | aai llm "turn into action items"
+   Pick a model and add a system prompt
+   $ aai llm "draft a follow-up email" --model claude-opus-4-7 --system "Be
+   concise."
    See available models
    $ aai llm --list-models
   
@@ -353,39 +380,12 @@
   
   '''
 # ---
-# name: test_command_help_matches_snapshot[samples_create]
+# name: test_command_help_matches_snapshot[onboard]
   '''
   
-   Usage: aai samples create [OPTIONS] NAME
+   Usage: aai onboard [OPTIONS]
   
-   Scaffold a runnable starter script (reads ASSEMBLYAI_API_KEY from the
-   environment).
-  
-  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    name      TEXT  Sample name. [required]                                 │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --force          Overwrite an existing sample file.                          │
-  │ --json           Output raw JSON.                                            │
-  │ --help           Show this message and exit.                                 │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Scaffold a transcribe starter script
-   $ aai samples create transcribe
-   Overwrite an existing script
-   $ aai samples create transcribe --force
-  
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[samples_list]
-  '''
-  
-   Usage: aai samples list [OPTIONS]
-  
-   List available sample scripts.
+   Guided setup: sign in, run your first transcription, and start building.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --json          Output raw JSON.                                             │
@@ -393,8 +393,8 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   List available starter scripts
-   $ aai samples list
+   Run the guided setup
+   $ aai onboard
   
   
   
@@ -418,6 +418,10 @@
    Examples
    Show one session's details
    $ aai sessions get <session-id>
+   Raw JSON for one session
+   $ aai sessions get <session-id> --json
+   Drill into the latest session
+   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
   
   
   
@@ -440,8 +444,12 @@
    Examples
    List recent streaming sessions
    $ aai sessions list
-   Only completed sessions
-   $ aai sessions list --status completed
+   Find failed sessions
+   $ aai sessions list --status error
+   Inspect the most recent session
+   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
+   Total audio across recent sessions (seconds)
+   $ aai sessions list --json | jq '[.[].audio_duration_sec] | add'
   
   
   
@@ -452,7 +460,14 @@
   
    Usage: aai setup install [OPTIONS]
   
-   Install the AssemblyAI docs MCP server and skills into your coding agent.
+   Set up your coding agent for AssemblyAI by installing three things:
+  
+   the assemblyai-docs MCP server (live API docs, via `claude mcp add`), the
+   AssemblyAI
+   skill (via `npx skills add`), and the bundled aai-cli skill (copied from this
+   package,
+   no network). Each step is idempotent and skipped if already present unless
+   --force.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --scope        [user|project|local]  Config scope to register the MCP under. │
@@ -468,6 +483,8 @@
    $ aai setup install
    Install for the current project only
    $ aai setup install --scope project
+   Reinstall everything even if already present
+   $ aai setup install --force
   
   
   
@@ -491,6 +508,8 @@
    Examples
    Remove the AssemblyAI MCP server and skills
    $ aai setup remove
+   Remove only from the project scope
+   $ aai setup remove --scope project
   
   
   
@@ -512,6 +531,8 @@
    Examples
    Show what's set up
    $ aai setup status
+   Print status as JSON
+   $ aai setup status --json
   
   
   
@@ -522,15 +543,21 @@
   
    Usage: aai stream [OPTIONS] [SOURCE]
   
-   Transcribe live audio in real time — from your mic, a file, or a URL.
+   Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
   
-   --prompt biases the speech model. --llm runs a prompt over the live transcript
-   through LLM Gateway, refreshing the answer on every finalized turn (e.g.
-   "summarize action items").
+   Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
+   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -. --prompt biases
+   the
+   speech model. --llm runs a prompt over the live transcript in-process,
+   refreshing the
+   answer on every finalized turn; for a separate step instead, pipe the text out
+   with
+   -o text | aai llm -f "…".
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Omit │
-  │                         to use the microphone.                               │
+  │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Use  │
+  │                         - for raw PCM16/mono/16k on stdin. Omit to use the   │
+  │                         microphone.                                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                          Stream the hosted wildfires.mp3 sample.    │
@@ -632,10 +659,14 @@
    Examples
    Stream from your microphone
    $ aai stream
-   Stream mic + system audio on macOS
-   $ aai stream --system-audio
+   Stream a file or URL in real time
+   $ aai stream recording.wav
    Stream the hosted sample
    $ aai stream --sample
+   Label speakers in the live transcript
+   $ aai stream --speaker-labels
+   Boost domain terms with keyterm prompts
+   $ aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk
    $ aai stream --llm "summarize action items"
    Print equivalent Python instead of running
@@ -652,11 +683,13 @@
   
    Transcribe an audio file, URL, or YouTube link.
   
-   A YouTube URL is downloaded first, then transcribed. Curated flags cover
-   common
-   features; --config KEY=VALUE and --config-file reach every other field.
-   Analysis
-   results (summary, chapters, sentiment, ...) render automatically in human
+   Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
+   Save with
+   --out FILE, or pipe one field with -o text. A YouTube URL is downloaded first,
+   then
+   transcribed. Curated flags cover common features; --config KEY=VALUE and
+   --config-file
+   reach every other field. Analysis (summary, chapters, ...) renders in human
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
@@ -665,9 +698,18 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                         Use the hosted              │
   │                                                  wildfires.mp3 sample.       │
-  │ --json                                           Output raw JSON.            │
-  │ --output     -o      [text|id|status|utterances  Print one field of the      │
-  │                      |srt|json]                  result.                     │
+  │ --json                                           Output the full result as   │
+  │                                                  JSON. Text stays the        │
+  │                                                  default even when piped;    │
+  │                                                  opt in here (same as -o     │
+  │                                                  json).                      │
+  │ --output     -o      [text|id|status|utterances  Print one field: text, id,  │
+  │                      |srt|json]                  status, utterances, srt     │
+  │                                                  (captions), or json.        │
+  │ --out                FILE                        Save the result to a file   │
+  │                                                  instead of printing it      │
+  │                                                  (clean text; pairs with     │
+  │                                                  -o).                        │
   │ --show-code                                      Print the equivalent Python │
   │                                                  SDK code and exit (does not │
   │                                                  transcribe).                │
@@ -764,12 +806,16 @@
    $ aai transcribe call.mp3
    Try it with the hosted sample
    $ aai transcribe --sample
-   Diarize two speakers and redact PII
-   $ aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
-   Get just the text for a pipeline
-   $ aai transcribe call.mp3 -o text
-   Print equivalent Python instead of running
-   $ aai transcribe call.mp3 --show-code
+   Transcribe a YouTube video
+   $ aai transcribe https://youtu.be/dtp6b76pMak
+   Label who said what
+   $ aai transcribe call.mp3 --speaker-labels
+   Redact PII for compliance
+   $ aai transcribe call.mp3 --redact-pii
+   Summarize a recording
+   $ aai transcribe call.mp3 --summarization
+   Ask about the transcript
+   $ aai transcribe call.mp3 --llm "List the action items"
   
   
   
@@ -795,6 +841,10 @@
    Examples
    Fetch a transcript's text by id
    $ aai transcripts get 5551234-abcd
+   Speaker-labeled turns
+   $ aai transcripts get 5551234-abcd -o utterances
+   Save SRT subtitles
+   $ aai transcripts get 5551234-abcd -o srt > captions.srt
    Get the raw JSON
    $ aai transcripts get 5551234-abcd --json
   
@@ -818,6 +868,13 @@
    Examples
    List your recent transcripts
    $ aai transcripts list
+   Show more at once
+   $ aai transcripts list --limit 50
+   Grab the latest transcript id
+   $ aai transcripts list --json | jq -r '.[0].id'
+   Summarize your latest transcript
+   $ aai llm "summarize" --transcript-id $(aai transcripts list --json | jq -r
+   '.[0].id')
   
   
   
@@ -844,21 +901,11 @@
    $ aai usage
    A specific date range
    $ aai usage --start 2026-05-01 --end 2026-06-01
+   Break spend down by month
+   $ aai usage --window month
+   Total spend in cents for scripting
+   $ aai usage --json | jq '[.usage_items[].line_items[].price] | add'
   
-  
-  
-  '''
-# ---
-# name: test_command_help_matches_snapshot[version]
-  '''
-  
-   Usage: aai version [OPTIONS]
-  
-   Show the CLI version.
-  
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --help          Show this message and exit.                                  │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
   
   
   '''
@@ -891,8 +938,9 @@
 # ---
 # name: test_error_human_render_matches_snapshot[not_authenticated]
   '''
-  Error: Not authenticated.
-  Suggestion: Run 'aai login'.
+  Error: You're not signed in.
+  Suggestion: Run 'aai onboard' for guided setup, or 'aai login' if you have an
+  account.
   
   '''
 # ---
@@ -924,7 +972,7 @@
 # ---
 # name: test_error_json_render_matches_snapshot[not_authenticated]
   '''
-  {"error": {"type": "not_authenticated", "message": "Not authenticated.", "suggestion": "Run 'aai login'."}}
+  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."}}
   
   '''
 # ---

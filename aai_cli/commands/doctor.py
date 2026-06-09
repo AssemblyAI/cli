@@ -36,7 +36,7 @@ class _SoundDeviceModule(Protocol):
 
 
 # Status -> (affordance symbol, render style). "fail" is a blocker; "warn" is
-# degraded-but-usable. Drives the per-check glyph in `_render`.
+# degraded-but-usable. Drives the per-check glyph in `render`.
 _SYMBOL = {
     "ok": (theme.SYMBOL_SUCCESS, "aai.success"),
     "warn": (theme.SYMBOL_WARN, "aai.warn"),
@@ -44,7 +44,7 @@ _SYMBOL = {
 }
 
 
-def _check_python() -> Check:
+def check_python() -> Check:
     v = sys.version_info
     version = f"{v.major}.{v.minor}.{v.micro}"
     if v >= (3, 12):
@@ -99,7 +99,7 @@ def _check_api_key(profile: str) -> Check:
     }
 
 
-def _check_ffmpeg() -> Check:
+def check_ffmpeg() -> Check:
     # ffmpeg is ONLY used to stream non-WAV files or URLs (stream/agent), where it
     # decodes them to 16 kHz mono PCM on the fly. Plain `transcribe` (including
     # YouTube URLs) uploads the file to AssemblyAI and never invokes ffmpeg, so it is
@@ -139,7 +139,7 @@ def _input_channels(device: Mapping[str, object]) -> int:
     return channels if isinstance(channels, int) else 0
 
 
-def _check_audio() -> Check:
+def check_audio() -> Check:
     affects = ["stream (microphone)", "agent"]
     try:
         inputs = _probe_input_devices()
@@ -199,7 +199,7 @@ def _check_coding_agent() -> Check:
     }
 
 
-def _render(data: DoctorResult) -> str:
+def render(data: DoctorResult) -> str:
     checks = data["checks"]
     lines = [output.heading("Environment check")]
     for c in checks:
@@ -223,6 +223,7 @@ def _render(data: DoctorResult) -> str:
     epilog=examples_epilog(
         [
             ("Check your environment is ready", "aai doctor"),
+            ("Output results as JSON", "aai doctor --json"),
         ]
     ),
 )
@@ -235,15 +236,15 @@ def doctor(
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         checks = [
-            _check_python(),
+            check_python(),
             _check_api_key(profile),
-            _check_ffmpeg(),
-            _check_audio(),
+            check_ffmpeg(),
+            check_audio(),
             _check_coding_agent(),
         ]
         ok = not any(c["status"] == "fail" for c in checks)
         payload: DoctorResult = {"ok": ok, "checks": checks}
-        output.emit(payload, _render, json_mode=json_mode)
+        output.emit(payload, render, json_mode=json_mode)
         if not ok:
             raise typer.Exit(code=1)
 

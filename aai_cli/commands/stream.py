@@ -76,8 +76,13 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
     epilog=examples_epilog(
         [
             ("Stream from your microphone", "aai stream"),
-            ("Stream mic + system audio on macOS", "aai stream --system-audio"),
+            ("Stream a file or URL in real time", "aai stream recording.wav"),
             ("Stream the hosted sample", "aai stream --sample"),
+            ("Label speakers in the live transcript", "aai stream --speaker-labels"),
+            (
+                "Boost domain terms with keyterm prompts",
+                'aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
+            ),
             (
                 "Summarize action items live as you talk",
                 'aai stream --llm "summarize action items"',
@@ -90,7 +95,8 @@ def stream(
     ctx: typer.Context,
     source: str | None = typer.Argument(
         None,
-        help="Audio file path, URL, or YouTube URL to stream. Omit to use the microphone.",
+        help="Audio file path, URL, or YouTube URL to stream. Use - for raw PCM16/mono/16k "
+        "on stdin. Omit to use the microphone.",
     ),
     sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample."),
     # audio capture
@@ -323,11 +329,13 @@ def stream(
         help="Print the equivalent Python SDK code and exit (does not stream).",
     ),
 ) -> None:
-    """Transcribe live audio in real time — from your mic, a file, or a URL.
+    """Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
 
-    --prompt biases the speech model. --llm runs a prompt over the live transcript
-    through LLM Gateway, refreshing the answer on every finalized turn (e.g.
-    "summarize action items").
+    Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
+    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -. --prompt biases the
+    speech model. --llm runs a prompt over the live transcript in-process, refreshing the
+    answer on every finalized turn; for a separate step instead, pipe the text out with
+    -o text | aai llm -f "…".
     """
 
     def body(state: AppState, json_mode: bool) -> None:

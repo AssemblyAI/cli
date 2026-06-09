@@ -1,3 +1,5 @@
+import json
+
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -12,8 +14,6 @@ def _fake_login_result(key="sk_from_oauth"):
 
 
 def test_login_with_api_key_flag_stores_key(mocker):
-    import json
-
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["login", "--api-key", "sk_flag", "--json"])
     assert result.exit_code == 0
@@ -36,8 +36,6 @@ def test_login_stores_under_named_profile(mocker):
 
 
 def test_whoami_reports_authenticated(mocker):
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["whoami", "--json"])
@@ -73,8 +71,6 @@ def test_whoami_unauthenticated_runs_login(monkeypatch, mocker):
 
 
 def test_logout_clears_key():
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     result = runner.invoke(app, ["logout", "--json"])
     assert result.exit_code == 0
@@ -163,8 +159,6 @@ def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
 
 
 def test_whoami_reports_env(mocker):
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["--env", "production", "whoami", "--json"])
@@ -176,8 +170,6 @@ def test_whoami_reports_env(mocker):
 def test_root_callback_keeps_profile_env_without_sandbox(mocker):
     # Without --sandbox the profile's own env must stand (pins `sandbox and env is
     # None`: an `or` would force sandbox000 onto every default invocation).
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     config.set_profile_env("default", "production")
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
@@ -189,8 +181,6 @@ def test_root_callback_keeps_profile_env_without_sandbox(mocker):
 def test_root_callback_sandbox_overrides_profile_env(mocker):
     # --sandbox forces sandbox000 even when the profile is bound elsewhere (pins the
     # `env is None` arm: an `is not None` would leave the profile env in place).
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     config.set_profile_env("default", "production")
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
@@ -217,6 +207,20 @@ def test_unknown_env_exits_2(mocker):
         assert '"error"' not in result.output  # never the JSON shape
 
 
+def test_root_callback_error_honors_json_request():
+    # A callback-level failure (bad --env) runs before the subcommand parses its own
+    # --json, but a `… --json` pipeline still expects the uniform {"error": …} shape, so
+    # the callback sniffs the pending command line and emits JSON for every failure class.
+    for args in (
+        ["--env", "bogus", "whoami", "--json"],
+        ["--env", "bogus", "transcripts", "list", "--json"],
+    ):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 2
+        payload = json.loads(result.output)
+        assert payload["error"]["type"] == "invalid_environment"
+
+
 def test_env_override_prints_warning_to_stderr(mocker):
     # The root callback warns when an explicit --env contradicts the profile's stored
     # env (the stored key was minted for a different environment).
@@ -238,8 +242,6 @@ def test_rejected_api_key_has_suggestion(monkeypatch):
 
 
 def test_whoami_reports_session_and_account(mocker):
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
@@ -251,8 +253,6 @@ def test_whoami_reports_session_and_account(mocker):
 
 
 def test_whoami_session_none_without_browser_login(mocker):
-    import json
-
     config.set_api_key("default", "sk_1234567890")
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["whoami", "--json"])

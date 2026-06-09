@@ -62,8 +62,8 @@ def test_usage_defaults_date_range_and_renders(mocker):
                 {
                     "start_timestamp": "2026-05-01",
                     "end_timestamp": "2026-05-02",
-                    "total": 12.5,
-                    "line_items": [],
+                    "total": 0.0,
+                    "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
                 }
             ]
         }
@@ -81,8 +81,10 @@ def test_usage_defaults_date_range_and_renders(mocker):
     start_day = _dt.fromisoformat(captured["start"]).date()
     end_day = _dt.fromisoformat(captured["end"]).date()
     assert (end_day - start_day).days == 30
+    # --json is a raw passthrough of the AMS response (the dead top-level `total`
+    # included), so downstream tooling sees exactly what the endpoint returned.
     data = json.loads(result.output)
-    assert data["usage_items"][0]["total"] == 12.5
+    assert data["usage_items"][0]["line_items"][0]["price"] == 1250.0
 
 
 def test_usage_renders_table_human(monkeypatch, mocker):
@@ -93,20 +95,30 @@ def test_usage_renders_table_human(monkeypatch, mocker):
             {
                 "start_timestamp": "2026-05-01",
                 "end_timestamp": "2026-05-02",
-                "total": 12.5,
-                "line_items": [],
+                "total": 0.0,
+                "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
             }
         ]
     }
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
     result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "2026-05-01" in result.output and "12.5" in result.output
+    # price (cents) is summed per window and shown as dollars, mirroring `aai balance`.
+    assert "2026-05-01" in result.output and "$12.50" in result.output
 
 
 def test_usage_helpers_format_windows_and_line_items():
     assert account._usage_items({"usage_items": "bad"}) == []
     assert account._usage_items({"usage_items": [{"total": 1}, "bad"]}) == [{"total": 1}]
+    # Window total is the sum of line-item `price` (cents); the dead top-level
+    # `total` field the AMS endpoint returns is ignored.
+    assert (
+        account._window_total_cents(
+            {"total": 0.0, "line_items": [{"price": 1250.0}, {"price": 0.5}]}
+        )
+        == 1250.5
+    )
+    assert account._window_total_cents({"total": 99.0, "line_items": []}) == 0.0
     assert account._window_label({"start_timestamp": "bad"}) == "bad"
     assert (
         account._window_label(
@@ -131,10 +143,38 @@ def test_usage_helpers_format_windows_and_line_items():
         )
         == "2026-01-01"
     )
-    assert account._line_item_label({"name": "minutes", "total": "12.500"}) == "minutes: 12.5"
-    assert account._line_item_label({"product": "streaming"}) == "streaming"
-    assert account._line_item_label({"quantity": 3}) == "3"
-    assert account._line_item_label({}) == ""
+    # Every recognized label key resolves (pins each entry in the lookup tuple).
+    for key in ("name", "product", "service", "feature", "model", "type", "description"):
+        assert account._line_item_name({key: "X"}) == "X"
+    assert account._line_item_name({"name": "minutes", "total": "12.500"}) == "minutes"
+    assert account._line_item_name({"product": "streaming"}) == "streaming"
+    assert account._line_item_name({"quantity": 3}) == ""
+    assert account._line_item_name({}) == ""
+    # Breakdown aggregates by product and shows dollars (from `price` cents), biggest
+    # first, so the line items sum to the window total and reconcile with it.
+    assert (
+        account._line_items_summary(
+            {
+                "line_items": [
+                    {"name": "minutes", "price": 1000.0},
+                    {"name": "streaming", "price": 2500.0},
+                    {"name": "minutes", "price": 250.0},
+                ]
+            }
+        )
+        == "streaming: $25.00, minutes: $12.50"
+    )
+    # Equal-dollar products break the tie by name (pins the nc[0] secondary sort key).
+    assert (
+        account._line_items_summary(
+            {"line_items": [{"name": "zeta", "price": 500.0}, {"name": "alpha", "price": 500.0}]}
+        )
+        == "alpha: $5.00, zeta: $5.00"
+    )
+    # A line item with no recognizable product label is grouped under "other".
+    assert account._line_items_summary({"line_items": [{"price": 500.0}]}) == "other: $5.00"
+    # Zero-dollar products are dropped (they only add noise and still reconcile to 0).
+    assert account._line_items_summary({"line_items": [{"name": "free", "price": 0.0}]}) == ""
     assert account._line_items_summary({"line_items": "bad"}) == ""
 
 
@@ -146,8 +186,8 @@ def test_usage_human_renders_breakdown(monkeypatch, mocker):
             {
                 "start_timestamp": "2026-01-01T00:00:00Z",
                 "end_timestamp": "2026-01-02T00:00:00Z",
-                "total": 10,
-                "line_items": [{"name": "minutes", "total": 10}],
+                "total": 0.0,
+                "line_items": [{"name": "minutes", "price": 1000.0, "quantity": 10}],
             }
         ]
     }
@@ -155,7 +195,9 @@ def test_usage_human_renders_breakdown(monkeypatch, mocker):
     result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
     assert "breakdown" in result.output
-    assert "minutes: 10" in result.output
+    # The breakdown shows each product's spend in dollars (1000 cents = $10.00), the
+    # same unit as the `total` column, so the two reconcile.
+    assert "minutes: $10.00" in result.output
 
 
 def test_usage_human_summarizes_empty_range(monkeypatch, mocker):
@@ -183,15 +225,15 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch, mocker):
             {
                 "start_timestamp": "2026-01-02T00:00:00Z",
                 "end_timestamp": "2026-01-03T00:00:00Z",
-                "total": 12.5,
-                "line_items": [],
+                "total": 0.0,
+                "line_items": [{"name": "Streaming", "price": 1250.0, "quantity": 12.5}],
             },
         ]
     }
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
     result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "Usage total: 12.5" in result.output
+    assert "Usage total: $12.50" in result.output
     assert "2026-01-01" not in result.output
     assert "2026-01-02" in result.output
     assert "Hidden: 1 zero-usage window" in result.output
@@ -233,7 +275,7 @@ def test_usage_human_summarizes_all_zero_range(monkeypatch, mocker):
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
     result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    assert "Usage total: 0" in result.output
+    assert "Usage total: $0.00" in result.output
     assert "No usage in this range" in result.output
     assert "2026-01-01" not in result.output
 
@@ -271,3 +313,30 @@ def test_limits_renders_services(monkeypatch, mocker):
     result = runner.invoke(app, ["limits"])
     assert result.exit_code == 0
     assert "transcript" in result.output and "200" in result.output
+
+
+def test_limits_human_summarizes_empty(monkeypatch, mocker):
+    _auth()
+    _human(monkeypatch)
+    # The AMS endpoint returns an empty array when no custom rate limits are
+    # configured; show a clear message instead of a bare header-only table.
+    mocker.patch(
+        "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
+        return_value={"rate_limits": []},
+    )
+    result = runner.invoke(app, ["limits"])
+    assert result.exit_code == 0
+    assert "No custom rate limits" in result.output
+
+
+def test_limits_json_passthrough_when_empty(mocker):
+    _auth()
+    mocker.patch(
+        "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
+        return_value={"rate_limits": []},
+    )
+    result = runner.invoke(app, ["limits", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"rate_limits": []}
