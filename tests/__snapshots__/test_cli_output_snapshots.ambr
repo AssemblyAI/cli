@@ -421,8 +421,10 @@
    Guided setup: sign in, run your first transcription, and start building.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json                     Output raw JSON.                                  │
+  │ --non-interactive          Run without interactive prompts (default when     │
+  │                            agent detected).                                  │
+  │ --help                     Show this message and exit.                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

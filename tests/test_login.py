@@ -196,7 +196,7 @@ def test_unknown_env_exits_2(mocker):
     # callback can't see a per-command --json, and we never auto-switch to JSON on a
     # pipe/agent), so it's the "Error:" + "Suggestion:" pair on stderr, not a JSON blob —
     # regardless of whether stdout is a TTY.
-    is_agentic = mocker.patch("aai_cli.output._is_agentic", autospec=True)
+    is_agentic = mocker.patch("aai_cli.output.is_agentic", autospec=True)
     for agentic in (True, False):
         is_agentic.return_value = agentic
         result = runner.invoke(app, ["--env", "bogus", "whoami"])
