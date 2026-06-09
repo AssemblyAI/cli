@@ -206,3 +206,31 @@ def test_launch_and_open_handles_keyboard_interrupt(monkeypatch):
     rc = runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
     assert rc == 0  # clean Ctrl-C shutdown
     assert proc.terminated is True
+
+
+def test_launch_and_open_defaults_to_no_reload(monkeypatch):
+    captured = {}
+    proc = _FakeProc(returncode=0)
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return proc
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+    runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
+    assert "--reload" not in captured["cmd"]
+
+
+def test_launch_and_open_forwards_reload(monkeypatch):
+    captured = {}
+    proc = _FakeProc(returncode=0)
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return proc
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+    runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False, reload=True)
+    assert "--reload" in captured["cmd"]
