@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 import types
 from collections.abc import Sequence
 from pathlib import Path
@@ -12,6 +13,10 @@ from aai_cli.commands.deploy import FLY, RAILWAY, VERCEL, Target
 from aai_cli.main import app
 
 runner = CliRunner()
+
+# CI forces color; Rich then styles option flags with ANSI codes inserted mid-token
+# (e.g. `--<ESC>[…m-fly`), so the literal "--fly" isn't a substring. Strip ANSI first.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def test_targets_are_frozen() -> None:
@@ -241,4 +246,4 @@ def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatc
 def test_deploy_help_lists_flags(flag: str) -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0
-    assert flag in result.output
+    assert flag in _ANSI.sub("", result.output)
