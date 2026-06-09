@@ -225,7 +225,7 @@ def run_init(
 
 
 @app.command(
-    rich_help_panel=help_panels.QUICK_START,
+    rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
             ("Scaffold a new app interactively", "aai init"),
@@ -254,7 +254,7 @@ def init(
     port: int = typer.Option(3000, "--port", help="Local server port."),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
 ) -> None:
-    """Scaffold and launch a starter app from a template.
+    """Scaffold a new project from a template, then launch it.
 
     This is the starting point for creating an app — including a voice agent app
     ('aai init voice-agent'). The 'aai agent' command only runs a live mic

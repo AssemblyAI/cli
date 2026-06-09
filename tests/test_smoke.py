@@ -69,16 +69,17 @@ def test_help_lists_commands_in_workflow_order():
     assert isinstance(cmd, TyperGroup)
     ctx = cmd.make_context("aai", [], resilient_parsing=True)
     names = cmd.list_commands(ctx)  # the order shown under --help
-    # Grouped into Rich help panels (see help_panels.py): Quick Start,
-    # Setup & Tools, Transcription & AI, History, then Account.
+    # Grouped into Rich help panels (see help_panels.py): Quick Start, Build an app,
+    # Setup & Tools, Run AssemblyAI, History, then Account.
     assert names == [
         # Quick Start
         "onboard",
+        # Build an app
         "init",
         # Setup & Tools
         "doctor",
         "setup",
-        # Transcription & AI
+        # Run AssemblyAI
         "transcribe",
         "stream",
         "agent",

@@ -136,7 +136,7 @@
   
    Usage: aai init [OPTIONS] [TEMPLATE] [DIRECTORY]
   
-   Scaffold and launch a starter app from a template.
+   Scaffold a new project from a template, then launch it.
   
    This is the starting point for creating an app — including a voice agent app
    ('aai init voice-agent'). The 'aai agent' command only runs a live mic

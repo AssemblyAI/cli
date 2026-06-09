@@ -42,11 +42,12 @@ from aai_cli.onboard.sections import WizardContext
 _COMMAND_ORDER = (
     # Quick Start — zero-to-running onboarding
     "onboard",
+    # Build an app — scaffold a new project
     "init",
     # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
-    # Transcription & AI — the verbs you run
+    # Run AssemblyAI — use AssemblyAI directly from the terminal
     "transcribe",
     "stream",
     "agent",
