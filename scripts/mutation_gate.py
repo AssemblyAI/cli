@@ -18,6 +18,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -255,6 +256,10 @@ def _invalidate_bytecode(path: Path) -> None:
 def _survives(
     path: Path, tree: ast.Module, src: str, mutant: _Mutant, data: coverage.CoverageData
 ) -> bool:
+    base_real = os.path.realpath(_PKG)
+    target_real = os.path.realpath(path)
+    if os.path.commonpath([base_real, target_real]) != base_real:
+        raise Exception("Invalid file path")
     mutant.apply()
     try:
         path.write_text(ast.unparse(tree), encoding="utf-8")
