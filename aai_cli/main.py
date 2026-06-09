@@ -21,6 +21,7 @@ from aai_cli.commands import (
     keys,
     llm,
     login,
+    onboard,
     samples,
     sessions,
     setup,
@@ -164,6 +165,7 @@ app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
 app.add_typer(samples.app, name="samples", rich_help_panel=help_panels.SETUP)
 app.add_typer(init.app)
+app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 
