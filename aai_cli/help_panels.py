@@ -13,7 +13,7 @@ decorator would otherwise silently spawn a duplicate panel.
 from __future__ import annotations
 
 QUICK_START = "Quick Start"  # zero-to-running onboarding: onboard
-BUILD = "Build an app"  # scaffold a new project: init
+BUILD = "Build an App"  # scaffold a new project: init
 TRANSCRIPTION = "Run AssemblyAI"  # use AssemblyAI directly: transcribe, stream, agent, llm
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
