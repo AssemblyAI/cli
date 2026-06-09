@@ -12,6 +12,7 @@ import sys
 import time
 from contextlib import closing, contextmanager
 from pathlib import Path
+from typing import NoReturn
 
 from aai_cli.init import templates
 
@@ -38,7 +39,7 @@ _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
 _STDLIB = set(sys.stdlib_module_names) | {"__future__"}
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     raise RuntimeError(message)
 
 
