@@ -144,6 +144,30 @@ def test_capture_times_out_without_callback():
     assert result.token is None
 
 
+def test_capture_server_thread_is_daemon_and_joined_with_timeout(monkeypatch):
+    # The serve_forever thread must be a daemon (so it can't block process exit) and the
+    # cleanup join must be bounded (5s) so a wedged server can't hang shutdown. The
+    # server really serves (no callback arrives, so capture just times out fast); we
+    # only spy on the thread's daemon flag and join timeout.
+    created = {}
+    real_cls = loopback.threading.Thread
+
+    class SpyThread(real_cls):
+        def __init__(self, *a, **k):
+            created["daemon"] = k.get("daemon")
+            super().__init__(*a, **k)
+
+        def join(self, timeout=None):
+            created["join_timeout"] = timeout
+            return super().join(timeout)
+
+    monkeypatch.setattr(loopback.threading, "Thread", SpyThread)
+    result = loopback.capture_callback(timeout=0.1)  # no callback -> times out
+    assert result.error == "timeout"
+    assert created["daemon"] is True
+    assert created["join_timeout"] == 5
+
+
 def test_capture_raises_clean_error_when_port_unavailable(monkeypatch):
     # Occupy a port, then point the callback server at it: binding must fail with a
     # clean APIError, not a raw OSError traceback escaping run_login_flow.

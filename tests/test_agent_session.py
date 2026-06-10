@@ -266,3 +266,19 @@ def test_send_audio_loop_waits_for_ready_event_before_streaming():
     ws = _RecordingWS()
     _send_audio_loop(ws, s, [b"\x01\x02"])
     assert len(ws.sent) == 1  # frame forwarded once the gate is open
+
+
+def test_send_audio_loop_waits_on_ready_event_with_bounded_timeout():
+    # The wait on ready_event is bounded so a server that never sends `ready` can't
+    # wedge the send loop forever; pins the 10s timeout.
+    seen = {}
+
+    class _RecordingEvent:
+        def wait(self, timeout=None):
+            seen["timeout"] = timeout
+            return True
+
+    s = _session(exit_after_reply=True, ready_event=_RecordingEvent())
+    s.ready = True
+    _send_audio_loop(_RecordingWS(), s, [b"\x01\x02"])
+    assert seen["timeout"] == 10

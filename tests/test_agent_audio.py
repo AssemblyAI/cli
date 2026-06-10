@@ -45,6 +45,20 @@ def test_duplex_opens_at_device_rate_and_closes():
     assert fake.stopped and fake.closed
 
 
+def test_duplex_floors_blocksize_at_one():
+    # A pathologically small device rate (//10 == 0) must still open with at least one
+    # frame per block; the max(1, ...) floor prevents a 0-frame block.
+    seen = {}
+
+    def factory(*, rate, blocksize, callback, device):
+        seen["blocksize"] = blocksize
+        return FakeStream()
+
+    d = DuplexAudio(device_rate=5, stream_factory=factory)  # 5 // 10 == 0
+    d.player.start()
+    assert seen["blocksize"] == 1
+
+
 def test_duplex_restart_after_close_reopens_stream():
     calls = {"n": 0}
 
