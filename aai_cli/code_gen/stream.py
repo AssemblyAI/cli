@@ -255,7 +255,7 @@ def render(
     # Capture/decode rate must match StreamingParameters.sample_rate, else audio is corrupt.
     rate = merged.get("sample_rate", 16000)
     source_stdlib, setup, banner, stream_expr = _source_parts(source, rate)
-    stdlib = {"os"} | source_stdlib | ({"time"} if llm else set())
+    stdlib = {"os"} | source_stdlib | ({"time"} if llm else set[str]())
     stdlib_imports = "\n".join(f"import {name}" for name in sorted(stdlib))
     preamble = _build_preamble(_imports_block(merged), llm, stdlib_imports)
     connect = _build_connect(merged)

@@ -1,7 +1,5 @@
 import json
 
-import click.testing
-import typer.main
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -12,8 +10,8 @@ runner = CliRunner()
 
 
 def _invoke_split(args):
-    """Invoke with stdout/stderr captured separately (typer's runner always mixes)."""
-    return click.testing.CliRunner(mix_stderr=False).invoke(typer.main.get_command(app), args)
+    """Invoke with stdout/stderr captured separately (typer's runner splits them)."""
+    return runner.invoke(app, args)
 
 
 def _login_result():
