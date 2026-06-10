@@ -96,8 +96,10 @@ def test_scaffold_writes_placeholder_when_no_key(tmp_path):
 
 
 def test_scaffold_unknown_template_raises(tmp_path):
-    with pytest.raises(CLIError):
+    with pytest.raises(CLIError) as exc:
         scaffold.scaffold("nope", tmp_path / "app", api_key=None)
+    assert exc.value.error_type == "unknown_template"
+    assert exc.value.exit_code == 1
 
 
 def test_scaffold_registered_but_missing_files_raises(tmp_path, monkeypatch):
@@ -106,6 +108,25 @@ def test_scaffold_registered_but_missing_files_raises(tmp_path, monkeypatch):
     with pytest.raises(CLIError) as exc:
         scaffold.scaffold("ghost-template", tmp_path / "app", api_key=None)
     assert exc.value.error_type == "template_missing"
+    assert exc.value.exit_code == 1
+
+
+def test_scaffold_creates_nested_target_parents(tmp_path):
+    # `aai init <tmpl> a/b/app` targets a path whose parents don't exist yet; scaffold
+    # must create the whole chain (target.mkdir parents=True).
+    target = tmp_path / "a" / "b" / "app"  # a/ and b/ do not exist
+    scaffold.scaffold("audio-transcription", target, api_key="k")
+    assert (target / "api" / "index.py").exists()
+
+
+def test_scaffold_is_idempotent_over_existing_tree(tmp_path):
+    # Re-scaffolding (e.g. `--force`) runs over an already-populated tree, so every
+    # mkdir along the copy walk must tolerate existing dirs (exist_ok=True).
+    target = tmp_path / "app"
+    scaffold.scaffold("audio-transcription", target, api_key="k")
+    scaffold.scaffold("audio-transcription", target, api_key="k2")  # dirs already exist
+    assert (target / "api" / "index.py").exists()
+    assert "ASSEMBLYAI_API_KEY=k2" in (target / ".env").read_text()
 
 
 def test_target_conflict_detects_nonempty_dir(tmp_path):

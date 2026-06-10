@@ -65,10 +65,13 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
         name = _DOTFILE_RENAMES.get(child.name, child.name)
         out = dest / name
         if child.is_dir():
-            out.mkdir(parents=True, exist_ok=True)
+            # parents=True is an equivalent mutant here: the walk always creates a
+            # node's parent before descending, so `dest` (and `out.parent`) already
+            # exists. exist_ok is exercised by the idempotent re-scaffold test.
+            out.mkdir(parents=True, exist_ok=True)  # pragma: no mutate
             _copy_tree(child, out)
         else:
-            out.parent.mkdir(parents=True, exist_ok=True)
+            out.parent.mkdir(parents=True, exist_ok=True)  # pragma: no mutate
             out.write_bytes(child.read_bytes())
 
 
