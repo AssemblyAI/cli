@@ -645,6 +645,45 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[speak]
+  '''
+  
+   Usage: aai speak [OPTIONS] [TEXT]
+  
+   Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
+  
+   Plays the audio through your speakers by default, or writes a WAV with --out.
+   This feature only exists in the sandbox today — run it with --sandbox.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --voice                TEXT     Voice id. Server default if omitted.         │
+  │ --language             TEXT     Language. Server default if omitted.         │
+  │ --sample-rate          INTEGER  Output sample rate in Hz. Server default if  │
+  │                                 omitted.                                     │
+  │ --out                  PATH     Write a WAV file instead of playing through  │
+  │                                 the speakers.                                │
+  │ --json         -j               Emit JSON metadata about the synthesized     │
+  │                                 audio.                                       │
+  │ --help                          Show this message and exit.                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Speak text aloud (sandbox only)
+   $ aai speak "Hello there, friend." --sandbox
+   Pick a voice and language
+   $ aai speak "Bonjour" --voice jane --language French --sandbox
+   Save to a WAV instead of playing
+   $ aai speak "Hello" --out /tmp/hello.wav --sandbox
+   Speak text piped from stdin
+   $ echo "Hello" | aai speak --sandbox
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[stream]
   '''
   
