@@ -263,3 +263,37 @@ def test_synthesize_without_connect_uses_real_client_and_fails_cleanly():
     _use_env("sandbox000")
     with pytest.raises(CLIError):
         session.synthesize("k", session.SpeakConfig(text="hi"))
+
+
+def test_synthesize_dialogue_concatenates_segments_with_silence():
+    # One fresh fake socket per segment; record the voice each connection requested.
+    sockets = [
+        FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\xaa\xbb", final=True)]),
+        FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\xcc\xdd", final=True)]),
+    ]
+    urls: list[str] = []
+
+    def _connect(url: str, **_kwargs):
+        urls.append(url)
+        return sockets.pop(0)
+
+    result = session.synthesize_dialogue(
+        "k",
+        [("jane", "Hello."), ("michael", "Hi.")],
+        language="English",
+        connect=_connect,
+    )
+    # Each segment connected with its own voice.
+    assert "voice=jane" in urls[0]
+    assert "voice=michael" in urls[1]
+    # 0.25 s of silence (24000 * 0.25 * 2 = 12000 zero bytes) sits BETWEEN the two
+    # segments' PCM, with none at the ends.
+    gap = b"\x00" * 12000
+    assert result.pcm == b"\xaa\xbb" + gap + b"\xcc\xdd"
+    assert result.sample_rate == 24000
+
+
+def test_synthesize_dialogue_single_segment_has_no_silence():
+    ws = FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\x01\x02", final=True)])
+    result = session.synthesize_dialogue("k", [("jane", "Hi.")], connect=lambda *a, **k: ws)
+    assert result.pcm == b"\x01\x02"  # no leading/trailing pad

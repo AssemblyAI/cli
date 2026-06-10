@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 from aai_cli import environments
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
+from aai_cli.tts import audio
 
 
 class _WebSocket(Protocol):
@@ -39,6 +40,9 @@ _WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
 # carry only the PCM payload, so Begin is the single source of truth for the rate; this
 # is the fallback if that field is ever absent.
 _DEFAULT_SAMPLE_RATE = 24000
+
+# Pause inserted between speaker turns in a multi-voice dialogue, for natural pacing.
+_INTER_TURN_SILENCE_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -185,3 +189,31 @@ def synthesize(
     finally:
         with contextlib.suppress(Exception):
             ws.close()
+
+
+def synthesize_dialogue(
+    api_key: str,
+    segments: list[tuple[str, str]],
+    *,
+    language: str | None = None,
+    sample_rate: int | None = None,
+    connect: _Connect | None = None,
+    on_warning: Callable[[str], None] | None = None,
+) -> SpeakResult:
+    """Synthesize each ``(voice, text)`` segment and concatenate the PCM.
+
+    Each segment opens its own connection (the voice is fixed at connect time).
+    A short silence is inserted between turns — never at the ends. The result's
+    sample rate is the rate the server reported for the segments.
+    """
+    pcm = bytearray()
+    sample_rate_out = _DEFAULT_SAMPLE_RATE
+    for index, (voice, text) in enumerate(segments):
+        config = SpeakConfig(text=text, voice=voice, language=language, sample_rate=sample_rate)
+        result = synthesize(api_key, config, connect=connect, on_warning=on_warning)
+        if index:
+            pcm.extend(audio.silence(result.sample_rate, _INTER_TURN_SILENCE_SECONDS))
+        pcm.extend(result.pcm)
+        sample_rate_out = result.sample_rate
+    duration = len(pcm) / 2 / sample_rate_out
+    return SpeakResult(bytes(pcm), sample_rate_out, duration)
