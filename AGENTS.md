@@ -70,6 +70,31 @@ The post-edit hook (`.claude/settings.json`) runs `ruff check --fix --unfixable 
 
 The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install`/`install_script` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
 
+### Writing tests that pass the diff gates
+
+Lessons that cost iterations getting the patch-coverage and mutation tail gates green:
+
+- **A boolean literal/default survives the mutation gate unless a test asserts the
+  difference between its two values**, not just that the line ran. `json_mode=False` passed
+  to `output.emit`, or `quiet=False` on `output.status`, get mutated to `True` — kill them by
+  asserting the *behavioral* split: the human branch prints bare text
+  (`result.output.strip() == "…"`, not a JSON object), or the spinner is actually entered
+  (monkeypatch `error_console.status` and assert it ran). A changed message / `prompter.note`
+  string is mutated whole, so one substring assert on the actionable keyword kills it.
+- **Help text and docstrings are pinned by the syrupy snapshots, not unit asserts** — a
+  mutated help string is killed by the regenerated `.ambr`, so `--snapshot-update` and commit
+  rather than adding redundant `--help` substring asserts.
+- **Typer's `CliRunner` merges stderr into `result.output`, and not in call order**, so don't
+  assume `splitlines()[-1]` is the command payload. In `--json` mode the env-mismatch warning
+  is its own `{"warning": …}` line, so filter parsed lines by a key the payload carries
+  (`next(o for o in objs if "env" in o)`). A monkeypatched fake must also mirror the real
+  signature — when a helper gains a kwarg (e.g. `output.status(…, quiet=…)`), doubles that
+  patch it must accept it or the call `TypeError`s.
+- **`--json` / `-j` is a per-command flag, not a root flag**: `aai --json transcribe …` fails
+  with "No such option"; it's `aai transcribe … --json`. (The root callback still sniffs the
+  whole token list via `_command_line_requests_json`, so a callback-level failure like a bad
+  `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
+
 ### Manual QA / running the CLI in sandboxed sessions
 
 Lessons that cost time in agent sessions — read before exercising `uv run aai` by hand:
