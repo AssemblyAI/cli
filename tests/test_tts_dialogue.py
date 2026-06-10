@@ -67,10 +67,10 @@ def test_parse_voice_overrides_bare_last_wins_and_empty_default():
     assert dialogue.parse_voice_overrides(["jane", "mary"]) == ("mary", {})
 
 
-def test_parse_voice_overrides_rejects_malformed_pair():
-    for bad in ["=vera", "A=", "  =  "]:
-        with pytest.raises(UsageError):
-            dialogue.parse_voice_overrides([bad])
+@pytest.mark.parametrize("bad", ["=vera", "A=", "  =  "])
+def test_parse_voice_overrides_rejects_malformed_pair(bad: str) -> None:
+    with pytest.raises(UsageError):
+        dialogue.parse_voice_overrides([bad])
 
 
 def test_assign_voices_rotates_in_first_appearance_order():
@@ -81,9 +81,11 @@ def test_assign_voices_rotates_in_first_appearance_order():
 
 
 def test_assign_voices_wraps_past_rotation_length():
-    segs = [dialogue.Segment(s, "x") for s in ("A", "B", "C")]
-    resolved, _ = dialogue.assign_voices(segs, ["jane", "michael"], {})
-    assert [v for v, _ in resolved] == ["jane", "michael", "jane"]
+    # 3-voice rotation, 4 speakers: the 4th wraps to the 1st voice. This only holds
+    # when the rotation index advances correctly, so it pins the wrap arithmetic.
+    segs = [dialogue.Segment(s, "x") for s in ("A", "B", "C", "D")]
+    resolved, _ = dialogue.assign_voices(segs, ["jane", "michael", "mary"], {})
+    assert [v for v, _ in resolved] == ["jane", "michael", "mary", "jane"]
 
 
 def test_assign_voices_override_beats_rotation_without_consuming_a_slot():
