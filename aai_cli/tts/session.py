@@ -66,3 +66,100 @@ def ws_url(params: dict[str, str]) -> str:
     """The streaming-TTS socket URL for the active environment, with query params."""
     base = f"wss://{environments.active().streaming_tts_host}/v1/ws/"
     return f"{base}?{urlencode(params)}" if params else base
+
+
+def _silence_websockets_logging() -> None:
+    """Keep websockets' internal teardown logging off the user's stderr."""
+    for name in _WEBSOCKETS_LOGGERS:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+
+
+def _is_rejected_key(exc: Exception) -> bool:
+    """Auth-shaped failure (the key was rejected) vs a generic block. A plain HTTP
+    403 on the upgrade is NOT a rejected key (WAF/region/plan also 403)."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status == _HTTP_FORBIDDEN:
+        return False
+    return is_auth_failure(exc)
+
+
+def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
+    """A rejected key becomes auth_failure(); anything else becomes an APIError."""
+    if _is_rejected_key(exc):
+        return auth_failure()
+    return APIError(f"{message}: {exc}")
+
+
+def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
+    """Open the TTS socket, mapping a connect failure to a clean CLIError."""
+    try:
+        return connect(
+            url,
+            additional_headers={"Authorization": f"Bearer {api_key}"},
+            max_size=None,
+        )
+    except Exception as exc:
+        raise _auth_or_api_error(exc, "Could not connect to the TTS service") from exc
+
+
+def _run_protocol(
+    ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
+) -> SpeakResult:
+    """Send Generate+Flush, collect Audio until is_final_for_flush, then Terminate."""
+    begin = json.loads(ws.recv())
+    if begin.get("type") != "Begin":
+        raise APIError(f"TTS service did not start the session (got {begin.get('type')!r}).")
+
+    ws.send(json.dumps({"type": "Generate", "text": config.text}))
+    ws.send(json.dumps({"type": "Flush"}))
+
+    pcm = bytearray()
+    sample_rate = 0
+    while True:
+        msg: dict[str, Any] = json.loads(ws.recv())
+        mtype = msg.get("type")
+        if mtype == "Audio":
+            pcm.extend(base64.b64decode(msg["audio"]))
+            sample_rate = int(msg["sample_rate"])
+            if msg.get("is_final_for_flush"):
+                break
+        elif mtype == "Error":
+            raise APIError(
+                f"TTS error ({msg.get('error_code', '')}): {msg.get('error') or 'unknown'}"
+            )
+        elif mtype == "Warning" and on_warning is not None:
+            on_warning(str(msg.get("warning", "")))
+
+    with contextlib.suppress(Exception):
+        ws.send(json.dumps({"type": "Terminate"}))
+
+    duration = len(pcm) / 2 / sample_rate
+    return SpeakResult(bytes(pcm), sample_rate, duration)
+
+
+def synthesize(
+    api_key: str,
+    config: SpeakConfig,
+    *,
+    connect: _Connect = None,
+    on_warning: Callable[[str], None] | None = None,
+) -> SpeakResult:
+    """Open the streaming-TTS socket and synthesize ``config.text`` to PCM.
+
+    ``connect`` defaults to websockets' synchronous client; injectable for tests.
+    Connect/session failures map to a clean CLIError (a rejected key -> exit 4).
+    """
+    _silence_websockets_logging()
+    if connect is None:
+        from websockets.sync.client import connect
+
+    ws = _open_ws(connect, api_key, ws_url(config.query_params()))
+    try:
+        return _run_protocol(ws, config, on_warning)
+    except (CLIError, KeyboardInterrupt, BrokenPipeError):
+        raise  # clean CLI errors, Ctrl-C, and a closed pipe are handled upstream
+    except Exception as exc:
+        raise _auth_or_api_error(exc, "TTS session failed") from exc
+    finally:
+        with contextlib.suppress(Exception):
+            ws.close()
