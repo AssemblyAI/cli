@@ -138,12 +138,8 @@ def _transcript_text(transcript: Any) -> str:
     return str(getattr(transcript, "text", "") or "")
 
 
-def _objects(value: object) -> list[object]:
-    return jsonshape.object_list(value)
-
-
 def _render_utterances(transcript: Any) -> str:
-    utterances = _objects(getattr(transcript, "utterances", None))
+    utterances = jsonshape.object_list(getattr(transcript, "utterances", None))
     if not utterances:
         return _transcript_text(transcript)
     return "\n".join(

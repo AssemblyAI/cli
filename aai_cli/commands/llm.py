@@ -5,7 +5,7 @@ from contextlib import suppress
 import typer
 from rich.markup import escape
 
-from aai_cli import choices, config, help_panels, output, stdio
+from aai_cli import choices, config, help_panels, options, output, stdio
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -91,9 +91,7 @@ def llm(
         gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate."
     ),
     list_models: bool = typer.Option(False, "--list-models", help="Print known models and exit."),
-    json_out: bool = typer.Option(
-        False, "--json", help="Output raw JSON (one object per turn in --follow mode)."
-    ),
+    json_out: bool = options.json_option("Output raw JSON (one object per turn in --follow mode)."),
 ) -> None:
     """Send a prompt to AssemblyAI's LLM Gateway and print the response.
 

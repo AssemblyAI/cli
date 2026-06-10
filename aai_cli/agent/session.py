@@ -12,8 +12,12 @@ from aai_cli import environments
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
 
-def _ws_url() -> str:
-    """Voice Agent socket URL for the active environment (set at CLI startup)."""
+def ws_url() -> str:
+    """Voice Agent socket URL for the active environment (set at CLI startup).
+
+    Shared with code_gen so generated agent scripts target the same host the
+    CLI itself would connect to.
+    """
     return f"wss://{environments.active().agents_host}/v1/ws"
 
 
@@ -196,7 +200,7 @@ def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
 def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
     """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
     try:
-        return connect(_ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
+        return connect(ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
         raise _auth_or_api_error(exc, "Could not connect to the voice agent") from exc
 

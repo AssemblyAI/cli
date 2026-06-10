@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from aai_cli import choices, output
+from aai_cli import choices, options, output
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.steps import Step, render_steps
@@ -305,7 +305,7 @@ def install(
         help="Config scope to register the MCP under. Presence is detected across all scopes.",
     ),
     force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Set up your coding agent for AssemblyAI by installing three things:
 
@@ -333,7 +333,7 @@ def install(
 )
 def status(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show whether the AssemblyAI MCP server and skills are set up in your coding agent."""
 
@@ -362,7 +362,7 @@ def remove(
             "Default: remove from whichever scope it exists in."
         ),
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Remove the AssemblyAI MCP server and skills from your coding agent."""
 

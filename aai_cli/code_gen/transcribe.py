@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from aai_cli import llm
+from aai_cli import environments, llm
 from aai_cli.code_gen import serialize, snippets
 
 
@@ -38,6 +38,13 @@ def render(
         "",
         '# Export your key first:  export ASSEMBLYAI_API_KEY="<your key>"',
         'aai.settings.api_key = os.environ["ASSEMBLYAI_API_KEY"]',
+    ]
+    # The SDK ships pointing at production, so only a non-default environment
+    # (e.g. --sandbox) needs its api base spelled out in the generated script.
+    env = environments.active()
+    if env.api_base != environments.get(environments.DEFAULT_ENV).api_base:
+        parts.append(f"aai.settings.base_url = {env.api_base!r}")
+    parts += [
         "",
         "transcriber = aai.Transcriber()",
     ]
@@ -75,7 +82,7 @@ def _llm_gateway_block(llm_gateway: dict[str, object]) -> list[str]:
         "# Each prompt runs on the previous response; the first runs on the transcript.",
         "gateway = OpenAI(",
         '    api_key=os.environ["ASSEMBLYAI_API_KEY"],',
-        f"    base_url={llm.GATEWAY_BASE_URL!r},",
+        f"    base_url={environments.active().llm_gateway_base!r},",
         ")",
         "prompts = [",
         prompt_lines,

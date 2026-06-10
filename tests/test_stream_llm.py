@@ -233,3 +233,54 @@ def test_maybe_summarize_is_noop_without_follow():
     assert session.llm_interval == 0.0  # the default cadence is per-turn until set
     session.transcript.append("x")
     session._maybe_summarize(final=True)  # must not raise or call the gateway
+
+
+def test_stream_llm_chain_error_is_latched_on_reader_thread(monkeypatch, capsys):
+    # A gateway failure mid-stream surfaces on the SDK reader thread, where raising
+    # would dump a thread traceback. The session must swallow it there (one stderr
+    # warning), stop hammering the failing gateway, and keep the panel alive.
+    import pytest
+
+    from aai_cli.errors import APIError
+
+    emitted: list[dict] = []
+    session = _llm_session(
+        interval=0.0, clock=lambda: 0.0, monkeypatch=monkeypatch, emitted=emitted
+    )
+    calls = {"n": 0}
+
+    def boom(*args, **kwargs):
+        calls["n"] += 1
+        raise APIError("gateway down")
+
+    monkeypatch.setattr("aai_cli.streaming.session.llm.run_chain", boom)
+    session.on_turn(_eot_turn("a"))  # reader-thread path: must not raise
+    session.on_turn(_eot_turn("b"))  # error latched -> the chain is not re-run
+    assert calls["n"] == 1
+    assert emitted == []
+    assert "gateway down" in capsys.readouterr().err
+    # The closing flush runs on the main thread, where the latched error can
+    # propagate to run_command for clean rendering + a non-zero exit.
+    with pytest.raises(APIError):
+        session._maybe_summarize(final=True)
+
+
+def test_stream_llm_chain_error_on_final_flush_raises(monkeypatch):
+    # When the failure first happens on the closing flush itself (main thread),
+    # it propagates immediately instead of being deferred.
+    import pytest
+
+    from aai_cli.errors import APIError
+
+    emitted: list[dict] = []
+    session = _llm_session(
+        interval=30.0, clock=lambda: 0.0, monkeypatch=monkeypatch, emitted=emitted
+    )
+
+    def boom(*args, **kwargs):
+        raise APIError("gateway down")
+
+    session.transcript.append("tail")
+    monkeypatch.setattr("aai_cli.streaming.session.llm.run_chain", boom)
+    with pytest.raises(APIError):
+        session._maybe_summarize(final=True)

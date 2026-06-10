@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import client, config, environments, help_panels, output
+from aai_cli import client, config, environments, help_panels, options, output
 from aai_cli.context import AppState, persist_browser_login, resolve_profile, run_command
 from aai_cli.errors import APIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
@@ -24,7 +24,7 @@ app = typer.Typer()
 def login(
     ctx: typer.Context,
     api_key: str | None = typer.Option(None, "--api-key", help="Provide key non-interactively."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Authenticate via your browser; stores a CLI API key."""
 
@@ -70,7 +70,7 @@ def login(
 )
 def logout(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Clear stored credentials for the active profile."""
 
@@ -101,7 +101,7 @@ def logout(
 )
 def whoami(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show the active profile and whether its key is usable."""
 

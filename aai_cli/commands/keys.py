@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import jsonshape, output
+from aai_cli import jsonshape, options, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.errors import APIError
@@ -53,7 +53,7 @@ def _default_project_id(account_id: int, jwt: str) -> int:
 )
 def list_(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """List API keys across your projects (keys shown masked)."""
 
@@ -110,7 +110,7 @@ def create(
     project_id: int | None = typer.Option(
         None, "--project", help="Project id to create the key in (defaults to your first)."
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Create a new API key. Prints the key value once — copy it now."""
 
@@ -142,7 +142,7 @@ def rename(
     ctx: typer.Context,
     token_id: int = typer.Argument(..., help="The key id (see `aai keys list`)."),
     new_name: str = typer.Argument(..., help="The new label."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Rename an existing API key."""
 

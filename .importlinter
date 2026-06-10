@@ -21,6 +21,7 @@ source_modules =
     aai_cli.init
     aai_cli.llm
     aai_cli.microphone
+    aai_cli.options
     aai_cli.output
     aai_cli.render
     aai_cli.stdio

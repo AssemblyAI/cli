@@ -10,9 +10,7 @@ if TYPE_CHECKING:
     from openai.types.chat import ChatCompletion
 
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
-# pointed at this base URL. This is the production host used in generated code
-# snippets (code_gen); runtime calls use the active environment's gateway base.
-GATEWAY_BASE_URL = "https://llm-gateway.assemblyai.com/v1"
+# pointed at the active environment's gateway base (see _client / code_gen).
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 1000
 

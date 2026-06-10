@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from aai_cli import llm as gateway
+from aai_cli import environments
 from aai_cli.code_gen import serialize
 
 # Streaming-class imports always used by the generated scaffold. SpeechModel is added
@@ -34,7 +34,7 @@ def on_turn(client: StreamingClient, event: TurnEvent) -> None:
 
 
 client = StreamingClient(
-    StreamingClientOptions(api_key=API_KEY, api_host="streaming.assemblyai.com")
+    StreamingClientOptions(api_key=API_KEY, api_host={api_host!r})
 )
 client.on(StreamingEvents.Turn, on_turn)
 """
@@ -102,7 +102,7 @@ def on_turn(client: StreamingClient, event: TurnEvent) -> None:
 
 
 client = StreamingClient(
-    StreamingClientOptions(api_key=API_KEY, api_host="streaming.assemblyai.com")
+    StreamingClientOptions(api_key=API_KEY, api_host={api_host!r})
 )
 client.on(StreamingEvents.Turn, on_turn)
 """
@@ -136,18 +136,24 @@ def _imports_block(merged: dict[str, object]) -> str:
 
 
 def _build_preamble(imports: str, llm: dict[str, object] | None) -> str:
-    """Pick and fill the plain vs. LLM-Gateway preamble for the given imports."""
+    """Pick and fill the plain vs. LLM-Gateway preamble for the given imports.
+
+    Hosts come from the active environment, so a sandbox run generates a script
+    that targets the sandbox its key was minted for, not production.
+    """
+    env = environments.active()
     if llm:
         prompts = "\n".join(f"    {p!r}," for p in cast("list[str]", llm["prompts"]))
         return _LLM_PREAMBLE.format(
             imports=imports,
-            base_url=gateway.GATEWAY_BASE_URL,
+            api_host=env.streaming_host,
+            base_url=env.llm_gateway_base,
             prompts=prompts,
             model=llm["model"],
             max_tokens=llm["max_tokens"],
             interval=llm.get("interval", 0.0),
         )
-    return _PREAMBLE.format(imports=imports)
+    return _PREAMBLE.format(imports=imports, api_host=env.streaming_host)
 
 
 def _build_connect(merged: dict[str, object]) -> str:

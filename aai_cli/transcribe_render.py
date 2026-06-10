@@ -10,8 +10,12 @@ from aai_cli import jsonshape, theme
 
 
 def _fmt_ms(ms: int) -> str:
+    """``MM:SS`` for sub-hour timestamps, ``H:MM:SS`` past that (so 1h isn't '60:00')."""
     total = int(ms) // 1000
-    return f"{total // 60:02d}:{total % 60:02d}"
+    hours, rem = divmod(total, 3600)
+    if hours:
+        return f"{hours}:{rem // 60:02d}:{rem % 60:02d}"
+    return f"{rem // 60:02d}:{rem % 60:02d}"
 
 
 def _enum_value(obj: object) -> str:
@@ -22,10 +26,6 @@ def _nested(transcript: object, outer: str, inner: str) -> object | None:
     """Return ``transcript.<outer>.<inner>``, or None if either link is missing/falsy."""
     mid = getattr(transcript, outer, None)
     return getattr(mid, inner, None) if mid else None
-
-
-def _objects(value: object) -> list[object]:
-    return jsonshape.object_list(value)
 
 
 def _mapping(value: object) -> dict[str, object]:
@@ -46,7 +46,7 @@ def render_transcript_result(transcript: object, console: Console) -> None:
 
 def _render_text(transcript: object, console: Console) -> None:
     """Print per-speaker utterances when present, else the flat transcript text."""
-    utterances = _objects(getattr(transcript, "utterances", None))
+    utterances = jsonshape.object_list(getattr(transcript, "utterances", None))
     if utterances:
         line = Text()
         for i, u in enumerate(utterances):
@@ -69,7 +69,7 @@ def _render_summary(transcript: object, console: Console) -> None:
 
 
 def _render_chapters(transcript: object, console: Console) -> None:
-    chapters = _objects(getattr(transcript, "chapters", None))
+    chapters = jsonshape.object_list(getattr(transcript, "chapters", None))
     if not chapters:
         return
     console.print("\n[bold]Chapters:[/bold]")
@@ -79,7 +79,7 @@ def _render_chapters(transcript: object, console: Console) -> None:
 
 
 def _render_highlights(transcript: object, console: Console) -> None:
-    results = _objects(_nested(transcript, "auto_highlights", "results"))
+    results = jsonshape.object_list(_nested(transcript, "auto_highlights", "results"))
     if not results:
         return
     console.print("\n[bold]Highlights:[/bold]")
@@ -88,17 +88,34 @@ def _render_highlights(transcript: object, console: Console) -> None:
 
 
 def _render_sentiment(transcript: object, console: Console) -> None:
-    results = _objects(getattr(transcript, "sentiment_analysis", None))
+    results = jsonshape.object_list(getattr(transcript, "sentiment_analysis", None))
     if not results:
         return
     counts = Counter(_enum_value(getattr(r, "sentiment", "")).lower() for r in results)
-    total = sum(counts.values()) or 1
-    parts = [f"{pct * 100 // total}% {label}" for label, pct in counts.items()]
+    parts = [f"{pct}% {label}" for label, pct in _percentages(counts).items()]
     console.print("\n[bold]Sentiment:[/bold] " + ", ".join(parts))
 
 
+def _percentages(counts: Counter[str]) -> dict[str, int]:
+    """Integer percentages that sum to exactly 100, in ``counts`` order.
+
+    Plain flooring loses the rounding remainder (three equal counts -> 33+33+33 = 99),
+    so the leftover points go to the labels with the largest fractional parts.
+    """
+    total = sum(counts.values())
+    if not total:
+        return {}
+    shares = {label: count * 100 / total for label, count in counts.items()}
+    pcts = {label: int(share) for label, share in shares.items()}
+    leftover = 100 - sum(pcts.values())
+    by_fraction = sorted(shares, key=lambda label: shares[label] - pcts[label], reverse=True)
+    for label in by_fraction[:leftover]:
+        pcts[label] += 1
+    return pcts
+
+
 def _render_entities(transcript: object, console: Console) -> None:
-    entities = _objects(getattr(transcript, "entities", None))
+    entities = jsonshape.object_list(getattr(transcript, "entities", None))
     if not entities:
         return
     console.print("\n[bold]Entities:[/bold]")

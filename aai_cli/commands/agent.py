@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from aai_cli import choices, client, code_gen, config, help_panels, output
+from aai_cli import choices, client, code_gen, config, help_panels, options, output
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent.session import (
@@ -103,7 +103,7 @@ def agent(
     greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting."),
     device: int | None = typer.Option(None, "--device", help="Microphone device index."),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
-    json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    json_out: bool = options.json_option("Emit newline-delimited JSON events."),
     output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",

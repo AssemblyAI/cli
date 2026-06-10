@@ -91,6 +91,7 @@ class DuplexAudio:
         device_rate: int | None = None,
         stream_factory: Callable[..., Any] | None = None,
         rate_query: Callable[[int | None], int] | None = None,
+        poll_timeout: float = 1.0,
     ) -> None:
         query = rate_query or _output_default_rate
         self._device_rate = device_rate if device_rate is not None else query(device)
@@ -104,6 +105,9 @@ class DuplexAudio:
         # access goes through `_lock`. `_out_state` (the target->device ratecv state)
         # is touched ONLY by feed(), never the callback, so it needs no lock.
         self._in: queue.Queue[bytes | None] = queue.Queue()
+        # How long capture_frames() waits for a chunk before checking whether the
+        # device stream silently died (e.g. unplugged); injectable for fast tests.
+        self._poll_timeout = poll_timeout
         self._out = bytearray()
         self._out_state: Any = None
         self._lock = threading.Lock()
@@ -156,10 +160,26 @@ class DuplexAudio:
             return len(self._out) // 2
 
     def capture_frames(self) -> Iterator[bytes]:
-        """Yield target-rate PCM captured from the device until closed."""
+        """Yield target-rate PCM captured from the device until closed.
+
+        Waits in short timeouts rather than blocking forever: if the PortAudio
+        stream dies without close() being called (device unplugged mid-session),
+        no sentinel ever arrives, so a bare get() would hang the capture thread —
+        and with it the whole agent session — instead of surfacing an error.
+        """
         state: Any = None
         while True:
-            chunk = self._in.get()
+            try:
+                chunk = self._in.get(timeout=self._poll_timeout)
+            except queue.Empty:
+                if self._started and not getattr(self._stream, "active", True):
+                    raise CLIError(
+                        "The audio device stopped producing input.",
+                        error_type="audio_input_error",
+                        exit_code=1,
+                        suggestion="Check your microphone/output device, then run 'aai doctor'.",
+                    ) from None
+                continue
             if chunk is None:
                 return
             if self._device_rate != self._target:

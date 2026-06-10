@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import help_panels, output, steps
+from aai_cli import config, help_panels, options, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
@@ -72,7 +72,12 @@ def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
         fd, name = tempfile.mkstemp(prefix="aai-tunnel-", suffix=".log")
         os.close(fd)
         log_path = Path(name)
-        proxy = runner.spawn(tunnel.tunnel_command(chosen_port), cwd=target, log_path=log_path)
+        # The tunnel binary only proxies the port; don't hand it the API key the
+        # dev server needs (keeps the secret out of cloudflared's logs/diagnostics).
+        tunnel_env = {k: v for k, v in os.environ.items() if k != config.ENV_API_KEY}
+        proxy = runner.spawn(
+            tunnel.tunnel_command(chosen_port), cwd=target, env=tunnel_env, log_path=log_path
+        )
         public = tunnel.await_url(log_path)
         if public is None:
             raise CLIError(
@@ -110,7 +115,7 @@ def share(
     no_install: bool = typer.Option(
         False, "--no-install", help="Skip dependency install; launch directly."
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Boot the app and expose it on a public URL via a cloudflared tunnel.
 
