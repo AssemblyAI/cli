@@ -1,4 +1,5 @@
 import os
+import time
 
 import keyring
 import pytest
@@ -8,6 +9,19 @@ from keyring.backend import KeyringBackend
 # environment. The e2e suite uses this real key to drive the CLI as a subprocess;
 # unit tests still run fully isolated.
 REAL_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+
+# Suites that legitimately reach the real network in-process (PyPI reachability
+# probes before a real install, real-API e2e) are gated behind these markers. They
+# opt out of the suite-wide --disable-socket; every other test stays blocked, so an
+# unmocked call in the unit suite still fails loudly. Tests that only bind a loopback
+# server use the tighter `@pytest.mark.allow_hosts(["127.0.0.1"])` instead.
+_NETWORK_MARKERS = ("e2e", "install", "install_script")
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        if any(item.get_closest_marker(name) for name in _NETWORK_MARKERS):
+            item.add_marker(pytest.mark.enable_socket)
 
 
 @pytest.fixture
@@ -52,6 +66,19 @@ def isolate_env(monkeypatch):
         "NO_COLOR",
     ):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def pin_timezone(monkeypatch):
+    # Pin the host timezone so any time rendering is deterministic across machines and
+    # CI, regardless of the contributor's local zone. A fixed *non-UTC* zone is
+    # deliberate: the CLI normalizes everything to UTC (timeparse.format_utc_*), so
+    # correct code is unaffected, while a future naive/local clock would visibly shift
+    # here instead of only on a laptop that happens to sit in that zone. Tests that
+    # need a frozen "now" use time-machine on top of this.
+    monkeypatch.setenv("TZ", "America/New_York")
+    if hasattr(time, "tzset"):
+        time.tzset()
 
 
 @pytest.fixture(autouse=True)

@@ -8,9 +8,14 @@
 </head>
 <body class="template-page voice-agent-template">
   <main class="app-shell">
+    <a class="brand" href="https://www.assemblyai.com" target="_blank" rel="noopener">
+      <img class="brand-logo" src="https://www.assemblyai.com/_aai/images/logos/assemblyai-logo-primary.svg" alt="AssemblyAI" />
+    </a>
+
     <header class="page-header">
+      <span class="eyebrow">Voice Agent API</span>
       <h1 class="page-title">Talk to a voice agent</h1>
-      <p class="page-subtitle">Click connect and just talk — speech in, LLM reply, speech out, with built-in turn detection and barge-in. The browser connects straight to AssemblyAI's Voice Agent API with a one-time token; your API key stays on the server. (Use headphones for the cleanest result.)</p>
+      <p class="page-subtitle">Connect and just talk — speech in, LLM reply, speech out, with turn detection and barge-in handled for you. The browser connects straight to AssemblyAI's Voice Agent API with a one-time token, so your API key stays on the server. Headphones give the cleanest result.</p>
     </header>
 
     <div class="control-bar">
@@ -19,6 +24,11 @@
     </div>
 
     <div id="log" class="conversation-log"></div>
+
+    <footer class="page-footer">
+      <span>Built with AssemblyAI</span>
+      <a class="footer-link" href="https://www.assemblyai.com" target="_blank" rel="noopener">assemblyai.com →</a>
+    </footer>
   </main>
 
   <script src="/static/audio.js"></script>

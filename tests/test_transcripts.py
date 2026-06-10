@@ -134,10 +134,13 @@ def test_list_table_colors_status(monkeypatch, mocker):
 
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
-    # Force a real color terminal so styling produces ANSI we can assert on.
+    # Pin a truecolor console with an empty _environ so the rendered ANSI is
+    # deterministic: Rich otherwise reads ambient color env (NO_COLOR/COLORTERM/...)
+    # at render time, which leaks across tests and flips the color depth. With
+    # _environ={} the depth is fixed by color_system alone.
     monkeypatch.setattr(
         "aai_cli.output.console",
-        make_console(force_terminal=True, color_system="truecolor"),
+        make_console(force_terminal=True, color_system="truecolor", _environ={}),
     )
     rows = [
         {"id": "t1", "status": "completed", "created": "2026-01-01"},
@@ -151,4 +154,4 @@ def test_list_table_colors_status(monkeypatch, mocker):
     assert "completed" in result.output
     assert "error" in result.output
     assert "\x1b[1;32m" in result.output  # aai.success (bold green) → "completed" cell
-    assert "\x1b[1;31m" in result.output  # aai.error (bold red) → "error" cell
+    assert "\x1b[1;38;2;240;68;56m" in result.output  # aai.error (bold #F04438) → "error" cell

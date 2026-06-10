@@ -60,11 +60,17 @@ def test_serve_command_uv_and_venv():
     ]
 
 
+# These two bind a real loopback socket, so they opt back into sockets past the
+# suite-wide --disable-socket (see pyproject pytest config); 127.0.0.1 only, so the
+# external-network block stays in force. test_find_free_port_raises_when_all_taken
+# monkeypatches the probe and needs no socket.
+@pytest.mark.allow_hosts(["127.0.0.1"])
 def test_find_free_port_returns_preferred_when_open():
     port = runner.find_free_port(0)  # 0 -> OS assigns a free port
     assert isinstance(port, int) and port > 0
 
 
+@pytest.mark.allow_hosts(["127.0.0.1"])
 def test_find_free_port_skips_taken_port():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("127.0.0.1", 0))

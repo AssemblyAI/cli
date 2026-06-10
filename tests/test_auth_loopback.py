@@ -8,6 +8,11 @@ import pytest
 from aai_cli.auth import endpoints, loopback
 from aai_cli.errors import APIError
 
+# These tests bind a real loopback HTTP server and connect to it, so they opt back
+# into sockets past the suite-wide --disable-socket (see pyproject pytest config).
+# Restricting to 127.0.0.1 keeps the external-network block intact.
+pytestmark = pytest.mark.allow_hosts(["127.0.0.1"])
+
 
 @pytest.fixture(autouse=True)
 def _unique_loopback_port(monkeypatch):

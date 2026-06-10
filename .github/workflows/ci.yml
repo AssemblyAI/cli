@@ -135,12 +135,14 @@ jobs:
       - name: System deps (PortAudio + ffmpeg)
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
 
-      # The local pytest hook runs `python -m pytest`, so the package + dev group
-      # must be importable. `pip install --group` needs pip >= 25.1, so upgrade first.
+      # The local pytest hook runs `uv run --frozen python -m pytest`, so the tests
+      # resolve the LOCKED dependency versions (uv.lock) rather than the newest
+      # release `pip install` would pull — which is what keeps the byte-exact
+      # `--help` snapshots stable. Install uv and materialize the frozen env here.
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e . --group dev
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
 
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
 

@@ -8,9 +8,14 @@
 </head>
 <body class="template-page live-captions-template">
   <main class="app-shell">
+    <a class="brand" href="https://www.assemblyai.com" target="_blank" rel="noopener">
+      <img class="brand-logo" src="https://www.assemblyai.com/_aai/images/logos/assemblyai-logo-primary.svg" alt="AssemblyAI" />
+    </a>
+
     <header class="page-header">
+      <span class="eyebrow">Streaming STT</span>
       <h1 class="page-title">Live captions</h1>
-      <p class="page-subtitle">Click record and talk — your mic streams to AssemblyAI and transcribes in real time. Audio goes straight from the browser to AssemblyAI with a one-time token; your API key stays on the server.</p>
+      <p class="page-subtitle">Hit record and start talking. Your mic streams straight to AssemblyAI and comes back as text in real time — the browser connects with a one-time token, so your API key never leaves the server.</p>
     </header>
 
     <div class="control-bar">
@@ -21,6 +26,11 @@
     <div class="caption-output" aria-live="polite">
       <span id="final" class="caption-final"></span><span id="partial" class="caption-partial"></span>
     </div>
+
+    <footer class="page-footer">
+      <span>Built with AssemblyAI</span>
+      <a class="footer-link" href="https://www.assemblyai.com" target="_blank" rel="noopener">assemblyai.com →</a>
+    </footer>
   </main>
 
   <script src="/static/audio.js"></script>
