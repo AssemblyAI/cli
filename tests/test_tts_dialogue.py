@@ -41,3 +41,13 @@ def test_parse_skips_blank_lines_and_drops_empty_turns():
     segs = dialogue.parse_segments("Speaker A: Hi.\n\nSpeaker B: \nSpeaker A: Bye.")
     # Speaker B's empty turn is dropped; the two A turns are not merged (B is between).
     assert [(s.speaker_id, s.text) for s in segs] == [("A", "Hi."), ("A", "Bye.")]
+
+
+def test_parse_label_only_line_with_continuation():
+    # A label line with no inline text, followed by a wrapped continuation line:
+    # the empty first part must be filtered so the text has no leading space.
+    segs = dialogue.parse_segments("Speaker A:\ncontinuation text\nSpeaker B: Ok.")
+    assert [(s.speaker_id, s.text) for s in segs] == [
+        ("A", "continuation text"),
+        ("B", "Ok."),
+    ]

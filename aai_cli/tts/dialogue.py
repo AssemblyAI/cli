@@ -55,7 +55,7 @@ def parse_segments(text: str) -> list[Segment]:
     merged: list[Segment] = []
     for turn in turns:
         if merged and merged[-1].speaker_id == turn.speaker_id:
-            joined = f"{merged[-1].text} {turn.text}".strip()
+            joined = f"{merged[-1].text} {turn.text}"
             merged[-1] = Segment(turn.speaker_id, joined)
         else:
             merged.append(turn)
