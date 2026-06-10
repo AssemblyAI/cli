@@ -756,7 +756,7 @@
   │ --llm-interval        FLOAT RANGE [x>=0.0]  Seconds between --llm summary    │
   │                                             refreshes (0 refreshes on every  │
   │                                             turn).                           │
-  │                                             [default: 30.0]                  │
+  │                                             [default: 10.0]                  │
   │ --model               TEXT                  LLM Gateway model.               │
   │                                             [default:                        │
   │                                             claude-haiku-4-5-20251001]       │

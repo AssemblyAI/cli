@@ -254,10 +254,7 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
                 'aai transcribe call.mp3 --llm "summarize action items"',
             ),
         ]
-    )
-    + "\n\n[bold]Authentication[/bold]\n\n"
-    "Run 'aai login', or set ASSEMBLYAI_API_KEY (used before the stored key). "
-    "--env or AAI_ENV selects the backend: production, sandbox000.",
+    ),
 )
 def main(
     ctx: typer.Context,

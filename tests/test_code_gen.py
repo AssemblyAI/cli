@@ -102,6 +102,38 @@ def test_transcribe_render_no_config_is_minimal():
     assert "TranscriptionConfig(" not in code  # no kwargs -> no config object
 
 
+def test_transcribe_render_youtube_downloads_before_upload():
+    # AssemblyAI can't fetch a YouTube watch URL itself, so the generated script must
+    # download the audio with yt-dlp first and upload the local file (mirroring the CLI),
+    # not hand the raw URL to transcribe() — which would fail with a download error.
+    code = code_gen.transcribe({}, source="https://www.youtube.com/watch?v=ZRcpnM26nJM")
+    ast.parse(code)
+    assert "import yt_dlp" in code
+    assert "import tempfile" in code
+    assert "yt_dlp.YoutubeDL(" in code
+    assert "extract_info('https://www.youtube.com/watch?v=ZRcpnM26nJM', download=True)" in code
+    # The transcribe call takes the downloaded local path, never the YouTube URL.
+    assert "transcriber.transcribe(_audio)" in code
+    assert "transcribe('https://www.youtube.com" not in code
+    assert 'transcribe("https://www.youtube.com' not in code
+
+
+def test_transcribe_render_youtube_passes_config_to_local_upload():
+    # With a config object the download still wraps the upload, and config flows through.
+    code = code_gen.transcribe({"speaker_labels": True}, source="https://youtu.be/abc123")
+    ast.parse(code)
+    assert "transcriber.transcribe(_audio, config=config)" in code
+
+
+def test_transcribe_render_plain_url_is_not_downloaded():
+    # A non-YouTube http(s) URL is uploaded straight through — no yt-dlp scaffolding.
+    code = code_gen.transcribe({}, source="https://assembly.ai/wildfires.mp3")
+    ast.parse(code)
+    assert "yt_dlp" not in code
+    assert "tempfile" not in code
+    assert "transcriber.transcribe('https://assembly.ai/wildfires.mp3')" in code
+
+
 def test_stream_render_parses_and_is_runnable_shape():
     from assemblyai.streaming.v3 import SpeechModel
 

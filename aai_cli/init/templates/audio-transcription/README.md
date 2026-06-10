@@ -16,9 +16,9 @@ aai dev   # installs deps if needed, starts the server, opens http://localhost:3
 
 Push this folder to a Git repo and import it on Vercel. Set `ASSEMBLYAI_API_KEY`
 as a Vercel environment variable (the local `.env` is git-ignored and not deployed).
-No extra config is needed (no `vercel.json`): Vercel runs `api/index.py` as the
-function, and that FastAPI app serves both the page and assets (from `static/`)
-and the API.
+The shipped `vercel.json` pins the FastAPI framework preset, so Vercel builds
+`api/index.py` as the function and routes every request to that FastAPI app, which
+serves both the page and assets (from `static/`) and the API.
 
 ## Deploy elsewhere
 

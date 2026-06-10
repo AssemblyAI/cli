@@ -1,4 +1,5 @@
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -36,8 +37,22 @@ def test_required_files_present(template_dir):
         "runtime.txt",
         "Dockerfile",
         "dockerignore",
+        "vercel.json",
     ):
         assert (template_dir / rel).exists(), f"{template_dir.name} missing {rel}"
+
+
+def test_vercel_json_pins_fastapi_framework(template_dir):
+    """Vercel's zero-config Python detection now resolves an `api/` + Dockerfile layout
+    to the multi-service `services` framework, which fails the deploy ("no services
+    declared"). Pinning the FastAPI preset makes Vercel build `api/index.py` and route
+    every request to the ASGI app — and stops auto-detection from ever picking
+    `services` again."""
+    config = json.loads((template_dir / "vercel.json").read_text())
+    assert config.get("framework") == "fastapi", (
+        f'{template_dir.name}: vercel.json must pin "framework": "fastapi" so Vercel '
+        f'never auto-detects the "services" framework; got {config.get("framework")!r}'
+    )
 
 
 def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):

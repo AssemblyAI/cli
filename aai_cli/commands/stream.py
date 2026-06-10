@@ -290,7 +290,7 @@ def stream(
         rich_help_panel=help_panels.OPT_LLM,
     ),
     llm_interval: float = typer.Option(
-        30.0,
+        10.0,
         "--llm-interval",
         help="Seconds between --llm summary refreshes (0 refreshes on every turn).",
         min=0.0,
