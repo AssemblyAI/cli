@@ -19,6 +19,7 @@ from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_v
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
+from aai_cli.streaming.session import validate_output_flags
 from aai_cli.streaming.sources import FileSource
 
 app = typer.Typer()
@@ -56,7 +57,8 @@ def _open_audio(
     # One full-duplex stream for mic + speaker: macOS rejects two separate
     # streams on a device, which silently kills capture.
     duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
-    # notice() self-suppresses in JSON mode and routes to stderr in text mode.
+    # notice() self-suppresses in JSON mode and routes to stderr otherwise, so a
+    # piped `aai agent | …` never reads this advisory as transcript data.
     renderer.notice(
         "Use headphones — the mic stays open while the agent speaks, "
         "so speakers would let it hear itself.\n"
@@ -131,6 +133,7 @@ def agent(
         raise typer.Exit(code=0)
 
     def body(state: AppState, json_mode: bool) -> None:
+        validate_output_flags(json_mode=json_mode, output_field=output_field)
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
         if voice not in VOICES:
             raise UsageError(
@@ -142,6 +145,16 @@ def agent(
         if show_code:
             # Print-only: emit the equivalent agent script from the flags and exit
             # without authenticating or opening audio. Raw stdout for `> script.py`.
+            if source or sample:
+                # A faithful file-driven agent script would need the CLI's whole
+                # ffmpeg-decode + ready-gate + exit-after-reply machinery, which is
+                # impractical to inline; the snippet is microphone-driven, so say so
+                # on stderr instead of silently dropping the source. stderr keeps
+                # `--show-code > script.py` byte-clean.
+                output.error_console.print(
+                    "[aai.warn]Note:[/aai.warn] the generated script uses the microphone; "
+                    "it does not stream the audio source you passed."
+                )
             output.print_code(code_gen.agent(voice, system_prompt_text, greeting))
             return
 

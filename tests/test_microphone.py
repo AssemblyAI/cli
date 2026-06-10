@@ -101,6 +101,26 @@ def test_device_error_raises_mic_error_exit_1():
         list(mic)
     assert exc.value.error_type == "mic_error"
     assert exc.value.exit_code == 1
+    assert "microphone device 99" in exc.value.message  # names the explicit device
+    assert "Invalid device" in exc.value.message  # keeps the underlying cause
+    assert exc.value.suggestion is not None
+    assert "--device" in exc.value.suggestion
+
+
+def test_default_device_error_names_default_microphone():
+    # device=None must read as "the default microphone", not the raw "device None",
+    # and carry an actionable suggestion (permissions / pick another device).
+    def boom(*, sample_rate, device):
+        raise OSError("Error querying device -1")
+
+    mic = MicrophoneSource(capture_rate=16000, stream_factory=boom)
+    with pytest.raises(CLIError) as exc:
+        list(mic)
+    assert "the default microphone" in exc.value.message
+    assert "device None" not in exc.value.message
+    assert exc.value.suggestion is not None
+    assert "permissions" in exc.value.suggestion
+    assert "python -m sounddevice" in exc.value.suggestion
 
 
 def test_closes_closeable_stream_in_finally():

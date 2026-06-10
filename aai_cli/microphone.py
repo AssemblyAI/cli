@@ -153,10 +153,20 @@ class MicrophoneSource:
         except ImportError as exc:
             raise audio_missing_error() from exc
         except Exception as exc:
+            # "device None" reads like a bug; name the default mic in plain words.
+            target = (
+                "the default microphone"
+                if self.device is None
+                else f"microphone device {self.device}"
+            )
             raise CLIError(
-                f"Could not open the microphone (device {self.device}): {exc}",
+                f"Could not open {target}: {exc}",
                 error_type="mic_error",
                 exit_code=1,
+                suggestion=(
+                    "Check your OS microphone permissions for this terminal, or pick "
+                    "another input with --device (list devices: python -m sounddevice)."
+                ),
             ) from exc
         if self._on_open is not None:
             self._on_open()  # the device is open and recording now

@@ -131,10 +131,23 @@ def test_human_close_commits_open_partial():
     assert "half a sentence" in buf.getvalue()  # committed, not dropped
 
 
-def test_human_notice_rendered():
-    r, buf = _human()
+def test_human_notice_goes_to_stderr_not_stdout():
+    # Human (default) mode is also piped sometimes (`aai agent | head`); the notice
+    # must land on stderr in every non-JSON mode so stdout carries only transcript.
+    out, err = io.StringIO(), io.StringIO()
+    console = theme.make_console(file=out, force_terminal=True, width=80)
+    r = AgentRenderer(json_mode=False, out=out, err=err, console=console)
     r.notice("Half-duplex note.\n")
-    assert "Half-duplex note." in buf.getvalue()
+    assert "Half-duplex note." in err.getvalue()
+    assert out.getvalue() == ""
+
+
+def test_json_notice_is_suppressed():
+    out, err = io.StringIO(), io.StringIO()
+    r = AgentRenderer(json_mode=True, out=out, err=err)
+    r.notice("Half-duplex note.\n")
+    assert out.getvalue() == ""
+    assert err.getvalue() == ""
 
 
 def test_human_connected_and_stopped_announce():

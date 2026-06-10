@@ -124,6 +124,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
 
 
 def test_stream_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
 
     def fake_stream_audio(api_key, source, *, params, **_kwargs):
@@ -387,6 +388,104 @@ def test_stream_show_code_prints_without_streaming(monkeypatch):
     assert "StreamingClient(" in result.output
     assert "MicrophoneStream(sample_rate=16000)" in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+
+
+def test_stream_show_code_file_source_streams_that_file():
+    # A file source must generate file-streaming code, not silently emit mic code.
+    # The file need not exist: generating code for it is legitimate (check_local=False).
+    result = runner.invoke(app, ["stream", "rec.wav", "--show-code"])
+    assert result.exit_code == 0
+    assert "client.stream(file_chunks())" in result.output
+    assert "'rec.wav'" in result.output  # the ffmpeg input is the file passed
+    assert "MicrophoneStream" not in result.output
+    compile(result.output, "<show-code>", "exec")  # the printed script is runnable
+
+
+def test_stream_show_code_stdin_source_reads_stdin():
+    result = runner.invoke(app, ["stream", "-", "--show-code"])
+    assert result.exit_code == 0
+    assert "client.stream(stdin_chunks())" in result.output
+    assert "sys.stdin.buffer" in result.output
+    assert "MicrophoneStream" not in result.output
+    compile(result.output, "<show-code>", "exec")
+
+
+def test_stream_show_code_sample_streams_hosted_clip():
+    result = runner.invoke(app, ["stream", "--sample", "--show-code"])
+    assert result.exit_code == 0
+    assert "wildfires.mp3" in result.output
+    assert "file_chunks()" in result.output
+    assert "MicrophoneStream" not in result.output
+
+
+def test_stream_show_code_honors_sample_rate_flag():
+    result = runner.invoke(app, ["stream", "--sample-rate", "8000", "--show-code"])
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "sample_rate=8000," in result.output  # params match the capture rate
+
+
+def test_stream_show_code_honors_config_sample_rate():
+    # An explicit `--config sample_rate=…` must not be overridden by the 16 kHz default.
+    result = runner.invoke(app, ["stream", "--config", "sample_rate=8000", "--show-code"])
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "sample_rate=8000," in result.output
+
+
+def test_stream_show_code_sample_rate_flag_beats_config():
+    result = runner.invoke(
+        app, ["stream", "--sample-rate", "8000", "--config", "sample_rate=44100", "--show-code"]
+    )
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "44100" not in result.output
+
+
+def test_stream_show_code_file_with_mic_flags_rejected():
+    # --show-code applies the same source validation as a real run, so the
+    # file + --sample-rate conflict errors instead of generating mic code.
+    result = runner.invoke(app, ["stream", "rec.wav", "--sample-rate", "8000", "--show-code"])
+    assert result.exit_code == 2
+    assert "--sample-rate" in result.output
+
+
+def test_stream_show_code_rejects_youtube_sources():
+    result = runner.invoke(app, ["stream", "https://youtu.be/abc", "--show-code"])
+    assert result.exit_code == 2
+    assert "YouTube" in result.output
+
+
+def test_stream_json_with_text_output_is_usage_error():
+    # Contradictory output shapes (--json + -o text) are rejected up front, before
+    # credentials, like the --llm + -o text precedent.
+    result = runner.invoke(app, ["stream", "--json", "-o", "text"])
+    assert result.exit_code == 2
+    assert "can't be combined with -o text" in result.output
+
+
+def test_stream_stdin_with_sample_rejected():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "-", "--sample"], input=b"\x00\x00")
+    assert result.exit_code == 2
+    assert "--sample" in result.output
+
+
+def test_stream_file_source_with_sample_rejected(monkeypatch, tmp_path):
+    # A real source plus --sample is a conflict (the file would silently lose),
+    # surfaced by resolve_audio_source as a usage error before any streaming.
+    config.set_api_key("default", "sk_live")
+
+    def _boom(*a, **k):
+        raise AssertionError("must not stream a conflicting source")
+
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _boom)
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"RIFF")
+    result = runner.invoke(app, ["stream", str(wav), "--sample"])
+    assert result.exit_code == 2
+    assert "--sample" in result.output
+    assert "cannot be combined" in result.output
 
 
 def test_stream_show_code_ignores_json_flag(monkeypatch):

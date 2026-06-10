@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import client, config_builder, llm, output
+from aai_cli import choices, client, config_builder, llm, output
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
@@ -51,6 +51,16 @@ class SourceOptions:
         return self.sample_rate is not None or self.device is not None
 
 
+def validate_output_flags(*, json_mode: bool, output_field: choices.TextOrJson | None) -> None:
+    """Reject --json combined with -o text, shared by `stream` and `agent`.
+
+    Same precedent as --llm + -o text: contradictory output shapes are a clean
+    usage error, not a silent coin-flip between plain text and NDJSON.
+    """
+    if json_mode and output_field is choices.TextOrJson.text:
+        raise UsageError("--json can't be combined with -o text; pick one output format.")
+
+
 def validate_sources(opts: SourceOptions, *, has_llm: bool, text_mode: bool) -> None:
     """Reject flag combinations that can't be honored, before any audio is opened."""
     if opts.system_audio and opts.system_audio_only:
@@ -72,6 +82,10 @@ def _validate_input_source(opts: SourceOptions) -> None:
                 "--sample-rate and --device require microphone input; use --system-audio."
             )
     elif opts.from_stdin:
+        if opts.sample:
+            # The stdin branch wins dispatch over --sample, so without this the
+            # hosted clip would be silently ignored in favor of the pipe.
+            raise UsageError("- (stdin) cannot be combined with --sample.")
         if opts.device is not None:
             raise UsageError("--device applies only to microphone input.")
     elif opts.from_file and opts.has_capture_overrides:

@@ -1,5 +1,7 @@
 import json
 
+import click.testing
+import typer.main
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -7,6 +9,11 @@ from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+def _invoke_split(args):
+    """Invoke with stdout/stderr captured separately (typer's runner always mixes)."""
+    return click.testing.CliRunner(mix_stderr=False).invoke(typer.main.get_command(app), args)
 
 
 def _login_result():
@@ -35,6 +42,7 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
 
 
 def test_agent_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
 
@@ -253,6 +261,54 @@ def test_agent_show_code_prints_without_session(monkeypatch):
     assert "agents.assemblyai.com" in result.output
     assert '"voice": "ivy"' in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+
+
+def test_agent_show_code_file_source_warns_on_stderr(monkeypatch):
+    # No faithful file-driven agent snippet exists yet; the mic-driven script must
+    # come with an explicit stderr note instead of silently ignoring the source.
+    def _boom(*a, **k):
+        raise AssertionError("must not run a session")
+
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", _boom)
+    result = _invoke_split(["agent", "clip.wav", "--show-code"])
+    assert result.exit_code == 0
+    assert "uses the microphone" in result.stderr
+    # (the console wraps the line, so assert a fragment that fits in 80 cols)
+    assert "does not stream the audio" in result.stderr
+    assert "uses the microphone" not in result.stdout  # stdout stays a clean script
+    compile(result.stdout, "<show-code>", "exec")
+
+
+def test_agent_show_code_sample_warns_on_stderr():
+    result = _invoke_split(["agent", "--sample", "--show-code"])
+    assert result.exit_code == 0
+    assert "uses the microphone" in result.stderr
+
+
+def test_agent_show_code_mic_emits_no_warning():
+    result = _invoke_split(["agent", "--show-code"])
+    assert result.exit_code == 0
+    assert result.stderr == ""  # nothing to warn about: the script matches the run
+    compile(result.stdout, "<show-code>", "exec")
+
+
+def test_agent_json_with_text_output_is_usage_error():
+    # Contradictory output shapes (--json + -o text) are rejected like stream's.
+    result = runner.invoke(app, ["agent", "--json", "-o", "text"])
+    assert result.exit_code == 2
+    assert "can't be combined with -o text" in result.output
+
+
+def test_agent_headphones_notice_routes_to_stderr(monkeypatch):
+    # `aai agent | head` must not eat the advisory as transcript data: in the
+    # default human mode the notice goes to stderr, stdout stays transcript-only.
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    result = _invoke_split(["agent"])
+    assert result.exit_code == 0
+    assert "headphones" in result.stderr.lower()
+    assert "headphones" not in result.stdout.lower()
 
 
 def test_agent_show_code_ignores_json_flag(monkeypatch):

@@ -1,9 +1,12 @@
 import base64
 import json
+import logging
+import types
 
 import pytest
 
 from aai_cli.agent.session import (
+    _WEBSOCKETS_LOGGERS,
     AgentRunConfig,
     VoiceAgentSession,
     _send_audio_loop,
@@ -307,6 +310,92 @@ def test_run_session_does_not_close_player_that_failed_to_open():
             connect=lambda url, **kwargs: _RecordingWS(),
         )
     assert player.closed is False  # never opened, so never closed
+
+
+class _HandshakeRejected(Exception):
+    """Mimics websockets' InvalidStatus: a structured HTTP status on ``.response``."""
+
+    def __init__(self, status):
+        super().__init__(f"server rejected WebSocket connection: HTTP {status}")
+        self.response = types.SimpleNamespace(status_code=status)
+
+
+def _run_with_connect(connect):
+    run_session(
+        "sk",
+        renderer=FakeRenderer(),
+        player=FakePlayer(),
+        mic=[],
+        config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
+        connect=connect,
+    )
+
+
+def test_run_session_handshake_403_is_api_error_like_stream():
+    # Harmonized with `stream`: a plain handshake 403 is an API error (exit 1), not
+    # "Your API key was rejected" — 403 also covers non-credential blocks.
+    def reject(url, **kwargs):
+        raise _HandshakeRejected(403)
+
+    with pytest.raises(APIError) as exc:
+        _run_with_connect(reject)
+    assert exc.value.error_type == "api_error"
+    assert exc.value.exit_code == 1
+    assert "HTTP 403" in exc.value.message
+
+
+def test_run_session_handshake_401_is_still_auth_failure():
+    # A genuinely auth-shaped rejection (HTTP 401) keeps the rejected-key path.
+    def reject(url, **kwargs):
+        raise _HandshakeRejected(401)
+
+    with pytest.raises(NotAuthenticated) as exc:
+        _run_with_connect(reject)
+    assert exc.value.exit_code == 4
+
+
+def test_run_session_auth_worded_failure_is_still_auth_failure():
+    # The text heuristic ("unauthorized" etc.) keeps working for real bad keys.
+    def reject(url, **kwargs):
+        raise RuntimeError("connection rejected: Unauthorized")
+
+    with pytest.raises(NotAuthenticated):
+        _run_with_connect(reject)
+
+
+class _CleanWS:
+    def send(self, _msg):
+        pass
+
+    def __iter__(self):
+        return iter(())
+
+    def close(self):
+        pass
+
+
+def test_run_session_silences_websockets_loggers():
+    # websockets' sync reader thread logs teardown errors (EOFError tracebacks) via
+    # its own loggers; run_session must mute them so they never hit the user's stderr.
+    loggers = [logging.getLogger(name) for name in _WEBSOCKETS_LOGGERS]
+    previous = [lg.level for lg in loggers]
+    try:
+        for lg in loggers:
+            lg.setLevel(logging.NOTSET)
+        _run_with_connect(lambda url, **kwargs: _CleanWS())
+        for lg in loggers:
+            assert lg.level == logging.CRITICAL
+            assert not lg.isEnabledFor(logging.ERROR)  # an ERROR record is dropped
+    finally:
+        for lg, level in zip(loggers, previous, strict=True):
+            lg.setLevel(level)
+
+
+def test_websockets_logger_names_cover_the_sync_client():
+    # The sync client logs through "websockets.client"; pin that the silenced set
+    # covers it (and the parent, for any future child loggers).
+    assert "websockets.client" in _WEBSOCKETS_LOGGERS
+    assert "websockets" in _WEBSOCKETS_LOGGERS
 
 
 def test_run_session_non_auth_failure_stays_api_error():

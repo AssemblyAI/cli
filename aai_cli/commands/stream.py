@@ -25,7 +25,12 @@ from aai_cli.help_text import examples_epilog
 from aai_cli.microphone import MicrophoneSource
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
-from aai_cli.streaming.session import SourceOptions, StreamSession, validate_sources
+from aai_cli.streaming.session import (
+    SourceOptions,
+    StreamSession,
+    validate_output_flags,
+    validate_sources,
+)
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
@@ -343,6 +348,7 @@ def stream(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
+        validate_output_flags(json_mode=json_mode, output_field=output_field)
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
         opts = SourceOptions(
             source=source,
@@ -380,20 +386,40 @@ def stream(
         base_flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
         if show_code:
-            # Print-only: emit the canonical microphone-streaming script (16 kHz) from
-            # the flags and exit without opening audio or authenticating. Raw stdout so
-            # `--show-code > script.py` yields a runnable file.
+            # Print-only: emit a script faithful to the requested source — mic
+            # (default), stdin (-), or a file/URL — and exit without opening audio or
+            # authenticating. Raw stdout so `--show-code > script.py` is runnable.
+            # The same source validation as a real run, so e.g. a file + --sample-rate
+            # conflict errors here too instead of silently generating mic code.
+            validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
             if opts.from_system_audio:
                 raise UsageError("--show-code does not support macOS system audio capture yet.")
+            if opts.source and youtube.is_youtube_url(opts.source):
+                raise UsageError(
+                    "--show-code does not support YouTube sources yet.",
+                    suggestion="Download the audio first (e.g. yt-dlp) and pass the local file.",
+                )
+            code_source: str | None = None
+            if opts.from_stdin:
+                code_source = "-"
+            elif opts.from_file:
+                # check_local=False: generating code for a file you don't have yet is fine.
+                code_source = client.resolve_audio_source(
+                    opts.source, sample=opts.sample, check_local=False
+                )
             merged = config_builder.merge_streaming_params(
-                flags=base_flags | {"sample_rate": TARGET_RATE},
+                # sample_rate precedence: --sample-rate (None is dropped by the merge)
+                # beats --config/--config-file, which beat the 16 kHz default below —
+                # so an explicit `--config sample_rate=…` is honored, not overridden.
+                flags=base_flags | {"sample_rate": opts.sample_rate},
                 overrides=config_kv,
                 config_file=config_file,
             )
+            merged.setdefault("sample_rate", TARGET_RATE)
             gateway = code_gen.gateway_options(
                 list(llm_prompt or []), model, max_tokens, interval=llm_interval
             )
-            output.print_code(code_gen.stream(merged, llm=gateway))
+            output.print_code(code_gen.stream(merged, llm=gateway, source=code_source))
             return
 
         # Validate the requested sources (including that a local file exists) before
