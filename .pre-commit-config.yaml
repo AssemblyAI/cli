@@ -48,7 +48,11 @@ repos:
       # them the moment an upstream release adds a value.
       - id: pytest
         name: pytest
-        entry: uv run --frozen python -m pytest -q -m "not e2e"
+        # Mirror check.sh: exclude both e2e (real API) and install_script (builds a
+        # wheel + runs install.sh / pip --user). install_script has its own dedicated
+        # "package install — real" CI jobs; running it here is slow and breaks under
+        # the locked .venv (the user-site install can't import aai_cli).
+        entry: uv run --frozen python -m pytest -q -m "not e2e and not install_script"
         language: system
         types: [python]
         pass_filenames: false
