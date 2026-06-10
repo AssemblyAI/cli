@@ -150,7 +150,7 @@ def _should_auto_login(ctx: typer.Context, err: NotAuthenticated) -> bool:
     return not (os.environ.get(config.ENV_API_KEY) and err.message == REJECTED_KEY_MESSAGE)
 
 
-def _auto_login_and_exit(state: AppState, json_mode: bool) -> NoReturn:
+def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
     """Run the browser login for an unauthenticated command, then exit.
 
     Always raises typer.Exit: with the login error's code on failure, or the
@@ -192,7 +192,7 @@ def run_command(
         if not auto_login or not _should_auto_login(ctx, err):
             output.emit_error(err, json_mode=json_mode)
             raise typer.Exit(code=err.exit_code) from None
-        _auto_login_and_exit(state, json_mode)
+        _auto_login_and_exit(state, json_mode=json_mode)
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None

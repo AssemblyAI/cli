@@ -82,7 +82,8 @@ def _transcribe_block(merged: dict[str, object], source: str) -> list[str]:
         call = f"transcript = transcriber.transcribe({source!r}, config=config)"
     else:
         call = f"transcript = transcriber.transcribe({source!r})"
-    return parts + [
+    return [
+        *parts,
         "",
         call,
         "",
