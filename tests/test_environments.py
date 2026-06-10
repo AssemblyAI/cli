@@ -23,7 +23,11 @@ def test_get_unknown_raises_cli_error():
     assert exc.value.exit_code == 2
     # Carries a recovery hint covering all three sources of the name (flag/env/profile).
     assert exc.value.suggestion is not None
+    assert "--env" in exc.value.suggestion
     assert "unset AAI_ENV" in exc.value.suggestion
+    # A bad env stored in the profile makes every command fail, and neither --env nor
+    # AAI_ENV is the fix there — the hint must point at the profile's config.toml too.
+    assert "profile's stored env in config.toml" in exc.value.suggestion
 
 
 def test_resolve_precedence(monkeypatch):

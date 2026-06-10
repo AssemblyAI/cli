@@ -200,6 +200,49 @@ def test_unexpected_config_shape_raises_clean_error(tmp_config):
     with pytest.raises(CLIError) as exc:
         config.get_active_profile()
     assert exc.value.error_type == "invalid_config"
+    assert exc.value.exit_code == 2
+
+
+def test_unexpected_config_shape_error_is_compact(tmp_config):
+    # The message keeps the failing field + a short reason and stays actionable,
+    # without pydantic's doc URLs or a dump of the offending input value.
+    (tmp_config / "config.toml").write_text('profiles = "oops"\n')
+    with pytest.raises(CLIError) as exc:
+        config.get_active_profile()
+    message = exc.value.message
+    assert "profiles:" in message  # the field that failed
+    assert "Fix or delete it." in message  # the actionable next step
+    assert "errors.pydantic.dev" not in message  # no pydantic doc URLs
+    assert "input_value" not in message  # no raw input dump
+    assert "oops" not in message  # the bad value itself isn't echoed back
+
+
+def test_unexpected_config_shape_error_names_nested_field(tmp_config):
+    (tmp_config / "config.toml").write_text("[profiles.default]\nenv = 12\n")
+    with pytest.raises(CLIError) as exc:
+        config.get_active_profile()
+    # The dotted location pinpoints which profile key is wrong.
+    assert "profiles.default.env:" in exc.value.message
+
+
+def test_validation_summary_joins_multiple_problems():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as exc:
+        config.Config.model_validate({"profiles": "oops", "active_profile": 7})
+    summary = config._validation_summary(exc.value)
+    assert "profiles:" in summary
+    assert "active_profile:" in summary
+    assert "; " in summary  # both problems, compactly joined
+    assert "https://" not in summary
+
+
+def test_validation_summary_labels_rootlevel_problems():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as exc:
+        config.Config.model_validate("not a table")
+    assert config._validation_summary(exc.value).startswith("top level: ")
 
 
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
@@ -311,3 +354,22 @@ def test_clear_credentials_without_keyring_backend_is_silent(monkeypatch):
     monkeypatch.setattr(keyring, "delete_password", no_backend)
     config.clear_api_key("default")
     config.clear_session("default")
+
+
+def test_keyring_write_failure_suggestion_covers_headless_linux(monkeypatch):
+    # The macOS keychain advice is useless on a headless Linux box; the suggestion
+    # must also offer the ASSEMBLYAI_API_KEY env-var path that works everywhere.
+    import keyring
+    import keyring.errors
+
+    def rejected(service, username, secret):
+        raise keyring.errors.KeyringError("locked")
+
+    monkeypatch.setattr(keyring, "set_password", rejected)
+    with pytest.raises(CLIError) as exc:
+        config.set_api_key("default", "sk_x")
+    assert exc.value.error_type == "keyring_error"
+    assert exc.value.suggestion is not None
+    assert "set ASSEMBLYAI_API_KEY instead" in exc.value.suggestion
+    # The macOS path stays for keychain users.
+    assert "security delete-generic-password -s assemblyai-cli" in exc.value.suggestion

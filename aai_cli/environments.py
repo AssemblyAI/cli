@@ -77,7 +77,9 @@ def get(name: str) -> Environment:
             error_type="invalid_environment",
             exit_code=2,
             suggestion=(
-                f"Pass --env with one of: {', '.join(ENVIRONMENTS)}, or unset AAI_ENV if it's set."
+                f"Pass --env with one of: {', '.join(ENVIRONMENTS)}, unset AAI_ENV if it's "
+                "set, or fix the profile's stored env in config.toml (where a bad value "
+                "fails every command)."
             ),
         )
     return env

@@ -307,11 +307,12 @@ def install(
     force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Set up your coding agent for AssemblyAI by installing three things:
+    """Set up your coding agent for AssemblyAI (docs MCP server + skills).
 
-    the assemblyai-docs MCP server (live API docs, via `claude mcp add`), the AssemblyAI
-    skill (via `npx skills add`), and the bundled aai-cli skill (copied from this package,
-    no network). Each step is idempotent and skipped if already present unless --force.
+    Installs three things: the assemblyai-docs MCP server (live API docs, via
+    `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled
+    aai-cli skill (copied from this package, no network). Each step is idempotent
+    and skipped if already present unless --force.
     """
 
     def body(_state: AppState, json_mode: bool) -> None:

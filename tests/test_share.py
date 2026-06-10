@@ -72,13 +72,66 @@ def test_share_prints_public_url(tmp_path, monkeypatch):
     assert server.terminated is False
 
 
-def test_share_missing_cloudflared_errors(tmp_path, monkeypatch):
+def test_share_missing_cloudflared_errors_with_brew_hint_on_macos(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)
+    monkeypatch.setattr("sys.platform", "darwin")
     _stub(monkeypatch, has_cloudflared=False)
     result = runner.invoke(app, ["share"])
     assert result.exit_code == 1
     assert "brew install cloudflared" in result.output
+
+
+def test_share_missing_cloudflared_errors_with_docs_url_on_linux(tmp_path, monkeypatch):
+    # brew is useless advice off macOS; Linux gets Cloudflare's official install docs.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    monkeypatch.setattr("sys.platform", "linux")
+    _stub(monkeypatch, has_cloudflared=False)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 1
+    # Rich wraps the long URL mid-token, so compare with all whitespace removed.
+    packed = "".join(result.output.split())
+    assert (
+        "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+        in packed
+    )
+    assert "brewinstallcloudflared" not in packed
+
+
+def test_cloudflared_install_hint_per_platform(monkeypatch):
+    from aai_cli.commands import share as share_cmd
+
+    monkeypatch.setattr("sys.platform", "darwin")
+    assert share_cmd._cloudflared_install_hint() == "Install it: brew install cloudflared"
+    monkeypatch.setattr("sys.platform", "linux")
+    assert share_cmd._cloudflared_install_hint() == (
+        "Install it: "
+        "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+    )
+
+
+def test_share_binds_loopback_not_procfile_wildcard(tmp_path, monkeypatch):
+    # share serves the LAN-facing side through cloudflared only; the local server
+    # itself must bind loopback, not the Procfile's 0.0.0.0.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    server, proxy = _stub(monkeypatch)
+    seq = iter([server, proxy])
+    commands = []
+
+    def spawn(command, **kwargs):
+        commands.append(command)
+        return next(seq)
+
+    monkeypatch.setattr("aai_cli.init.runner.spawn", spawn)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 0, result.output
+    dev_cmd = commands[0]
+    assert dev_cmd[dev_cmd.index("--host") + 1] == "127.0.0.1"
+    # The Procfile's wildcard bind must not survive into the local server command.
+    wildcard_host = WEB.split("--host ")[1].split(maxsplit=1)[0]
+    assert wildcard_host not in dev_cmd
 
 
 def test_share_missing_procfile_errors(tmp_path, monkeypatch):

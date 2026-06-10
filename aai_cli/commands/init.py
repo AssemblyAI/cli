@@ -182,8 +182,9 @@ def run_init(
     running dev server — it stops after install and leaves the run command as a hint.
     """
     if not json_mode:
-        # Vercel-style banner at the top of the run.
-        output.console.print(
+        # Vercel-style banner at the top of the run. Decoration goes to stderr (data →
+        # stdout): it must never pollute a piped stdout, even on an error path.
+        output.error_console.print(
             f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
         )
     chosen = _resolve_template(template)
@@ -243,7 +244,13 @@ def run_init(
 def init(
     ctx: typer.Context,
     template: str | None = typer.Argument(
-        None, help="Template to scaffold (omit to pick interactively)."
+        None,
+        # Enumerate the registry so the help text can never drift from the templates
+        # that actually ship.
+        help=(
+            f"Template to scaffold: {', '.join(templates.TEMPLATE_ORDER)} "
+            "(omit to pick interactively)."
+        ),
     ),
     directory: str | None = typer.Argument(None, help="Target directory (default: <template>)."),
     no_install: bool = typer.Option(

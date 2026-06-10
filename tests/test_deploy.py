@@ -19,6 +19,15 @@ runner = CliRunner()
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+@pytest.fixture(autouse=True)
+def in_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Run each test inside a scaffolded-looking project (deploy guards on ./Procfile)."""
+    monkeypatch.chdir(tmp_path)
+    procfile = tmp_path / "Procfile"
+    procfile.write_text("web: python -m uvicorn api.index:app --host 0.0.0.0 --port 3000\n")
+    return procfile
+
+
 def test_targets_are_frozen() -> None:
     # Every deploy target is a module-level singleton; freezing them guards
     # against accidental in-place mutation of shared deploy config.
@@ -197,11 +206,14 @@ def test_deploy_prod_flag_vercel(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _cmds(calls)[0] == ["vercel", "deploy", "--prod"]
 
 
-def test_deploy_prod_ignored_for_railway(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_prod_rejected_for_railway(monkeypatch: pytest.MonkeyPatch) -> None:
+    # --prod only means something to Vercel; silently dropping it would deploy a
+    # preview the user believed was production. Clean usage error instead.
     calls = _stub(monkeypatch, available=("railway",))
     result = runner.invoke(app, ["deploy", "--railway", "--prod", "--yes"])
-    assert result.exit_code == 0, result.output
-    assert _cmds(calls)[0] == ["railway", "up"]
+    assert result.exit_code == 2
+    assert "--prod is only supported for Vercel deploys." in result.output
+    assert _cmds(calls) == []  # nothing was deployed
 
 
 def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,19 +225,36 @@ def test_deploy_fly_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _cmds(calls) == [["fly", "launch"]]
 
 
-def test_deploy_prod_ignored_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_prod_rejected_for_fly(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("fly",))
     result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
-    assert result.exit_code == 0, result.output
-    assert _cmds(calls)[0] == ["fly", "launch"]
+    assert result.exit_code == 2
+    assert "--prod is only supported for Vercel deploys." in result.output
+    assert _cmds(calls) == []
 
 
-def test_deploy_missing_fly_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_missing_fly_errors_with_brew_hint_on_macos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.platform", "darwin")
     _stub(monkeypatch, available=())
     result = runner.invoke(app, ["deploy", "--fly", "--yes"])
     assert result.exit_code == 1
     assert "Fly CLI" in result.output
     assert "brew install flyctl" in " ".join(result.output.split())
+
+
+def test_deploy_missing_fly_errors_with_docs_url_on_linux(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # brew is useless advice off macOS; Linux gets the official install docs URL.
+    monkeypatch.setattr("sys.platform", "linux")
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--fly", "--yes"])
+    assert result.exit_code == 1
+    flat = " ".join(result.output.split())
+    assert "https://fly.io/docs/flyctl/install/" in flat
+    assert "brew install flyctl" not in flat
 
 
 def test_deploy_nonzero_exit_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,3 +276,61 @@ def test_deploy_help_lists_flags(flag: str) -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0
     assert flag in _ANSI.sub("", result.output)
+
+
+def test_deploy_outside_project_errors_like_dev(
+    in_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Same guard as `aai dev`/`aai share`: outside a scaffolded project, say
+    # "run `aai init`" — not "install the Vercel CLI".
+    in_project.unlink()
+    calls = _stub(monkeypatch, available=("vercel",))
+    result = runner.invoke(app, ["deploy", "--yes"])
+    assert result.exit_code == 1
+    assert "No Procfile here (expected ./Procfile)" in result.output
+    assert "aai init" in result.output
+    assert _cmds(calls) == []  # never deployed
+
+
+def test_deploy_procfile_guard_runs_before_cli_check(
+    in_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # With neither a Procfile nor the Vercel CLI, the missing-project error must win:
+    # the actionable next step is `aai init`, not installing a deploy CLI.
+    in_project.unlink()
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--yes"])
+    assert result.exit_code == 1
+    assert "No Procfile here" in result.output
+    assert "Vercel CLI" not in result.output
+
+
+def test_deploy_prod_usage_error_wins_even_outside_project(
+    in_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Flag validation precedes the project/CLI checks, with the conventional usage exit 2.
+    in_project.unlink()
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--fly", "--prod", "--yes"])
+    assert result.exit_code == 2
+    assert "--prod is only supported for Vercel deploys." in result.output
+    assert "No Procfile" not in result.output
+
+
+def test_deploy_prod_error_suggests_dropping_the_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub(monkeypatch, available=("railway",))
+    result = runner.invoke(app, ["deploy", "--railway", "--prod", "--yes"])
+    flat = " ".join(result.output.split())
+    assert "Drop --prod, or drop --railway to deploy to Vercel." in flat
+
+
+def test_install_hint_platform_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aai_cli.commands import deploy
+
+    monkeypatch.setattr("sys.platform", "darwin")
+    assert deploy._install_hint(FLY) == "Install it with `brew install flyctl`."
+    monkeypatch.setattr("sys.platform", "linux")
+    assert deploy._install_hint(FLY) == "Install it: https://fly.io/docs/flyctl/install/"
+    # npm-based targets have one hint that works everywhere, on either platform.
+    assert deploy._install_hint(VERCEL) == "Install it with `npm i -g vercel`."
+    assert deploy._install_hint(RAILWAY) == "Install it with `npm i -g @railway/cli`."

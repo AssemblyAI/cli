@@ -17,7 +17,7 @@ from aai_cli.init import devserver, procfile, runner
 app = typer.Typer()
 
 
-def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> None:
+def run_dev(*, port: int, host: str, no_install: bool, no_open: bool, json_mode: bool) -> None:
     """Boot the project's Procfile `web:` process locally, with live reload."""
     target = Path.cwd()
     use_uv = runner.has_uv()
@@ -34,8 +34,11 @@ def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> N
     if any(s["status"] == "failed" for s in report):
         raise typer.Exit(code=1)
 
-    command = devserver.dev_command(target, web, use_uv=use_uv)
-    url = f"http://localhost:{chosen_port}"
+    command = devserver.dev_command(target, web, use_uv=use_uv, host=host)
+    # The printed URL reflects the actual bind: "localhost" for the loopback
+    # default, the literal host for an explicit --host.
+    url_host = "localhost" if host == devserver.LOCAL_HOST else host
+    url = f"http://{url_host}:{chosen_port}"
     if not json_mode:
         output.console.print(
             f"[aai.heading]Starting[/aai.heading] [aai.url]{escape(url)}[/aai.url]"
@@ -62,6 +65,11 @@ def run_dev(*, port: int, no_install: bool, no_open: bool, json_mode: bool) -> N
 def dev(
     ctx: typer.Context,
     port: int = typer.Option(3000, "--port", help="Local server port."),
+    host: str = typer.Option(
+        devserver.LOCAL_HOST,
+        "--host",
+        help="Interface to bind. Loopback by default; pass 0.0.0.0 to expose on your network.",
+    ),
     no_open: bool = typer.Option(False, "--no-open", help="Launch, but don't open the browser."),
     no_install: bool = typer.Option(
         False, "--no-install", help="Skip dependency install; launch directly."
@@ -75,6 +83,6 @@ def dev(
     """
 
     def body(_state: AppState, json_mode: bool) -> None:
-        run_dev(port=port, no_install=no_install, no_open=no_open, json_mode=json_mode)
+        run_dev(port=port, host=host, no_install=no_install, no_open=no_open, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)

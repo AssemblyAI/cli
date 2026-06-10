@@ -73,6 +73,20 @@ def _config_file() -> Path:
     return config_dir() / "config.toml"
 
 
+def _validation_summary(exc: ValidationError) -> str:
+    """A compact, human-sized summary of a pydantic ValidationError.
+
+    Just "field: reason" per problem — pydantic's full rendering dumps input values
+    and errors.pydantic.dev doc URLs, which is noise (and a potential value leak)
+    in a one-line CLI error.
+    """
+    problems: list[str] = []
+    for err in exc.errors(include_url=False, include_input=False):
+        loc = ".".join(str(part) for part in err["loc"]) or "top level"
+        problems.append(f"{loc}: {err['msg']}")
+    return "; ".join(problems)
+
+
 # Parsed-config cache: path -> (mtime_ns, size, parsed). The several _load()
 # calls in one CLI invocation (profile, env, key resolution) then don't each
 # re-read and re-parse the same unchanged TOML; _dump() bumps the mtime, which
@@ -107,7 +121,8 @@ def _load() -> Config:
         from aai_cli.errors import CLIError
 
         raise CLIError(
-            f"Config file at {path} has an unexpected shape ({exc}). Fix or delete it.",
+            f"Config file at {path} has an unexpected shape "
+            f"({_validation_summary(exc)}). Fix or delete it.",
             error_type="invalid_config",
             exit_code=2,
         ) from exc
@@ -157,7 +172,8 @@ def _keyring_set(username: str, secret: str) -> None:
             error_type="keyring_error",
             suggestion=(
                 "Unlock your keyring, or remove the stale 'assemblyai-cli' entry and "
-                "retry (macOS: security delete-generic-password -s assemblyai-cli)."
+                "retry (macOS: security delete-generic-password -s assemblyai-cli). "
+                "On a headless machine without a keyring, set ASSEMBLYAI_API_KEY instead."
             ),
         ) from exc
 

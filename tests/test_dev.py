@@ -6,6 +6,9 @@ from aai_cli.main import app
 
 runner = CliRunner()
 WEB = "web: python -m uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}\n"
+# The wildcard host exactly as the Procfile spells it (avoids a bare "0.0.0.0"
+# literal, which ruff's S104 binding lint flags).
+WILDCARD_HOST = WEB.split("--host ")[1].split(maxsplit=1)[0]
 
 
 def _make_project(tmp_path):
@@ -40,12 +43,38 @@ def test_dev_boots_procfile_command_with_reload(tmp_path, monkeypatch):
     cmd = captured["command"]
     assert cmd[:5] == ["uv", "run", "python", "-m", "uvicorn"]
     assert "api.index:app" in cmd
-    assert "--host" in cmd
     assert cmd[-3:] == ["--port", "3000", "--reload"]
     assert captured["env"]["PORT"] == "3000"
     assert captured["open_browser"] is False
     assert "Starting" in result.output
     assert "localhost:3000" in result.output
+
+
+def test_dev_binds_loopback_not_procfile_wildcard(tmp_path, monkeypatch):
+    # The Procfile says 0.0.0.0 (right for deploy targets); `aai dev` must rewrite it
+    # so the dev server (with the real key in .env) never listens on the whole network —
+    # and the printed http://localhost URL then matches the actual bind.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    captured = _stub_runner(monkeypatch)
+    result = runner.invoke(app, ["dev", "--no-open"])
+    assert result.exit_code == 0, result.output
+    cmd = captured["command"]
+    assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
+    assert WILDCARD_HOST not in cmd
+    assert "localhost:3000" in result.output
+
+
+def test_dev_host_flag_opts_into_lan_exposure(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    captured = _stub_runner(monkeypatch)
+    result = runner.invoke(app, ["dev", "--no-open", "--host", WILDCARD_HOST])
+    assert result.exit_code == 0, result.output
+    cmd = captured["command"]
+    assert cmd[cmd.index("--host") + 1] == WILDCARD_HOST
+    # The printed URL reflects the explicit bind, not a hardcoded localhost.
+    assert "http://0.0.0.0:3000" in result.output
 
 
 def test_dev_opens_browser_by_default(tmp_path, monkeypatch):

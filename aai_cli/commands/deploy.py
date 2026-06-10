@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,8 +11,9 @@ import typer
 
 from aai_cli import help_panels, output
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
+from aai_cli.init import procfile
 
 # Flattened single-command sub-typer (same pattern as `aai dev`).
 app = typer.Typer()
@@ -22,10 +24,11 @@ class Target:
     name: str  # human label, e.g. "Vercel"
     bin: str  # executable resolved via shutil.which
     flag: str  # CLI selector, e.g. "--vercel"
-    install: str  # full hint sentence shown when the CLI is missing
+    install: str  # hint sentence shown when the CLI is missing (everywhere, or macOS-only)
     deploy_args: tuple[str, ...]  # subcommand(s) appended after `bin`
     supports_prod: bool = False  # whether `--prod` adds a production flag
     post_deploy_args: tuple[str, ...] | None = None  # command run after a successful deploy
+    install_non_darwin: str | None = None  # hint off-macOS, when `install` is brew-specific
 
     def command(self, *, prod: bool) -> list[str]:
         argv = [self.bin, *self.deploy_args]
@@ -54,7 +57,9 @@ FLY = Target(
     name="Fly",
     bin="fly",
     flag="--fly",
+    # brew is macOS-specific; elsewhere point at the official install docs.
     install="Install it with `brew install flyctl`.",
+    install_non_darwin="Install it: https://fly.io/docs/flyctl/install/",
     # `fly launch` does it all: creates the app, generates fly.toml (detecting the
     # shipped Dockerfile), and deploys — so no fly.toml needs to exist beforehand.
     deploy_args=("launch",),
@@ -74,10 +79,17 @@ def _resolve_target(selected: list[Target]) -> Target:
     return selected[0] if selected else VERCEL  # Vercel is the default
 
 
+def _install_hint(target: Target) -> str:
+    """The platform-appropriate install hint: brew on macOS, docs URL elsewhere."""
+    if target.install_non_darwin is not None and sys.platform != "darwin":
+        return target.install_non_darwin
+    return target.install
+
+
 def _require_cli(target: Target) -> None:
     if shutil.which(target.bin) is None:
         raise CLIError(
-            f"The {target.name} CLI is required to deploy. {target.install}",
+            f"The {target.name} CLI is required to deploy. {_install_hint(target)}",
             error_type="missing_dependency",
             exit_code=1,
         )
@@ -101,6 +113,14 @@ def _confirmed(target: Target, *, assume_yes: bool) -> bool:
 
 def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
     """Confirm, then run the target's deploy command in the current directory."""
+    if prod and not target.supports_prod:
+        raise UsageError(
+            "--prod is only supported for Vercel deploys.",
+            suggestion=f"Drop --prod, or drop {target.flag} to deploy to Vercel.",
+        )
+    # Same not-a-project guard as `aai dev`/`aai share`, checked before CLI presence
+    # so an empty directory says "run `aai init`", not "install the Vercel CLI".
+    procfile.require_procfile(Path.cwd())
     _require_cli(target)
     if not _confirmed(target, assume_yes=assume_yes):
         output.console.print("Aborted.")

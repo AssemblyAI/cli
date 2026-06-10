@@ -143,7 +143,50 @@ def test_init_prints_cli_banner_in_human_mode(tmp_path, monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["init", TEMPLATE, "x", "--no-install"])
     assert result.exit_code == 0, result.output
-    assert "AssemblyAI CLI" in result.output
+    # Decoration goes to stderr (data → stdout), so a piped stdout never sees it.
+    assert "AssemblyAI CLI" in result.stderr
+    assert "AssemblyAI CLI" not in result.stdout
+
+
+def test_init_banner_stays_off_stdout_on_error_paths(tmp_path, monkeypatch):
+    # The banner prints before template validation; an error run must still leave
+    # stdout empty (errors + banner are both stderr-only in human mode).
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    result = runner.invoke(app, ["init", "nope", "x", "--no-install"])
+    assert result.exit_code == 1
+    assert "AssemblyAI CLI" in result.stderr
+    assert result.stdout == ""
+
+
+def test_init_help_enumerates_template_names():
+    import re
+
+    from aai_cli.init import templates
+
+    result = runner.invoke(app, ["init", "--help"])
+    assert result.exit_code == 0
+    # Strip ANSI (CI forces color) and unwrap lines before matching. Every template
+    # name from the registry must be visible (live-captions appears nowhere else in
+    # the help, so this pins the enumeration, not the Examples epilog).
+    flat = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
+    for name in templates.TEMPLATE_ORDER:
+        assert name in flat
+
+
+def test_init_template_arg_help_is_derived_from_registry():
+    # The exact help string, render-independent: derived from TEMPLATE_ORDER so the
+    # enumeration can never drift from the templates that actually ship.
+    import inspect
+
+    from typer.models import ArgumentInfo
+
+    default = inspect.signature(init_cmd.init).parameters["template"].default
+    assert isinstance(default, ArgumentInfo)
+    assert default.help == (
+        "Template to scaffold: audio-transcription, live-captions, voice-agent "
+        "(omit to pick interactively)."
+    )
 
 
 def test_init_here_scaffolds_into_cwd(tmp_path, monkeypatch):
