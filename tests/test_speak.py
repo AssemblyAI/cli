@@ -19,7 +19,7 @@ def _fake_key(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def fake_synthesize(monkeypatch: pytest.MonkeyPatch):
-    calls: dict = {}
+    calls: dict[str, object] = {}
 
     def _fake(api_key, cfg, *, connect=None, on_warning=None):
         calls["api_key"] = api_key

@@ -81,16 +81,18 @@ def test_play_pcm_reraises_cli_error_unchanged(monkeypatch: pytest.MonkeyPatch):
 def test_default_output_stream_opens_raw_int16_mono_stream(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 
-    def _raw_output_stream(**kwargs: object) -> str:
+    sentinel = object()
+
+    def _raw_output_stream(**kwargs: object) -> object:
         captured.update(kwargs)
-        return "stream-sentinel"
+        return sentinel
 
     fake_sd = types.ModuleType("sounddevice")
     monkeypatch.setattr(fake_sd, "RawOutputStream", _raw_output_stream, raising=False)
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
 
-    stream = audio._default_output_stream(24000)
-    assert stream == "stream-sentinel"
+    stream: object = audio._default_output_stream(24000)
+    assert stream is sentinel  # returns exactly what RawOutputStream produced
     assert captured == {"samplerate": 24000, "channels": 1, "dtype": "int16"}
 
 

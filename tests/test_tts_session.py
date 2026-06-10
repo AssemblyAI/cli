@@ -45,18 +45,23 @@ def test_query_params_serializes_sample_rate_as_string():
     assert cfg.query_params() == {"sample_rate": "16000"}
 
 
+def _set_attr(obj: object, name: str, value: object) -> None:
+    # Indirect setattr: the attribute name is opaque to the type checker (so no
+    # read-only error) and non-constant (so ruff's B010 leaves it as setattr),
+    # while still hitting a frozen dataclass's blocking __setattr__ at runtime.
+    setattr(obj, name, value)
+
+
 def test_speak_config_is_immutable():
-    # frozen=True: attribute assignment must raise (setattr avoids a static
-    # type error so no `# type: ignore` escape hatch is needed).
     cfg = session.SpeakConfig(text="hi")
-    with pytest.raises(AttributeError):
-        cfg.text = "changed"
+    with pytest.raises(AttributeError):  # frozen=True -> assignment is blocked
+        _set_attr(cfg, "text", "changed")
 
 
 def test_speak_result_is_immutable():
     result = session.SpeakResult(pcm=b"\x01", sample_rate=24000, audio_duration_seconds=0.0)
     with pytest.raises(AttributeError):
-        result.sample_rate = 1
+        _set_attr(result, "sample_rate", 1)
 
 
 class FakeWS:
@@ -64,7 +69,7 @@ class FakeWS:
 
     def __init__(self, incoming: list[str]) -> None:
         self._incoming = list(incoming)
-        self.sent: list[dict] = []
+        self.sent: list[dict[str, object]] = []
         self.closed = False
 
     def recv(self) -> str:
@@ -89,7 +94,7 @@ def _audio_frame(pcm: bytes, *, sample_rate: int = 24000, final: bool) -> str:
     )
 
 
-def _connect_returning(ws: FakeWS, captured: dict):
+def _connect_returning(ws: FakeWS, captured: dict[str, object]):
     def _connect(url: str, **kwargs):
         captured["url"] = url
         captured["kwargs"] = kwargs
