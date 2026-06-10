@@ -19,7 +19,11 @@ def test_render_steps_colors_status() -> None:
     assert "[aai.heading]" in rendered
     # ...and renders to real ANSI through the themed console.
     buf = io.StringIO()
-    console = theme.make_console(file=buf, force_terminal=True, color_system="truecolor")
+    # _environ={} pins the color depth: Rich reads ambient color env at render time,
+    # which leaks across tests and otherwise flips truecolor to a 16-color downsample.
+    console = theme.make_console(
+        file=buf, force_terminal=True, color_system="truecolor", _environ={}
+    )
     console.print(rendered)
     out = buf.getvalue()
     assert "installed" in out
