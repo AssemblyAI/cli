@@ -139,6 +139,9 @@ def test_get_errored_transcript_exits_nonzero(mocker):
     )
     result = runner.invoke(app, ["transcripts", "get", "t_err"])
     assert result.exit_code == 1
+    # The transcript's own error message is surfaced, not the generic fallback
+    # (pins `getattr(transcript, "error", None) or "Transcript failed."`).
+    assert "decode failed" in result.output
 
 
 def test_list_table_colors_status(monkeypatch, mocker):

@@ -149,6 +149,53 @@ def test_run_session_surfaces_mic_open_failure_from_capture_thread():
     assert exc.value.exit_code == 1  # the real mic failure reaches the user, not a hang
 
 
+def test_run_session_capture_thread_is_daemon(monkeypatch):
+    # The capture thread is a daemon so a stuck mic read can't keep the process alive
+    # after the session ends.
+    import threading as _threading
+
+    from aai_cli.agent import session as session_mod
+
+    daemons = []
+    real_cls = session_mod.threading.Thread
+
+    class SpyThread(real_cls):
+        def __init__(self, *a, **k):
+            daemons.append(k.get("daemon"))
+            super().__init__(*a, **k)
+
+    monkeypatch.setattr(session_mod.threading, "Thread", SpyThread)
+
+    class _BoomMic:
+        def __iter__(self):
+            raise CLIError("no microphone", error_type="mic_error", exit_code=1)
+
+    class _BlockingWS:
+        def __init__(self):
+            self._closed = _threading.Event()
+
+        def send(self, _msg):
+            pass
+
+        def __iter__(self):
+            self._closed.wait(timeout=2)
+            return iter(())
+
+        def close(self):
+            self._closed.set()
+
+    with pytest.raises(CLIError):
+        run_session(
+            "sk_live",
+            renderer=FakeRenderer(),
+            player=FakePlayer(),
+            mic=_BoomMic(),
+            config=AgentRunConfig(voice="ivy", system_prompt="x", greeting="hi"),
+            connect=lambda url, **kwargs: _BlockingWS(),
+        )
+    assert daemons == [True]  # the one capture thread, created as a daemon
+
+
 def test_run_session_does_not_close_player_that_failed_to_open():
     # If opening the speaker stream raises, the cleanup must NOT call close() on a
     # player that never started (pins the player_started=False initializer).

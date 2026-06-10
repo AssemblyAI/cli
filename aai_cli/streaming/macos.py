@@ -84,7 +84,9 @@ def build_helper() -> Path:
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     module_cache = cache_dir / "swift-module-cache"
-    module_cache.mkdir(parents=True, exist_ok=True)
+    # parents=True is an equivalent mutant here: cache_dir was just created above, so
+    # module_cache's parent always exists. exist_ok is covered by the rebuild test.
+    module_cache.mkdir(parents=True, exist_ok=True)  # pragma: no mutate
     source_path = cache_dir / f"{_HELPER_PREFIX}-{digest}.swift"
     source_path.write_bytes(source)
     tmp_helper = helper.with_suffix(".tmp")

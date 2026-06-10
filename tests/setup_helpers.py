@@ -32,12 +32,14 @@ class FakeRun:
 
     def __init__(self, returncodes=None, *, creates_skill=True, removes_skill=True):
         self.calls = []
+        self.invocations = []  # (cmd, kwargs) per call, so tests can assert timeout etc.
         self.returncodes = returncodes or {}
         self.creates_skill = creates_skill
         self.removes_skill = removes_skill
 
     def __call__(self, cmd, *args, **kwargs):
         self.calls.append(cmd)
+        self.invocations.append((list(cmd), dict(kwargs)))
         rc = 0
         best = -1
         for prefix, code in self.returncodes.items():

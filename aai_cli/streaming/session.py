@@ -296,7 +296,9 @@ class StreamSession:
             thread.start()
         while any(thread.is_alive() for thread in threads):
             for thread in threads:
-                thread.join(timeout=0.1)
+                # Poll interval: a responsiveness/CPU tradeoff, not behavior -- the loop
+                # surfaces a worker error within ~0.1s. Exact value isn't assertable.
+                thread.join(timeout=0.1)  # pragma: no mutate
             if not errors.empty():
                 raise errors.get()
         if not errors.empty():

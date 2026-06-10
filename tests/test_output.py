@@ -37,6 +37,16 @@ def test_is_agentic_false_for_plain_interactive_tty(monkeypatch):
     assert output.is_agentic() is False
 
 
+def test_is_agentic_true_when_stdout_not_a_tty(monkeypatch):
+    # Piped/redirected stdout means no interactive human, so the spinner is
+    # suppressed even with no agent env var set -- guards the `not a tty -> True`
+    # early return (without it, this path would fall through to the env-var check).
+    monkeypatch.setattr(output, "_stdout_is_tty", lambda: False)
+    for var in output._AGENT_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    assert output.is_agentic() is True
+
+
 def test_mask_secret_preserves_only_short_edges():
     assert output.mask_secret("sk_1234567890") == "sk_…7890"
     assert output.mask_secret("12345678") == "123…5678"

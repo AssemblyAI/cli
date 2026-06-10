@@ -160,6 +160,16 @@ def test_json_mode_emits_ndjson_events():
     assert lines[1] == {"type": "turn", "transcript": "hi", "end_of_turn": True}
 
 
+def test_turn_defaults_end_of_turn_to_false_when_absent():
+    # An event missing end_of_turn must read as a partial (False), never a finalized
+    # turn; pins the getattr default against a flip to True.
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.turn(types.SimpleNamespace(transcript="hi"))  # no end_of_turn attribute
+    event = json.loads(out.getvalue().splitlines()[0])
+    assert event["end_of_turn"] is False
+
+
 def test_json_mode_emits_source_when_labeled():
     out = io.StringIO()
     r = StreamRenderer(json_mode=True, out=out)

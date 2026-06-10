@@ -291,10 +291,13 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
+    daemons = []
+
     class ImmediateThread:
         def __init__(self, *, target, args, daemon):
             self._target = target
             self._args = args
+            daemons.append(daemon)
 
         def start(self):
             self._target(*self._args)
@@ -315,6 +318,8 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
     result = runner.invoke(app, ["stream", "--system-audio", "--json"])
     assert result.exit_code == 1
     assert "failed" in result.output
+    # Both source workers run as daemons so a wedged stream can't block process exit.
+    assert daemons and all(d is True for d in daemons)
 
 
 def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypatch):

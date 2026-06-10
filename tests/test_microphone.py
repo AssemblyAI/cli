@@ -220,6 +220,16 @@ def test_device_default_rate_falls_back_on_non_numeric_rate(monkeypatch) -> None
     assert _device_default_rate(None) == _FALLBACK_RATE
 
 
+def test_device_default_rate_keeps_smallest_positive_rate(monkeypatch) -> None:
+    # A reported rate of exactly 1 is positive and must be kept as-is; only a
+    # non-positive (<= 0) rate falls back. Pins the `rate > 0` boundary so it can't
+    # drift to `rate > 1` and silently discard a legitimate 1 Hz reading.
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.query_devices = lambda device, kind: {"default_samplerate": 1.0}
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    assert _device_default_rate(None) == 1
+
+
 def test_sounddevice_mic_yields_bytes_then_stops_and_closes():
     stream = _FakeRawStream()
     mic = _SoundDeviceMic(stream, blocksize=1024)
@@ -249,6 +259,24 @@ def test_default_mic_stream_opens_started_sounddevice_stream(monkeypatch) -> Non
     assert created["channels"] == 1  # mono capture
     assert created["dtype"] == "int16"  # PCM16
     assert next(iter(stream)) == b"\x01\x02"
+
+
+def test_default_mic_stream_floors_blocksize_at_one(monkeypatch) -> None:
+    # A pathologically small sample rate makes `sample_rate // 10` round to 0; the
+    # max(1, ...) floor must still open with one frame per read, never 0 (which would
+    # make sounddevice read nothing). Pins that floor at 1.
+    created: dict[str, Any] = {}
+
+    def raw_input_stream(**kwargs):
+        created.update(kwargs)
+        return _FakeRawStream(**kwargs)
+
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.RawInputStream = raw_input_stream
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    _default_mic_stream(sample_rate=5, device=None)  # 5 // 10 == 0
+    assert created["blocksize"] == 1
 
 
 def test_default_mic_stream_missing_sounddevice_raises_mic_missing(monkeypatch):
