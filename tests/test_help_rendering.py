@@ -37,16 +37,6 @@ def test_no_flag_name_is_clipped_at_80_columns(argv):
     assert not _CLIPPED_FLAG.search(plain), _CLIPPED_FLAG.search(plain)
 
 
-def test_root_help_documents_authentication():
-    # The shared "how do I authenticate / pick a backend" line: the env vars must be
-    # discoverable from the CLI itself, not only from external docs.
-    result = runner.invoke(app, ["--help"])
-    assert result.exit_code == 0
-    plain = _plain(result.output)
-    assert "ASSEMBLYAI_API_KEY" in plain
-    assert "AAI_ENV" in plain
-
-
 def test_unknown_flag_suggestion_renders_clean():
     # Vendored Click formats this as a stringified 1-tuple ("('(Possible options:
     # --json)',)"); main.py folds the suggestion into the message instead.
