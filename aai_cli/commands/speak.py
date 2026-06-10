@@ -13,6 +13,12 @@ from aai_cli.tts import audio, session
 
 app = typer.Typer()
 
+# The streaming-TTS server requires an explicit voice and language on the
+# connection (it does not backfill them), so the CLI always sends a value. These
+# mirror the service's own documented defaults; override with --voice/--language.
+DEFAULT_VOICE = "Vivian"
+DEFAULT_LANGUAGE = "English"
+
 
 def _read_text(text: str | None) -> str:
     """The text to speak: the argument if non-blank, else stdin when piped."""
@@ -73,10 +79,8 @@ def _emit_result(
 def speak(
     ctx: typer.Context,
     text: str | None = typer.Argument(None, help="Text to speak. Omit to read from stdin."),
-    voice: str | None = typer.Option(None, "--voice", help="Voice id. Server default if omitted."),
-    language: str | None = typer.Option(
-        None, "--language", help="Language. Server default if omitted."
-    ),
+    voice: str = typer.Option(DEFAULT_VOICE, "--voice", help="Voice id."),
+    language: str = typer.Option(DEFAULT_LANGUAGE, "--language", help="Language of the text."),
     sample_rate: int | None = typer.Option(
         None, "--sample-rate", help="Output sample rate in Hz. Server default if omitted."
     ),

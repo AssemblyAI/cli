@@ -6,17 +6,25 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol
 from urllib.parse import urlencode
 
 from aai_cli import environments
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
-# The websocket connection and the `connect` factory come from a library with no
-# usable type stubs; alias that untyped boundary so each role is named and Any
-# stays in one place. (Server frames remain dict[str, Any].)
-_WebSocket = Any
-_Connect = Any
+
+class _WebSocket(Protocol):
+    """The slice of a websockets sync connection this module drives — named as a
+    Protocol so the untyped library boundary is structurally typed, not opaque."""
+
+    def recv(self) -> str | bytes: ...
+    def send(self, data: str, /) -> None: ...  # positional-only: matches ws send(message)
+    def close(self) -> None: ...
+
+
+# The connect factory: returns a fresh _WebSocket. websockets' real sync client
+# matches structurally; tests inject a fake with the same surface.
+_Connect = Callable[..., _WebSocket]
 
 # A pre-upgrade HTTP 403 on the WebSocket handshake is NOT a rejected key (it also
 # covers WAF/region/plan blocks) — mirrors how agent/stream classify handshakes.
@@ -90,6 +98,15 @@ def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
     return APIError(f"{message}: {exc}")
 
 
+def _default_connect(
+    url: str, *, additional_headers: dict[str, str], max_size: int | None
+) -> _WebSocket:
+    """The real websockets sync client, imported lazily so tests can inject a fake."""
+    from websockets.sync.client import connect
+
+    return connect(url, additional_headers=additional_headers, max_size=max_size)
+
+
 def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
     """Open the TTS socket, mapping a connect failure to a clean CLIError."""
     try:
@@ -119,7 +136,7 @@ def _run_protocol(
     # is reassigned from the frame), so its literal can't be asserted.
     sample_rate = 0  # pragma: no mutate
     while True:
-        msg: dict[str, Any] = json.loads(ws.recv())
+        msg = json.loads(ws.recv())
         mtype = msg.get("type")
         if mtype == "Audio":
             pcm.extend(base64.b64decode(msg["audio"]))
@@ -144,7 +161,7 @@ def synthesize(
     api_key: str,
     config: SpeakConfig,
     *,
-    connect: _Connect = None,
+    connect: _Connect | None = None,
     on_warning: Callable[[str], None] | None = None,
 ) -> SpeakResult:
     """Open the streaming-TTS socket and synthesize ``config.text`` to PCM.
@@ -154,7 +171,7 @@ def synthesize(
     """
     _silence_websockets_logging()
     if connect is None:
-        from websockets.sync.client import connect
+        connect = _default_connect
 
     ws = _open_ws(connect, api_key, ws_url(config.query_params()))
     try:

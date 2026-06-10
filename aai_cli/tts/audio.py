@@ -3,10 +3,20 @@ from __future__ import annotations
 import wave
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 from aai_cli.errors import CLIError
 from aai_cli.microphone import audio_missing_error
+
+
+class _OutputStream(Protocol):
+    """The slice of a sounddevice output stream play_pcm drives — named as a
+    Protocol so the untyped library boundary is structurally typed, not opaque."""
+
+    def start(self) -> None: ...
+    def write(self, data: bytes, /) -> object: ...  # real write returns a bool we ignore
+    def stop(self) -> None: ...
+    def close(self) -> None: ...
 
 
 def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
@@ -19,20 +29,21 @@ def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
         wav.writeframes(pcm)
 
 
-def _default_output_stream(sample_rate: int) -> Any:
+def _default_output_stream(sample_rate: int) -> _OutputStream:
     """A started-on-demand raw 16-bit mono output stream from sounddevice."""
     try:
         import sounddevice as sd
     except ImportError as exc:
         raise audio_missing_error() from exc
-    return sd.RawOutputStream(samplerate=sample_rate, channels=1, dtype="int16")
+    stream: _OutputStream = sd.RawOutputStream(samplerate=sample_rate, channels=1, dtype="int16")
+    return stream
 
 
 def play_pcm(
     pcm: bytes,
     sample_rate: int,
     *,
-    stream_factory: Callable[[int], Any] | None = None,
+    stream_factory: Callable[[int], _OutputStream] | None = None,
 ) -> None:
     """Play 16-bit mono PCM through the default output device (blocks until done).
 

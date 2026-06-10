@@ -4,7 +4,6 @@ import sys
 import types
 import wave
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -80,14 +79,14 @@ def test_play_pcm_reraises_cli_error_unchanged(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_default_output_stream_opens_raw_int16_mono_stream(monkeypatch: pytest.MonkeyPatch):
-    captured: dict[str, Any] = {}
+    captured: dict[str, object] = {}
 
-    def _raw_output_stream(**kwargs: Any) -> str:
+    def _raw_output_stream(**kwargs: object) -> str:
         captured.update(kwargs)
         return "stream-sentinel"
 
-    fake_sd: Any = types.ModuleType("sounddevice")
-    fake_sd.RawOutputStream = _raw_output_stream
+    fake_sd = types.ModuleType("sounddevice")
+    monkeypatch.setattr(fake_sd, "RawOutputStream", _raw_output_stream, raising=False)
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
 
     stream = audio._default_output_stream(24000)
