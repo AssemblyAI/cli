@@ -28,9 +28,11 @@ _CLOUDFLARED_DOCS = (
 
 
 def _cloudflared_install_hint() -> str:
-    if sys.platform == "darwin":
-        return "Install it: brew install cloudflared"
-    return f"Install it: {_CLOUDFLARED_DOCS}"
+    # A ternary (not an if/return) so neither branch reads as unreachable under
+    # mypy --warn-unreachable, which targets one platform at a time: on macOS the
+    # second return looked dead, on Linux the first would.
+    hint = "brew install cloudflared" if sys.platform == "darwin" else _CLOUDFLARED_DOCS
+    return f"Install it: {hint}"
 
 
 def _require_cloudflared() -> None:

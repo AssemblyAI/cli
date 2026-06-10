@@ -10,9 +10,17 @@
 useDefault = true
 
 [allowlist]
-description = "Fake placeholder API keys used only in tests and planning docs"
+description = "Fake placeholder keys (tests/docs) + gitignored per-developer agent settings"
 regexTarget = "match"
 regexes = [
   '''sk_abcdef1234''',
   '''sk_zzzzzz9999''',
+]
+# `gitleaks dir` scans the working tree regardless of .gitignore, so high-entropy values
+# in a developer's gitignored `.claude/settings.local.json` (a personal Claude Code file
+# that never enters the repo) would fail the *local* gate while CI — which lacks the file
+# — passes. Exclude the path so local runs match CI. Tracked `.claude/` files
+# (settings.json, agents/, skills/) are not matched and stay scanned.
+paths = [
+  '''\.claude/settings\.local\.json$''',
 ]

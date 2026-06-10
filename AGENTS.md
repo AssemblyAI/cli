@@ -115,6 +115,32 @@ Lessons that cost time in agent sessions — read before exercising `uv run aai`
   blocking path can't wedge the session. For pytest, `--timeout N` (pytest-timeout, in the
   dev group) does the same per-test.
 
+### Replay fixtures (offline end-to-end coverage)
+
+`tests/test_replay_e2e.py` drives whole commands (`transcribe`/`transcripts`/`llm`/
+`balance`/`usage`/`limits`) against **real** API responses recorded once and replayed
+offline — the command's own parsing/rendering runs, but pytest-socket stays armed, so
+these live in the default suite. Three moving parts:
+
+- **`tests/fixtures/api/*.json`** — scrubbed snapshots (API key/JWT redacted, `email` and
+  `account_id` faked, private `cdn.assemblyai.com/upload/…` URLs redacted). Committed and
+  gitleaks-clean; treat them like syrupy snapshots (regenerate, don't hand-edit).
+- **`scripts/record_fixtures.py`** — the recorder. It is **deliberately outside the gate**
+  (it hits the network) and is *not* mypy/pyright-checked (only ruff covers `scripts/`).
+  Refresh after an API shape change: `ASSEMBLYAI_API_KEY=… uv run python scripts/record_fixtures.py`.
+  The key comes from the env; the AMS session JWT + `account_id` from the keyring/`config.toml`
+  of whoever ran `aai login` (profile `default`) — neither is ever written to a fixture.
+- **`tests/replay_fixtures.py`** — rebuilds the boundary objects from JSON. A transcript is a
+  real `aai.Transcript` via `Transcript.from_response`; an LLM response is rebuilt with
+  `ChatCompletion.model_construct` (**not** `model_validate`) because the gateway returns
+  Anthropic-flavored fields — `finish_reason="end_turn"`, token counts under
+  `input_tokens`/`output_tokens` — that strict validation rejects but the OpenAI SDK itself
+  parses leniently.
+
+The replay tests patch the same boundary the unit tests do
+(`commands.<cmd>.client.<fn>` / `.ams.<fn>` / `.gateway.complete`); the only difference is
+the return value comes from a recorded payload instead of a hand-built mock.
+
 ## Naming & packaging gotchas
 
 - The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `aai` (`[project.scripts] aai = "aai_cli.main:run"`).
