@@ -1,3 +1,22 @@
+"""The CLIError hierarchy and the exit-code contract scripts can rely on.
+
+Exit codes (stable; mirrored in the README "Exit codes" table):
+
+* ``0`` — success.
+* ``1`` — a generic runtime failure: an API/network error (:class:`APIError`),
+  a missing dependency, or an unexpected internal error.
+* ``2`` — a usage/validation error (:class:`UsageError` and the validation
+  ``CLIError``\\s): bad flags, a bad path, a malformed id, or an unusable config.
+* ``4`` — not authenticated (:class:`NotAuthenticated`): no usable credential,
+  a rejected key, or a self-service command that needs a browser login. The
+  gh-style split keeps "you're not signed in" distinct from a usage error.
+* ``130`` — cancelled with Ctrl-C.
+
+A subprocess the CLI shells out to (``aai deploy``/``dev``) propagates that
+process's own exit code unchanged. Each :class:`CLIError` carries an
+``error_type`` (the JSON ``error.type``) paired 1:1 with its ``exit_code``.
+"""
+
 from __future__ import annotations
 
 

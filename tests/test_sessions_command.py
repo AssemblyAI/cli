@@ -72,10 +72,23 @@ def test_sessions_list_renders_table_human(monkeypatch, mocker):
     result = runner.invoke(app, ["sessions", "list"])
     assert result.exit_code == 0
     assert "s_1" in result.output and "universal" in result.output
-    # The created/duration columns must render their values (pins `value or ""`: an
-    # `and` there would blank a present value).
-    assert "2026-06-01" in result.output
+    # The created column is normalized to a UTC YYYY-MM-DD HH:MM:SS string (was raw),
+    # and the duration must still render (pins `value or ""`).
+    assert "2026-06-01 00:00:00" in result.output
     assert "12.0" in result.output
+
+
+def test_sessions_list_empty_shows_human_empty_state(monkeypatch, mocker):
+    _auth()
+    _human(monkeypatch)
+    mocker.patch(
+        "aai_cli.commands.sessions.ams.list_streaming",
+        autospec=True,
+        return_value={"data": []},
+    )
+    result = runner.invoke(app, ["sessions", "list"])
+    assert result.exit_code == 0
+    assert "No streaming sessions yet." in result.output
 
 
 def test_sessions_list_passes_status_filter(mocker):

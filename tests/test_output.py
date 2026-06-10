@@ -255,6 +255,53 @@ def test_status_is_noop_when_agentic(monkeypatch):
     assert entered["status"] is False
 
 
+def test_status_enters_spinner_when_not_json_and_not_quiet(monkeypatch):
+    # The default quiet=False must let the spinner run (pins the parameter default).
+    import contextlib
+
+    monkeypatch.setattr(output, "is_agentic", lambda: False)
+    entered = {"status": False}
+
+    @contextlib.contextmanager
+    def fake_status(*a, **k):
+        entered["status"] = True
+        yield
+
+    monkeypatch.setattr(output.error_console, "status", fake_status)
+    with output.status("Working…", json_mode=False):
+        pass
+    assert entered["status"] is True
+
+
+def test_status_is_noop_when_quiet(monkeypatch):
+    # --quiet suppresses the spinner even for an interactive human.
+    monkeypatch.setattr(output, "is_agentic", lambda: False)
+    entered = {"status": False}
+    monkeypatch.setattr(
+        output.error_console, "status", lambda *a, **k: entered.__setitem__("status", True)
+    )
+    with output.status("Working…", json_mode=False, quiet=True):
+        pass
+    assert entered["status"] is False
+
+
+def test_emit_warning_human_writes_yellow_line_to_stderr(capsys):
+    from aai_cli import theme
+
+    output.emit_warning("env mismatch", json_mode=False)
+    captured = capsys.readouterr()
+    assert "env mismatch" in captured.err
+    assert theme.SYMBOL_WARN in captured.err  # the ! affordance glyph
+    assert captured.out == ""  # stdout stays clean for pipelines
+
+
+def test_emit_warning_json_goes_to_stderr_as_warning_object(capsys):
+    output.emit_warning("env mismatch", json_mode=True)
+    captured = capsys.readouterr()
+    assert json.loads(captured.err) == {"warning": "env mismatch"}
+    assert captured.out == ""
+
+
 def test_status_shows_spinner_for_interactive_human(monkeypatch):
     monkeypatch.setattr(output, "is_agentic", lambda: False)
     calls = []

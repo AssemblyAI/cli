@@ -46,7 +46,7 @@ class FileSource:
         if self._path is not None:
             if not self._path.is_file():
                 raise CLIError(
-                    f"No such file: {self._path}",
+                    f"File not found: {self._path}",
                     error_type="file_not_found",
                     exit_code=2,
                     suggestion="Check the path, or pass a URL or YouTube link instead.",

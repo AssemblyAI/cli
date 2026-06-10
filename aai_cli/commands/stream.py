@@ -155,7 +155,7 @@ def stream(
     prompt: str | None = typer.Option(
         None,
         "--prompt",
-        help="Prompt to bias the speech model (u3-pro).",
+        help="Prompt to bias the speech model (supported models only).",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     keyterms_prompt: list[str] | None = typer.Option(
@@ -341,10 +341,11 @@ def stream(
     """Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
 
     Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
-    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -. --prompt biases the
-    speech model. --llm runs a prompt over the live transcript in-process, refreshing the
-    answer on every finalized turn; for a separate step instead, pipe the text out with
-    -o text | aai llm -f "…".
+    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -.
+
+    --prompt biases the speech model. --llm runs a prompt over the live transcript
+    in-process, refreshing the answer on every finalized turn; for a separate step
+    instead, pipe the text out with -o text | aai llm -f "…".
     """
 
     def body(state: AppState, json_mode: bool) -> None:

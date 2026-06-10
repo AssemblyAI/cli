@@ -238,6 +238,8 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch, mocker):
     assert "2026-01-01" not in result.output
     assert "2026-01-02" in result.output
     assert "Hidden: 1 zero-usage window" in result.output
+    # The hidden-note names the flag that reveals them, matching --include-logins on audit.
+    assert "Use --include-zero to show them." in result.output
 
 
 def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
@@ -254,10 +256,30 @@ def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
         ]
     }
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
-    result = runner.invoke(app, ["usage", "--all"])
+    # The primary flag name is --include-zero (matching --include-logins on `aai audit`).
+    result = runner.invoke(app, ["usage", "--include-zero"])
     assert result.exit_code == 0
     assert "2026-01-01" in result.output
     assert "No usage in this range" not in result.output
+
+
+def test_usage_all_is_a_back_compat_alias_for_include_zero(monkeypatch, mocker):
+    _auth()
+    _human(monkeypatch)
+    payload = {
+        "usage_items": [
+            {
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "end_timestamp": "2026-01-02T00:00:00Z",
+                "total": 0.0,
+                "line_items": [],
+            }
+        ]
+    }
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage", "--all"])
+    assert result.exit_code == 0
+    assert "2026-01-01" in result.output
 
 
 def test_usage_human_summarizes_all_zero_range(monkeypatch, mocker):

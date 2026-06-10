@@ -13,6 +13,7 @@ def test_command_line_requests_json_recognizes_every_form():
     assert f(["transcribe", "a.mp3", "--output", "json"])
     assert f(["transcribe", "a.mp3", "--output=json"])
     assert f(["transcribe", "a.mp3", "-ojson"])
+    assert f(["whoami", "-j"])  # the short --json alias is recognized too
     # `-o json` is detected even when more tokens follow (pins the 1-element slice width).
     assert f(["transcribe", "-o", "json", "--speaker-labels"])
 

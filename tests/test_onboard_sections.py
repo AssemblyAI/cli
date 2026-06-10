@@ -27,6 +27,8 @@ class _FakeTranscript:
 class _ScriptedPrompter:
     """A Prompter test-double whose answers are pinned at construction time."""
 
+    interactive = True
+
     def __init__(self, *, select: str = "skip", confirm: bool = True, text: str = "k") -> None:
         self._select = select
         self._confirm = confirm
@@ -57,7 +59,7 @@ def _capture_status(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     messages: list[str] = []
 
     @contextlib.contextmanager
-    def _fake_status(message: str, *, json_mode: bool) -> Generator[None]:
+    def _fake_status(message: str, *, json_mode: bool, quiet: bool = False) -> Generator[None]:
         messages.append(message)
         yield
 
@@ -176,6 +178,29 @@ def test_auth_browser_path(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) 
     # Onboarding signs in via the browser only — there is no API-key paste path.
     monkeypatch.setattr(sections, "persist_browser_login", lambda *a, **k: None)
     assert sections.auth(_ScriptedPrompter(), ctx) is SectionResult.DONE
+
+
+def test_auth_noninteractive_fails_without_blocking_on_browser(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A non-interactive session (agent/CI) must NOT start a browser login that would
+    # block for two minutes on a callback no one can produce — it fails fast with the
+    # actionable next step instead.
+    def _must_not_run(*a: object, **k: object) -> None:
+        raise AssertionError("non-interactive onboarding must not start a browser login")
+
+    monkeypatch.setattr(sections, "persist_browser_login", _must_not_run)
+
+    class _RecordingNonInteractive(NonInteractivePrompter):
+        def __init__(self) -> None:
+            self.notes: list[str] = []
+
+        def note(self, message: str) -> None:
+            self.notes.append(message)
+
+    prompter = _RecordingNonInteractive()
+    assert sections.auth(prompter, ctx) is SectionResult.FAILED
+    assert any("ASSEMBLYAI_API_KEY" in note for note in prompter.notes)
 
 
 def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

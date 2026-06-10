@@ -15,6 +15,10 @@ class WizardCancelled(Exception):
 class Prompter(Protocol):
     """How the wizard asks for input — one interface, interactive or not."""
 
+    # True only when a human can answer prompts (and complete a browser sign-in);
+    # the wizard reads this to skip steps that would otherwise hang a headless run.
+    interactive: bool
+
     def section(self, title: str) -> None: ...
     def note(self, message: str) -> None: ...
     def confirm(self, title: str, *, default: bool = True) -> bool: ...  # pragma: no mutate
@@ -26,6 +30,8 @@ class Prompter(Protocol):
 
 class InteractivePrompter:
     """Drives real terminal prompts (questionary for select, Typer for the rest)."""
+
+    interactive = True
 
     def section(self, title: str) -> None:
         output.console.print("\n" + output.heading(title))
@@ -60,6 +66,8 @@ class NonInteractivePrompter:
     Keeps the CLI pipeline-safe — `--json`, a piped stdin, or an agent run can call
     the wizard without it hanging on a prompt no human will answer.
     """
+
+    interactive = False
 
     def section(self, title: str) -> None:
         output.error_console.print(output.heading(title))

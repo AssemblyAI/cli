@@ -289,6 +289,8 @@ def test_env_override_warning_when_aai_env_contradicts_profile(monkeypatch):
     warning = env_override_warning(AppState(env=None))
     assert warning is not None
     assert "AAI_ENV" in warning
+    # The warning now ends with an actionable remediation naming how to fix it.
+    assert "Unset AAI_ENV" in warning
 
 
 def test_env_override_warning_flag_beats_aai_env(monkeypatch):
@@ -298,6 +300,7 @@ def test_env_override_warning_flag_beats_aai_env(monkeypatch):
     warning = env_override_warning(AppState(env="production"))
     assert warning is not None
     assert "--env" in warning
+    assert "Drop --env" in warning
 
 
 def test_env_override_warning_none_when_aai_env_matches_profile(monkeypatch):

@@ -6,6 +6,12 @@ from aai_cli.errors import UsageError
 from aai_cli.onboard.prompter import InteractivePrompter, NonInteractivePrompter, WizardCancelled
 
 
+def test_interactive_flag_distinguishes_the_two_prompters() -> None:
+    # The wizard reads `.interactive` to decide whether a browser sign-in can run.
+    assert InteractivePrompter().interactive is True
+    assert NonInteractivePrompter().interactive is False
+
+
 def test_noninteractive_section_and_note() -> None:
     p = NonInteractivePrompter()
     p.section("Setup")  # exercises NonInteractivePrompter.section()

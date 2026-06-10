@@ -43,6 +43,16 @@ def auth(prompter: Prompter, ctx: WizardContext) -> SectionResult:
         prompter.note("Already signed in.")
         return SectionResult.SKIPPED
     prompter.section("Sign in")
+    if not prompter.interactive:
+        # A browser sign-in can't complete in a non-interactive/agent session: it
+        # would bind a loopback port and block for two minutes on a callback no one
+        # can produce. Stop here with the actionable next step instead of hanging.
+        prompter.note(
+            "No API key found, and this is a non-interactive session — "
+            "browser sign-in can't complete here. Run `aai login` in a terminal, "
+            "or set ASSEMBLYAI_API_KEY."
+        )
+        return SectionResult.FAILED
     # Browser sign-in only: we deliberately don't offer an API-key paste here so a
     # secret never lands in the terminal scrollback or shell history.
     prompter.note(f"No account yet? Create one at {environments.active().signup_url}")
@@ -59,7 +69,9 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     ).strip()
     label = source or "the sample clip"
     try:
-        with output.status(f"Transcribing {label}…", json_mode=ctx.json_mode):
+        with output.status(
+            f"Transcribing {label}…", json_mode=ctx.json_mode, quiet=ctx.state.quiet
+        ):
             transcript = transcribe_exec.run_transcription(
                 api_key,
                 source or None,

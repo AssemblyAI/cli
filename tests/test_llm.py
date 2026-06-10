@@ -70,8 +70,10 @@ def test_complete_auth_error_surfaces_gateway_message(monkeypatch):
         "bad key", response=httpx.Response(401, request=_REQUEST), body=None
     )
     _fake_client(monkeypatch, error=err)
-    with pytest.raises(APIError, match="access denied"):
+    with pytest.raises(APIError, match="access denied") as exc:
         llm.complete("sk", model="m", messages=[])
+    # Access-denied is usually a plan entitlement block, so the hint names the cause.
+    assert exc.value.suggestion is not None and "paid plan" in exc.value.suggestion
 
 
 def test_complete_permission_error_surfaces_gateway_message(monkeypatch):
@@ -88,8 +90,9 @@ def test_complete_bad_request_maps_to_api_error(monkeypatch):
         "missing model", response=httpx.Response(400, request=_REQUEST), body=None
     )
     _fake_client(monkeypatch, error=err)
-    with pytest.raises(APIError):
+    with pytest.raises(APIError) as exc:
         llm.complete("sk", model="m", messages=[])
+    assert exc.value.suggestion is not None and "network" in exc.value.suggestion
 
 
 def test_complete_connection_error_maps_to_api_error(monkeypatch):

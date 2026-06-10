@@ -103,9 +103,16 @@ def complete(
         # entitlement block ("no access to LLM Gateway"), so surface its actual
         # message rather than a generic "run aai login" that misleads unpaid
         # accounts (the key is fine; the feature requires a paid plan).
-        raise APIError(f"LLM Gateway access denied: {exc}") from exc
+        raise APIError(
+            f"LLM Gateway access denied: {exc}",
+            suggestion="The LLM Gateway requires a paid plan — check your plan at "
+            "https://www.assemblyai.com/dashboard.",
+        ) from exc
     except openai.OpenAIError as exc:
-        raise APIError(f"LLM Gateway request failed: {exc}") from exc
+        raise APIError(
+            f"LLM Gateway request failed: {exc}",
+            suggestion="Check your network and try again.",
+        ) from exc
 
 
 def content_of(response: ChatCompletion) -> str:

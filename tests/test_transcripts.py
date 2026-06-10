@@ -26,7 +26,8 @@ def test_get_prints_transcript_text(mocker):
     )
     result = runner.invoke(app, ["transcripts", "get", "t_42"])
     assert result.exit_code == 0
-    assert "retrieved text" in result.output
+    # Human mode prints the bare transcript text — not a JSON object (pins json_mode=False).
+    assert result.output.strip() == "retrieved text"
 
 
 def test_get_output_text_prints_raw(mocker):
@@ -72,6 +73,56 @@ def test_get_json_emits_full_payload(mocker):
     data = json.loads(result.output)
     assert data["id"] == "t_42"
     assert data["text"] == "retrieved text"
+
+
+def test_get_json_emits_full_sdk_payload_when_present(mocker):
+    # `transcripts get --json` returns the full SDK payload (same shape as
+    # `transcribe --json`), so a fetched transcript round-trips for scripting.
+    config.set_api_key("default", "sk_live")
+    fake = mocker.MagicMock()
+    fake.id = "t_42"
+    fake.text = "retrieved text"
+    fake.status = "completed"
+    fake.json_response = {
+        "id": "t_42",
+        "status": "completed",
+        "text": "retrieved text",
+        "utterances": [{"speaker": "A", "text": "retrieved text"}],
+    }
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.get_transcript", autospec=True, return_value=fake
+    )
+    result = runner.invoke(app, ["transcripts", "get", "t_42", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["utterances"] == [{"speaker": "A", "text": "retrieved text"}]
+
+
+def test_get_short_json_flag_emits_json(mocker):
+    # The shared -j alias for --json works on every command.
+    config.set_api_key("default", "sk_live")
+    fake = mocker.MagicMock()
+    fake.id = "t_42"
+    fake.text = "hi"
+    fake.status = "completed"
+    fake.json_response = None
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.get_transcript", autospec=True, return_value=fake
+    )
+    result = runner.invoke(app, ["transcripts", "get", "t_42", "-j"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["id"] == "t_42"
+
+
+def test_list_empty_shows_human_empty_state(monkeypatch, mocker):
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=[]
+    )
+    result = runner.invoke(app, ["transcripts", "list"])
+    assert result.exit_code == 0
+    assert "No transcripts yet." in result.output
 
 
 def test_get_output_invalid_field_exits_2():
@@ -126,6 +177,7 @@ def test_list_human_mode_renders_table(monkeypatch, mocker):
     result = runner.invoke(app, ["transcripts", "list"])
     assert result.exit_code == 0
     assert "t1" in result.output  # rendered through the Rich table path
+    assert "2026-01-01 00:00:00" in result.output  # created normalized to UTC datetime
 
 
 def test_get_errored_transcript_exits_nonzero(mocker):

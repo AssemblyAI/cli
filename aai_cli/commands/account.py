@@ -150,7 +150,12 @@ def usage(
     ),
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD). Default: today."),
     window: str | None = typer.Option(None, "--window", help="Window size, e.g. 'day' or 'month'."),
-    include_zero: bool = typer.Option(False, "--all", help="Include zero-usage windows."),
+    include_zero: bool = typer.Option(
+        False,
+        "--include-zero",
+        "--all",
+        help="Include zero-usage windows (matches --include-logins on `aai audit`).",
+    ),
     json_out: bool = options.json_option(),
 ) -> None:
     """Show usage over a date range (defaults to the last 30 days)."""
@@ -204,7 +209,7 @@ def usage(
                 table.add_row(*row)
             hidden_note = (
                 output.muted(
-                    f"Hidden: {hidden_count} zero-usage window(s). Use --all to show them."
+                    f"Hidden: {hidden_count} zero-usage window(s). Use --include-zero to show them."
                 )
                 if hidden_count
                 else None

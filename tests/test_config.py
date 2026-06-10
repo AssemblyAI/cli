@@ -73,6 +73,21 @@ def test_set_api_key_keyring_failure_raises_clean_error(monkeypatch):
     assert exc.value.suggestion is not None
 
 
+def test_keyring_usable_true_with_a_working_backend():
+    # The autouse MemoryKeyring backend reads fine, so the probe reports usable.
+    assert config.keyring_usable() is True
+
+
+def test_keyring_usable_false_when_backend_raises(monkeypatch):
+    import keyring.errors
+
+    def boom(*_a, **_k):
+        raise keyring.errors.NoKeyringError("no backend on this headless box")
+
+    monkeypatch.setattr(config.keyring, "get_password", boom)
+    assert config.keyring_usable() is False
+
+
 def test_set_session_keyring_failure_raises_clean_error(monkeypatch):
     import keyring.errors
 

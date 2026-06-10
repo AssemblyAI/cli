@@ -111,7 +111,7 @@ def transcribe(
     prompt: str | None = typer.Option(
         None,
         "--prompt",
-        help="Prompt to bias the speech model (u3-pro).",
+        help="Prompt to bias the speech model (supported models only).",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     # formatting
@@ -359,10 +359,13 @@ def transcribe(
 ) -> None:
     """Transcribe an audio file, URL, or YouTube link.
 
-    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo). Save with
-    --out FILE, or pipe one field with -o text. A YouTube URL is downloaded first, then
-    transcribed. Curated flags cover common features; --config KEY=VALUE and --config-file
-    reach every other field. Analysis (summary, chapters, ...) renders in human mode.
+    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
+
+    Save with --out FILE, or pipe one field with -o text. A YouTube URL is downloaded
+    first, then transcribed.
+
+    Curated flags cover common features; --config KEY=VALUE and --config-file reach
+    every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -447,7 +450,7 @@ def transcribe(
         transcribe_exec.check_source_exists(source, sample=sample)
 
         api_key = config.resolve_api_key(profile=state.profile)
-        with output.status("Transcribing…", json_mode=json_mode):
+        with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
             transcript = transcribe_exec.run_transcription(
                 api_key, source, sample=sample, transcription_config=tc
             )
