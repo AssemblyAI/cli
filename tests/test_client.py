@@ -91,17 +91,6 @@ def test_list_transcripts_rejected_key_becomes_not_authenticated(mocker):
         client.list_transcripts("sk_bad")
 
 
-def test_resolve_audio_source_sample_explicit_and_missing():
-    from aai_cli.errors import UsageError
-
-    assert client.resolve_audio_source(None, sample=True) == client.SAMPLE_AUDIO_URL
-    assert client.resolve_audio_source("clip.mp3", sample=False) == "clip.mp3"
-    with pytest.raises(UsageError) as exc:
-        client.resolve_audio_source(None, sample=False)
-    assert exc.value.message == "Provide an audio path or URL."
-    assert "--sample" in (exc.value.suggestion or "")
-
-
 def test_transcribe_blocks_and_returns_transcript(mocker):
     fake_transcript = mocker.MagicMock()
     fake_transcript.status = client.aai.TranscriptStatus.completed

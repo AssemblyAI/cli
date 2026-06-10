@@ -392,7 +392,7 @@ def transcribe(
             # authenticating (raw stdout, so `--show-code > script.py` runs). No
             # source/--sample needed — fall back to a placeholder path for a pure snippet.
             audio = (
-                client.resolve_audio_source(source, sample=sample)
+                client.resolve_audio_source(source, sample=sample, check_local=False)
                 if source or sample
                 else "your-audio-file.mp3"
             )
@@ -401,6 +401,9 @@ def transcribe(
             return
 
         tc = config_builder.construct_transcription_config(merged)
+
+        # A typo'd path must read as "file not found", not trigger a login.
+        transcribe_exec.check_source_exists(source, sample=sample)
 
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode):

@@ -171,3 +171,20 @@ def run_command(
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
+    except (typer.Exit, typer.Abort, BrokenPipeError):
+        # Deliberate control flow (and the closed-pipe contract handled in main.run);
+        # these must reach Click/the entry point untouched.
+        raise
+    except Exception as exc:
+        # Last resort: a bug must surface as one clean line (and the JSON error shape
+        # under --json), never as a raw traceback.
+        internal = CLIError(
+            f"Unexpected error: {exc}",
+            error_type="internal_error",
+            suggestion=(
+                "This looks like a bug in the CLI — please report it at "
+                "https://github.com/AssemblyAI/cli/issues."
+            ),
+        )
+        output.emit_error(internal, json_mode=json_mode)
+        raise typer.Exit(code=internal.exit_code) from exc

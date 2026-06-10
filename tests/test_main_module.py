@@ -69,3 +69,31 @@ def test_python_dash_m_version():
     )
     assert result.returncode == 0
     assert result.stdout.strip()  # prints something (the version)
+
+
+def test_run_converts_click_epipe_exit_to_success(monkeypatch):
+    """Typer's vendored Click swallows EPIPE itself (PacifyFlushWrapper + exit 1);
+    run() must still honor the closed-pipe-is-success contract."""
+    from typer._click.utils import PacifyFlushWrapper
+
+    def epipe_path(*a, **k):
+        monkeypatch.setattr(sys, "stdout", PacifyFlushWrapper(sys.stdout))
+        raise SystemExit(1)
+
+    monkeypatch.setattr(main_mod, "app", epipe_path)
+    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
+    with pytest.raises(SystemExit) as exc:
+        main_mod.run()
+    assert exc.value.code == 0
+
+
+def test_run_keeps_exit_1_when_stdout_is_not_pacified(monkeypatch):
+    """A real failure exit (code 1, untouched stdout) must never be rewritten."""
+
+    def failure(*a, **k):
+        raise SystemExit(1)
+
+    monkeypatch.setattr(main_mod, "app", failure)
+    with pytest.raises(SystemExit) as exc:
+        main_mod.run()
+    assert exc.value.code == 1

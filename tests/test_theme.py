@@ -70,3 +70,21 @@ def test_output_console_is_themed_and_error_is_styled(monkeypatch):
     assert "Error:" in out
     assert "boom" in out
     assert "\x1b[" in out  # themed error emits ANSI on a forced-color console
+
+
+def test_pipe_safe_console_reraises_broken_pipe():
+    # Rich's default on_broken_pipe converts EPIPE to SystemExit(1); the CLI's
+    # consoles must re-raise so main.run() can treat a closed pipe as success.
+    import io
+
+    import pytest
+
+    from aai_cli import theme
+
+    class BrokenFile(io.StringIO):
+        def write(self, s):
+            raise BrokenPipeError
+
+    console = theme.make_console(file=BrokenFile())
+    with pytest.raises(BrokenPipeError):
+        console.print("hello")

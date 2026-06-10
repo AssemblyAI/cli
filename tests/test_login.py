@@ -289,3 +289,15 @@ def test_whoami_renders_human_table_rejected_key(mocker):
     assert result.exit_code == 0
     assert "key rejected" in result.output
     assert "none" in result.output
+
+
+def test_whoami_honors_env_api_key(monkeypatch, mocker):
+    # A CI box authenticated only via ASSEMBLYAI_API_KEY (no keyring entry) must be
+    # able to use whoami as a preflight check.
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_env_1234567890")
+    mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
+    result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["reachable"] is True
+    assert "sk_env_1234567890" not in result.output  # still masked

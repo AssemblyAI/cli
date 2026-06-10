@@ -162,7 +162,10 @@ def stream(
     # turn detection
     end_of_turn_confidence_threshold: float | None = typer.Option(
         None,
-        "--end-of-turn-confidence-threshold",
+        # Not "--end-of-turn-confidence-threshold": at 34 chars the name can't render
+        # un-clipped in an 80-column help screen, which made it unlearnable from --help.
+        # The full SDK field stays reachable via --config.
+        "--end-of-turn-confidence",
         help="End-of-turn confidence (0-1).",
         min=0.0,
         max=1.0,
@@ -183,7 +186,7 @@ def stream(
     vad_threshold: float | None = typer.Option(
         None,
         "--vad-threshold",
-        help="Voice-activity threshold (0-1).",
+        help="Voice activity threshold (0-1).",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_TURNS,
@@ -191,7 +194,7 @@ def stream(
     format_turns: bool | None = typer.Option(
         None,
         "--format-turns/--no-format-turns",
-        help="Punctuate/format finalized turns.",
+        help="Format (punctuate) finalized turns.",
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     include_partial_turns: bool | None = typer.Option(
@@ -393,8 +396,12 @@ def stream(
             output.print_code(code_gen.stream(merged, llm=gateway))
             return
 
-        api_key = config.resolve_api_key(profile=state.profile)
+        # Validate the requested sources (including that a local file exists) before
+        # credentials, so a typo'd path reads as "file not found" — not as a login.
         validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
+        if opts.from_file and not opts.from_stdin:
+            client.resolve_audio_source(opts.source, sample=opts.sample)
+        api_key = config.resolve_api_key(profile=state.profile)
 
         llm_prompts = list(llm_prompt or [])
         session = StreamSession(

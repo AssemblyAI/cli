@@ -6,9 +6,9 @@ def test_not_authenticated_defaults():
     assert err.exit_code == 4
     assert err.error_type == "not_authenticated"
     assert err.message == "You're not signed in."
-    assert (
-        err.suggestion
-        == "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."
+    assert err.suggestion == (
+        "Run 'aai onboard' for guided setup, 'aai login' if you have an account, "
+        "or set ASSEMBLYAI_API_KEY."
     )
 
 

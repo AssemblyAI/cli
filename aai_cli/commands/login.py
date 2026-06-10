@@ -6,7 +6,7 @@ from rich.table import Table
 
 from aai_cli import client, config, environments, help_panels, options, output
 from aai_cli.context import AppState, persist_browser_login, resolve_profile, run_command
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
@@ -107,9 +107,9 @@ def whoami(
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
-        key = config.get_api_key(profile)
-        if not key:
-            raise NotAuthenticated()
+        # The full env -> keyring chain (raises NotAuthenticated when empty), so a CI
+        # box authenticated via ASSEMBLYAI_API_KEY can use whoami as a preflight check.
+        key = config.resolve_api_key(profile=state.profile)
         masked = output.mask_secret(key)
         env = environments.active().name
         reachable = client.validate_key(key)

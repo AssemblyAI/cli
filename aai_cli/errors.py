@@ -39,7 +39,8 @@ class NotAuthenticated(CLIError):
         message: str = "You're not signed in.",
         *,
         suggestion: str | None = (
-            "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."
+            "Run 'aai onboard' for guided setup, 'aai login' if you have an account, "
+            "or set ASSEMBLYAI_API_KEY."
         ),
     ) -> None:
         super().__init__(

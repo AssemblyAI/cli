@@ -695,19 +695,25 @@
   │                                                     (repeatable).            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
-  │ --end-of-turn-co…                        FLOAT RANGE       End-of-turn       │
-  │                                          [0.0<=x<=1.0]     confidence (0-1). │
-  │ --min-turn-silen…                        INTEGER           Min silence to    │
-  │                                                            end a turn (ms).  │
-  │ --max-turn-silen…                        INTEGER           Max silence       │
-  │                                                            before ending a   │
-  │                                                            turn (ms).        │
-  │ --vad-threshold                          FLOAT RANGE       Voice-activity    │
-  │                                          [0.0<=x<=1.0]     threshold (0-1).  │
-  │ --format-turns       --no-format-tur…                      Punctuate/format  │
-  │                                                            finalized turns.  │
-  │ --include-partia…                                          Emit partial      │
-  │                                                            turns.            │
+  │ --end-of-turn-confidence                         FLOAT RANGE   End-of-turn   │
+  │                                                  [0.0<=x<=1.0  confidence    │
+  │                                                  ]             (0-1).        │
+  │ --min-turn-silence                               INTEGER       Min silence   │
+  │                                                                to end a turn │
+  │                                                                (ms).         │
+  │ --max-turn-silence                               INTEGER       Max silence   │
+  │                                                                before ending │
+  │                                                                a turn (ms).  │
+  │ --vad-threshold                                  FLOAT RANGE   Voice         │
+  │                                                  [0.0<=x<=1.0  activity      │
+  │                                                  ]             threshold     │
+  │                                                                (0-1).        │
+  │ --format-turns              --no-format-turns                  Format        │
+  │                                                                (punctuate)   │
+  │                                                                finalized     │
+  │                                                                turns.        │
+  │ --include-partial-turns                                        Emit partial  │
+  │                                                                turns.        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
   │ --speaker-labels                              Diarize speakers. With system  │
@@ -717,11 +723,11 @@
   │ --max-speakers          INTEGER RANGE [x>=1]  Max speakers.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Features ───────────────────────────────────────────────────────────────────╮
-  │ --voice-focus                 [near-field|far-field]  Voice focus (noise     │
-  │                                                       suppression model).    │
-  │ --voice-focus-thresho…        FLOAT RANGE             Voice-focus threshold  │
-  │                               [0.0<=x<=1.0]           (0-1).                 │
-  │ --inactivity-timeout          INTEGER                 Auto-close after N     │
+  │ --voice-focus                  [near-field|far-field  Voice focus (noise     │
+  │                                ]                      suppression model).    │
+  │ --voice-focus-threshold        FLOAT RANGE            Voice-focus threshold  │
+  │                                [0.0<=x<=1.0]          (0-1).                 │
+  │ --inactivity-timeout           INTEGER                Auto-close after N     │
   │                                                       seconds idle.          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
@@ -843,22 +849,23 @@
   │                                                  channel separately.         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
-  │ --redact-pii                                          Redact PII from the    │
-  │                                                       transcript.            │
-  │ --redact-pii-policy           TEXT                    Comma-separated PII    │
-  │                                                       policies (e.g.         │
-  │                                                       person_name,...).      │
-  │ --redact-pii-sub              [hash|entity_name]      How to replace         │
-  │                                                       redacted PII.          │
-  │ --redact-pii-audio                                    Also redact audio.     │
-  │ --filter-profanity                                    Mask profanity.        │
-  │ --content-safety                                      Detect sensitive       │
-  │                                                       content.               │
-  │ --content-safety-conf…        INTEGER RANGE           Content-safety         │
-  │                               [25<=x<=100]            confidence threshold   │
-  │                                                       (25-100).              │
-  │ --speech-threshold            FLOAT RANGE             Minimum proportion of  │
-  │                               [0.0<=x<=1.0]           speech required (0-1). │
+  │ --redact-pii                                            Redact PII from the  │
+  │                                                         transcript.          │
+  │ --redact-pii-policy                TEXT                 Comma-separated PII  │
+  │                                                         policies (e.g.       │
+  │                                                         person_name,...).    │
+  │ --redact-pii-sub                   [hash|entity_name]   How to replace       │
+  │                                                         redacted PII.        │
+  │ --redact-pii-audio                                      Also redact audio.   │
+  │ --filter-profanity                                      Mask profanity.      │
+  │ --content-safety                                        Detect sensitive     │
+  │                                                         content.             │
+  │ --content-safety-confidence        INTEGER RANGE        Content-safety       │
+  │                                    [25<=x<=100]         confidence threshold │
+  │                                                         (25-100).            │
+  │ --speech-threshold                 FLOAT RANGE          Minimum proportion   │
+  │                                    [0.0<=x<=1.0]        of speech required   │
+  │                                                         (0-1).               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
   │ --summarization                                      Summarize the           │
@@ -1040,8 +1047,8 @@
 # name: test_error_human_render_matches_snapshot[not_authenticated]
   '''
   Error: You're not signed in.
-  Suggestion: Run 'aai onboard' for guided setup, or 'aai login' if you have an
-  account.
+  Suggestion: Run 'aai onboard' for guided setup, 'aai login' if you have an
+  account, or set ASSEMBLYAI_API_KEY.
   
   '''
 # ---
@@ -1073,7 +1080,7 @@
 # ---
 # name: test_error_json_render_matches_snapshot[not_authenticated]
   '''
-  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'aai onboard' for guided setup, or 'aai login' if you have an account."}}
+  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'aai onboard' for guided setup, 'aai login' if you have an account, or set ASSEMBLYAI_API_KEY."}}
   
   '''
 # ---

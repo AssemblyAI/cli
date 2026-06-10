@@ -272,3 +272,44 @@ def test_appstate_methods_are_the_single_source_of_truth():
 
 def test_appstate_environment_falls_back_to_default():
     assert AppState().resolve_environment().name == environments.DEFAULT_ENV
+
+
+def test_run_command_maps_unexpected_exception_to_clean_internal_error():
+    # The last-resort handler: a bug surfaces as one clean line, never a traceback.
+    def body(state, json_mode):
+        raise ValueError("kaboom")
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 1
+    assert "Unexpected error: kaboom" in result.output
+    assert "Traceback" not in result.output
+    assert "report it" in result.output
+
+
+def test_run_command_unexpected_exception_keeps_json_error_shape():
+    import json
+
+    def body(state, json_mode):
+        raise ValueError("kaboom")
+
+    result = runner.invoke(_make_app(body, json=True), ["go"])
+    assert result.exit_code == 1
+    assert json.loads(result.output)["error"]["type"] == "internal_error"
+
+
+def test_run_command_lets_typer_exit_pass_through():
+    def body(state, json_mode):
+        raise typer.Exit(code=7)
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 7
+    assert "Unexpected error" not in result.output
+
+
+def test_run_command_lets_broken_pipe_propagate():
+    # The closed-pipe contract is owned by main.run(); run_command must not eat it.
+    def body(state, json_mode):
+        raise BrokenPipeError()
+
+    result = runner.invoke(_make_app(body), ["go"], standalone_mode=False)
+    assert isinstance(result.exception, BrokenPipeError)

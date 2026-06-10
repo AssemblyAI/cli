@@ -271,3 +271,43 @@ def test_load_returns_independent_copies():
     hit = config._load()  # cache hit: must also be a *deep* copy
     hit.profiles.clear()
     assert "default" in config._load().profiles
+
+
+def test_get_api_key_treats_broken_keyring_backend_as_no_key(monkeypatch):
+    # Headless boxes (containers, CI) have no keyring backend at all; reads raise
+    # NoKeyringError there. That must read as "not signed in", never as a crash.
+    import keyring
+    import keyring.errors
+
+    def no_backend(service, username):
+        raise keyring.errors.NoKeyringError("no recommended backend")
+
+    monkeypatch.setattr(keyring, "get_password", no_backend)
+    assert config.get_api_key("default") is None
+    assert config.get_session("default") is None
+    with pytest.raises(NotAuthenticated):
+        config.resolve_api_key()
+
+
+def test_resolve_api_key_env_var_works_without_keyring_backend(monkeypatch):
+    import keyring
+    import keyring.errors
+
+    def no_backend(service, username):
+        raise keyring.errors.NoKeyringError("no recommended backend")
+
+    monkeypatch.setattr(keyring, "get_password", no_backend)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "from_env")
+    assert config.resolve_api_key() == "from_env"
+
+
+def test_clear_credentials_without_keyring_backend_is_silent(monkeypatch):
+    import keyring
+    import keyring.errors
+
+    def no_backend(service, username):
+        raise keyring.errors.NoKeyringError("no recommended backend")
+
+    monkeypatch.setattr(keyring, "delete_password", no_backend)
+    config.clear_api_key("default")
+    config.clear_session("default")

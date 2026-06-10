@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import sys
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 import typer
+from rich.console import RenderableType
+from rich.style import StyleType
+from rich.table import Table
 from typer import completion, rich_utils
+from typer._click.exceptions import ClickException, NoSuchOption
+from typer._click.utils import PacifyFlushWrapper
 from typer.core import TyperGroup
 
 if TYPE_CHECKING:
@@ -111,6 +117,50 @@ rich_utils.STYLE_METAVAR = theme.ACCENT
 rich_utils.STYLE_USAGE = theme.MUTED
 rich_utils.STYLE_USAGE_COMMAND = f"bold {theme.BRAND}"
 
+
+# Help tables put flag/command names in the leading columns and wrapping prose
+# (metavar, help text) in the trailing two. Rich's width collapse only spares no_wrap
+# columns, so on a narrow terminal it happily clips a flag name to "--end-of-turn-c…" —
+# unlearnable from the help screen itself. Pin every column except the last two so the
+# prose columns absorb the squeeze instead.
+class _NoClipTable(Table):
+    def add_row(
+        self,
+        *renderables: RenderableType | None,
+        style: StyleType | None = None,
+        end_section: bool = False,
+    ) -> None:
+        super().add_row(*renderables, style=style, end_section=end_section)
+        for column in self.columns[:-2]:
+            column.no_wrap = True
+
+
+def _patch_module(module: ModuleType, **attrs: object) -> None:
+    """Replace module attributes that are imports (not definitions) in their module —
+    strict mypy's no-implicit-reexport rejects plain attribute assignment for those."""
+    for name, value in attrs.items():
+        setattr(module, name, value)
+
+
+# Typer's own help/error consoles must also honor the closed-pipe contract: with
+# Rich's default Console, `aai --help | head -2` exits 1 via Console.on_broken_pipe.
+_patch_module(rich_utils, Table=_NoClipTable, Console=theme.PipeSafeConsole)
+
+_format_click_error = rich_utils.rich_format_error
+
+
+def _format_click_error_fixed(self: ClickException) -> None:
+    # Typer's vendored Click renders flag suggestions as a stringified 1-tuple:
+    # "No such option: --jsno ('(Possible options: --json)',)". Fold the suggestion
+    # into the message ourselves so the user sees "(Possible options: --json)".
+    if isinstance(self, NoSuchOption) and self.possibilities:
+        self.message = f"{self.message} (Possible options: {', '.join(sorted(self.possibilities))})"
+        self.possibilities = None
+    _format_click_error(self)
+
+
+rich_utils.rich_format_error = _format_click_error_fixed
+
 # Typer's built-in `--show-completion` help is long enough to wrap several lines in
 # the options panel. Trim it so it fits on fewer rows. The OptionInfo objects live on
 # the completion placeholder's parameter defaults; reach the (underscore-prefixed)
@@ -204,7 +254,10 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
                 'aai transcribe call.mp3 --llm "summarize action items"',
             ),
         ]
-    ),
+    )
+    + "\n\n[bold]Authentication[/bold]\n\n"
+    "Run 'aai login', or set ASSEMBLYAI_API_KEY (used before the stored key). "
+    "--env or AAI_ENV selects the backend: production, sandbox000.",
 )
 def main(
     ctx: typer.Context,
@@ -288,3 +341,11 @@ def run() -> None:
     except BrokenPipeError:
         stdio.silence_stdout()
         sys.exit(0)
+    except SystemExit as exc:
+        # Typer's vendored Click handles EPIPE before our handler can see it: it wraps
+        # the streams in PacifyFlushWrapper and exits 1. That wrapper only ever appears
+        # on the closed-pipe path, so rewrite that exit to the documented success code.
+        if exc.code == 1 and isinstance(sys.stdout, PacifyFlushWrapper):
+            stdio.silence_stdout()
+            sys.exit(0)
+        raise
