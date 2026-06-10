@@ -356,3 +356,10 @@ def test_limits_json_passthrough_when_empty(mocker):
     result = runner.invoke(app, ["limits", "--json"])
     assert result.exit_code == 0
     assert json.loads(result.output) == {"rate_limits": []}
+
+
+def test_format_usage_number_fractional_trims_trailing_zeros():
+    # Non-integers keep up to six decimals with trailing zeros (and a bare dot) trimmed.
+    assert account._format_usage_number(1234.5) == "1,234.5"
+    assert account._format_usage_number(0.000001) == "0.000001"
+    assert account._format_usage_number(2.5000004) == "2.5"
