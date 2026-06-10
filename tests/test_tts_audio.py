@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import sys
+import types
 import wave
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from aai_cli.errors import CLIError
+from aai_cli.microphone import audio_missing_error
 from aai_cli.tts import audio
 
 
@@ -53,3 +57,38 @@ def test_play_pcm_wraps_device_failure_in_cli_error():
 
     with pytest.raises(CLIError, match="Could not play audio"):
         audio.play_pcm(b"\x01\x02", 16000, stream_factory=_boom)
+
+
+def test_play_pcm_reraises_cli_error_unchanged(monkeypatch: pytest.MonkeyPatch):
+    # A CLIError from the factory (e.g. audio_missing_error) is already user-facing,
+    # so it must propagate as-is, NOT get re-wrapped in "Could not play audio".
+    def _missing(_rate: int):
+        raise audio_missing_error()
+
+    with pytest.raises(CLIError) as excinfo:
+        audio.play_pcm(b"\x01\x02", 16000, stream_factory=_missing)
+    assert "Could not play audio" not in excinfo.value.message
+
+
+def test_default_output_stream_opens_raw_int16_mono_stream(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, Any] = {}
+
+    def _raw_output_stream(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "stream-sentinel"
+
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.RawOutputStream = _raw_output_stream
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    stream = audio._default_output_stream(24000)
+    assert stream == "stream-sentinel"
+    assert captured == {"samplerate": 24000, "channels": 1, "dtype": "int16"}
+
+
+def test_default_output_stream_missing_sounddevice_raises_audio_missing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import -> ImportError
+    with pytest.raises(CLIError):
+        audio._default_output_stream(24000)

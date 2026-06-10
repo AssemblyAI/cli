@@ -6,7 +6,7 @@ import json
 import pytest
 
 from aai_cli import environments
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.tts import session
 
 
@@ -181,3 +181,33 @@ def test_synthesize_maps_forbidden_connect_to_api_error():
 
     with pytest.raises(APIError):
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=_connect)
+
+
+def test_synthesize_error_frame_without_details_says_unknown():
+    # An Error frame with no error_code / error message still produces a clean,
+    # non-empty message (the "unknown" fallback), not a KeyError.
+    ws = FakeWS(
+        [
+            json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
+            json.dumps({"type": "Error"}),
+        ]
+    )
+    with pytest.raises(APIError, match="unknown"):
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
+def test_synthesize_maps_unexpected_protocol_error_to_api_error():
+    # recv() on an exhausted FakeWS raises IndexError inside _run_protocol; the
+    # generic-exception arm maps it to a clean APIError rather than leaking.
+    ws = FakeWS([json.dumps({"type": "Begin", "id": "s", "expires_at": 1})])
+    with pytest.raises(APIError, match="TTS session failed"):
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
+def test_synthesize_without_connect_uses_real_client_and_fails_cleanly():
+    # No `connect` provided: synthesize imports websockets' real sync client and
+    # attempts a connection. pytest-socket blocks socket creation, so this must
+    # surface as a clean CLIError (mapped in _open_ws), never a raw socket error.
+    _use_env("sandbox000")
+    with pytest.raises(CLIError):
+        session.synthesize("k", session.SpeakConfig(text="hi"))
