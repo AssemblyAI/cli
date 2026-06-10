@@ -142,3 +142,11 @@ def test_default_output_stream_missing_sounddevice_raises_audio_missing(
     monkeypatch.setitem(sys.modules, "sounddevice", None)  # import -> ImportError
     with pytest.raises(CLIError):
         audio._default_output_stream(24000)
+
+
+def test_silence_returns_zeroed_pcm_of_the_right_length():
+    # 16-bit mono: 100 ms at 16 kHz = 1600 frames = 3200 zero bytes.
+    pcm = audio.silence(16000, 0.1)
+    assert pcm == b"\x00" * 3200
+    # Empty duration -> no bytes.
+    assert audio.silence(24000, 0.0) == b""

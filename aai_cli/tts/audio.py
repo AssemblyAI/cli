@@ -37,6 +37,11 @@ def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
         wav.writeframes(pcm)
 
 
+def silence(sample_rate: int, seconds: float) -> bytes:
+    """Zeroed 16-bit mono PCM of the given duration (2 bytes per frame)."""
+    return b"\x00" * (int(sample_rate * seconds) * 2)
+
+
 def _default_output_stream(sample_rate: int) -> _OutputStream:
     """A started-on-demand raw 16-bit mono output stream from sounddevice."""
     try:
