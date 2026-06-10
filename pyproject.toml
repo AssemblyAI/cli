@@ -227,6 +227,9 @@ max-statements = 40
 "aai_cli/commands/**" = ["FBT001", "FBT003", "PLR0913"]
 # The root callback is also a Typer command signature.
 "aai_cli/main.py" = ["FBT001", "FBT003"]
+# Shared Typer option factories take the same boolean positional default the
+# command signatures do.
+"aai_cli/options.py" = ["FBT003"]
 # Raw stdout/stderr writes are centralized here; command modules call output helpers.
 "aai_cli/output.py" = ["T201"]
 # The active environment is process-global startup state by design.

@@ -14,6 +14,7 @@ from aai_cli import (
     config_builder,
     help_panels,
     llm,
+    options,
     output,
     youtube,
 )
@@ -316,7 +317,7 @@ def stream(
         exists=True,
         dir_okay=False,
     ),
-    json_out: bool = typer.Option(False, "--json", help="Emit newline-delimited JSON events."),
+    json_out: bool = options.json_option("Emit newline-delimited JSON events."),
     output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",

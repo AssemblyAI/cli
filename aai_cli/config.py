@@ -73,10 +73,23 @@ def _config_file() -> Path:
     return config_dir() / "config.toml"
 
 
+# Parsed-config cache: path -> (mtime_ns, size, parsed). The several _load()
+# calls in one CLI invocation (profile, env, key resolution) then don't each
+# re-read and re-parse the same unchanged TOML; _dump() bumps the mtime, which
+# invalidates it naturally. Callers mutate the returned Config (and persist_login
+# snapshots one for rollback), so hand out deep copies, never the cached object.
+_load_cache: dict[Path, tuple[int, int, Config]] = {}
+
+
 def _load() -> Config:
     path = _config_file()
-    if not path.exists():
+    try:
+        stat = path.stat()
+    except OSError:
         return Config()
+    cached = _load_cache.get(path)
+    if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+        return cached[2].model_copy(deep=True)
     with path.open("rb") as fh:
         try:
             data = tomllib.load(fh)
@@ -89,7 +102,7 @@ def _load() -> Config:
                 exit_code=2,
             ) from exc
     try:
-        return Config.model_validate(data)
+        cfg = Config.model_validate(data)
     except ValidationError as exc:
         from aai_cli.errors import CLIError
 
@@ -98,6 +111,8 @@ def _load() -> Config:
             error_type="invalid_config",
             exit_code=2,
         ) from exc
+    _load_cache[path] = (stat.st_mtime_ns, stat.st_size, cfg)
+    return cfg.model_copy(deep=True)
 
 
 def _dump(cfg: Config) -> None:
@@ -113,6 +128,10 @@ def _dump(cfg: Config) -> None:
         with os.fdopen(fd, "wb") as fh:
             tomli_w.dump(cfg.model_dump(exclude_none=True), fh)
         tmp.replace(path)
+        # The mtime/size key usually invalidates on its own, but drop the entry
+        # explicitly so a same-size rewrite on a coarse-mtime filesystem can't
+        # serve the pre-write parse.
+        _load_cache.pop(path, None)
     except BaseException:
         with contextlib.suppress(OSError):
             tmp.unlink()

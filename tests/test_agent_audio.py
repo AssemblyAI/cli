@@ -12,6 +12,7 @@ class FakeStream:
         self.writes = []
         self.stopped = False
         self.closed = False
+        self.active = True
 
     def write(self, data):
         self.writes.append(data)
@@ -199,3 +200,60 @@ def test_default_duplex_stream_open_failure_raises_audio_output_error(monkeypatc
         _default_duplex_stream(rate=24000, blocksize=2400, callback=lambda *a: None, device=None)
     assert exc.value.error_type == "audio_output_error"
     assert exc.value.exit_code == 1
+
+
+def test_capture_frames_raises_when_stream_dies_without_close():
+    # A device that vanishes mid-session stops the PortAudio callback without a
+    # close(): no sentinel ever arrives, so the consumer must time out and surface
+    # a clean error instead of blocking the capture thread forever.
+    fake = FakeStream()
+    fake.active = False
+    d = DuplexAudio(device_rate=24000, stream_factory=lambda **kwargs: fake, poll_timeout=0.01)
+    d.player.start()
+    with pytest.raises(CLIError) as excinfo:
+        next(d.capture_frames())
+    assert excinfo.value.error_type == "audio_input_error"
+    assert excinfo.value.exit_code == 1
+
+
+def test_poll_timeout_defaults_to_one_second():
+    # The default must stay long enough to never fire during normal silence but
+    # short enough that a dead device surfaces quickly.
+    d = DuplexAudio(device_rate=24000, stream_factory=lambda **kwargs: FakeStream())
+    assert d._poll_timeout == 1.0
+
+
+def test_capture_frames_tolerates_streams_without_active_flag():
+    # Fake/file-driven streams may not expose `active`; an empty queue then means
+    # "keep waiting", not "device died" — only the sentinel ends capture.
+    import threading
+
+    class MinimalStream:
+        pass
+
+    d = DuplexAudio(
+        device_rate=24000, stream_factory=lambda **kwargs: MinimalStream(), poll_timeout=0.01
+    )
+    d.player.start()
+    threading.Timer(0.05, d._in.put, args=(None,)).start()
+    assert list(d.capture_frames()) == []
+
+
+def test_capture_frames_keeps_waiting_while_stream_is_alive():
+    # An empty queue with a healthy stream is just silence: the poll loop keeps
+    # waiting (no error) and only raises once the stream actually reports dead.
+    class FlippingStream:
+        def __init__(self):
+            self.polls = 0
+
+        @property
+        def active(self):
+            self.polls += 1
+            return self.polls == 1  # alive on the first poll, dead afterwards
+
+    fake = FlippingStream()
+    d = DuplexAudio(device_rate=24000, stream_factory=lambda **kwargs: fake, poll_timeout=0.01)
+    d.player.start()
+    with pytest.raises(CLIError):
+        next(d.capture_frames())
+    assert fake.polls >= 2  # first timeout passed the alive check and kept waiting

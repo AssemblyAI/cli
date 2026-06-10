@@ -416,3 +416,29 @@ def test_stream_show_code_without_llm_is_plain_scaffold():
     ast.parse(code)
     assert "from openai import OpenAI" not in code  # no gateway when --llm absent
     assert "MicrophoneStream" in code
+
+
+def test_generated_code_targets_active_environment():
+    # --show-code embeds hosts from the active environment, so a sandbox user's
+    # generated script talks to the sandbox that minted their key, not production.
+    from aai_cli import environments
+
+    sandbox = environments.get("sandbox000")
+    environments.set_active(sandbox)
+
+    assert sandbox.streaming_host in code_gen.stream({})
+    llm_code = code_gen.stream({}, llm={"prompts": ["p"], "model": "m", "max_tokens": 5})
+    assert sandbox.streaming_host in llm_code
+    assert sandbox.llm_gateway_base in llm_code
+    assert sandbox.agents_host in code_gen.agent("aura", "be brief", "hi")
+    transcribe_code = code_gen.transcribe(
+        {}, source="a.mp3", llm_gateway={"prompts": ["p"], "model": "m", "max_tokens": 5}
+    )
+    assert sandbox.llm_gateway_base in transcribe_code
+    assert f"aai.settings.base_url = {sandbox.api_base!r}" in transcribe_code
+
+
+def test_generated_transcribe_omits_base_url_on_production():
+    # The SDK already defaults to the production api base, so the default
+    # environment's generated script stays free of redundant settings lines.
+    assert "base_url" not in code_gen.transcribe({}, source="a.mp3")

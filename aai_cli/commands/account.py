@@ -7,7 +7,7 @@ import typer
 from rich.markup import escape
 from rich.text import Text
 
-from aai_cli import help_panels, jsonshape, output, timeparse
+from aai_cli import help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.errors import UsageError
@@ -112,7 +112,7 @@ app = typer.Typer(help="Account billing, usage, and limits.")
 )
 def balance(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show your remaining account balance."""
 
@@ -151,7 +151,7 @@ def usage(
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD). Default: today."),
     window: str | None = typer.Option(None, "--window", help="Window size, e.g. 'day' or 'month'."),
     include_zero: bool = typer.Option(False, "--all", help="Include zero-usage windows."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show usage over a date range (defaults to the last 30 days)."""
 
@@ -225,7 +225,7 @@ def usage(
 )
 def limits(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show your account's rate limits per service."""
 

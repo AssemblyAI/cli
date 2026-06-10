@@ -233,3 +233,41 @@ def test_dump_cleans_up_temp_file_when_write_fails(tmp_config, monkeypatch):
     names = sorted(p.name for p in tmp_config.iterdir())
     assert names == ["config.toml"]  # no .config-*.toml.tmp left behind
     assert config.get_api_key("default") == "sk_abc"  # original untouched
+
+
+def test_load_caches_parsed_config_between_calls(monkeypatch):
+    # One CLI invocation reads the config several times (profile, env, key); the
+    # parse must happen once, with later reads served from the mtime-keyed cache.
+    config.set_profile_env("default", "production")
+    parses = {"n": 0}
+    real_load = config.tomllib.load
+
+    def counting_load(fh):
+        parses["n"] += 1
+        return real_load(fh)
+
+    monkeypatch.setattr(config.tomllib, "load", counting_load)
+    assert config.get_active_profile() == "default"
+    assert config.get_profile_env("default") == "production"
+    assert parses["n"] == 1
+
+
+def test_write_invalidates_load_cache(monkeypatch):
+    # A _dump must never leave a stale parse behind: the next read reflects it.
+    config.set_profile_env("default", "production")
+    assert config.get_profile_env("default") == "production"  # primes the cache
+    config.set_profile_env("default", "sandbox000")
+    assert config.get_profile_env("default") == "sandbox000"
+
+
+def test_load_returns_independent_copies():
+    # Callers mutate the returned Config (persist_login snapshots one for rollback),
+    # so the cache must hand out copies — a caller's mutation can't poison it.
+    config.set_api_key("default", "sk_abc")
+    first = config._load()  # cache miss: parses and primes the cache
+    first.active_profile = "mutated"
+    first.profiles.clear()
+    assert config._load().active_profile == "default"
+    hit = config._load()  # cache hit: must also be a *deep* copy
+    hit.profiles.clear()
+    assert "default" in config._load().profiles

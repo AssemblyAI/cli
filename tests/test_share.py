@@ -141,3 +141,26 @@ def test_share_json_emits_url(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert '"url"' in result.output
     assert "happy-slug.trycloudflare.com" in result.output
+
+
+def test_share_tunnel_env_excludes_api_key(tmp_path, monkeypatch):
+    # The tunnel binary only proxies a port; the API key the dev server inherits
+    # must not reach cloudflared's environment (logs/diagnostics could leak it).
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-secret")
+    server, proxy = _stub(monkeypatch)
+    seq = iter([server, proxy])
+    spawn_envs = []
+
+    def spawn(command, **kwargs):
+        spawn_envs.append(kwargs.get("env"))
+        return next(seq)
+
+    monkeypatch.setattr("aai_cli.init.runner.spawn", spawn)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 0, result.output
+    dev_env, tunnel_env = spawn_envs
+    assert dev_env["ASSEMBLYAI_API_KEY"] == "sk-secret"  # the user's app needs it
+    assert "ASSEMBLYAI_API_KEY" not in tunnel_env
+    assert tunnel_env["PATH"] == dev_env["PATH"]  # everything else passes through

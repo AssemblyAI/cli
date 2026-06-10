@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import client, config_builder, llm
+from aai_cli import client, config_builder, llm, output
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.follow import FollowRenderer
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
@@ -109,6 +109,11 @@ class StreamSession:
     # -inf so the very first finalized turn always produces an immediate summary.
     _summarized_len: int = 0
     _last_summary_at: float = float("-inf")
+    # First CLIError raised by an --llm refresh. The chain runs on the SDK reader
+    # thread, where raising would dump a thread traceback instead of reaching
+    # run_command, so the error is recorded (and warned once) there and re-raised
+    # from the final main-thread flush to fail the command cleanly.
+    _llm_error: CLIError | None = None
 
     @property
     def on_open(self) -> Callable[[], None]:
@@ -157,6 +162,12 @@ class StreamSession:
         follow = self.follow
         if follow is None:
             return
+        if self._llm_error is not None:
+            # The chain already failed; don't keep hammering a failing gateway. The
+            # final flush runs on the main thread, so re-raise there to fail cleanly.
+            if final:
+                raise self._llm_error
+            return
         with self._callback_lock:
             turns = len(self.transcript)
             if turns <= self._summarized_len:
@@ -168,13 +179,24 @@ class StreamSession:
             transcript_text = " ".join(self.transcript)
             self._summarized_len = turns
             self._last_summary_at = now
-        answer = llm.run_chain(
-            self.api_key,
-            self.llm_prompts,
-            transcript_text=transcript_text,
-            model=self.model,
-            max_tokens=self.max_tokens,
-        )
+        try:
+            answer = llm.run_chain(
+                self.api_key,
+                self.llm_prompts,
+                transcript_text=transcript_text,
+                model=self.model,
+                max_tokens=self.max_tokens,
+            )
+        except CLIError as exc:
+            self._llm_error = exc
+            if final:
+                raise
+            # Reader thread: raising would print a thread traceback, so warn on
+            # stderr now and let the final flush surface the error + exit code.
+            output.error_console.print(
+                f"[aai.muted]--llm refresh failed: {exc.message}[/aai.muted]"
+            )
+            return
         follow(answer, turns)
 
     def stream_one(

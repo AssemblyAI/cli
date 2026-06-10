@@ -8,7 +8,7 @@ from typing import Protocol, TypedDict
 import typer
 from rich.markup import escape
 
-from aai_cli import client, config, help_panels, output, theme
+from aai_cli import client, config, help_panels, options, output, theme
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
@@ -224,7 +224,7 @@ def render(data: DoctorResult) -> str:
 )
 def doctor(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Check that your environment is ready to use AssemblyAI."""
 

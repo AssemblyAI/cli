@@ -4,7 +4,7 @@ import sys
 
 import typer
 
-from aai_cli import help_panels, output
+from aai_cli import help_panels, options, output
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
@@ -34,7 +34,7 @@ def build_prompter(*, non_interactive: bool = False) -> Prompter:
 )
 def onboard(
     ctx: typer.Context,
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
     non_interactive: bool = typer.Option(
         False,
         "--non-interactive",

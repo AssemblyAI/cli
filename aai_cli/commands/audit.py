@@ -5,7 +5,7 @@ from collections.abc import Mapping
 import typer
 from rich.markup import escape
 
-from aai_cli import help_panels, jsonshape, output, timeparse
+from aai_cli import help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.help_text import examples_epilog
@@ -93,7 +93,7 @@ def audit(
     include_logins: bool = typer.Option(
         False, "--include-logins", help="Show successful login events."
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """List recent audit-log entries for your account."""
 

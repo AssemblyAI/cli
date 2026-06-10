@@ -95,9 +95,9 @@ def test_renders_sentiment_aggregate():
     )
     out = _render(transcript).lower()
     assert "sentiment:" in out
-    # Exact aggregated percentages pin the `* 100 // total` math and the `or 1`
-    # guard: 2 of 3 positive -> 66%, 1 of 3 negative -> 33%.
-    assert "66% positive" in out
+    # Largest-remainder rounding makes the percentages sum to exactly 100:
+    # 2 of 3 positive -> 67% (66.67 takes the leftover point), 1 of 3 -> 33%.
+    assert "67% positive" in out
     assert "33% negative" in out
 
 
@@ -122,3 +122,33 @@ def test_renders_entities_topics_content_safety_highlights():
     # ...and both lists are sorted most-relevant-first (pins reverse=True).
     assert out.index("Technology") < out.index("Health")
     assert out.index("profanity") < out.index("alcohol")
+
+
+def test_fmt_ms_rolls_over_to_hours():
+    # Sub-hour stays MM:SS; at an hour the format grows an hours field so a
+    # 1h chapter reads 1:00:00 instead of the ambiguous 60:00.
+    from aai_cli.transcribe_render import _fmt_ms
+
+    assert _fmt_ms(0) == "00:00"
+    assert _fmt_ms(59_000) == "00:59"
+    assert _fmt_ms(3_599_000) == "59:59"
+    assert _fmt_ms(3_600_000) == "1:00:00"
+    assert _fmt_ms(4_530_000) == "1:15:30"
+    assert _fmt_ms(3_720_000) == "1:02:00"  # minutes division boundary past the hour
+
+
+def test_sentiment_percentages_always_sum_to_100():
+    # Largest-remainder rounding: three equal counts split 34/33/33, not 33x3=99.
+    from collections import Counter
+
+    from aai_cli.transcribe_render import _percentages
+
+    pcts = _percentages(Counter(positive=1, neutral=1, negative=1))
+    assert sum(pcts.values()) == 100
+    assert sorted(pcts.values()) == [33, 33, 34]
+    assert _percentages(Counter()) == {}
+    assert _percentages(Counter(positive=2, negative=1)) == {"positive": 67, "negative": 33}
+    assert _percentages(Counter(positive=4)) == {"positive": 100}
+    # The leftover point goes to the largest *fraction* (positive, .714), which here
+    # is not the largest share -- pins the remainder ordering.
+    assert _percentages(Counter(positive=5, negative=9)) == {"positive": 36, "negative": 64}

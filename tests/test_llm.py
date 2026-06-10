@@ -6,10 +6,11 @@ import openai
 import pytest
 from openai.types.chat import ChatCompletion
 
-from aai_cli import llm
+from aai_cli import environments, llm
 from aai_cli.errors import APIError
 
-_REQUEST = httpx.Request("POST", f"{llm.GATEWAY_BASE_URL}/chat/completions")
+_GATEWAY_BASE = environments.get(environments.DEFAULT_ENV).llm_gateway_base
+_REQUEST = httpx.Request("POST", f"{_GATEWAY_BASE}/chat/completions")
 
 
 def _response(content: "str | None" = "hi there", usage=None) -> ChatCompletion:

@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import __version__, environments, help_panels, output, steps
+from aai_cli import __version__, environments, help_panels, options, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
@@ -255,7 +255,7 @@ def init(
     force: bool = typer.Option(False, "--force", help="Overwrite a non-empty target directory."),
     here: bool = typer.Option(False, "--here", help="Scaffold into the current directory."),
     port: int = typer.Option(3000, "--port", help="Local server port."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Scaffold a new project from a template, then launch it.
 

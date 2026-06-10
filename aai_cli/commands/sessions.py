@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import jsonshape, output, theme
+from aai_cli import jsonshape, options, output, theme
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.help_text import examples_epilog
@@ -53,7 +53,7 @@ def list_(
     status: str | None = typer.Option(
         None, "--status", help="Filter: created, completed, or error."
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """List recent streaming sessions."""
 
@@ -100,7 +100,7 @@ def list_(
 def get(
     ctx: typer.Context,
     session_id: str = typer.Argument(..., help="Streaming session id."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Show details for one streaming session."""
 

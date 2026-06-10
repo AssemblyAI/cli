@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 
-# Injected fields ({voice}/{system_prompt}/{greeting}) are substituted with json.dumps
-# values via str.format in a single pass, so prompt text can't collide with the
-# template's own braces. Every other literal brace below is doubled for str.format.
+from aai_cli.agent import session
+
+# Injected fields ({ws_url}/{voice}/{system_prompt}/{greeting}) are substituted with
+# json.dumps values via str.format in a single pass, so prompt text can't collide with
+# the template's own braces. Every other literal brace below is doubled for str.format.
 _TEMPLATE = """# Live two-way voice conversation with an AssemblyAI voice agent.
 # Requires audio support:  pip install sounddevice websockets
 # Tip: use headphones — the mic stays open while the agent speaks.
@@ -18,7 +20,7 @@ import sounddevice as sd
 from websockets.sync.client import connect
 
 API_KEY = os.environ["ASSEMBLYAI_API_KEY"]
-WS_URL = "wss://agents.assemblyai.com/v1/ws"
+WS_URL = {ws_url}
 RATE = 24000  # Voice Agent native PCM16 mono sample rate
 
 # ONE full-duplex stream (mic + speaker together) at the agent's native 24 kHz. Opening
@@ -87,8 +89,13 @@ with connect(WS_URL, additional_headers={{"Authorization": f"Bearer {{API_KEY}}"
 
 
 def render(voice: str, system_prompt: str, greeting: str) -> str:
-    """Generate a runnable voice-agent script with the given session settings."""
+    """Generate a runnable voice-agent script with the given session settings.
+
+    The socket URL comes from the active environment, so a sandbox run generates
+    a script that targets the sandbox its key was minted for, not production.
+    """
     return _TEMPLATE.format(
+        ws_url=json.dumps(session.ws_url()),
         voice=json.dumps(voice),
         system_prompt=json.dumps(system_prompt),
         greeting=json.dumps(greeting),

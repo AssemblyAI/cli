@@ -14,6 +14,7 @@ from aai_cli import (
     config_builder,
     help_panels,
     llm,
+    options,
     output,
     transcribe_exec,
     transcribe_render,
@@ -300,11 +301,9 @@ def transcribe(
         help="Max tokens.",
         rich_help_panel=help_panels.OPT_LLM,
     ),
-    json_out: bool = typer.Option(
-        False,
-        "--json",
-        help="Output the full result as JSON. Text stays the default even when piped; "
-        "opt in here (same as -o json).",
+    json_out: bool = options.json_option(
+        "Output the full result as JSON. Text stays the default even when piped; "
+        "opt in here (same as -o json)."
     ),
     output_field: choices.TranscriptOutput | None = typer.Option(
         None,

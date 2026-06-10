@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import help_panels, output, steps
+from aai_cli import help_panels, options, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import devserver, procfile, runner
@@ -66,7 +66,7 @@ def dev(
     no_install: bool = typer.Option(
         False, "--no-install", help="Skip dependency install; launch directly."
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Launch the dev server for the app in the current directory.
 

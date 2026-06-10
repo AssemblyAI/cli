@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.py) uv run ruff check --fix \"$f\" >/dev/null 2>&1; uv run ruff format \"$f\" >/dev/null 2>&1;; esac; exit 0"
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.py) uv run ruff check --fix --unfixable F401 \"$f\" >/dev/null 2>&1; uv run ruff format \"$f\" >/dev/null 2>&1;; esac; exit 0"
           }
         ]
       }

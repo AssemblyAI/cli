@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import choices, client, config, output, theme
+from aai_cli import choices, client, config, options, output, theme
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
@@ -31,7 +31,7 @@ def get(
         "--output",
         help="Print one field of the result.",
     ),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
@@ -74,7 +74,7 @@ def get(
 def list_(
     ctx: typer.Context,
     limit: int = typer.Option(10, "--limit", help="How many transcripts to show."),
-    json_out: bool = typer.Option(False, "--json", help="Output raw JSON."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """List recent transcripts."""
 
