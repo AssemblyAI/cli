@@ -1,4 +1,5 @@
 import os
+import time
 
 import keyring
 import pytest
@@ -52,6 +53,19 @@ def isolate_env(monkeypatch):
         "NO_COLOR",
     ):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def pin_timezone(monkeypatch):
+    # Pin the host timezone so any time rendering is deterministic across machines and
+    # CI, regardless of the contributor's local zone. A fixed *non-UTC* zone is
+    # deliberate: the CLI normalizes everything to UTC (timeparse.format_utc_*), so
+    # correct code is unaffected, while a future naive/local clock would visibly shift
+    # here instead of only on a laptop that happens to sit in that zone. Tests that
+    # need a frozen "now" use time-machine on top of this.
+    monkeypatch.setenv("TZ", "America/New_York")
+    if hasattr(time, "tzset"):
+        time.tzset()
 
 
 @pytest.fixture(autouse=True)

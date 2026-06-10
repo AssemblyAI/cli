@@ -41,6 +41,8 @@ uv run pytest -m install_script  # builds a wheel and runs install.sh for real; 
 
 CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`). Changing help text, tables, or rendered output will fail those tests until you regenerate them with `uv run pytest --snapshot-update` and commit the updated `.ambr` files. The auto-format hook only touches `*.py`, and pre-commit's whitespace fixers deliberately skip `tests/__snapshots__/` (syrupy's indentation must stay byte-for-byte), so never hand-edit a snapshot — always regenerate.
 
+The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that legitimately binds a loopback server opts back in with `@pytest.mark.allow_hosts(["127.0.0.1"])` — never `enable_socket`, which would also unblock external hosts. e2e/install suites drive the CLI as a subprocess, so the in-process socket patch never touches them.
+
 ## Naming & packaging gotchas
 
 - The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `aai` (`[project.scripts] aai = "aai_cli.main:run"`).
