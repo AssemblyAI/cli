@@ -81,7 +81,10 @@ def _validation_summary(exc: ValidationError) -> str:
     in a one-line CLI error.
     """
     problems: list[str] = []
-    for err in exc.errors(include_url=False, include_input=False):
+    # include_url/include_input=False keep pydantic's url/input fields out of each
+    # error dict, but this summary only reads loc + msg, so flipping them is an
+    # equivalent mutant (the rendered string is identical either way).
+    for err in exc.errors(include_url=False, include_input=False):  # pragma: no mutate
         loc = ".".join(str(part) for part in err["loc"]) or "top level"
         problems.append(f"{loc}: {err['msg']}")
     return "; ".join(problems)

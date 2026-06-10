@@ -110,6 +110,8 @@ def test_install_detaches_stdin_and_sets_timeout(monkeypatch):
         assert kwargs.get("stdin") is subprocess.DEVNULL
         assert kwargs.get("timeout")
         assert kwargs.get("capture_output") is True  # stdout/stderr must be captured
+        assert kwargs.get("text") is True  # decoded to str, not bytes
+        assert kwargs.get("check") is False  # we inspect returncode, never raise
 
     # The skill download gets the longer 300s timeout (vs the 120s default elsewhere).
     add_calls = [kw for cmd, kw in seen if cmd[:1] == ["npx"] and "add" in cmd]
