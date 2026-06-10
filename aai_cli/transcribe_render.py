@@ -74,7 +74,9 @@ def _render_chapters(transcript: object, console: Console) -> None:
         return
     console.print("\n[bold]Chapters:[/bold]")
     for ch in chapters:
-        span = f"{_fmt_ms(jsonshape.as_int(getattr(ch, 'start', 0)))}-{_fmt_ms(jsonshape.as_int(getattr(ch, 'end', 0)))}"
+        # The `, 0` getattr fallbacks are equivalent mutants: they apply only to a
+        # chapter missing start/end, and _fmt_ms(0) == _fmt_ms(1) == "00:00" regardless.
+        span = f"{_fmt_ms(jsonshape.as_int(getattr(ch, 'start', 0)))}-{_fmt_ms(jsonshape.as_int(getattr(ch, 'end', 0)))}"  # pragma: no mutate
         console.print(f"  {span}  {getattr(ch, 'headline', '')}")
 
 

@@ -174,14 +174,18 @@ def test_empty_api_key_flag_rejected():
 
     from aai_cli.errors import CLIError
 
-    with pytest.raises(CLIError):
+    with pytest.raises(CLIError) as exc:
         config.resolve_api_key(api_key_flag="")
+    assert exc.value.error_type == "invalid_key"
+    assert exc.value.exit_code == 2  # usage error, not the generic 1
 
 
 def test_invalid_profile_name_has_suggestion():
     with pytest.raises(CLIError) as exc:
         config.set_api_key("bad name!", "sk_x")
     assert exc.value.message.startswith("Invalid profile name")
+    assert exc.value.error_type == "invalid_profile"
+    assert exc.value.exit_code == 2  # usage error, not the generic 1
     assert exc.value.suggestion == "Use only letters, digits, '-' or '_'."
 
 
@@ -189,8 +193,10 @@ def test_malformed_config_raises_clean_error(tmp_config):
     from aai_cli.errors import CLIError
 
     (tmp_config / "config.toml").write_text("this is not = = valid toml ===\n")
-    with pytest.raises(CLIError):
+    with pytest.raises(CLIError) as exc:
         config.get_active_profile()
+    assert exc.value.error_type == "invalid_config"
+    assert exc.value.exit_code == 2  # usage error, not the generic 1
 
 
 def test_unexpected_config_shape_raises_clean_error(tmp_config):
@@ -200,7 +206,7 @@ def test_unexpected_config_shape_raises_clean_error(tmp_config):
     with pytest.raises(CLIError) as exc:
         config.get_active_profile()
     assert exc.value.error_type == "invalid_config"
-    assert exc.value.exit_code == 2
+    assert exc.value.exit_code == 2  # usage error, not the generic 1
 
 
 def test_unexpected_config_shape_error_is_compact(tmp_config):
@@ -243,6 +249,17 @@ def test_validation_summary_labels_rootlevel_problems():
     with pytest.raises(ValidationError) as exc:
         config.Config.model_validate("not a table")
     assert config._validation_summary(exc.value).startswith("top level: ")
+
+
+def test_dump_creates_missing_parent_directories(monkeypatch, tmp_path):
+    # The config dir's parents may not exist yet (first run on a fresh machine);
+    # _dump must create the whole chain (mkdir parents=True), not just the leaf.
+    nested = tmp_path / "deeply" / "nested" / "config"
+    monkeypatch.setattr("aai_cli.config.config_dir", lambda: nested)
+    config.set_api_key("default", "sk_abc")
+    assert nested.is_dir()
+    assert (nested / "config.toml").exists()
+    assert config.get_api_key("default") == "sk_abc"
 
 
 def test_config_roundtrips_after_special_value(tmp_path, monkeypatch):
