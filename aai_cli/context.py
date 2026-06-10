@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -127,9 +128,21 @@ def _rerun_after_login_error() -> CLIError:
     )
 
 
+def _interactive_session() -> bool:
+    """True only when a human can complete a browser login: stdin and stderr are both
+    real TTYs and no agent/CI context is detected (`output.is_agentic`)."""
+    return sys.stdin.isatty() and sys.stderr.isatty() and not output.is_agentic()
+
+
 def _should_auto_login(ctx: typer.Context, err: NotAuthenticated) -> bool:
     command_name = ctx.command.name if ctx.command else None
     if command_name in {"login", "logout"}:
+        return False
+    # CI/pipelines/agents have no human to finish a browser sign-in; starting one
+    # would bind a loopback port and block for up to two minutes. Surface the
+    # original NotAuthenticated (with its 'aai login' / ASSEMBLYAI_API_KEY
+    # suggestion) instead.
+    if not _interactive_session():
         return False
     # An invalid ASSEMBLYAI_API_KEY would still take precedence after browser login,
     # so retrying cannot fix that case.
@@ -153,7 +166,9 @@ def run_command(
             output.emit_error(err, json_mode=json_mode)
             raise typer.Exit(code=err.exit_code) from None
         try:
-            if not state.quiet:
+            # Suppressed in json_mode too: --json stderr must stay machine-readable,
+            # never mix human prose into it.
+            if not state.quiet and not json_mode:
                 output.error_console.print(
                     "[aai.muted]Not signed in; starting browser login.[/aai.muted]"
                 )

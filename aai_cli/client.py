@@ -49,19 +49,36 @@ def resolve_audio_source(source: str | None, *, sample: bool, check_local: bool 
     don't have yet is legitimate.
     """
     if sample:
+        if source:
+            # Never silently prefer one over the other: the user asked for both.
+            raise UsageError(
+                "An audio source and --sample cannot be combined.",
+                suggestion="Pass the file/URL or --sample, not both.",
+            )
         return SAMPLE_AUDIO_URL
     if not source:
         raise UsageError(
             "Provide an audio path or URL.",
             suggestion="Or pass --sample to use the hosted demo file.",
         )
-    if check_local and not source.startswith(("http://", "https://")) and not Path(source).exists():
-        raise CLIError(
-            f"File not found: {source}",
-            error_type="file_not_found",
-            exit_code=2,
-            suggestion="Check the path. For remote audio, pass an http(s):// URL.",
-        )
+    if check_local and not source.startswith(("http://", "https://")):
+        path = Path(source)
+        if not path.exists():
+            raise CLIError(
+                f"File not found: {source}",
+                error_type="file_not_found",
+                exit_code=2,
+                suggestion="Check the path. For remote audio, pass an http(s):// URL.",
+            )
+        if not path.is_file():
+            # A directory (or socket/FIFO) would otherwise fall through to credential
+            # resolution and fail much later as an opaque upload error.
+            raise CLIError(
+                f"Not a file: {source}",
+                error_type="not_a_file",
+                exit_code=2,
+                suggestion="Pass an audio file, not a directory.",
+            )
     return source
 
 
@@ -90,17 +107,42 @@ def _sdk_errors(message: str) -> Generator[None]:
         raise APIError(f"{message}: {exc}") from exc
 
 
+def _list_transcript_params(limit: int) -> aai.ListTranscriptParameters:
+    """List-transcripts params that serialize without the spurious ``model_config`` key.
+
+    assemblyai==0.64.4 under pydantic==2.13.4: the SDK's pydantic-v1-shim request model
+    picks up the v2-style ``model_config`` class attribute as a regular field, so the
+    ``.dict(exclude_none=True)`` the SDK puts on the query string ships a junk
+    ``?model_config=...`` param on every request. Null the bogus field out so
+    ``exclude_none`` drops it from the wire.
+    """
+    params = aai.ListTranscriptParameters(limit=limit)
+    object.__setattr__(params, "model_config", None)
+    return params
+
+
+# httpx-backed SDK errors embed a multi-line repr ("…\nReason: …\nRequest: <Request(…)>").
+_REQUEST_REPR_RE = re.compile(r"Request: <[^>]*>")
+
+
+def _compact_reason(exc: object) -> str:
+    """``str(exc)`` as a single clean line: drop the trailing ``Request: <…>`` repr and
+    collapse all whitespace/newlines, keeping the informative reason text."""
+    text = _REQUEST_REPR_RE.sub("", str(exc))
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def validate_key(api_key: str) -> bool:
     """True if the key authenticates, False on an auth failure. Raises APIError otherwise."""
     _configure(api_key)
     try:
-        aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=1))
+        aai.Transcriber().list_transcripts(_list_transcript_params(1))
     except aai.types.AssemblyAIError as exc:
         if is_auth_failure(exc):
             return False
-        raise APIError(f"Could not validate key: {exc}") from exc
+        raise APIError(f"Could not validate key: {_compact_reason(exc)}") from exc
     except Exception as exc:
-        raise APIError(f"Network error contacting AssemblyAI: {exc}") from exc
+        raise APIError(f"Network error contacting AssemblyAI: {_compact_reason(exc)}") from exc
     return True
 
 
@@ -114,7 +156,7 @@ def _item_to_dict(item: Any) -> dict[str, Any]:
 def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]]:
     _configure(api_key)
     with _sdk_errors("Could not list transcripts"):
-        resp = aai.Transcriber().list_transcripts(aai.ListTranscriptParameters(limit=limit))
+        resp = aai.Transcriber().list_transcripts(_list_transcript_params(limit))
     return [_item_to_dict(item) for item in resp.transcripts]
 
 

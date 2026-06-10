@@ -6,7 +6,7 @@ from rich.table import Table
 
 from aai_cli import client, config, environments, help_panels, options, output
 from aai_cli.context import AppState, persist_browser_login, resolve_profile, run_command
-from aai_cli.errors import APIError
+from aai_cli.errors import APIError, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
@@ -31,7 +31,20 @@ def login(
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         env = environments.active().name
-        if api_key:
+        if api_key is None:
+            persist_browser_login(profile, env)
+        elif not api_key.strip():
+            # An explicitly-passed empty/whitespace key (e.g. --api-key "$UNSET_VAR")
+            # must fail loudly, not silently fall into the browser flow as if the
+            # flag had never been passed.
+            raise UsageError(
+                "--api-key was given an empty value.",
+                suggestion=(
+                    "Pass a real key: aai login --api-key <KEY> "
+                    "(check that the shell variable you expanded is set)."
+                ),
+            )
+        else:
             # Non-interactive escape hatch for CI/automation: no AMS session is
             # obtained, so account self-service commands won't work for this profile.
             if not client.validate_key(api_key):
@@ -45,8 +58,6 @@ def login(
             # api-key-only, so account self-service must report it needs a browser
             # login rather than silently reusing the old (possibly different) identity.
             config.clear_session(profile)
-        else:
-            persist_browser_login(profile, env)
         output.emit(
             {"authenticated": True, "profile": profile, "env": env},
             lambda _d: (
@@ -138,5 +149,10 @@ def whoami(
             "session": session_label,
         }
         output.emit(data, render, json_mode=json_mode)
+        if not reachable:
+            # A rejected key must fail the command (exit 4, the auth code used by
+            # NotAuthenticated) so CI can use whoami as a preflight check; the
+            # rendered status above still lands on stdout in both modes.
+            raise typer.Exit(code=4)
 
     run_command(ctx, body, json=json_out)

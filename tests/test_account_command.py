@@ -38,6 +38,7 @@ def test_balance_formats_dollars(monkeypatch, mocker):
 
 
 def test_balance_without_session_runs_login(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     get_balance = mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
@@ -299,6 +300,21 @@ def test_usage_rejects_invalid_date(mocker):
     result = runner.invoke(app, ["usage", "--start", "not-a-date"])
     assert result.exit_code == 2
     assert "Invalid date" in result.output
+    get_usage.assert_not_called()
+
+
+def test_usage_invalid_date_fails_before_session_resolution(monkeypatch, mocker):
+    # Not logged in + a bad --start/--end: date validation must run before
+    # resolve_session, so the user gets a fast exit-2 usage error, not a login flow.
+    def _no_login():
+        raise AssertionError("login flow must not start for an invalid date")
+
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _no_login)
+    get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
+    result = runner.invoke(app, ["usage", "--end", "not-a-date"])
+    assert result.exit_code == 2
+    assert "Invalid date 'not-a-date'" in result.output
     get_usage.assert_not_called()
 
 

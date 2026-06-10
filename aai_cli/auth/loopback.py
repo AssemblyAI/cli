@@ -30,15 +30,47 @@ class CallbackResult:
     error: str | None = None
 
 
-def capture_callback(
-    timeout: float = 120.0,  # pragma: no mutate (default window; tests pass explicit timeouts)
-) -> CallbackResult:
-    """Bind the fixed loopback port, capture one OAuth callback, return its token.
+@dataclass
+class CallbackCapture:
+    """A loopback callback server that is already bound and serving.
 
-    Only a callback to the registered path that carries a `token` is accepted; any
-    other request (a different path, or no token) gets a 4xx and the server keeps
-    waiting, so a stray request can't end the capture early. Returns a
-    CallbackResult; `error="timeout"` if no matching callback arrives in time.
+    Splitting the bind (`start_capture`) from the blocking wait lets the login flow
+    fail on a taken port *before* it sends the user's browser into the OAuth flow.
+    `wait()` blocks for one matching callback and always shuts the server down.
+    """
+
+    result: CallbackResult
+    done: threading.Event
+    server: HTTPServer
+    thread: threading.Thread
+
+    def wait(
+        self,
+        timeout: float = 120.0,  # pragma: no mutate (default window; tests pass explicit timeouts)
+    ) -> CallbackResult:
+        """Block for one OAuth callback (or the timeout), then shut the server down.
+
+        Returns the CallbackResult; `error="timeout"` if no matching callback
+        arrived in time.
+        """
+        try:
+            if not self.done.wait(timeout):
+                self.result.error = "timeout"
+        finally:
+            self.server.shutdown()  # stop serve_forever()
+            self.thread.join(timeout=5)  # pragma: no mutate (cleanup grace period only)
+            self.server.server_close()  # close the listening socket (shutdown() leaves it open)
+        return self.result
+
+
+def start_capture() -> CallbackCapture:
+    """Bind the fixed loopback port and start serving; the returned capture's
+    ``wait()`` collects one OAuth callback.
+
+    Raises a clean APIError when the bind fails (port taken) so callers can abort
+    before opening the browser. Only a callback to the registered path that carries
+    a `token` is accepted; any other request (a different path, or no token) gets a
+    4xx and the server keeps waiting, so a stray request can't end the capture early.
     """
     result = CallbackResult()
     done = threading.Event()
@@ -81,11 +113,11 @@ def capture_callback(
         ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    try:
-        if not done.wait(timeout):
-            result.error = "timeout"
-    finally:
-        server.shutdown()  # stop serve_forever()
-        thread.join(timeout=5)
-        server.server_close()  # close the listening socket (shutdown() leaves it open)
-    return result
+    return CallbackCapture(result=result, done=done, server=server, thread=thread)
+
+
+def capture_callback(
+    timeout: float = 120.0,  # pragma: no mutate (default window; tests pass explicit timeouts)
+) -> CallbackResult:
+    """Bind the port, capture one OAuth callback, and shut down (one-shot helper)."""
+    return start_capture().wait(timeout)

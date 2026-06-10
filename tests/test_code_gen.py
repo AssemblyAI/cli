@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from aai_cli.code_gen import serialize
+from aai_cli.code_gen.transcribe import render as render_transcribe_code
 
 settings.register_profile("codegen", max_examples=150)
 settings.load_profile("codegen")
@@ -298,6 +300,67 @@ def test_every_snippet_execs_against_a_realistic_transcript() -> None:
 def test_fuzz_result_handling_always_execs(merged):
     body = snippets.result_handling(merged)
     exec(compile(body, "<snippets>", "exec"), {"transcript": _Stub(), "getattr": getattr})  # noqa: S102
+
+
+@pytest.mark.parametrize(
+    ("field", "fragment"),
+    [
+        ("text", "print(transcript.text)"),
+        ("id", "print(transcript.id)"),
+        ("status", "print(transcript.status.value)"),
+        ("utterances", 'print(f"Speaker {utt.speaker}: {utt.text}")'),
+        ("srt", "print(transcript.export_subtitles_srt())"),
+        ("json", "print(json.dumps(transcript.json_response, default=str))"),
+    ],
+)
+def test_transcribe_render_output_field_generates_matching_code(field, fragment):
+    # Each -o choice maps to result code faithful to client._FIELD_RENDERERS.
+    code = render_transcribe_code({}, "audio.mp3", output=field)
+    _compiles(code)
+    assert fragment in code
+
+
+def test_transcribe_render_output_json_imports_json_only_when_needed():
+    assert "import json" in render_transcribe_code({}, "audio.mp3", output="json")
+    assert "import json" not in render_transcribe_code({}, "audio.mp3", output="srt")
+    assert "import json" not in render_transcribe_code({}, "audio.mp3")
+
+
+def test_transcribe_render_output_replaces_analysis_result_handling():
+    # -o overrides the analysis sections, exactly like the real command's output path.
+    code = render_transcribe_code({"speaker_labels": True}, "audio.mp3", output="srt")
+    _compiles(code)
+    assert "print(transcript.export_subtitles_srt())" in code
+    assert "transcript.utterances" not in code
+
+
+def test_transcribe_render_output_takes_precedence_over_llm_gateway():
+    # The real command returns the -o field before the LLM chain runs; the generated
+    # script mirrors that and stays free of an unused OpenAI import.
+    code = render_transcribe_code(
+        {},
+        "audio.mp3",
+        llm_gateway={"prompts": ["summarize"], "model": "m", "max_tokens": 5},
+        output="srt",
+    )
+    _compiles(code)
+    assert "print(transcript.export_subtitles_srt())" in code
+    assert "from openai import OpenAI" not in code
+
+
+def test_transcribe_render_unknown_output_falls_back_to_text():
+    # Mirrors select_transcript_field's fallback for unrecognized field names.
+    code = render_transcribe_code({}, "audio.mp3", output="bogus")
+    _compiles(code)
+    assert "print(transcript.text)" in code
+
+
+@given(
+    merged=merged_strategy(config_builder.TRANSCRIBE_COERCE),
+    field=st.sampled_from(["text", "id", "status", "utterances", "srt", "json"]),
+)
+def test_fuzz_transcribe_output_fields_always_compile(merged, field):
+    _compiles(render_transcribe_code(merged, "audio.mp3", output=field))
 
 
 def test_transcribe_show_code_includes_llm_gateway_transform():

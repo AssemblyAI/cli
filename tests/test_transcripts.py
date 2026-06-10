@@ -92,6 +92,7 @@ def test_list_renders_rows(mocker):
 
 
 def test_list_unauthenticated_runs_login(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     rows = [{"id": "t1", "status": "completed"}]
     list_ = mocker.patch(
@@ -102,6 +103,17 @@ def test_list_unauthenticated_runs_login(monkeypatch, mocker):
     assert config.get_api_key("default") == "sk_from_oauth"
     list_.assert_not_called()
     assert "Run the same command again" in result.output
+
+
+def test_list_limit_must_be_at_least_one(mocker):
+    # min=1 on --limit: 0 and negatives are rejected client-side, before any request.
+    config.set_api_key("default", "sk_live")
+    list_ = mocker.patch("aai_cli.commands.transcripts.client.list_transcripts", autospec=True)
+    for bad in ("0", "-3"):
+        result = runner.invoke(app, ["transcripts", "list", "--limit", bad])
+        assert result.exit_code == 2
+        assert "limit" in result.output.lower()
+    list_.assert_not_called()
 
 
 def test_list_human_mode_renders_table(monkeypatch, mocker):

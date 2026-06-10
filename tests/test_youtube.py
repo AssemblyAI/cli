@@ -56,6 +56,47 @@ def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
     assert captured["download"] is True
 
 
+def test_download_audio_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypatch, capsys):
+    # yt-dlp's default logger writes its own "ERROR: …" line to stderr before the CLI's
+    # clean error, duplicating the message; the passed logger must swallow everything.
+    import logging
+
+    captured = {}
+
+    class FakeYDL:
+        def __init__(self, opts):
+            captured["opts"] = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            (tmp_path / "x.m4a").write_bytes(b"audio")
+            return {"id": "x", "ext": "m4a"}
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "x.m4a")
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    youtube.download_audio("https://youtu.be/x", tmp_path)
+    logger = captured["opts"]["logger"]
+    # Structurally quiet: no propagation to root, only swallow-everything handlers.
+    assert logger.name == "aai_cli.youtube.yt_dlp"
+    assert logger.propagate is False
+    assert logger.handlers
+    assert all(isinstance(h, logging.NullHandler) for h in logger.handlers)
+    # Behaviorally quiet: even an ERROR record produces no console output.
+    logger.error("ERROR: [youtube] nope: Video unavailable")
+    logger.warning("WARNING: noisy")
+    logger.debug("[debug] noise")
+    out = capsys.readouterr()
+    assert out.err == ""
+    assert out.out == ""
+
+
 def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
     landed = tmp_path / "actual.webm"
 

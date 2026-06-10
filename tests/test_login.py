@@ -59,6 +59,7 @@ def test_whoami_human_render_shows_detail_rows(monkeypatch, mocker):
 
 
 def test_whoami_unauthenticated_runs_login(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
     validate = mocker.patch(
         "aai_cli.commands.login.client.validate_key", autospec=True, return_value=True
@@ -124,12 +125,58 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
     from aai_cli.errors import APIError
 
     def boom():
-        raise APIError("Login timed out waiting for the browser.")
+        raise APIError("Login failed: the server returned an unexpected response.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", boom)
     result = runner.invoke(app, ["login"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
+
+
+def test_login_timeout_is_auth_typed_with_exit_4(monkeypatch):
+    # The loopback timeout surfaces as not_authenticated/exit 4, not api_error/1.
+    from aai_cli.errors import NotAuthenticated
+
+    def timed_out():
+        raise NotAuthenticated("Login timed out waiting for the browser.")
+
+    monkeypatch.setattr("aai_cli.context.run_login_flow", timed_out)
+    result = runner.invoke(app, ["login", "--json"])
+    assert result.exit_code == 4
+    payload = json.loads(result.output)
+    assert payload["error"]["type"] == "not_authenticated"
+    assert config.get_api_key("default") is None
+
+
+def test_login_empty_api_key_flag_is_usage_error(monkeypatch):
+    # `--api-key "$UNSET_VAR"` (an explicit empty value) must not silently fall
+    # into the browser flow.
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("empty --api-key must not start a browser")),
+    )
+    result = runner.invoke(app, ["login", "--api-key", ""])
+    assert result.exit_code == 2
+    assert "empty" in result.output
+    assert config.get_api_key("default") is None
+
+
+def test_login_whitespace_api_key_flag_is_usage_error(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("blank --api-key must not start a browser")),
+    )
+    result = runner.invoke(app, ["login", "--api-key", "   "])
+    assert result.exit_code == 2
+    assert config.get_api_key("default") is None
+
+
+def test_login_empty_api_key_flag_json_error_shape():
+    result = runner.invoke(app, ["login", "--api-key", "", "--json"])
+    assert result.exit_code == 2
+    payload = json.loads(result.output)
+    assert payload["error"]["type"] == "usage_error"
+    assert "--api-key" in payload["error"]["message"]
 
 
 def test_login_api_key_flag_still_bypasses_oauth(monkeypatch, mocker):
@@ -281,14 +328,27 @@ def test_whoami_renders_human_table_reachable(mocker):
 
 def test_whoami_renders_human_table_rejected_key(mocker):
     # The non-JSON render path also covers the "key rejected" branch and the
-    # account/session "none" fallbacks (the em-dash placeholder).
+    # account/session "none" fallbacks (the em-dash placeholder). A rejected key
+    # is a failed preflight: the status still renders, but the exit code is 4.
     config.set_api_key("default", "sk_1234567890")
     mocker.patch("aai_cli.output.resolve_json", autospec=True, return_value=False)
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=False)
     result = runner.invoke(app, ["whoami"])
-    assert result.exit_code == 0
+    assert result.exit_code == 4
     assert "key rejected" in result.output
     assert "none" in result.output
+
+
+def test_whoami_rejected_key_exits_4_with_json_status_on_stdout(mocker):
+    # CI preflight contract: a rejected key keeps the rendered status (stdout, clean
+    # JSON) but signals failure via the auth exit code 4.
+    config.set_api_key("default", "sk_1234567890")
+    mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=False)
+    result = runner.invoke(app, ["whoami", "--json"])
+    assert result.exit_code == 4
+    data = json.loads(result.output)
+    assert data["reachable"] is False
+    assert data["profile"] == "default"
 
 
 def test_whoami_honors_env_api_key(monkeypatch, mocker):

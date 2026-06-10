@@ -26,6 +26,61 @@ def test_validate_key_true_on_success(mocker):
     assert params.limit == 1
 
 
+def test_list_transcript_params_serialize_without_model_config():
+    # assemblyai==0.64.4 + pydantic==2.13.4: the SDK's own ListTranscriptParameters
+    # leaks a spurious `model_config` field into .dict(exclude_none=True) — exactly
+    # what the SDK serializes onto the query string. The helper must drop it.
+    params = client._list_transcript_params(3)
+    assert params.dict(exclude_none=True) == {"limit": 3}
+
+
+def test_validate_key_probe_serializes_without_model_config(mocker):
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.return_value = mocker.MagicMock()
+    assert client.validate_key("sk_good") is True
+    params = T.return_value.list_transcripts.call_args.args[0]
+    # No junk `model_config` query param on the wire (and still a one-row probe).
+    assert params.dict(exclude_none=True) == {"limit": 1}
+
+
+def test_list_transcripts_params_serialize_without_model_config(mocker):
+    resp = mocker.MagicMock()
+    resp.transcripts = []
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.return_value = resp
+    assert client.list_transcripts("sk", limit=7) == []
+    params = T.return_value.list_transcripts.call_args.args[0]
+    assert params.dict(exclude_none=True) == {"limit": 7}
+
+
+def test_validate_key_sdk_error_message_is_one_clean_line(mocker):
+    # httpx-backed SDK failures embed a multi-line repr; the CLI error must keep the
+    # reason but collapse it to one line and drop the `Request: <…>` tail.
+    raw = (
+        "failed to retrieve transcripts: \n"
+        "Reason: [Errno -3] Temporary failure in name resolution\n"
+        "Request: <Request('GET', 'https://api.assemblyai.com/v2/transcript?limit=1')>"
+    )
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(raw)
+    with pytest.raises(APIError) as exc:
+        client.validate_key("sk")
+    assert exc.value.message == (
+        "Could not validate key: failed to retrieve transcripts: "
+        "Reason: [Errno -3] Temporary failure in name resolution"
+    )
+
+
+def test_validate_key_network_error_message_is_one_clean_line(mocker):
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.side_effect = ConnectionError(
+        "connection refused\nRequest: <Request('GET', 'https://api.assemblyai.com/x')>"
+    )
+    with pytest.raises(APIError) as exc:
+        client.validate_key("sk")
+    assert exc.value.message == "Network error contacting AssemblyAI: connection refused"
+
+
 def test_validate_key_false_on_auth_error(mocker):
     T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
     T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(

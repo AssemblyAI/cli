@@ -89,6 +89,7 @@ def test_transcribe_json_output(mocker):
 
 
 def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     tx = mocker.patch(
         "aai_cli.commands.transcribe.client.transcribe",
@@ -476,6 +477,120 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
     assert "llm-gateway.assemblyai.com" in result.output
     assert "translate to spanish" in result.output
     assert '"transcript_id": transcript.id' in result.output
+
+
+def test_transcribe_show_code_output_srt_generates_export(monkeypatch):
+    # -o srt must be reflected in the generated code (not silently dropped).
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "-o", "srt", "--show-code"])
+    assert result.exit_code == 0
+    compile(result.output, "<generated>", "exec")  # the emitted script is runnable
+    assert "print(transcript.export_subtitles_srt())" in result.output
+    assert "print(transcript.text)" not in result.output
+
+
+def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "-o", "utterances", "--show-code"])
+    assert result.exit_code == 0
+    compile(result.output, "<generated>", "exec")
+    assert 'print(f"Speaker {utt.speaker}: {utt.text}")' in result.output
+
+
+def test_transcribe_negative_audio_start_exits_2(mocker):
+    _auth()
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--audio-start", "-100"])
+    assert result.exit_code == 2
+    tx.assert_not_called()
+
+
+def test_transcribe_language_code_with_detection_exits_2(mocker):
+    _auth()
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    result = runner.invoke(
+        app,
+        ["transcribe", "audio.mp3", "--language-code", "en_us", "--language-detection"],
+    )
+    assert result.exit_code == 2
+    assert "--language-code and --language-detection can't be combined." in result.output
+    tx.assert_not_called()
+
+
+def test_transcribe_language_flags_alone_are_accepted(mocker):
+    # Only the combination is contradictory; each flag works on its own.
+    _auth()
+    tx = mocker.patch(
+        "aai_cli.commands.transcribe.client.transcribe",
+        autospec=True,
+        return_value=_fake_transcript(mocker),
+    )
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--language-code", "en_us"])
+    assert result.exit_code == 0
+    assert tx.call_args.kwargs["config"].language_code == "en_us"
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--language-detection"])
+    assert result.exit_code == 0
+    assert tx.call_args.kwargs["config"].language_detection is True
+
+
+def test_transcribe_speakers_expected_without_labels_exits_2(mocker):
+    _auth()
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--speakers-expected", "2"])
+    assert result.exit_code == 2
+    assert "--speakers-expected only applies when diarization is enabled." in result.output
+    assert "Add --speaker-labels." in result.output
+    tx.assert_not_called()
+
+
+def test_transcribe_speakers_expected_with_labels_is_accepted(mocker):
+    _auth()
+    tx = mocker.patch(
+        "aai_cli.commands.transcribe.client.transcribe",
+        autospec=True,
+        return_value=_fake_transcript(mocker),
+    )
+    result = runner.invoke(
+        app, ["transcribe", "audio.mp3", "--speaker-labels", "--speakers-expected", "2"]
+    )
+    assert result.exit_code == 0
+    assert tx.call_args.kwargs["config"].speakers_expected == 2
+
+
+def test_transcribe_speakers_expected_with_config_speaker_labels_is_accepted(mocker):
+    # Diarization enabled through the --config escape hatch counts too: the check
+    # runs on the merged config, not just the curated flag.
+    _auth()
+    tx = mocker.patch(
+        "aai_cli.commands.transcribe.client.transcribe",
+        autospec=True,
+        return_value=_fake_transcript(mocker),
+    )
+    result = runner.invoke(
+        app,
+        ["transcribe", "audio.mp3", "--config", "speaker_labels=true", "--speakers-expected", "2"],
+    )
+    assert result.exit_code == 0
+    assert tx.call_args.kwargs["config"].speakers_expected == 2
+
+
+def test_transcribe_unknown_pii_policy_exits_2_and_lists_valid(mocker):
+    _auth()
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    result = runner.invoke(
+        app,
+        ["transcribe", "audio.mp3", "--redact-pii", "--redact-pii-policy", "not_a_policy"],
+    )
+    assert result.exit_code == 2
+    assert "Unknown PII policy(s) ['not_a_policy']" in result.output
+    assert "person_name" in result.output  # the valid values are listed
+    tx.assert_not_called()
 
 
 def test_transcribe_renders_summary_human(monkeypatch, mocker):

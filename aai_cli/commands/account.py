@@ -156,10 +156,12 @@ def usage(
     """Show usage over a date range (defaults to the last 30 days)."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        _, jwt = resolve_session(state)
+        # Parse/validate the date flags before any session resolution or network
+        # work, so a bad --start/--end is a fast usage error even when not logged in.
         today = datetime.now(UTC).date()
         start_date = _utc_day_start(start or (today - timedelta(days=30)).isoformat())
         end_date = _utc_day_start(end or today.isoformat())
+        _, jwt = resolve_session(state)
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, object]) -> object:

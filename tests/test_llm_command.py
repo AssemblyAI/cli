@@ -140,6 +140,7 @@ def test_llm_missing_prompt_exits_2(monkeypatch):
 
 
 def test_llm_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
 
     def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
@@ -281,6 +282,44 @@ def test_llm_follow_requires_piped_stdin(monkeypatch):
     result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"])
     assert result.exit_code == 2
     assert "stdin" in result.output.lower()
+
+
+def test_llm_follow_empty_stdin_exits_2(monkeypatch):
+    # `aai llm -f "…" </dev/null` must not exit 0 silently: an empty pipe means the
+    # prompt never ran, which is a usage error, not a success.
+    _auth()
+    calls = []
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+        calls.append(messages)
+        return _payload("ok")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
+    assert result.exit_code == 2
+    assert "--follow needs transcript text piped on stdin" in result.output
+    assert calls == []  # no API call was made
+
+
+def test_llm_follow_interrupt_before_first_turn_still_exits_0(monkeypatch):
+    # Ctrl-C before any turn arrives is the normal "stop watching" signal, not the
+    # empty-stdin usage error.
+    _auth()
+
+    class _InterruptIter:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.stdio.iter_piped_stdin_lines", lambda: _InterruptIter()
+    )
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
+    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
+    assert result.exit_code == 0
+    assert "--follow needs transcript text piped on stdin" not in result.output
 
 
 def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
