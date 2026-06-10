@@ -70,12 +70,13 @@ def capture_callback(
         def log_message(self, format: str, *args: object) -> None:  # silence stderr logging
             pass
 
+    port = endpoints.loopback_port()
     try:
-        server = HTTPServer((endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT), Handler)
+        server = HTTPServer((endpoints.LOOPBACK_HOST, port), Handler)
     except OSError as exc:
         raise APIError(
             f"Could not start the login callback server on "
-            f"{endpoints.LOOPBACK_HOST}:{endpoints.LOOPBACK_PORT} ({exc}). "
+            f"{endpoints.LOOPBACK_HOST}:{port} ({exc}). "
             "Close whatever is using that port and run 'aai login' again."
         ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)

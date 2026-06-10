@@ -23,7 +23,7 @@ def _unique_loopback_port(monkeypatch):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind((endpoints.LOOPBACK_HOST, 0))
         port = probe.getsockname()[1]
-    monkeypatch.setattr(endpoints, "LOOPBACK_PORT", port)
+    monkeypatch.setenv("AAI_AUTH_PORT", str(port))
 
 
 def _hit(path: str) -> int | None:
@@ -35,7 +35,7 @@ def _hit(path: str) -> int | None:
     # Retry briefly until the server thread is bound.
     for _ in range(50):
         conn = http.client.HTTPConnection(
-            endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT, timeout=2
+            endpoints.LOOPBACK_HOST, endpoints.loopback_port(), timeout=2
         )
         try:
             conn.request("GET", path)
@@ -91,7 +91,7 @@ def _body(path: str) -> bytes:
     Callers first confirm the server is bound via `_hit`, so no readiness loop is
     needed here.
     """
-    conn = http.client.HTTPConnection(endpoints.LOOPBACK_HOST, endpoints.LOOPBACK_PORT, timeout=2)
+    conn = http.client.HTTPConnection(endpoints.LOOPBACK_HOST, endpoints.loopback_port(), timeout=2)
     try:
         conn.request("GET", path)
         return conn.getresponse().read()
@@ -146,7 +146,7 @@ def test_capture_raises_clean_error_when_port_unavailable(monkeypatch):
     busy.bind((endpoints.LOOPBACK_HOST, 0))
     busy.listen(1)
     port = busy.getsockname()[1]
-    monkeypatch.setattr(endpoints, "LOOPBACK_PORT", port)
+    monkeypatch.setenv("AAI_AUTH_PORT", str(port))
     try:
         with pytest.raises(APIError):
             loopback.capture_callback(timeout=1.0)
