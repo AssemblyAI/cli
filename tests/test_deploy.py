@@ -158,7 +158,7 @@ def test_deploy_railway_prompt_names_railway(monkeypatch: pytest.MonkeyPatch) ->
 def test_deploy_multiple_targets_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel", "railway"))
     result = runner.invoke(app, ["deploy", "--vercel", "--railway", "--yes"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2  # usage error: the conventional exit 2
     assert "at most one" in result.output
     # The error lists every target flag, including the new ones.
     assert "--fly" in result.output
@@ -266,7 +266,7 @@ def test_deploy_nonzero_exit_propagates(monkeypatch: pytest.MonkeyPatch) -> None
 def test_deploy_noninteractive_without_yes_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _stub(monkeypatch, available=("vercel",), agentic=True)
     result = runner.invoke(app, ["deploy"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2  # refusing to deploy without confirmation is a usage error
     assert "--yes" in result.output
     assert _cmds(calls) == []
 

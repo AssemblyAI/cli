@@ -36,6 +36,25 @@ def test_quiet_suppresses_env_override_warning(monkeypatch):
     assert "may be rejected" not in quiet.output
 
 
+def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
+    # In --json mode the warning ships as a {"warning": …} object on stderr, so a
+    # pipeline gets a machine-readable hint instead of an unexplained auth failure.
+    import json
+
+    from aai_cli import config
+
+    config.set_api_key("default", "sk_live")
+    config.set_profile_env("default", "production")
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=[]
+    )
+    result = runner.invoke(app, ["--env", "sandbox000", "transcripts", "list", "--json"])
+    warning_line = next(
+        line for line in result.output.splitlines() if line.strip().startswith('{"warning"')
+    )
+    assert "may be rejected" in json.loads(warning_line)["warning"]
+
+
 def test_shell_completion_is_available(monkeypatch):
     # add_completion=True ships `--show-completion` (and --install-completion), the
     # discoverability affordance gh/kubectl/docker users reach for. Typer detects the

@@ -167,19 +167,32 @@ def emit_text(text: str) -> None:
 
 
 @contextlib.contextmanager
-def status(message: str, *, json_mode: bool) -> Generator[None]:
+def status(message: str, *, json_mode: bool, quiet: bool = False) -> Generator[None]:
     """Show an ephemeral spinner on stderr during a long human-facing wait.
 
-    A no-op in JSON or non-interactive mode (piped / agent-run), so stdout stays
-    clean for pipelines and machine output is never decorated. Rendered on the
-    stderr console so even an interactive `aai transcribe x -o text` keeps stdout
-    pristine.
+    A no-op in JSON or non-interactive mode (piped / agent-run), under ``--quiet``,
+    so stdout stays clean for pipelines and machine output is never decorated.
+    Rendered on the stderr console so even an interactive `aai transcribe x -o text`
+    keeps stdout pristine.
     """
-    if json_mode or is_agentic():
+    if json_mode or quiet or is_agentic():
         yield
         return
     with error_console.status(message):
         yield
+
+
+def emit_warning(message: str, *, json_mode: bool) -> None:
+    """Emit a non-fatal warning to stderr, structured under ``--json``.
+
+    In JSON mode a human ``! …`` line would corrupt a ``{"error": …}`` pipeline, so
+    the warning ships as its own ``{"warning": …}`` object on stderr — keeping stdout
+    clean and stderr machine-readable. Human mode gets the familiar yellow line.
+    """
+    if json_mode:
+        print(json.dumps({"warning": message}, default=str), file=sys.stderr)
+    else:
+        error_console.print(warn(message))
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:

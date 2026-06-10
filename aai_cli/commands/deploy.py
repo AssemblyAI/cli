@@ -71,11 +71,7 @@ TARGETS = (VERCEL, RAILWAY, FLY)
 def _resolve_target(selected: list[Target]) -> Target:
     if len(selected) > 1:
         flags = " / ".join(t.flag for t in TARGETS)
-        raise CLIError(
-            f"Pass at most one deploy target ({flags}).",
-            error_type="usage_error",
-            exit_code=1,
-        )
+        raise UsageError(f"Pass at most one deploy target ({flags}).")
     return selected[0] if selected else VERCEL  # Vercel is the default
 
 
@@ -102,11 +98,9 @@ def _confirmed(target: Target, *, assume_yes: bool) -> bool:
     if assume_yes:
         return True
     if output.is_agentic():
-        raise CLIError(
+        raise UsageError(
             "Refusing to deploy without confirmation in a non-interactive session. "
-            "Pass --yes to deploy.",
-            error_type="usage_error",
-            exit_code=1,
+            "Pass --yes to deploy."
         )
     return typer.confirm(f"Deploy this project to {target.name}?")
 

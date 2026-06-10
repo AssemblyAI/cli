@@ -101,6 +101,27 @@ def test_login_api_key_flag_does_not_persist_session(mocker):
     assert config.get_session("default") is None
 
 
+def test_login_api_key_flag_warns_account_commands_need_browser_login(mocker):
+    # An --api-key login stores no browser session, so the user is told up front that
+    # account self-service commands need `aai login` without --api-key.
+    mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
+    result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
+    assert result.exit_code == 0
+    # (Substring chosen to survive Rich soft-wrapping of the longer hint line.)
+    assert "Account commands (keys/balance/usage/limits/audit) need" in result.output
+
+
+def test_login_browser_path_has_no_api_key_only_note(monkeypatch):
+    # The browser login DOES create a session, so the api-key-only caveat must not show.
+    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    assert "Signed in as default" in result.output
+    assert "aai onboard" in result.output  # the shared next-step hint
+    assert "without --api-key" not in result.output
+    assert config.get_session("default") is not None
+
+
 def test_login_api_key_flag_clears_prior_browser_session(mocker):
     # A profile previously authenticated via browser becomes api-key-only on
     # re-login; the stale session must not linger and silently authenticate
@@ -233,8 +254,10 @@ def test_root_callback_sandbox_overrides_profile_env(mocker):
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["--sandbox", "whoami", "--json"])
     assert result.exit_code == 0
-    # A profile/env mismatch warning prints to stderr first; the JSON is the last line.
-    payload = json.loads(result.output.strip().splitlines()[-1])
+    # In --json mode the env-mismatch warning is its own {"warning": …} object, so pick
+    # the whoami payload (the line carrying "env") rather than assuming an ordering.
+    objs = [json.loads(line) for line in result.output.strip().splitlines()]
+    payload = next(obj for obj in objs if "env" in obj)
     assert payload["env"] == "sandbox000"
 
 

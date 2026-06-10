@@ -59,6 +59,8 @@ def test_filesource_missing_file_raises():
     with pytest.raises(CLIError) as exc:
         FileSource("/no/such/file.wav")
     assert exc.value.exit_code == 2
+    # Wording matches `client.resolve_audio_source` so the CLI speaks with one voice.
+    assert "File not found:" in exc.value.message
 
 
 def test_filesource_non_wav_without_ffmpeg_raises(tmp_path, monkeypatch):

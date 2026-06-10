@@ -218,7 +218,7 @@ def _command_line_requests_json(raw_args: list[str]) -> bool:
     callback runs, so sniffing it lets every failure class honor the request.
     """
     for index, token in enumerate(raw_args):
-        if token in ("--json", "--output=json", "-ojson"):
+        if token in ("--json", "-j", "--output=json", "-ojson"):
             return True
         if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
             return True
@@ -299,7 +299,9 @@ def main(
         raise typer.Exit(code=err.exit_code) from None
     warning = env_override_warning(state)
     if warning and not quiet:
-        output.error_console.print(output.warn(warning))
+        # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets a
+        # machine-readable hint instead of an unexplained downstream auth failure.
+        output.emit_warning(warning, json_mode=json_mode)
     if ctx.invoked_subcommand is None:
         _offer_or_help(ctx, state)
 

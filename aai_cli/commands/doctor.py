@@ -79,6 +79,16 @@ def _check_api_key(profile: str) -> Check:
     try:
         key = config.resolve_api_key(profile=profile)
     except NotAuthenticated:
+        if not config.keyring_usable():
+            # On a box with no keyring, `aai login` can't persist a key either, so
+            # point at the env var that actually works here instead of a dead end.
+            return _check(
+                "api-key",
+                "fail",
+                "No API key found, and this machine has no usable OS keyring.",
+                fix="Set ASSEMBLYAI_API_KEY (browser login can't store a key without a keyring).",
+                affects=["everything"],
+            )
         return _check(
             "api-key",
             "fail",
@@ -217,6 +227,11 @@ def render(data: DoctorResult) -> str:
             lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
     if data["ok"]:
         lines.append("  " + output.success("Everything looks good."))
+        # Only the real `aai doctor` carries profile context; the onboarding wizard
+        # reuses render() for a partial check and has its own next-steps, so don't
+        # tack a "try transcribe" hint onto that one.
+        if data.get("profile") is not None:
+            lines.append("  " + output.hint("Try it: aai transcribe --sample"))
     else:
         failed = sum(1 for c in checks if c["status"] == "fail")
         noun = "problem" if failed == 1 else "problems"

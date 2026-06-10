@@ -180,6 +180,19 @@ def test_keys_create_rejects_empty_project_list(mocker):
     result = runner.invoke(app, ["keys", "create", "--name", "ci"])
     assert result.exit_code == 1
     create.assert_not_called()
+    # The error now carries an actionable remediation (it previously had none).
+    assert "dashboard" in result.output
+
+
+def test_keys_list_empty_shows_human_empty_state(monkeypatch, mocker):
+    _auth()
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+    # A project with no tokens yields no rows -> a friendly empty state, not a bare header.
+    projects = [{"project": {"id": 1, "name": "Default"}, "tokens": []}]
+    mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)
+    result = runner.invoke(app, ["keys", "list"])
+    assert result.exit_code == 0
+    assert "No API keys found." in result.output
 
 
 def test_keys_create_with_explicit_project_skips_lookup(mocker):

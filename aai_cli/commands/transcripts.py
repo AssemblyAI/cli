@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import typer
 from rich.markup import escape
-from rich.table import Table
 
-from aai_cli import choices, client, config, options, output, theme
+from aai_cli import choices, client, config, options, output, theme, timeparse
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
@@ -47,11 +46,16 @@ def get(
             # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
             output.emit_text(client.select_transcript_field(transcript, output_field))
             return
-        output.emit(
-            client.transcript_summary(transcript),
-            lambda d: escape(str(d["text"])),
-            json_mode=json_mode,
-        )
+        if json_mode:
+            # The full SDK payload, identical to `aai transcribe … --json`, so the
+            # same `jq` works whether the transcript is fetched fresh or re-fetched.
+            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
+        else:
+            output.emit(
+                client.transcript_summary(transcript),
+                lambda d: escape(str(d["text"])),
+                json_mode=False,
+            )
 
     run_command(ctx, body, json=json_out)
 
@@ -82,13 +86,15 @@ def list_(
         api_key = config.resolve_api_key(profile=state.profile)
         rows = client.list_transcripts(api_key, limit=limit)
 
-        def render(data: list[dict[str, object]]) -> Table:
-            table = output.data_table("id", "status", "created")
+        def render(data: list[dict[str, object]]) -> object:
+            if not data:
+                return output.muted("No transcripts yet.")
+            table = output.data_table("id", "status", "created (UTC)")
             for row in data:
                 table.add_row(
                     escape(str(row["id"])),
                     theme.status_text(str(row["status"])),
-                    escape(str(row.get("created", ""))),
+                    escape(timeparse.format_utc_datetime(row.get("created"))),
                 )
             return table
 

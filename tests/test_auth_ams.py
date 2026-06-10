@@ -44,8 +44,10 @@ def test_auth_4xx_raises_not_authenticated(monkeypatch, status):
         return httpx.Response(status, json={"detail": "Invalid credentials"})
 
     _patch_transport(monkeypatch, handler)
-    with pytest.raises(NotAuthenticated):
+    with pytest.raises(NotAuthenticated) as exc:
         ams.discover("bad")
+    # A rejected AMS session now carries an actionable next step.
+    assert exc.value.suggestion is not None and "aai login" in exc.value.suggestion
 
 
 def test_500_raises_api_error_with_detail(monkeypatch):
@@ -56,6 +58,7 @@ def test_500_raises_api_error_with_detail(monkeypatch):
     with pytest.raises(APIError) as exc:
         ams.discover("x")
     assert "Something went wrong" in str(exc.value)
+    assert exc.value.suggestion is not None and "network" in exc.value.suggestion
     # The "detail" field is extracted, not the raw JSON body: the field name and its
     # braces must not leak (pins `mapping is not None and "detail" in mapping`).
     assert "detail" not in str(exc.value)

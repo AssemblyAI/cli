@@ -4,7 +4,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import jsonshape, options, output, theme
+from aai_cli import jsonshape, options, output, theme, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
 from aai_cli.help_text import examples_epilog
@@ -62,11 +62,13 @@ def list_(
         payload = ams.list_streaming(jwt, limit=limit, status=status)
         rows = _session_rows(payload.get("data"))
 
-        def render(data: list[dict[str, object]]) -> Table:
+        def render(data: list[dict[str, object]]) -> object:
+            if not data:
+                return output.muted("No streaming sessions yet.")
             table = output.data_table(
                 "session id",
                 "status",
-                "created",
+                "created (UTC)",
                 "audio (s)",
                 "model",
             )
@@ -74,7 +76,7 @@ def list_(
                 table.add_row(
                     escape(str(s["session_id"])),
                     theme.status_text(str(s["status"])),
-                    escape(str(s.get("created_at") or "")),
+                    escape(timeparse.format_utc_datetime(s.get("created_at"))),
                     escape(str(s.get("audio_duration_sec") or "")),
                     escape(str(s.get("speech_model") or "")),
                 )
@@ -88,8 +90,8 @@ def list_(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Show one session's details", "aai sessions get <session-id>"),
-            ("Raw JSON for one session", "aai sessions get <session-id> --json"),
+            ("Show one session's details", "aai sessions get sess_5551234"),
+            ("Raw JSON for one session", "aai sessions get sess_5551234 --json"),
             (
                 "Drill into the latest session",
                 "aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')",

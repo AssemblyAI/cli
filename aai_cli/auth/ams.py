@@ -24,9 +24,15 @@ def _detail(resp: httpx.Response) -> str:
 
 def _raise_for_error(resp: httpx.Response) -> None:
     if resp.status_code in (401, 403):
-        raise NotAuthenticated(f"AMS rejected the login ({resp.status_code}): {_detail(resp)}")
+        raise NotAuthenticated(
+            f"AMS rejected the login ({resp.status_code}): {_detail(resp)}",
+            suggestion="Your browser session may have expired — run 'aai login' again.",
+        )
     if resp.status_code >= _HTTP_ERROR_MIN_STATUS:
-        raise APIError(f"AMS request failed ({resp.status_code}): {_detail(resp)}")
+        raise APIError(
+            f"AMS request failed ({resp.status_code}): {_detail(resp)}",
+            suggestion="Check your network and try again; if it persists, contact support.",
+        )
 
 
 def _json_or_raise(resp: httpx.Response) -> object:

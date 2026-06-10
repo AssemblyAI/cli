@@ -10,7 +10,7 @@ import json
 import pytest
 
 from aai_cli.agent.session import VoiceAgentSession, _send_audio_loop
-from aai_cli.errors import APIError, CLIError
+from aai_cli.errors import APIError, NotAuthenticated
 
 
 class FakeRenderer:
@@ -121,12 +121,15 @@ def test_transcripts_routed_to_renderer():
     assert ("agent_transcript", "later", False) in s.renderer.calls
 
 
-def test_unauthorized_error_raises_cli_error_exit_2():
+def test_unauthorized_error_raises_not_authenticated_exit_4():
+    # A rejected voice-agent connection uses the same exit 4 as every other
+    # not-authenticated path across the CLI (REST, streaming), not a one-off code.
     s = _session()
-    with pytest.raises(CLIError) as excinfo:
+    with pytest.raises(NotAuthenticated) as excinfo:
         s.dispatch({"type": "session.error", "code": "UNAUTHORIZED", "message": "bad key"})
-    assert excinfo.value.exit_code == 2
+    assert excinfo.value.exit_code == 4
     assert "bad key" in str(excinfo.value)  # the server message wins over code/fallback
+    assert excinfo.value.suggestion is not None and "aai login" in excinfo.value.suggestion
 
 
 def test_other_session_error_raises_api_error():

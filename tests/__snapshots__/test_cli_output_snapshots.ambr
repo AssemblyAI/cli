@@ -42,7 +42,7 @@
   │                                            mind?]                            │
   │ --device                      INTEGER      Microphone device index.          │
   │ --list-voices                              Print known voices and exit.      │
-  │ --json                                     Emit newline-delimited JSON       │
+  │ --json                -j                   Emit newline-delimited JSON       │
   │                                            events.                           │
   │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
   │                                            lines as plain stdout,            │
@@ -77,12 +77,12 @@
    List recent audit-log entries for your account.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit                 INTEGER  How many entries to show. [default: 20]     │
-  │ --action                TEXT     Filter by raw action name.                  │
-  │ --resource              TEXT     Filter by raw resource type.                │
-  │ --include-logins                 Show successful login events.               │
-  │ --json                           Output raw JSON.                            │
-  │ --help                           Show this message and exit.                 │
+  │ --limit                   INTEGER  How many entries to show. [default: 20]   │
+  │ --action                  TEXT     Filter by raw action name.                │
+  │ --resource                TEXT     Filter by raw resource type.              │
+  │ --include-logins                   Show successful login events.             │
+  │ --json            -j               Output raw JSON.                          │
+  │ --help                             Show this message and exit.               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -109,8 +109,8 @@
    Show your remaining account balance.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -169,14 +169,14 @@
    browser.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --port              INTEGER  Local server port. [default: 3000]              │
-  │ --host              TEXT     Interface to bind. Loopback by default; pass    │
-  │                              0.0.0.0 to expose on your network.              │
-  │                              [default: 127.0.0.1]                            │
-  │ --no-open                    Launch, but don't open the browser.             │
-  │ --no-install                 Skip dependency install; launch directly.       │
-  │ --json                       Output raw JSON.                                │
-  │ --help                       Show this message and exit.                     │
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --host                TEXT     Interface to bind. Loopback by default; pass  │
+  │                                0.0.0.0 to expose on your network.            │
+  │                                [default: 127.0.0.1]                          │
+  │ --no-open                      Launch, but don't open the browser.           │
+  │ --no-install                   Skip dependency install; launch directly.     │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -201,8 +201,8 @@
    Check that your environment is ready to use AssemblyAI.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -233,13 +233,13 @@
   │   directory      [DIRECTORY]  Target directory (default: <template>).        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --no-install                 Scaffold only; don't install or launch.         │
-  │ --no-open                    Install + launch, but don't open the browser.   │
-  │ --force                      Overwrite a non-empty target directory.         │
-  │ --here                       Scaffold into the current directory.            │
-  │ --port              INTEGER  Local server port. [default: 3000]              │
-  │ --json                       Output raw JSON.                                │
-  │ --help                       Show this message and exit.                     │
+  │ --no-install                   Scaffold only; don't install or launch.       │
+  │ --no-open                      Install + launch, but don't open the browser. │
+  │ --force                        Overwrite a non-empty target directory.       │
+  │ --here                         Scaffold into the current directory.          │
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -266,11 +266,11 @@
    Create a new API key. Prints the key value once — copy it now.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ *  --name           TEXT     A label for the new key. [required]             │
-  │    --project        INTEGER  Project id to create the key in (defaults to    │
-  │                              your first).                                    │
-  │    --json                    Output raw JSON.                                │
-  │    --help                    Show this message and exit.                     │
+  │ *  --name             TEXT     A label for the new key. [required]           │
+  │    --project          INTEGER  Project id to create the key in (defaults to  │
+  │                                your first).                                  │
+  │    --json     -j               Output raw JSON.                              │
+  │    --help                      Show this message and exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -294,8 +294,8 @@
    List API keys across your projects (keys shown masked).
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -322,8 +322,8 @@
   │ *    new_name      TEXT     The new label. [required]                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -342,8 +342,8 @@
    Show your account's rate limits per service.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -388,7 +388,7 @@
   │ --max-tokens             INTEGER      Max tokens to generate.                │
   │                                       [default: 1000]                        │
   │ --list-models                         Print known models and exit.           │
-  │ --json                                Output raw JSON (one object per turn   │
+  │ --json           -j                   Output raw JSON (one object per turn   │
   │                                       in --follow mode).                     │
   │ --help                                Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -416,9 +416,9 @@
    Authenticate via your browser; stores a CLI API key.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --api-key        TEXT  Provide key non-interactively.                        │
-  │ --json                 Output raw JSON.                                      │
-  │ --help                 Show this message and exit.                           │
+  │ --api-key          TEXT  Provide key non-interactively.                      │
+  │ --json     -j            Output raw JSON.                                    │
+  │ --help                   Show this message and exit.                         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -439,8 +439,8 @@
    Clear stored credentials for the active profile.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -459,10 +459,10 @@
    Guided setup: sign in, run your first transcription, and start building.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json                     Output raw JSON.                                  │
-  │ --non-interactive          Run without interactive prompts (default when     │
-  │                            agent detected).                                  │
-  │ --help                     Show this message and exit.                       │
+  │ --json             -j        Output raw JSON.                                │
+  │ --non-interactive            Run without interactive prompts (default when   │
+  │                              agent detected).                                │
+  │ --help                       Show this message and exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -484,15 +484,15 @@
   │ *    session_id      TEXT  Streaming session id. [required]                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Show one session's details
-   $ aai sessions get <session-id>
+   $ aai sessions get sess_5551234
    Raw JSON for one session
-   $ aai sessions get <session-id> --json
+   $ aai sessions get sess_5551234 --json
    Drill into the latest session
    $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
   
@@ -508,10 +508,10 @@
    List recent streaming sessions.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit         INTEGER  How many sessions to show. [default: 10]            │
-  │ --status        TEXT     Filter: created, completed, or error.               │
-  │ --json                   Output raw JSON.                                    │
-  │ --help                   Show this message and exit.                         │
+  │ --limit           INTEGER  How many sessions to show. [default: 10]          │
+  │ --status          TEXT     Filter: created, completed, or error.             │
+  │ --json    -j               Output raw JSON.                                  │
+  │ --help                     Show this message and exit.                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -542,12 +542,13 @@
    and skipped if already present unless --force.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        [user|project|local]  Config scope to register the MCP under. │
-  │                                      Presence is detected across all scopes. │
-  │                                      [default: user]                         │
-  │ --force                              Reinstall even if already present.      │
-  │ --json                               Output raw JSON.                        │
-  │ --help                               Show this message and exit.             │
+  │ --scope          [user|project|local]  Config scope to register the MCP      │
+  │                                        under. Presence is detected across    │
+  │                                        all scopes.                           │
+  │                                        [default: user]                       │
+  │ --force                                Reinstall even if already present.    │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -570,11 +571,11 @@
    Remove the AssemblyAI MCP server and skills from your coding agent.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --scope        [user|project|local]  Only remove the MCP from this scope.    │
-  │                                      Default: remove from whichever scope it │
-  │                                      exists in.                              │
-  │ --json                               Output raw JSON.                        │
-  │ --help                               Show this message and exit.             │
+  │ --scope          [user|project|local]  Only remove the MCP from this scope.  │
+  │                                        Default: remove from whichever scope  │
+  │                                        it exists in.                         │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -596,8 +597,8 @@
    agent.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -626,10 +627,10 @@
    downloads/).
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --port              INTEGER  Local server port. [default: 3000]              │
-  │ --no-install                 Skip dependency install; launch directly.       │
-  │ --json                       Output raw JSON.                                │
-  │ --help                       Show this message and exit.                     │
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --no-install                   Skip dependency install; launch directly.     │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -652,13 +653,11 @@
    Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
   
    Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
-   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -. --prompt biases
-   the
-   speech model. --llm runs a prompt over the live transcript in-process,
-   refreshing the
-   answer on every finalized turn; for a separate step instead, pipe the text out
-   with
-   -o text | aai llm -f "…".
+   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -.
+  
+   --prompt biases the speech model. --llm runs a prompt over the live transcript
+   in-process, refreshing the answer on every finalized turn; for a separate step
+   instead, pipe the text out with -o text | aai llm -f "…".
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Use  │
@@ -667,7 +666,7 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                          Stream the hosted wildfires.mp3 sample.    │
-  │ --json                            Emit newline-delimited JSON events.        │
+  │ --json       -j                   Emit newline-delimited JSON events.        │
   │ --output     -o      [text|json]  Output mode: text (finalized turns as      │
   │                                   plain lines, pipe-friendly) or json.       │
   │ --show-code                       Print the equivalent Python SDK code and   │
@@ -695,7 +694,8 @@
   │ --domain                    TEXT                    Domain preset (e.g.      │
   │                                                     medical).                │
   │ --prompt                    TEXT                    Prompt to bias the       │
-  │                                                     speech model (u3-pro).   │
+  │                                                     speech model (supported  │
+  │                                                     models only).            │
   │ --keyterms-prompt           TEXT                    Boost a key term         │
   │                                                     (repeatable).            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -796,13 +796,14 @@
    Transcribe an audio file, URL, or YouTube link.
   
    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
-   Save with
-   --out FILE, or pipe one field with -o text. A YouTube URL is downloaded first,
-   then
-   transcribed. Curated flags cover common features; --config KEY=VALUE and
-   --config-file
-   reach every other field. Analysis (summary, chapters, ...) renders in human
-   mode.
+  
+   Save with --out FILE, or pipe one field with -o text. A YouTube URL is
+   downloaded
+   first, then transcribed.
+  
+   Curated flags cover common features; --config KEY=VALUE and --config-file
+   reach
+   every other field. Analysis (summary, chapters, ...) renders in human mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path, public URL, or YouTube URL.         │
@@ -810,7 +811,7 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                         Use the hosted              │
   │                                                  wildfires.mp3 sample.       │
-  │ --json                                           Output the full result as   │
+  │ --json       -j                                  Output the full result as   │
   │                                                  JSON. Text stays the        │
   │                                                  default even when piped;    │
   │                                                  opt in here (same as -o     │
@@ -839,7 +840,8 @@
   │ --temperature               FLOAT                   Speech model             │
   │                                                     temperature.             │
   │ --prompt                    TEXT                    Prompt to bias the       │
-  │                                                     speech model (u3-pro).   │
+  │                                                     speech model (supported  │
+  │                                                     models only).            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Formatting ─────────────────────────────────────────────────────────────────╮
   │ --punctuate       --no-punctuate        Add punctuation.                     │
@@ -949,7 +951,7 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --output  -o      [text|id|status|utterances|s  Print one field of the       │
   │                   rt|json]                      result.                      │
-  │ --json                                          Output raw JSON.             │
+  │ --json    -j                                    Output raw JSON.             │
   │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -975,10 +977,10 @@
    List recent transcripts.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit        INTEGER RANGE [x>=1]  How many transcripts to show.           │
-  │                                      [default: 10]                           │
-  │ --json                               Output raw JSON.                        │
-  │ --help                               Show this message and exit.             │
+  │ --limit          INTEGER RANGE [x>=1]  How many transcripts to show.         │
+  │                                        [default: 10]                         │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -1004,12 +1006,14 @@
    Show usage over a date range (defaults to the last 30 days).
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --start         TEXT  Start date (YYYY-MM-DD). Default: 30d ago.             │
-  │ --end           TEXT  End date (YYYY-MM-DD). Default: today.                 │
-  │ --window        TEXT  Window size, e.g. 'day' or 'month'.                    │
-  │ --all                 Include zero-usage windows.                            │
-  │ --json                Output raw JSON.                                       │
-  │ --help                Show this message and exit.                            │
+  │ --start                       TEXT  Start date (YYYY-MM-DD). Default: 30d    │
+  │                                     ago.                                     │
+  │ --end                         TEXT  End date (YYYY-MM-DD). Default: today.   │
+  │ --window                      TEXT  Window size, e.g. 'day' or 'month'.      │
+  │ --include-zero,--all                Include zero-usage windows (matches      │
+  │                                     --include-logins on `aai audit`).        │
+  │ --json                -j            Output raw JSON.                         │
+  │ --help                              Show this message and exit.              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -1034,8 +1038,8 @@
    Show the active profile and whether its key is usable.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json          Output raw JSON.                                             │
-  │ --help          Show this message and exit.                                  │
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

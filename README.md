@@ -59,6 +59,12 @@ Prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`.
 ## Quick Start
 
 ```sh
+aai onboard               # guided setup: sign in, first transcription, start building
+```
+
+Prefer to do it by hand?
+
+```sh
 aai login                 # store your API key (browser-assisted)
 aai transcribe --sample   # transcribe the hosted wildfires.mp3 sample
 ```
@@ -91,7 +97,38 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | `aai setup install` | Set up your coding agent for AssemblyAI (docs MCP + skills). |
 | `aai keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service (browser login). |
 
-Every command prints human-readable text by default — terminal, pipe, CI, or agent alike. Add `--json` for machine-readable output; it never switches on just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob. Errors go to **stderr**, so stdout stays clean for pipelines.
+Every command prints human-readable text by default — terminal, pipe, CI, or agent alike. Add `--json` (or `-j`) for machine-readable output; it never switches on just because stdout is piped, so `aai transcribe call.mp3 | grep hello` still gets the transcript, not a JSON blob. Errors go to **stderr**, so stdout stays clean for pipelines.
+
+Account data lives in **top-level** commands — `aai balance` / `usage` / `limits` / `keys` / `audit`, and `aai login` / `logout` / `whoami` — not under an `aai account` group.
+
+### JSON output
+
+`--json` is the scripting contract. The shapes are stable:
+
+| Command | `--json` shape |
+| --- | --- |
+| `transcribe` / `transcripts get` | the full transcript payload (`id`, `status`, `text`, `words`, `utterances`, …) — identical for both, so a fetched transcript round-trips |
+| `transcribe --llm` | `{id, status, text, transform: {model, steps: [{prompt, output}]}}` |
+| `transcripts list` / `sessions list` / `keys list` | a JSON array of row objects (`[]` when empty) |
+| `balance` / `usage` / `limits` / `audit` | the raw AMS payload (e.g. `balance.balance_in_cents`; `usage.usage_items[].line_items[].price` in cents) |
+| `doctor` | `{ok, profile, environment, checks: [{name, status, affects, detail, fix}]}` |
+| any error | `{"error": {"type", "message", "suggestion"?, "transcript_id"?}}` on **stderr** |
+
+`stream`/`agent` with `--json` emit newline-delimited JSON (one object per event/turn).
+
+### Exit codes
+
+Scripts can branch on the exit code:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | success |
+| `1` | API/network error, missing dependency, or unexpected internal error |
+| `2` | usage/validation error (bad flag, bad path, malformed id, unusable config) |
+| `4` | not authenticated (no usable key, rejected key, or a self-service command needing browser login) |
+| `130` | cancelled with Ctrl-C |
+
+`aai deploy` / `aai dev` shell out to other tools and propagate that tool's own exit code.
 
 > **Tip:** Quote URLs that contain `?` (most YouTube links do) — in zsh the `?` is a glob character: `aai transcribe "https://www.youtube.com/watch?v=VIDEO_ID"`.
 

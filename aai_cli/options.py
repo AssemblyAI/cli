@@ -10,6 +10,6 @@ import typer
 
 
 def json_option(help_text: str = "Output raw JSON.") -> bool:
-    """The standard ``--json`` flag; pass ``help_text`` where the output shape differs."""
-    flag: bool = typer.Option(False, "--json", help=help_text)
+    """The standard ``--json``/``-j`` flag; pass ``help_text`` where the shape differs."""
+    flag: bool = typer.Option(False, "--json", "-j", help=help_text)
     return flag

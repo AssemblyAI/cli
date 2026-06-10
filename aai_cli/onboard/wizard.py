@@ -16,9 +16,10 @@ def run_onboarding(prompter: Prompter, ctx: WizardContext) -> int:
     try:
         sections.welcome(prompter, ctx)
         if sections.auth(prompter, ctx) is SectionResult.FAILED:
-            output.error_console.print(
-                output.fail("Could not sign in. Run `aai onboard` again to retry.")
-            )
+            # The auth section already printed the specific next step (browser retry,
+            # or — non-interactively — `aai login`/ASSEMBLYAI_API_KEY), so keep this
+            # terminal line neutral rather than implying a re-run always fixes it.
+            output.error_console.print(output.fail("Sign-in didn't complete."))
             return NotAuthenticated().exit_code
         sections.first_request(prompter, ctx)
         sections.environment(prompter, ctx)

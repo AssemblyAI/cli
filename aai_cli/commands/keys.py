@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typer
 from rich.markup import escape
-from rich.table import Table
 
 from aai_cli import jsonshape, options, output
 from aai_cli.auth import ams
@@ -37,7 +36,10 @@ def _default_project_id(account_id: int, jwt: str) -> int:
     project = jsonshape.as_mapping(projects[0].get("project")) if projects else None
     pid = _project_id(project) if project is not None else None
     if pid is None:
-        raise APIError("Your account has no project to create a key in.")
+        raise APIError(
+            "Your account has no project to create a key in.",
+            suggestion="Create a project in the AssemblyAI dashboard, then try again.",
+        )
     return pid
 
 
@@ -75,7 +77,9 @@ def list_(
                 for token in jsonshape.mapping_list(entry.get("tokens"))
             )
 
-        def render(data: list[dict[str, object]]) -> Table:
+        def render(data: list[dict[str, object]]) -> object:
+            if not data:
+                return output.muted("No API keys found.")
             table = output.data_table("id", "name", "project", "key", "disabled")
             for row in data:
                 table.add_row(

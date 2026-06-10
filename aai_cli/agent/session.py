@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aai_cli import environments
-from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
+from aai_cli.errors import APIError, CLIError, NotAuthenticated, auth_failure, is_auth_failure
 
 
 def ws_url() -> str:
@@ -29,7 +29,8 @@ DEFAULT_PROMPT = (
 )
 DEFAULT_GREETING = "Hey, what's on your mind?"
 
-# session.error codes that mean the connection is unauthorized -> exit 2.
+# session.error codes that mean the connection is unauthorized -> exit 4, the same
+# NotAuthenticated code every other rejected-credential path across the CLI uses.
 _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
 
 # A pre-upgrade HTTP 403 on the WebSocket handshake (see _is_rejected_key).
@@ -154,10 +155,9 @@ class VoiceAgentSession:
         code = event.get("code", "")
         message = event.get("message") or code or "Voice agent error."
         if code in _AUTH_ERROR_CODES:
-            raise CLIError(
+            raise NotAuthenticated(
                 f"Voice agent rejected the connection: {message}",
-                error_type="unauthorized",
-                exit_code=2,
+                suggestion="Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY.",
             )
         raise APIError(f"Voice agent error ({code}): {message}")
 

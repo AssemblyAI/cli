@@ -58,13 +58,28 @@ def login(
             # api-key-only, so account self-service must report it needs a browser
             # login rather than silently reusing the old (possibly different) identity.
             config.clear_session(profile)
+        # An --api-key login stores no browser session, so the AMS self-service
+        # commands won't work for this profile — say so up front instead of letting
+        # the user hit "needs a browser login" later.
+        api_key_only = api_key is not None
+
+        def render(_d: object) -> str:
+            lines = [
+                output.success(f"Signed in as {escape(profile)} ({escape(env)})."),
+                output.hint("Run `aai onboard` to finish setup, or `aai transcribe <file>`."),
+            ]
+            if api_key_only:
+                lines.append(
+                    output.hint(
+                        "Account commands (keys/balance/usage/limits/audit) need "
+                        "`aai login` without --api-key."
+                    )
+                )
+            return "\n".join(lines)
+
         output.emit(
-            {"authenticated": True, "profile": profile, "env": env},
-            lambda _d: (
-                output.success(f"Signed in as {escape(profile)} ({escape(env)}).")
-                + "\n"
-                + output.hint("Run `aai onboard` to finish setup, or `aai transcribe <file>`.")
-            ),
+            {"authenticated": True, "profile": profile, "env": env, "api_key_only": api_key_only},
+            render,
             json_mode=json_mode,
         )
 

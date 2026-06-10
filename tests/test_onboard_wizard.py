@@ -25,9 +25,14 @@ def test_auth_failure_stops_the_wizard(ctx: WizardContext, monkeypatch: pytest.M
         return SectionResult.DONE
 
     monkeypatch.setattr(sections, "first_request", _first)
+    printed: list[str] = []
+    monkeypatch.setattr(
+        output.error_console, "print", lambda *a, **k: printed.append(str(a[0]) if a else "")
+    )
     code = wizard.run_onboarding(NonInteractivePrompter(), ctx)
     assert code == 4  # NotAuthenticated exit code
     assert ran_after is False
+    assert any("Sign-in didn't complete" in line for line in printed)
 
 
 def test_happy_path_runs_all_sections(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

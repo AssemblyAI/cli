@@ -74,9 +74,11 @@ class AppState:
         profile_env = config.get_profile_env(profile)
         if profile_env is None or profile_env == selected:
             return None
+        fix = "Unset AAI_ENV" if source == "AAI_ENV" else "Drop --env"
         return (
             f"Using {source} {selected}, but profile '{profile}' was set up for "
-            f"{profile_env}; its stored key may be rejected by {selected}."
+            f"{profile_env}; its stored key may be rejected by {selected}. "
+            f"{fix}, or run 'aai login' for {selected}."
         )
 
 

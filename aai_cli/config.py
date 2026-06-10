@@ -221,6 +221,21 @@ def get_api_key(profile: str) -> str | None:
     return _keyring_get(profile)
 
 
+def keyring_usable() -> bool:
+    """True when the OS keyring backend can be read.
+
+    Headless boxes (containers, CI, bare SSH) often have no keyring backend, so
+    ``keyring`` raises on every access. ``aai doctor`` uses this to tell a user with
+    no key that the *backend* is the problem — and to recommend ASSEMBLYAI_API_KEY —
+    rather than pointing at `aai login`, whose browser flow also can't persist there.
+    """
+    try:
+        keyring.get_password(KEYRING_SERVICE, "__probe__")
+    except keyring.errors.KeyringError:
+        return False
+    return True
+
+
 def get_profile_env(profile: str) -> str | None:
     """The backend environment recorded for a profile, if any (e.g. 'sandbox000')."""
     prof = _load().profiles.get(profile)
