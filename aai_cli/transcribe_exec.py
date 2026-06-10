@@ -41,6 +41,15 @@ def out_payload(
     return client.select_transcript_field(transcript, choices.TranscriptOutput.text)
 
 
+def check_source_exists(source: str | None, *, sample: bool) -> None:
+    """Resolve (and existence-check) the audio reference before credential resolution.
+
+    Stdin (``-``) is exempt: its bytes are buffered at transcription time.
+    """
+    if source != "-":
+        client.resolve_audio_source(source, sample=sample)
+
+
 def run_transcription(
     api_key: str,
     source: str | None,

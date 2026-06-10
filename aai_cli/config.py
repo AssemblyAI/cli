@@ -185,8 +185,21 @@ def set_api_key(profile: str, api_key: str) -> None:
     _dump(cfg)
 
 
+def _keyring_get(username: str) -> str | None:
+    """Read a secret, treating an unusable keyring backend as "nothing stored".
+
+    Headless machines (containers, CI, servers) routinely have no keyring backend at
+    all, so keyring raises NoKeyringError on every read. That state must read as "not
+    signed in" — ASSEMBLYAI_API_KEY still works there — never as a crash.
+    """
+    try:
+        return keyring.get_password(KEYRING_SERVICE, username)
+    except keyring.errors.KeyringError:
+        return None
+
+
 def get_api_key(profile: str) -> str | None:
-    return keyring.get_password(KEYRING_SERVICE, profile)
+    return _keyring_get(profile)
 
 
 def get_profile_env(profile: str) -> str | None:
@@ -204,7 +217,9 @@ def set_profile_env(profile: str, env: str) -> None:
 
 
 def clear_api_key(profile: str) -> None:
-    with contextlib.suppress(keyring.errors.PasswordDeleteError):
+    # KeyringError, not just PasswordDeleteError: with no backend at all (headless
+    # boxes) delete raises NoKeyringError, and "nothing stored" is already the goal.
+    with contextlib.suppress(keyring.errors.KeyringError):
         keyring.delete_password(KEYRING_SERVICE, profile)
 
 
@@ -233,7 +248,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
 
 def get_session(profile: str) -> dict[str, str] | None:
     """The stored {'jwt', 'token'} for a profile, or None if absent/corrupt."""
-    raw = keyring.get_password(KEYRING_SERVICE, _session_username(profile))
+    raw = _keyring_get(_session_username(profile))
     if not raw:
         return None
     try:
@@ -250,7 +265,7 @@ def get_account_id(profile: str) -> int | None:
 
 
 def clear_session(profile: str) -> None:
-    with contextlib.suppress(keyring.errors.PasswordDeleteError):
+    with contextlib.suppress(keyring.errors.KeyringError):
         keyring.delete_password(KEYRING_SERVICE, _session_username(profile))
     cfg = _load()
     prof = cfg.profiles.get(profile)
@@ -278,8 +293,8 @@ def persist_login(
     restored best-effort.
     """
     _validate_profile(profile)
-    prior_api_key = keyring.get_password(KEYRING_SERVICE, profile)
-    prior_session = keyring.get_password(KEYRING_SERVICE, _session_username(profile))
+    prior_api_key = _keyring_get(profile)
+    prior_session = _keyring_get(_session_username(profile))
     prior_cfg = _load()
     done = False
     try:

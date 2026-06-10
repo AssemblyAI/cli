@@ -1,12 +1,22 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def audio_file(tmp_path, monkeypatch):
+    # The command checks the local path exists before resolving credentials, so the
+    # "audio.mp3" the tests pass must be a real file; run each test in its own cwd.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "audio.mp3").write_bytes(b"fake-audio")
+
 
 _TRANSCRIBE = "aai_cli.commands.transcribe.client.transcribe"
 

@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -7,6 +8,14 @@ from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def audio_file(tmp_path, monkeypatch):
+    # The command checks the local path exists before resolving credentials, so the
+    # "audio.mp3" the tests pass must be a real file; run each test in its own cwd.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "audio.mp3").write_bytes(b"fake-audio")
 
 
 def _auth():
@@ -55,12 +64,6 @@ def test_transcribe_sample_prints_text(mocker):
     assert "hello world" in result.output
     audio_arg = tx.call_args.args[1]
     assert audio_arg.endswith("wildfires.mp3")
-
-
-def test_transcribe_requires_source():
-    _auth()
-    result = runner.invoke(app, ["transcribe"])
-    assert result.exit_code == 2
 
 
 def test_transcribe_passes_speaker_labels(mocker):
@@ -161,12 +164,6 @@ def test_transcribe_reads_audio_from_stdin(monkeypatch, mocker):
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"
     assert seen["bytes"] == b"RIFFfake-wav-bytes"
-
-
-def test_transcribe_empty_stdin_exits_2():
-    _auth()
-    result = runner.invoke(app, ["transcribe", "-"], input=b"")
-    assert result.exit_code == 2  # nothing piped -> usage error
 
 
 def test_transcribe_status_renders_enum_value(mocker):

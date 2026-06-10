@@ -145,10 +145,14 @@ def agent(
             output.print_code(code_gen.agent(voice, system_prompt_text, greeting))
             return
 
-        api_key = config.resolve_api_key(profile=state.profile)
         from_file = bool(source) or sample
         if from_file and device is not None:
             raise UsageError("--device applies only to microphone input.")
+        if from_file:
+            # Existence-check the clip before credentials, so a typo'd path reads as
+            # "file not found" instead of triggering a login.
+            client.resolve_audio_source(source, sample=sample)
+        api_key = config.resolve_api_key(profile=state.profile)
 
         renderer = AgentRenderer(
             json_mode=json_mode,

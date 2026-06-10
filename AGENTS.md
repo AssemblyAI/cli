@@ -9,10 +9,12 @@ this file, so Claude Code reads the same instructions.
 This project uses [uv](https://docs.astral.sh/uv/). **Run every Python tool through `uv run`** so it uses the locked environment (`pyproject.toml` + `uv.lock`), not whatever is on `PATH`:
 
 ```sh
-uv sync --extra dev          # create/refresh the venv with dev dependencies
+uv sync                      # create/refresh the venv (the dev group installs by default)
 uv run aai --help            # run the CLI from the locked environment
 ./scripts/check.sh           # the full gate CI runs (scripts/check.sh is the source of truth)
 ```
+
+Dev tooling is a PEP 735 `[dependency-groups]` group with `default-groups = ["dev"]`, not a `[project]` extra — `uv sync --extra dev` errors.
 
 `scripts/check.sh` is the authoritative gate; keep this list in sync with it. It runs, in order: `uv lock --check` → `ruff check` → `ruff format --check` → `mypy` → `pyright` (src strict) → `pyright` (tests) → `vulture` (dead code) → `deptry` (dependency hygiene) → `lint-imports` (import-linter architecture contracts) → max-file-length (500 lines) → `xenon` (cyclomatic complexity, max grade B / project avg A) → `swiftlint` + swift compile (macOS only, skipped elsewhere) → `markdownlint` → `prettier` (init template JS/CSS) → `shellcheck` → `actionlint` + `zizmor` (workflow lint/audit) → `gitleaks` (secret scan) → generated `--show-code` compile gate → init template contract gate → `pytest` (90% branch coverage) → `diff-cover` (100% patch coverage vs `origin/main`) → **mutation gate** (diff-scoped: mutates each changed line and reruns the tests that cover it — a surviving mutant fails the gate, so changed lines need assertions that would *fail* if the line broke, not just coverage; suppress a genuinely unassertable line with `# pragma: no mutate`) → a "no new escape hatches" diff gate (`# type: ignore` / `# noqa` / `pragma: no cover` / net-new `Any` / `cast(`) → `uv build` + `twine check --strict`. The `vulture`/`deptry`/`lint-imports`/`xenon`, patch-coverage, and mutation stages catch the failures that `ruff`+`mypy` alone won't — don't claim the gate is green until the script prints `All checks passed.`
 
@@ -28,16 +30,27 @@ uv run pytest tests/test_transcribe.py -q              # a single file
 uv run pytest tests/test_transcribe.py::test_name -q   # a single test
 ```
 
+The two diff-scoped tail gates are the slowest failures to discover via the full
+script; after a gate run (or any pytest run with the coverage flags below) they can
+be re-run alone:
+
+```sh
+uv run pytest -q -n auto --cov=aai_cli --cov-branch --cov-context=test --cov-report=xml  # refresh coverage data
+uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=100             # patch-coverage gate
+uv run python scripts/mutation_gate.py origin/main                                       # mutation gate
+```
+
 ### Test markers
 
-The default suite **excludes** two slow/credentialed marker sets (see `scripts/check.sh` and `pyproject.toml`):
+The default suite **excludes** three slow/credentialed marker sets — `pyproject.toml`'s `addopts` carries `-m "not e2e and not install and not install_script"`, so a bare `pytest` matches what `check.sh` gates. An explicit command-line `-m` overrides it for the opt-in runs:
 
 ```sh
 uv run pytest -m e2e             # real-API end-to-end; needs ASSEMBLYAI_API_KEY, else skips
+uv run pytest -m install         # installs each init template's requirements for real; needs network + uv
 uv run pytest -m install_script  # builds a wheel and runs install.sh for real; needs network + uv/pipx
 ```
 
-`check.sh` runs `-m "not e2e and not install_script"` with a **90% branch-coverage gate** (`--cov-fail-under=90`). New code generally needs tests to clear that gate.
+`check.sh` runs the default suite with a **90% branch-coverage gate** (`--cov-fail-under=90`). New code generally needs tests to clear that gate.
 
 CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`). Changing help text, tables, or rendered output will fail those tests until you regenerate them with `uv run pytest --snapshot-update` and commit the updated `.ambr` files. The auto-format hook only touches `*.py`, and pre-commit's whitespace fixers deliberately skip `tests/__snapshots__/` (syrupy's indentation must stay byte-for-byte), so never hand-edit a snapshot — always regenerate.
 

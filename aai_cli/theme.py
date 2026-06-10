@@ -84,9 +84,22 @@ _ERROR = {"error", "failed"}
 _WARN = {"queued", "processing", "in_progress", "running"}
 
 
+class PipeSafeConsole(Console):
+    """A Console honoring the CLI's closed-pipe contract.
+
+    Rich's default ``on_broken_pipe`` redirects stdout to devnull and raises
+    ``SystemExit(1)``, so ``aai … | head`` would report failure. Re-raise the
+    ``BrokenPipeError`` instead so the entry point (``main.run``) can treat a closed
+    downstream pipe as success.
+    """
+
+    def on_broken_pipe(self) -> None:
+        raise BrokenPipeError()
+
+
 def make_console(file: IO[str] | None = None, **kwargs: Any) -> Console:
     """Build a Console with the AssemblyAI theme attached so `aai.*` names resolve."""
-    return Console(file=file, theme=THEME, **kwargs)
+    return PipeSafeConsole(file=file, theme=THEME, **kwargs)
 
 
 def speaker_style(speaker: object) -> str:

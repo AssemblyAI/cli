@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from collections.abc import Callable, Generator, Iterable
+from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import assemblyai as aai
@@ -37,10 +39,14 @@ def _make_streaming_client(api_key: str) -> _StreamingClientLike:
     return client
 
 
-def resolve_audio_source(source: str | None, *, sample: bool) -> str:
+def resolve_audio_source(source: str | None, *, sample: bool, check_local: bool = True) -> str:
     """The audio reference to use: the hosted --sample clip, else the given path/URL.
 
     Shared by `transcribe` and `stream` so both accept a file or URL and `--sample`.
+    A local path that doesn't exist fails here — before any credential resolution or
+    request — so a typo'd filename reads as "file not found", not as an API failure.
+    ``--show-code`` paths pass ``check_local=False``: generating code for a file you
+    don't have yet is legitimate.
     """
     if sample:
         return SAMPLE_AUDIO_URL
@@ -48,6 +54,13 @@ def resolve_audio_source(source: str | None, *, sample: bool) -> str:
         raise UsageError(
             "Provide an audio path or URL.",
             suggestion="Or pass --sample to use the hosted demo file.",
+        )
+    if check_local and not source.startswith(("http://", "https://")) and not Path(source).exists():
+        raise CLIError(
+            f"File not found: {source}",
+            error_type="file_not_found",
+            exit_code=2,
+            suggestion="Check the path. For remote audio, pass an http(s):// URL.",
         )
     return source
 
@@ -169,7 +182,23 @@ def select_transcript_field(transcript: Any, field: str) -> str:
     return _FIELD_RENDERERS.get(field, _transcript_text)(transcript)
 
 
+# Transcript ids are opaque url-safe tokens. Reject anything else before it is
+# interpolated into the request path: an "id" like ../v2/other would otherwise steer
+# an authenticated GET at an arbitrary API route.
+_TRANSCRIPT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_transcript_id(transcript_id: str) -> str:
+    if not _TRANSCRIPT_ID_RE.match(transcript_id):
+        raise UsageError(
+            f"{transcript_id!r} doesn't look like a transcript id.",
+            suggestion="Ids are letters/digits/dashes; find them with 'aai transcripts list'.",
+        )
+    return transcript_id
+
+
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
+    validate_transcript_id(transcript_id)
     _configure(api_key)
     with _sdk_errors(f"Could not fetch transcript {transcript_id}"):
         return aai.Transcript.get_by_id(transcript_id)
