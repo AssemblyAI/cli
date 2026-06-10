@@ -41,6 +41,19 @@ FAKE_ACCOUNT_ID = 12345
 FAKE_EMAIL = "user@example.com"
 REDACTED = "REDACTED"
 UPLOAD_PREFIX = "https://cdn.assemblyai.com/upload/"
+# API responses are shallow; a deeper structure means malformed/hostile input, so cap
+# the recursion rather than risk a stack overflow on a pathologically nested payload.
+_MAX_SCRUB_DEPTH = 100
+
+
+def _scrub_str(value: str, secret_set: set[str]) -> str:
+    """Redact a string value: a known secret becomes ``REDACTED``; an account upload
+    URL keeps its prefix but drops the high-entropy hash so no private audio leaks."""
+    if value in secret_set:
+        return REDACTED
+    if value.startswith(UPLOAD_PREFIX):
+        return UPLOAD_PREFIX + REDACTED
+    return value
 
 
 def _build_scrubber(secrets: list[str]) -> Callable[[Any], Any]:
@@ -53,7 +66,11 @@ def _build_scrubber(secrets: list[str]) -> Callable[[Any], Any]:
     """
     secret_set = {s for s in secrets if s}
 
-    def scrub(obj: Any) -> Any:
+    def scrub(obj: Any, depth: int = 0) -> Any:
+        if depth > _MAX_SCRUB_DEPTH:
+            raise CLIError(
+                f"Fixture nesting exceeded {_MAX_SCRUB_DEPTH} levels; refusing to scrub."
+            )
         if isinstance(obj, dict):
             out: dict[str, Any] = {}
             for key, value in obj.items():
@@ -62,17 +79,12 @@ def _build_scrubber(secrets: list[str]) -> Callable[[Any], Any]:
                 elif key == "account_id":
                     out[key] = FAKE_ACCOUNT_ID
                 else:
-                    out[key] = scrub(value)
+                    out[key] = scrub(value, depth + 1)
             return out
         if isinstance(obj, list):
-            return [scrub(item) for item in obj]
+            return [scrub(item, depth + 1) for item in obj]
         if isinstance(obj, str):
-            if obj in secret_set:
-                return REDACTED
-            # The account's own uploads expose a high-entropy path the public sample
-            # URLs don't; redact the upload hash so no private audio reference ships.
-            if obj.startswith(UPLOAD_PREFIX):
-                return UPLOAD_PREFIX + REDACTED
+            return _scrub_str(obj, secret_set)
         return obj
 
     return scrub
@@ -122,7 +134,8 @@ def main() -> int:
     sample = client.transcribe(api_key, client.SAMPLE_AUDIO_URL, config=aai.TranscriptionConfig())
     _write("transcribe_sample", _transcript_payload(sample), scrub)
     sample_id = sample.id
-    assert sample_id is not None  # noqa: S101 — a completed transcript always has an id
+    if sample_id is None:  # a completed transcript always has an id; guard for the type checker
+        raise CLIError("Transcribe returned no transcript id.")
 
     _write("transcripts_list", client.list_transcripts(api_key, limit=10), scrub)
 
