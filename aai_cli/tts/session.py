@@ -114,7 +114,10 @@ def _run_protocol(
     ws.send(json.dumps({"type": "Flush"}))
 
     pcm = bytearray()
-    sample_rate = 0
+    # Bound only so the post-loop duration calc has a name; the value is never
+    # observed (the sole loop break is inside the Audio branch, after sample_rate
+    # is reassigned from the frame), so its literal can't be asserted.
+    sample_rate = 0  # pragma: no mutate
     while True:
         msg: dict[str, Any] = json.loads(ws.recv())
         mtype = msg.get("type")

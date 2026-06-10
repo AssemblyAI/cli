@@ -45,6 +45,20 @@ def test_query_params_serializes_sample_rate_as_string():
     assert cfg.query_params() == {"sample_rate": "16000"}
 
 
+def test_speak_config_is_immutable():
+    # frozen=True: attribute assignment must raise (setattr avoids a static
+    # type error so no `# type: ignore` escape hatch is needed).
+    cfg = session.SpeakConfig(text="hi")
+    with pytest.raises(AttributeError):
+        cfg.text = "changed"
+
+
+def test_speak_result_is_immutable():
+    result = session.SpeakResult(pcm=b"\x01", sample_rate=24000, audio_duration_seconds=0.0)
+    with pytest.raises(AttributeError):
+        result.sample_rate = 1
+
+
 class FakeWS:
     """A minimal stand-in for a websockets sync connection."""
 
