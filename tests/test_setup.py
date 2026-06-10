@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 import pytest
@@ -53,6 +54,12 @@ def test_remove_skill_failure_reports_failed(monkeypatch):
     result = runner.invoke(app, ["setup", "remove"])
     assert result.exit_code == 1
     assert _statuses(result)["skill"] == "failed"
+    # The failure detail surfaces the subprocess's stderr ("boom"), preferring it over
+    # the generic "still present" fallback (pins `_proc_detail(proc) or ...`).
+    skill_detail = next(
+        s["detail"] for s in json.loads(result.output)["steps"] if s["name"] == "skill"
+    )
+    assert "boom" in skill_detail
 
 
 def test_remove_skill_skipped_when_npx_missing(monkeypatch):
@@ -94,6 +101,9 @@ def test_remove_unwinds_all(monkeypatch, tmp_path):
     assert ["npx", "-y", "skills", "remove", "assemblyai", "--global"] in fake.calls
     assert not _skill_path().exists()
     assert not _cli_skill_path().exists()
+    # The skill-remove subprocess uses the explicit 120s timeout backstop.
+    remove_calls = [kw for cmd, kw in fake.invocations if cmd[:1] == ["npx"] and "remove" in cmd]
+    assert remove_calls and remove_calls[0]["timeout"] == 120
 
 
 def test_remove_when_absent_is_not_an_error(monkeypatch):
@@ -177,6 +187,35 @@ def test_copy_tree_skips_pycache_and_pyc(tmp_path):
     assert not (dest / "__pycache__").exists()
 
 
+def test_copy_tree_creates_missing_parent_dirs(tmp_path):
+    # The destination's parents may not exist yet (~/.claude/skills on a fresh
+    # machine); _copy_tree must create the whole chain (mkdir parents=True).
+    from aai_cli.commands import setup
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "SKILL.md").write_text("# skill")
+
+    dest = tmp_path / "a" / "b" / "c" / "dest"  # none of a/b/c exist yet
+    setup._copy_tree(src, dest)
+    assert (dest / "SKILL.md").read_text() == "# skill"
+
+
+def test_copy_tree_into_existing_dir_is_tolerated(tmp_path):
+    # _copy_tree may run with the destination already present (a forced reinstall over
+    # an existing skill dir); the mkdir must tolerate it (exist_ok=True), not raise.
+    from aai_cli.commands import setup
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "SKILL.md").write_text("# skill")
+
+    dest = tmp_path / "dest"
+    dest.mkdir()  # already exists before the copy
+    setup._copy_tree(src, dest)
+    assert (dest / "SKILL.md").read_text() == "# skill"
+
+
 # --- help --------------------------------------------------------------------
 
 
@@ -238,6 +277,26 @@ def test_remove_cli_skill_fails_when_rmtree_noops(monkeypatch):
     dest.mkdir(parents=True)
     (dest / "SKILL.md").write_text("# x")
     monkeypatch.setattr(setup.shutil, "rmtree", lambda *a, **k: None)
+    step = setup._remove_cli_skill()
+    assert step["status"] == "failed"
+    assert "still present" in step["detail"]
+
+
+def test_remove_cli_skill_tolerates_rmtree_error(monkeypatch):
+    # Removal is best-effort (ignore_errors=True): a deletion failure must surface as a
+    # clean "failed" step (skill still present), never an uncaught OSError. Without
+    # ignore_errors, rmtree would raise instead of returning.
+    from aai_cli.commands import setup
+
+    dest = _cli_skill_path()
+    dest.mkdir(parents=True)
+    (dest / "SKILL.md").write_text("# x")
+
+    def rmtree(path, ignore_errors=False, **kwargs):
+        if not ignore_errors:
+            raise OSError("permission denied")  # what a non-ignoring rmtree would do
+
+    monkeypatch.setattr(setup.shutil, "rmtree", rmtree)
     step = setup._remove_cli_skill()
     assert step["status"] == "failed"
     assert "still present" in step["detail"]

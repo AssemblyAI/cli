@@ -28,6 +28,15 @@ def test_init_scaffold_only_creates_project(tmp_path, monkeypatch):
     assert (tmp_path / "myapp" / ".env").exists()
 
 
+def test_init_rejects_dir_and_here_together(tmp_path, monkeypatch):
+    # DIRECTORY and --here are mutually exclusive; passing both is a usage error
+    # exiting 1 (pins that exit_code on the conflict).
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", TEMPLATE, "somedir", "--here", "--no-install"])
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
 def test_init_writes_key_from_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-from-env")
@@ -264,6 +273,34 @@ def test_pick_template_missing_questionary_errors(monkeypatch):
     with pytest.raises(CLIError) as exc:
         init_cmd._pick_template()
     assert exc.value.error_type == "missing_dependency"
+    assert exc.value.exit_code == 1
+
+
+@pytest.mark.parametrize(("stdin_tty", "stdout_tty"), [(True, False), (False, True)])
+def test_pick_template_errors_when_either_stream_not_a_tty(monkeypatch, stdin_tty, stdout_tty):
+    # The picker needs BOTH stdin and stdout interactive; if either is piped it must
+    # bail with a usage error (pins the `or`, which an `and` would weaken to "both
+    # piped"). questionary is stubbed out so a mutated fall-through is observable as a
+    # *different* error rather than the usage error this asserts.
+    monkeypatch.setattr("sys.stdin", _Tty() if stdin_tty else io.StringIO())
+    monkeypatch.setattr("sys.stdout", _Tty() if stdout_tty else io.StringIO())
+    monkeypatch.setitem(sys.modules, "questionary", None)
+    with pytest.raises(CLIError) as exc:
+        init_cmd._pick_template()
+    assert exc.value.error_type == "usage_error"
+    assert exc.value.exit_code == 1
+
+
+def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
+    # The agents host is derived by swapping the FIRST "streaming" token for "agents"
+    # (replace count=1); a host containing it twice must keep the later occurrence.
+    fake_env = types.SimpleNamespace(
+        api_base="https://api.x",
+        llm_gateway_base="https://llm.x",
+        streaming_host="streaming.streaming.example.com",
+    )
+    monkeypatch.setattr(init_cmd.environments, "active", lambda: fake_env)
+    assert init_cmd._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
 
 
 def test_init_install_failure_reports_and_exits(tmp_path, monkeypatch):
@@ -282,6 +319,40 @@ def test_init_install_failure_reports_and_exits(tmp_path, monkeypatch):
     assert result.exit_code == 1
     assert launched["v"] is False
     assert "pip exploded" in result.output
+
+
+def test_init_install_failure_does_not_launch_even_with_key(tmp_path, monkeypatch):
+    # A failed install must flip will_launch off so the server never starts -- even
+    # when a key is present (which would otherwise satisfy the launch guard). Pins the
+    # literal `False` returned on the failure branch.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-real-key")
+    monkeypatch.setattr(
+        "aai_cli.init.runner.run_setup",
+        lambda *a, **k: subprocess.CompletedProcess([], 1, "", "pip exploded"),
+    )
+    launched = {"v": False}
+    monkeypatch.setattr(
+        "aai_cli.init.runner.launch_and_open",
+        lambda *a, **k: launched.__setitem__("v", True) or 0,
+    )
+    result = runner.invoke(app, ["init", TEMPLATE, "app", "--json"])
+    assert result.exit_code == 1
+    assert launched["v"] is False
+
+
+def test_init_install_failure_detail_is_truncated(tmp_path, monkeypatch):
+    # A pathologically long install error is capped at 300 chars in the report detail
+    # so it can't flood the terminal; pins the [:300] slice.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "aai_cli.init.runner.run_setup",
+        lambda *a, **k: subprocess.CompletedProcess([], 1, "", "x" * 500),
+    )
+    result = runner.invoke(app, ["init", TEMPLATE, "app", "--json"])
+    assert result.exit_code == 1
+    assert "x" * 300 in result.output
+    assert "x" * 301 not in result.output
 
 
 def test_init_launches_when_key_present(tmp_path, monkeypatch):

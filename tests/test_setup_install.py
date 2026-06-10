@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 import pytest
@@ -79,6 +80,12 @@ def test_install_skill_failed_when_npx_succeeds_but_nothing_installed(monkeypatc
     result = runner.invoke(app, ["setup", "install"])
     assert result.exit_code == 1  # skill step failed
     assert _statuses(result)["skill"] == "failed"
+    # The detail quotes the install command starting at `add` (_SKILL_ADD[3:]), so the
+    # user sees exactly what to retry -- pins that slice start.
+    skill_detail = next(
+        s["detail"] for s in json.loads(result.output)["steps"] if s["name"] == "skill"
+    )
+    assert "'add AssemblyAI/assemblyai-skill --global --yes'" in skill_detail
 
     # And status agrees: still not installed.
     status_result = runner.invoke(app, ["setup", "status"])
@@ -92,16 +99,21 @@ def test_install_detaches_stdin_and_sets_timeout(monkeypatch):
     seen = []
 
     def record(cmd, *args, **kwargs):
-        seen.append(kwargs)
+        seen.append((list(cmd), kwargs))
         return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="")
 
     monkeypatch.setattr("aai_cli.commands.setup.subprocess.run", record)
     result = runner.invoke(app, ["setup", "install"])
     assert result.exit_code in (0, 1)
     assert seen, "expected subprocess.run to be called"
-    for kwargs in seen:
+    for _cmd, kwargs in seen:
         assert kwargs.get("stdin") is subprocess.DEVNULL
         assert kwargs.get("timeout")
+        assert kwargs.get("capture_output") is True  # stdout/stderr must be captured
+
+    # The skill download gets the longer 300s timeout (vs the 120s default elsewhere).
+    add_calls = [kw for cmd, kw in seen if cmd[:1] == ["npx"] and "add" in cmd]
+    assert add_calls and add_calls[0]["timeout"] == 300
 
 
 def test_install_scope_passthrough(monkeypatch):

@@ -105,7 +105,10 @@ def _install_step(
             "status": "failed",
             "detail": (setup.stderr or setup.stdout).strip()[:300],
         }
-        return [row], False
+        # The False (don't-launch) is an equivalent mutant: run_init raises Exit(1) on
+        # any failed step before it ever consults will_launch, so the value is unused
+        # on this branch.
+        return [row], False  # pragma: no mutate
     return [
         {
             "name": "install",

@@ -250,6 +250,18 @@ def test_llm_json_flag_emits_json(monkeypatch):
     assert json.loads(result.output)["output"] == "hello"
 
 
+def test_llm_output_json_field_forces_json_without_flag(monkeypatch):
+    # `-o json` selects machine output even without the global --json flag, at an
+    # interactive terminal (where json_mode is otherwise off). Pins the
+    # `output_field == "json"` half of the json_mode disjunction.
+    _auth()
+    monkeypatch.setattr("aai_cli.output._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hi42"))
+    result = runner.invoke(app, ["llm", "hi", "-o", "json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["output"] == "hi42"
+
+
 def test_llm_output_invalid_field_exits_2(monkeypatch):
     _auth()
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
