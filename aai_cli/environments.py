@@ -17,6 +17,7 @@ class Environment:
     name: str
     api_base: str  # SDK base_url for /v2/upload + /v2/transcript
     streaming_host: str  # StreamingClientOptions.api_host (SDK builds wss://host/v3/ws)
+    streaming_tts_host: str  # streaming TTS host; empty when TTS isn't available (prod)
     agents_host: str  # Voice Agent host; the agent client builds wss://host/v1/ws
     llm_gateway_base: str  # OpenAI base_url for the LLM Gateway (…/v1)
     ams_base: str  # Accounts Management Service
@@ -37,6 +38,7 @@ ENVIRONMENTS: dict[str, Environment] = {
         name="production",
         api_base="https://api.assemblyai.com",
         streaming_host="streaming.assemblyai.com",
+        streaming_tts_host="",
         agents_host="agents.assemblyai.com",
         llm_gateway_base="https://llm-gateway.assemblyai.com/v1",
         ams_base="https://ams.internal.assemblyai-labs.com",
@@ -48,6 +50,7 @@ ENVIRONMENTS: dict[str, Environment] = {
         name="sandbox000",
         api_base="https://api.sandbox000.assemblyai-labs.com",
         streaming_host="streaming.sandbox000.assemblyai-labs.com",
+        streaming_tts_host="streaming-tts.sandbox000.assemblyai-labs.com",
         agents_host="agents.sandbox000.assemblyai-labs.com",
         llm_gateway_base="https://llm-gateway.sandbox000.assemblyai-labs.com/v1",
         ams_base="https://ams.sandbox000.assemblyai-labs.com",
