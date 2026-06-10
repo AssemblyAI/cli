@@ -10,6 +10,19 @@ from keyring.backend import KeyringBackend
 # unit tests still run fully isolated.
 REAL_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 
+# Suites that legitimately reach the real network in-process (PyPI reachability
+# probes before a real install, real-API e2e) are gated behind these markers. They
+# opt out of the suite-wide --disable-socket; every other test stays blocked, so an
+# unmocked call in the unit suite still fails loudly. Tests that only bind a loopback
+# server use the tighter `@pytest.mark.allow_hosts(["127.0.0.1"])` instead.
+_NETWORK_MARKERS = ("e2e", "install", "install_script")
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        if any(item.get_closest_marker(name) for name in _NETWORK_MARKERS):
+            item.add_marker(pytest.mark.enable_socket)
+
 
 @pytest.fixture
 def real_api_key():
