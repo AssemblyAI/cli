@@ -34,6 +34,7 @@ from aai_cli.commands import (
     sessions,
     setup,
     share,
+    speak,
     stream,
     transcribe,
     transcripts,
@@ -60,6 +61,7 @@ _COMMAND_ORDER = (
     "transcribe",
     "stream",
     "agent",
+    "speak",
     "llm",
     # Setup & Tools — get set up & maintain
     "doctor",
@@ -313,6 +315,7 @@ app.add_typer(transcripts.app, name="transcripts", rich_help_panel=help_panels.H
 app.add_typer(sessions.app, name="sessions", rich_help_panel=help_panels.HISTORY)
 app.add_typer(audit.app)  # audit
 app.add_typer(agent.app)
+app.add_typer(speak.app)
 app.add_typer(llm.app)
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
