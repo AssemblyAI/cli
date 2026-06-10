@@ -291,9 +291,29 @@ def test_synthesize_dialogue_concatenates_segments_with_silence():
     gap = b"\x00" * 12000
     assert result.pcm == b"\xaa\xbb" + gap + b"\xcc\xdd"
     assert result.sample_rate == 24000
+    # Pin the duration formula (len/2/rate) so its operators survive the mutation gate.
+    assert result.audio_duration_seconds == pytest.approx(len(result.pcm) / 2 / 24000)
 
 
 def test_synthesize_dialogue_single_segment_has_no_silence():
     ws = FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\x01\x02", final=True)])
     result = session.synthesize_dialogue("k", [("jane", "Hi.")], connect=lambda *a, **k: ws)
     assert result.pcm == b"\x01\x02"  # no leading/trailing pad
+
+
+def test_synthesize_dialogue_uses_server_sample_rate():
+    # A non-default server rate must flow into the result (proving the per-segment
+    # rate is read, not left at the default) and into the duration denominator.
+    ws = FakeWS([_begin_frame(sample_rate=16000), _audio_frame(b"\x01\x02", final=True)])
+    result = session.synthesize_dialogue("k", [("jane", "Hi.")], connect=lambda *a, **k: ws)
+    assert result.sample_rate == 16000
+    assert result.audio_duration_seconds == pytest.approx(2 / 2 / 16000)
+
+
+def test_synthesize_dialogue_empty_segments_returns_silent_default():
+    # No segments -> no audio at the default rate, and no crash (the connect factory
+    # is never invoked because the loop body never runs).
+    result = session.synthesize_dialogue("k", [], connect=lambda *a, **k: None)
+    assert result.pcm == b""
+    assert result.sample_rate == 24000
+    assert result.audio_duration_seconds == 0.0
