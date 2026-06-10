@@ -74,6 +74,9 @@ dev = [
     #     tests/conftest.py so time rendering is deterministic across machines.
     # Floors sit at the second-newest release so safe-chain's min-age gate can resolve.
     "pytest-socket>=0.7.0",
+    # Hang guard for agent/CI runs: `pytest --timeout N` turns a stuck test into a
+    # failure instead of a wedged session (not in addopts — opt-in per run).
+    "pytest-timeout>=2.3.1",
     "time-machine>=3.1.0",
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
