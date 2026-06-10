@@ -73,7 +73,7 @@ def get(
 )
 def list_(
     ctx: typer.Context,
-    limit: int = typer.Option(10, "--limit", help="How many transcripts to show."),
+    limit: int = typer.Option(10, "--limit", help="How many transcripts to show.", min=1),
     json_out: bool = options.json_option(),
 ) -> None:
     """List recent transcripts."""

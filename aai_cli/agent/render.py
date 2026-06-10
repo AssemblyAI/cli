@@ -40,13 +40,15 @@ class AgentRenderer(BaseRenderer):
             self._line(Text("Connected — start talking. (Ctrl-C to stop)", style="aai.muted"))
 
     def notice(self, text: str) -> None:
-        """Print a human-facing notice (suppressed in JSON; to stderr in text mode)."""
+        """Print a human-facing notice: suppressed in JSON, to stderr otherwise.
+
+        Stderr in *every* non-JSON mode (not just ``-o text``): the default human
+        mode is also piped sometimes (``aai agent | head``), and a notice on stdout
+        would be consumed as transcript data there.
+        """
         if self.json_mode:
             return
-        if self.text_mode:
-            self._status(text.rstrip("\n"))
-        else:
-            self._line(text.rstrip("\n"))
+        self._status(text.rstrip("\n"))
 
     # --- user --------------------------------------------------------------
     def user_partial(self, text: str) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
+import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -30,6 +31,9 @@ DEFAULT_GREETING = "Hey, what's on your mind?"
 
 # session.error codes that mean the connection is unauthorized -> exit 2.
 _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
+
+# A pre-upgrade HTTP 403 on the WebSocket handshake (see _is_rejected_key).
+_HTTP_FORBIDDEN = 403
 
 # The websocket connection, the `connect` factory, and the renderer/player/mic I/O
 # objects come from libraries/modules with no usable type stubs. Alias that untyped
@@ -189,10 +193,44 @@ def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> No
             return
 
 
+# The sync websockets client logs through these; both are silenced for the session
+# (the parent covers any future child logger, the client logger is the one that fires).
+_WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
+
+
+def _silence_websockets_logging() -> None:
+    """Keep websockets' internal logging off the user's stderr for the session.
+
+    The sync client's background reader thread logs unhandled teardown errors (e.g.
+    ``EOFError: stream ended``) as "unexpected internal error" + traceback through the
+    ``websockets.client`` logger, which would land on stderr right next to our clean
+    CLIError. Those internals are never user-actionable from the CLI, so raise the
+    loggers above every level they emit at. Idempotent: re-setting the level is a no-op.
+    """
+    for name in _WEBSOCKETS_LOGGERS:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+
+
+def _is_rejected_key(exc: Exception) -> bool:
+    """Is this connect/session failure auth-shaped (the key itself was rejected)?
+
+    Mirrors how `stream` classifies handshake failures: a plain HTTP 403 on the
+    WebSocket upgrade stays an API error there ("Streaming error: WebSocket handshake
+    rejected (HTTP 403)"), so it must not become "Your API key was rejected" here —
+    403 also covers non-credential blocks (WAF, region, plan). Only 401, the Voice
+    Agent's 1008 policy-violation close, or an explicitly auth-worded message
+    (`is_auth_failure`'s text hints) count as a rejected key.
+    """
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status == _HTTP_FORBIDDEN:
+        return False
+    return is_auth_failure(exc)
+
+
 def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
     """Map a connect/session exception to the right CLIError: a rejected key becomes
     auth_failure(), anything else becomes APIError(f"{message}: {exc}")."""
-    if is_auth_failure(exc):
+    if _is_rejected_key(exc):
         return auth_failure()
     return APIError(f"{message}: {exc}")
 
@@ -243,6 +281,7 @@ def run_session(
     the agent's first reply to the spoken input and the capture thread waits for
     session.ready before streaming the source.
     """
+    _silence_websockets_logging()
     if connect is None:
         from websockets.sync.client import connect
 

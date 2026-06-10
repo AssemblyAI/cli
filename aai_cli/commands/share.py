@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -20,13 +21,25 @@ from aai_cli.init import devserver, procfile, runner, tunnel
 app = typer.Typer()
 
 
+# brew exists only on macOS; everywhere else point at Cloudflare's install docs.
+_CLOUDFLARED_DOCS = (
+    "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+)
+
+
+def _cloudflared_install_hint() -> str:
+    if sys.platform == "darwin":
+        return "Install it: brew install cloudflared"
+    return f"Install it: {_CLOUDFLARED_DOCS}"
+
+
 def _require_cloudflared() -> None:
     if shutil.which(tunnel.CLOUDFLARED) is None:
         raise CLIError(
             "cloudflared is required to share a public link.",
             error_type="missing_dependency",
             exit_code=1,
-            suggestion="Install it: brew install cloudflared",
+            suggestion=_cloudflared_install_hint(),
         )
 
 
@@ -121,7 +134,8 @@ def share(
 
     Run this from inside a project created by `aai init`. It starts the dev server and
     opens a cloudflared quick tunnel, printing a shareable https://*.trycloudflare.com
-    URL. Requires cloudflared (`brew install cloudflared`).
+    URL. Requires cloudflared (macOS: `brew install cloudflared`; other platforms:
+    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
     """
 
     def body(_state: AppState, json_mode: bool) -> None:

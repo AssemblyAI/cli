@@ -58,3 +58,17 @@ def test_web_argv_raises_without_web_line(tmp_path):
 def test_web_argv_raises_on_empty_web_command(tmp_path):
     with pytest.raises(CLIError):
         procfile.web_argv(_write(tmp_path, "web:\n"), env={})
+
+
+def test_require_procfile_returns_path_when_present(tmp_path):
+    assert procfile.require_procfile(_write(tmp_path, WEB)) == tmp_path / "Procfile"
+
+
+def test_require_procfile_raises_the_standard_not_a_project_error(tmp_path):
+    # dev/share/deploy all share this guard, so the message must stay actionable.
+    with pytest.raises(CLIError) as exc:
+        procfile.require_procfile(tmp_path)
+    assert exc.value.error_type == "usage_error"
+    assert exc.value.exit_code == 1
+    assert "No Procfile here (expected ./Procfile)" in exc.value.message
+    assert "aai init" in exc.value.message

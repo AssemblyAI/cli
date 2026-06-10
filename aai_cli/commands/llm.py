@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from contextlib import suppress
-
 import typer
 from rich.markup import escape
 
@@ -13,6 +11,11 @@ from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+_FOLLOW_STDIN_MESSAGE = (
+    "--follow needs transcript text piped on stdin, e.g. "
+    '`aai stream -o text | aai llm -f "summarize action items as I talk"`.'
+)
 
 
 def _validate_follow_args(
@@ -35,10 +38,7 @@ def _validate_follow_args(
             "combined with --transcript-id."
         )
     if not stdio.stdin_is_piped():
-        raise UsageError(
-            "--follow needs transcript text piped on stdin, e.g. "
-            '`aai stream -o text | aai llm -f "summarize action items as I talk"`.'
-        )
+        raise UsageError(_FOLLOW_STDIN_MESSAGE)
     return prompt
 
 
@@ -116,13 +116,20 @@ def llm(
             )
             return gateway.content_of(response)
 
+        transcript: list[str] = []
+        interrupted = False
         with FollowRenderer(json_mode=json_mode) as render:
-            transcript: list[str] = []
             # Ctrl-C is the normal "stop watching" signal -> exit cleanly (code 0).
-            with suppress(KeyboardInterrupt):
+            try:
                 for turn in stdio.iter_piped_stdin_lines():
                     transcript.append(turn)
                     render(ask("\n".join(transcript)), len(transcript))
+            except KeyboardInterrupt:
+                interrupted = True
+        if not transcript and not interrupted:
+            # An empty pipe (`aai llm -f "…" </dev/null`) would otherwise exit 0
+            # silently, having asked nothing.
+            raise UsageError(_FOLLOW_STDIN_MESSAGE)
 
     def body(state: AppState, json_mode: bool) -> None:
         if not prompt:

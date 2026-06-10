@@ -1,3 +1,8 @@
+"""`aai transcribe` behavior: output rendering, LLM transforms, sources, --show-code.
+
+Flag-to-config mapping and flag validation live in test_transcribe_flags.py.
+"""
+
 import json
 
 import pytest
@@ -48,10 +53,6 @@ def _fake_transcript(mocker):
     return t
 
 
-def _enum_or_str(value):
-    return getattr(value, "value", value)
-
-
 def test_transcribe_sample_prints_text(mocker):
     _auth()
     tx = mocker.patch(
@@ -66,17 +67,6 @@ def test_transcribe_sample_prints_text(mocker):
     assert audio_arg.endswith("wildfires.mp3")
 
 
-def test_transcribe_passes_speaker_labels(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    runner.invoke(app, ["transcribe", "audio.mp3", "--speaker-labels"])
-    assert tx.call_args.kwargs["config"].speaker_labels is True
-
-
 def test_transcribe_json_output(mocker):
     _auth()
     mocker.patch(
@@ -89,6 +79,7 @@ def test_transcribe_json_output(mocker):
 
 
 def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     tx = mocker.patch(
         "aai_cli.commands.transcribe.client.transcribe",
@@ -289,117 +280,6 @@ def test_transcribe_chained_prompts_human_labels_each_step(monkeypatch, mocker):
     assert "out(summarize)" in result.output
 
 
-def test_transcribe_prompt_biases_speech_model(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    result = runner.invoke(app, ["transcribe", "audio.mp3", "--prompt", "expect medical terms"])
-    assert result.exit_code == 0
-    # --prompt is the speech-model prompt, forwarded to the transcription call.
-    assert tx.call_args.kwargs["config"].prompt == "expect medical terms"
-
-
-def test_transcribe_maps_analysis_flags(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    runner.invoke(
-        app,
-        [
-            "transcribe",
-            "audio.mp3",
-            "--summarization",
-            "--summary-type",
-            "bullets",
-            "--sentiment-analysis",
-            "--topic-detection",
-        ],
-    )
-    cfg = tx.call_args.kwargs["config"]
-    assert cfg.raw.summarization is True
-    assert cfg.raw.summary_type == "bullets"
-    assert cfg.raw.sentiment_analysis is True
-    assert cfg.raw.iab_categories is True
-
-
-def test_transcribe_redact_pii_policy_csv(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    runner.invoke(
-        app,
-        [
-            "transcribe",
-            "audio.mp3",
-            "--redact-pii",
-            "--redact-pii-policy",
-            "person_name,phone_number",
-        ],
-    )
-    cfg = tx.call_args.kwargs["config"]
-    assert cfg.raw.redact_pii is True
-    assert [_enum_or_str(p) for p in cfg.raw.redact_pii_policies] == [
-        "person_name",
-        "phone_number",
-    ]
-
-
-def test_transcribe_config_escape_hatch(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    runner.invoke(app, ["transcribe", "audio.mp3", "--config", "speech_threshold=0.5"])
-    assert tx.call_args.kwargs["config"].raw.speech_threshold == 0.5
-
-
-def test_transcribe_unknown_config_field_exits_2(mocker):
-    _auth()
-    mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    result = runner.invoke(app, ["transcribe", "audio.mp3", "--config", "bogus=1"])
-    assert result.exit_code == 2
-    assert "bogus" in result.output
-
-
-def test_transcribe_webhook_auth_header(mocker):
-    _auth()
-    tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
-        autospec=True,
-        return_value=_fake_transcript(mocker),
-    )
-    runner.invoke(
-        app,
-        [
-            "transcribe",
-            "audio.mp3",
-            "--webhook-url",
-            "https://example.com/hook",
-            "--webhook-auth-header",
-            "X-Token:secret",
-        ],
-    )
-    cfg = tx.call_args.kwargs["config"]
-    assert cfg.raw.webhook_url == "https://example.com/hook"
-    assert cfg.raw.webhook_auth_header_name == "X-Token"
-    assert cfg.raw.webhook_auth_header_value == "secret"
-
-
 def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, tmp_path):
     _auth()
     fake = tmp_path / "vid.m4a"
@@ -476,6 +356,30 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
     assert "llm-gateway.assemblyai.com" in result.output
     assert "translate to spanish" in result.output
     assert '"transcript_id": transcript.id' in result.output
+
+
+def test_transcribe_show_code_output_srt_generates_export(monkeypatch):
+    # -o srt must be reflected in the generated code (not silently dropped).
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "-o", "srt", "--show-code"])
+    assert result.exit_code == 0
+    compile(result.output, "<generated>", "exec")  # the emitted script is runnable
+    assert "print(transcript.export_subtitles_srt())" in result.output
+    assert "print(transcript.text)" not in result.output
+
+
+def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "-o", "utterances", "--show-code"])
+    assert result.exit_code == 0
+    compile(result.output, "<generated>", "exec")
+    assert 'print(f"Speaker {utt.speaker}: {utt.text}")' in result.output
 
 
 def test_transcribe_renders_summary_human(monkeypatch, mocker):

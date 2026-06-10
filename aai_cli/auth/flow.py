@@ -8,7 +8,7 @@ from rich.markup import escape
 
 from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
-from aai_cli.errors import APIError
+from aai_cli.errors import APIError, NotAuthenticated
 
 
 @dataclass
@@ -97,8 +97,8 @@ def _open_browser(url: str) -> None:
         )
 
 
-def _capture() -> loopback.CallbackResult:
-    return loopback.capture_callback()
+def _start_capture() -> loopback.CallbackCapture:
+    return loopback.start_capture()
 
 
 def _reusable_cli_key(token: _Token) -> str | None:
@@ -137,13 +137,21 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
 
 def run_login_flow() -> LoginResult:
     """Drive the full browser + AMS login and return a LoginResult."""
+    # Bind the loopback callback server *before* opening the browser: if the port is
+    # taken, fail cleanly now instead of stranding the user mid-OAuth in a flow that
+    # can never call back.
+    capture = _start_capture()
     _open_browser(discovery.build_start_url())
-    result = _capture()
+    output.error_console.print(
+        "[aai.muted]Waiting up to 2 minutes for you to finish signing in…[/aai.muted]\n"
+        "[aai.muted]No browser here? Run 'aai login --api-key <KEY>' instead.[/aai.muted]"
+    )
+    result = capture.wait()
 
     if result.error == "timeout":
-        raise APIError(
+        raise NotAuthenticated(
             "Login timed out waiting for the browser.",
-            suggestion="Run 'aai login' again.",
+            suggestion="Run 'aai login' again, or use 'aai login --api-key <KEY>'.",
         )
     if result.token_type != "discovery_oauth" or not result.token:  # noqa: S105
         raise APIError(

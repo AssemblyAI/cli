@@ -58,6 +58,26 @@ The post-edit hook (`.claude/settings.json`) runs `ruff check --fix --unfixable 
 
 The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install`/`install_script` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
 
+### Manual QA / running the CLI in sandboxed sessions
+
+Lessons that cost time in agent sessions — read before exercising `uv run aai` by hand:
+
+- **Probe network reachability first.** Remote/sandboxed environments often allowlist
+  PyPI but block `api.assemblyai.com` / `streaming.assemblyai.com` / `llm-gateway.assemblyai.com`
+  (`curl -s https://api.assemblyai.com/v2/transcript -H "authorization: $ASSEMBLYAI_API_KEY"`
+  returning a proxy 403 like "Host not in allowlist" means **no** real-API path can work —
+  test error handling and `--show-code` instead of burning time on happy paths).
+- **Isolate the config dir per test run.** The CLI persists profiles in
+  `platformdirs`-resolved `config.toml` (e.g. `~/.config/assemblyai/`). Concurrent or
+  destructive manual tests (corrupt-config probes, profile/env switches) stomp each other
+  through that shared file — set `XDG_CONFIG_HOME=$(mktemp -d)` per run instead.
+- **Write scratch output to `/tmp`, never the repo root.** Redirects like `cmd > out.txt`
+  in the repo show up as untracked files and trip commit hooks/gates.
+- **Headless boxes have no mic/speakers/browser.** `aai stream`/`aai agent` mic paths and
+  `aai login`'s browser flow can't complete; wrap exploratory runs in `timeout 30 …` so a
+  blocking path can't wedge the session. For pytest, `--timeout N` (pytest-timeout, in the
+  dev group) does the same per-test.
+
 ## Naming & packaging gotchas
 
 - The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `aai` (`[project.scripts] aai = "aai_cli.main:run"`).
@@ -70,7 +90,7 @@ A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app,
 
 ### Command layer
 
-Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `transcripts`, `agent`, `llm`, `login`, `doctor`, `init`, `claude`). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
+Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `transcripts`, `agent`, `llm`, `login` (login/logout/whoami), `doctor`, `init`, `dev`, `share`, `deploy`, `setup`, `onboard`, `account` (balance/usage/limits), `keys`, `sessions`, `audit`). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
 
 ### Cross-cutting state (resolution order matters)
 
@@ -78,7 +98,7 @@ Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `tr
 - **`config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring** (`KEYRING_SERVICE = "assemblyai-cli"`), never in a dotfile. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history.
 - **`environments.py`** — a frozen `Environment` (api_base, streaming_host, llm_gateway_base, ams_base, stytch_*). `DEFAULT_ENV` is **`production`**; use `--sandbox` (or `--env sandbox000` / `AAI_ENV`) to target the sandbox. The active environment is a process-global set once at startup; precedence: `--env` → `AAI_ENV` → profile's stored env → default. A credential is only valid against the environment that minted it.
 - **`client.py`** — thin wrappers over the `assemblyai` SDK (`transcribe`, `list_transcripts`, `stream_audio`, etc.). It normalizes SDK exceptions: auth failures become a single clean `auth_failure()` `CLIError`; everything else becomes `APIError`. New SDK calls should follow this try/except shape.
-- **`errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` (auto-enabled when piped/agent-run) switches to machine-readable output.
+- **`errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` switches to machine-readable output; it is never auto-enabled — `output.resolve_json()` deliberately keeps human text the default even when piped or agent-run.
 
 ### Feature subsystems
 

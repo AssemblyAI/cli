@@ -19,11 +19,44 @@ from aai_cli import (
     transcribe_exec,
     transcribe_render,
 )
+
+# The package attribute `code_gen.transcribe` is the wrapper function, so the module's
+# render() (which also takes the -o output field) is imported from the submodule itself.
+from aai_cli.code_gen.transcribe import render as render_transcribe_code
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+# The PII policy strings the SDK accepts, validated client-side so a typo'd
+# --redact-pii-policy fails before any upload — mirroring how an unknown --config
+# key is rejected with the valid field list.
+_PII_POLICY_VALUES = frozenset(policy.value for policy in aai.PIIRedactionPolicy)
+
+
+def _validate_pii_policies(policies: list[str] | None) -> None:
+    unknown = [p for p in policies or [] if p not in _PII_POLICY_VALUES]
+    if unknown:
+        valid = ", ".join(sorted(_PII_POLICY_VALUES))
+        raise UsageError(f"Unknown PII policy(s) {unknown}. Valid policies: {valid}.")
+
+
+def _validate_language_flags(language_code: str | None, language_detection: bool | None) -> None:
+    if language_code and language_detection:
+        raise UsageError(
+            "--language-code and --language-detection can't be combined.",
+            suggestion="Force a language or auto-detect it, not both.",
+        )
+
+
+def _validate_speakers_expected(merged: dict[str, object]) -> None:
+    # Checked on the merged dict so `--config speaker_labels=true` also counts.
+    if merged.get("speakers_expected") and not merged.get("speaker_labels"):
+        raise UsageError(
+            "--speakers-expected only applies when diarization is enabled.",
+            suggestion="Add --speaker-labels.",
+        )
 
 
 @app.command(
@@ -238,6 +271,7 @@ def transcribe(
         None,
         "--audio-start",
         help="Start offset in ms.",
+        min=0,
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     audio_end: int | None = typer.Option(
@@ -332,6 +366,9 @@ def transcribe(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
+        _validate_language_flags(language_code, language_detection)
+        pii_policies = config_builder.split_csv(redact_pii_policy)
+        _validate_pii_policies(pii_policies)
         flags: dict[str, object] = {
             "speech_model": config_builder.enum_value(speech_model),
             "language_code": language_code,
@@ -346,7 +383,7 @@ def transcribe(
             "speakers_expected": speakers_expected,
             "multichannel": multichannel,
             "redact_pii": redact_pii,
-            "redact_pii_policies": config_builder.split_csv(redact_pii_policy),
+            "redact_pii_policies": pii_policies,
             "redact_pii_sub": config_builder.enum_value(redact_pii_sub),
             "redact_pii_audio": redact_pii_audio,
             "filter_profanity": filter_profanity,
@@ -387,6 +424,8 @@ def transcribe(
             flags=flags, overrides=config_kv, config_file=config_file
         )
 
+        _validate_speakers_expected(merged)
+
         if show_code:
             # Print-only: build the equivalent script and exit without transcribing or
             # authenticating (raw stdout, so `--show-code > script.py` runs). No
@@ -397,7 +436,9 @@ def transcribe(
                 else "your-audio-file.mp3"
             )
             gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
-            output.print_code(code_gen.transcribe(merged, audio, llm_gateway=gateway))
+            output.print_code(
+                render_transcribe_code(merged, audio, llm_gateway=gateway, output=output_field)
+            )
             return
 
         tc = config_builder.construct_transcription_config(merged)

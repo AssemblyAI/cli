@@ -1,3 +1,9 @@
+"""`aai stream` source/streaming behavior and --show-code tests.
+
+Flag-to-params mapping and conflicting-flag validation live in
+test_stream_command_flags.py.
+"""
+
 import json
 import time
 import types
@@ -124,6 +130,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
 
 
 def test_stream_unauthenticated_runs_login(monkeypatch):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
 
     def fake_stream_audio(api_key, source, *, params, **_kwargs):
@@ -171,12 +178,6 @@ def test_stream_url_source_uses_filesource(monkeypatch):
     assert seen["source"].source == "https://example.com/clip.mp3"
 
 
-def test_stream_sample_with_sample_rate_rejected():
-    config.set_api_key("default", "sk_live")
-    result = runner.invoke(app, ["stream", "--sample", "--sample-rate", "44100"])
-    assert result.exit_code == 2  # mic-only flags don't apply to a file/sample source
-
-
 def test_stream_ctrl_c_exits_cleanly(monkeypatch):
     config.set_api_key("default", "sk_live")
 
@@ -199,20 +200,6 @@ def test_stream_ctrl_c_human_mode_prints_stopped(monkeypatch):
     result = runner.invoke(app, ["stream"])
     assert result.exit_code == 0
     assert "Stopped." in result.output
-
-
-def test_stream_file_with_sample_rate_flag_rejected(tmp_path):
-    config.set_api_key("default", "sk_live")
-    import wave
-
-    p = tmp_path / "a.wav"
-    with wave.open(str(p), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(16000)
-        w.writeframes(b"\x00\x01" * 100)
-    result = runner.invoke(app, ["stream", str(p), "--sample-rate", "44100"])
-    assert result.exit_code == 2
 
 
 def test_stream_broken_pipe_exits_zero(monkeypatch):
@@ -297,83 +284,6 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
     assert seen["src"] == str(fake)
 
 
-def test_stream_maps_turn_detection_flags(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    captured = {}
-
-    def fake_stream_audio(api_key, source, *, params, **kw):
-        captured["params"] = params
-
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
-
-    runner.invoke(
-        app,
-        [
-            "stream",
-            "--sample",
-            "--max-turn-silence",
-            "400",
-            "--filter-profanity",
-            "--speaker-labels",
-        ],
-    )
-    params = captured["params"]
-    assert params.max_turn_silence == 400
-    assert params.filter_profanity is True
-    assert params.speaker_labels is True
-
-
-def test_stream_config_escape_hatch(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    captured = {}
-    monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
-        lambda api_key, source, *, params, **kw: captured.update(params=params),
-    )
-
-    runner.invoke(app, ["stream", "--sample", "--config", "vad_threshold=0.7"])
-    assert captured["params"].vad_threshold == 0.7
-
-
-def test_stream_maps_webhook_auth_header(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    captured = {}
-    monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
-        lambda api_key, source, *, params, **kw: captured.update(params=params),
-    )
-
-    runner.invoke(
-        app,
-        [
-            "stream",
-            "--sample",
-            "--webhook-url",
-            "https://example.com/hook",
-            "--webhook-auth-header",
-            "Authorization:Bearer xyz",
-        ],
-    )
-    params = captured["params"]
-    assert params.webhook_auth_header_name == "Authorization"
-    assert params.webhook_auth_header_value == "Bearer xyz"
-
-
-def test_stream_format_turns_tristate(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    captured = {}
-    monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
-        lambda api_key, source, *, params, **kw: captured.update(params=params),
-    )
-
-    runner.invoke(app, ["stream", "--sample"])
-    assert captured["params"].format_turns is True  # unset defaults to True
-
-    runner.invoke(app, ["stream", "--sample", "--no-format-turns"])
-    assert captured["params"].format_turns is False
-
-
 def test_stream_show_code_prints_without_streaming(monkeypatch):
     # Print-only: emits the mic-streaming script, never opens audio or streams, no auth.
     called = []
@@ -387,6 +297,72 @@ def test_stream_show_code_prints_without_streaming(monkeypatch):
     assert "StreamingClient(" in result.output
     assert "MicrophoneStream(sample_rate=16000)" in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
+
+
+def test_stream_show_code_file_source_streams_that_file():
+    # A file source must generate file-streaming code, not silently emit mic code.
+    # The file need not exist: generating code for it is legitimate (check_local=False).
+    result = runner.invoke(app, ["stream", "rec.wav", "--show-code"])
+    assert result.exit_code == 0
+    assert "client.stream(file_chunks())" in result.output
+    assert "'rec.wav'" in result.output  # the ffmpeg input is the file passed
+    assert "MicrophoneStream" not in result.output
+    compile(result.output, "<show-code>", "exec")  # the printed script is runnable
+
+
+def test_stream_show_code_stdin_source_reads_stdin():
+    result = runner.invoke(app, ["stream", "-", "--show-code"])
+    assert result.exit_code == 0
+    assert "client.stream(stdin_chunks())" in result.output
+    assert "sys.stdin.buffer" in result.output
+    assert "MicrophoneStream" not in result.output
+    compile(result.output, "<show-code>", "exec")
+
+
+def test_stream_show_code_sample_streams_hosted_clip():
+    result = runner.invoke(app, ["stream", "--sample", "--show-code"])
+    assert result.exit_code == 0
+    assert "wildfires.mp3" in result.output
+    assert "file_chunks()" in result.output
+    assert "MicrophoneStream" not in result.output
+
+
+def test_stream_show_code_honors_sample_rate_flag():
+    result = runner.invoke(app, ["stream", "--sample-rate", "8000", "--show-code"])
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "sample_rate=8000," in result.output  # params match the capture rate
+
+
+def test_stream_show_code_honors_config_sample_rate():
+    # An explicit `--config sample_rate=…` must not be overridden by the 16 kHz default.
+    result = runner.invoke(app, ["stream", "--config", "sample_rate=8000", "--show-code"])
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "sample_rate=8000," in result.output
+
+
+def test_stream_show_code_sample_rate_flag_beats_config():
+    result = runner.invoke(
+        app, ["stream", "--sample-rate", "8000", "--config", "sample_rate=44100", "--show-code"]
+    )
+    assert result.exit_code == 0
+    assert "MicrophoneStream(sample_rate=8000)" in result.output
+    assert "44100" not in result.output
+
+
+def test_stream_show_code_file_with_mic_flags_rejected():
+    # --show-code applies the same source validation as a real run, so the
+    # file + --sample-rate conflict errors instead of generating mic code.
+    result = runner.invoke(app, ["stream", "rec.wav", "--sample-rate", "8000", "--show-code"])
+    assert result.exit_code == 2
+    assert "--sample-rate" in result.output
+
+
+def test_stream_show_code_rejects_youtube_sources():
+    result = runner.invoke(app, ["stream", "https://youtu.be/abc", "--show-code"])
+    assert result.exit_code == 2
+    assert "YouTube" in result.output
 
 
 def test_stream_show_code_ignores_json_flag(monkeypatch):
@@ -415,12 +391,6 @@ def test_stream_reads_raw_pcm_from_stdin(monkeypatch):
     assert result.exit_code == 0
     assert seen["rate"] == 16000  # default raw-PCM rate
     assert seen["audio"] == b"\x01\x02" * 100
-
-
-def test_stream_stdin_rejects_device(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    result = runner.invoke(app, ["stream", "-", "--device", "2"], input=b"\x00\x00")
-    assert result.exit_code == 2  # --device applies only to the microphone
 
 
 def test_stream_system_audio_parallel_worker_error_surfaces(monkeypatch):

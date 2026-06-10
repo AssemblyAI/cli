@@ -3,12 +3,12 @@ from __future__ import annotations
 import shutil
 import sys
 from collections.abc import Mapping, Sequence
-from typing import Protocol, TypedDict
+from typing import NotRequired, Protocol, TypedDict
 
 import typer
 from rich.markup import escape
 
-from aai_cli import client, config, help_panels, options, output, theme
+from aai_cli import client, config, environments, help_panels, options, output, theme
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
@@ -28,6 +28,11 @@ class Check(TypedDict):
 
 class DoctorResult(TypedDict):
     ok: bool
+    # Which profile/environment the checks ran against. `aai doctor` always fills
+    # these in; the onboarding wizard reuses `render` for a partial check without
+    # them, so they stay optional.
+    profile: NotRequired[str]
+    environment: NotRequired[str]
     checks: list[Check]
 
 
@@ -82,7 +87,8 @@ def _check_api_key(profile: str) -> Check:
             affects=["everything"],
         )
     # validate_key doubles as the connectivity probe: it makes one cheap authed call,
-    # so a pass means the key is valid AND api.assemblyai.com is reachable.
+    # so a pass means the key is valid AND the active environment's API is reachable.
+    api_host = environments.active().api_base.removeprefix("https://")
     try:
         valid = client.validate_key(key)
     except CLIError as exc:
@@ -90,7 +96,7 @@ def _check_api_key(profile: str) -> Check:
             "api-key",
             "fail",
             f"Could not reach AssemblyAI: {exc.message}",
-            fix="Check your network/proxy and that api.assemblyai.com is reachable.",
+            fix=f"Check your network/proxy and that {api_host} is reachable.",
             affects=["everything"],
         )
     if valid:
@@ -197,6 +203,11 @@ def _check_coding_agent() -> Check:
 def render(data: DoctorResult) -> str:
     checks = data["checks"]
     lines = [output.heading("Environment check")]
+    profile, environment = data.get("profile"), data.get("environment")
+    if profile is not None and environment is not None:
+        lines.append(
+            "  " + output.hint(f"profile: {escape(profile)} · environment: {escape(environment)}")
+        )
     for c in checks:
         symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
         lines.append(
@@ -238,7 +249,12 @@ def doctor(
             _check_coding_agent(),
         ]
         ok = not any(c["status"] == "fail" for c in checks)
-        payload: DoctorResult = {"ok": ok, "checks": checks}
+        payload: DoctorResult = {
+            "ok": ok,
+            "profile": profile,
+            "environment": environments.active().name,
+            "checks": checks,
+        }
         output.emit(payload, render, json_mode=json_mode)
         if not ok:
             raise typer.Exit(code=1)

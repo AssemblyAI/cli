@@ -157,3 +157,31 @@ def test_capture_raises_clean_error_when_port_unavailable(monkeypatch):
             loopback.capture_callback(timeout=1.0)
     finally:
         busy.close()
+
+
+def test_start_capture_raises_clean_error_when_port_unavailable(monkeypatch):
+    # The bind failure surfaces from start_capture() itself — i.e. before any
+    # caller would open a browser — not from the later wait().
+    busy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    busy.bind((endpoints.LOOPBACK_HOST, 0))
+    busy.listen(1)
+    port = busy.getsockname()[1]
+    monkeypatch.setenv("AAI_AUTH_PORT", str(port))
+    try:
+        with pytest.raises(APIError, match="callback server"):
+            loopback.start_capture()
+    finally:
+        busy.close()
+
+
+def test_start_capture_is_serving_before_wait_is_called():
+    # start_capture() returns with the server already bound and answering — the
+    # whole point of splitting bind from wait. The callback can land before wait().
+    capture = loopback.start_capture()
+    assert capture.thread.daemon is True  # never blocks interpreter shutdown
+    status = _hit("/callback?stytch_token_type=discovery_oauth&token=tok_pre")
+    assert status == 200  # answered while no one is waiting yet
+    result = capture.wait(timeout=5.0)
+    assert result.token == "tok_pre"
+    assert result.token_type == "discovery_oauth"
+    assert result.error is None

@@ -21,16 +21,38 @@ def install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
     return {"name": "install", "status": "installed", "detail": "uv" if use_uv else "venv + pip"}
 
 
-def dev_command(target: Path, web: list[str], *, use_uv: bool) -> list[str]:
+# Local dev binds the loopback interface only. The template Procfile says
+# `--host 0.0.0.0` — correct for the deploy targets (Railway/Fly route traffic into
+# the container) but wrong for `aai dev`/`aai share`: the .env beside it holds a real
+# API key, so the dev server must not listen on every interface of the machine.
+LOCAL_HOST = "127.0.0.1"
+
+
+def _override_host(argv: list[str], host: str) -> list[str]:
+    """Rewrite (or add) the uvicorn ``--host`` argument so the server binds `host`."""
+    out = list(argv)
+    for index, arg in enumerate(out):
+        if arg == "--host" and index + 1 < len(out):
+            out[index + 1] = host
+            return out
+        if arg.startswith("--host="):
+            out[index] = f"--host={host}"
+            return out
+    return [*out, "--host", host]
+
+
+def dev_command(target: Path, web: list[str], *, use_uv: bool, host: str = LOCAL_HOST) -> list[str]:
     """The Procfile web process, run in the project venv with live reload.
 
     The Procfile's `web:` line starts with `python -m uvicorn …`. With uv, run it
-    verbatim under `uv run`; without uv, swap a leading `python` for the project's
-    venv interpreter so it runs inside the scaffolded `.venv`.
+    under `uv run`; without uv, swap a leading `python` for the project's venv
+    interpreter so it runs inside the scaffolded `.venv`. In both cases the
+    Procfile's `--host 0.0.0.0` is overridden to `host` (loopback by default) so a
+    local dev run never exposes the server — and the key in `.env` — to the LAN.
     """
+    argv = _override_host(web, host)
     if use_uv:
-        return ["uv", "run", *web, "--reload"]
-    argv = list(web)
+        return ["uv", "run", *argv, "--reload"]
     if argv and argv[0] == "python":
         argv[0] = str(runner.venv_python(target))
     return [*argv, "--reload"]

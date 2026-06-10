@@ -188,6 +188,18 @@ def test_setup_help_lists_all_subcommands():
     assert "remove" in result.output
 
 
+def test_setup_help_install_summary_is_a_complete_sentence():
+    # The panel shows install's docstring first line; it used to be cut mid-sentence
+    # at a colon ("…by installing three things:"). Pin a standalone summary.
+    import re
+
+    result = runner.invoke(app, ["setup", "--help"])
+    # Strip ANSI (CI forces color) and unwrap lines before matching.
+    flat = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
+    assert "Set up your coding agent for AssemblyAI (docs MCP server + skills)." in flat
+    assert "three things:" not in flat
+
+
 def test_setup_no_subcommand_lists_commands():
     # Bare `aai setup` should show its commands instead of "Missing command".
     result = runner.invoke(app, ["setup"])

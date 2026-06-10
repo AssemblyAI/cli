@@ -5,12 +5,27 @@ from typing import cast
 from aai_cli import environments, llm
 from aai_cli.code_gen import serialize, snippets
 
+# ``-o/--output`` choice -> printed-result code, mirroring the run path's
+# ``client._FIELD_RENDERERS`` semantics: plain fields, the speaker-labeled
+# utterances loop, the SRT export endpoint, and the raw ``json_response`` payload.
+_OUTPUT_SNIPPETS: dict[str, str] = {
+    "text": "print(transcript.text)",
+    "id": "print(transcript.id)",
+    "status": "print(transcript.status.value)",
+    "utterances": (
+        'for utt in transcript.utterances or []:\n    print(f"Speaker {utt.speaker}: {utt.text}")'
+    ),
+    "srt": "print(transcript.export_subtitles_srt())",
+    "json": "print(json.dumps(transcript.json_response, default=str))",
+}
+
 
 def render(
     merged: dict[str, object],
     source: str,
     *,
     llm_gateway: dict[str, object] | None = None,
+    output: str | None = None,
 ) -> str:
     """Generate a runnable transcribe script reproducing this CLI invocation.
 
@@ -18,21 +33,32 @@ def render(
     script transforms the transcript through AssemblyAI's LLM Gateway and prints that
     result instead of the analysis sections — mirroring how `--llm-gateway-prompt`
     replaces the normal output.
-    """
-    if merged:
-        kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=4))
-        config_block = f"config = aai.TranscriptionConfig(\n{kwargs}\n)"
-        call = f"transcript = transcriber.transcribe({source!r}, config=config)"
-    else:
-        config_block = ""
-        call = f"transcript = transcriber.transcribe({source!r})"
 
+    When `output` (a ``-o/--output`` field name) is given, the script prints that one
+    field instead — and, as in the real command, it takes precedence over the LLM chain
+    and the analysis sections.
+    """
+    if output is not None:
+        llm_gateway = None  # `-o` returns before the chain runs in the real command
+    parts = (
+        _header_block(llm_gateway, output)
+        + _transcribe_block(merged, source)
+        + _result_block(merged, llm_gateway, output)
+    )
+    parts.append("")
+    return "\n".join(parts)
+
+
+def _header_block(llm_gateway: dict[str, object] | None, output: str | None) -> list[str]:
+    """Imports plus the api-key (and non-default environment) settings lines."""
+    stdlib_imports = ["import os"]
+    if output == "json":
+        stdlib_imports.insert(0, "import json")
     imports = ["import assemblyai as aai"]
     if llm_gateway:
         imports.append("from openai import OpenAI")
-
     parts = [
-        "import os",
+        *stdlib_imports,
         "",
         *imports,
         "",
@@ -44,13 +70,20 @@ def render(
     env = environments.active()
     if env.api_base != environments.get(environments.DEFAULT_ENV).api_base:
         parts.append(f"aai.settings.base_url = {env.api_base!r}")
-    parts += [
-        "",
-        "transcriber = aai.Transcriber()",
-    ]
-    if config_block:
-        parts += ["", config_block]
-    parts += [
+    return parts
+
+
+def _transcribe_block(merged: dict[str, object], source: str) -> list[str]:
+    """The transcriber setup, optional config, the transcribe call, and error check."""
+    parts = ["", "transcriber = aai.Transcriber()"]
+    if merged:
+        kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=4))
+        parts += ["", f"config = aai.TranscriptionConfig(\n{kwargs}\n)"]
+        call = f"transcript = transcriber.transcribe({source!r}, config=config)"
+    else:
+        call = f"transcript = transcriber.transcribe({source!r})"
+    return [
+        *parts,
         "",
         call,
         "",
@@ -59,13 +92,17 @@ def render(
         "",
     ]
 
-    if llm_gateway:
-        parts += _llm_gateway_block(llm_gateway)
-    else:
-        parts.append(snippets.result_handling(merged))
 
-    parts.append("")
-    return "\n".join(parts)
+def _result_block(
+    merged: dict[str, object], llm_gateway: dict[str, object] | None, output: str | None
+) -> list[str]:
+    """The printed-result lines: one ``-o`` field, the LLM chain, or the analysis sections."""
+    if output is not None:
+        # Unknown names fall back to the plain text, like select_transcript_field does.
+        return [_OUTPUT_SNIPPETS.get(output, _OUTPUT_SNIPPETS["text"])]
+    if llm_gateway:
+        return _llm_gateway_block(llm_gateway)
+    return [snippets.result_handling(merged)]
 
 
 def _llm_gateway_block(llm_gateway: dict[str, object]) -> list[str]:

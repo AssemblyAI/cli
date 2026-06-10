@@ -1,14 +1,16 @@
+"""Example-based code_gen tests: serializers, snippets, rendered scripts.
+
+Hypothesis fuzz/property tests live in test_code_gen_fuzz.py.
+"""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+import pytest
 
 from aai_cli.code_gen import serialize
-
-settings.register_profile("codegen", max_examples=150)
-settings.load_profile("codegen")
+from aai_cli.code_gen.transcribe import render as render_transcribe_code
 
 
 def test_py_literal_basic_types():
@@ -36,71 +38,6 @@ def test_config_kwarg_lines_emits_indented_kwargs():
 
 def test_config_kwarg_lines_empty_dict():
     assert serialize.config_kwarg_lines({}, indent=4) == []
-
-
-# ---------------------------------------------------------------------------
-# Shared, domain-driven strategy: build merged-kwargs dicts from the AUTHORITATIVE
-# field tables in config_builder. Used by every validity test below. Because the
-# field list comes from the coerce tables, any field added later is fuzzed for free.
-# ---------------------------------------------------------------------------
-from assemblyai.streaming.v3 import SpeechModel  # noqa: E402
-
-from aai_cli import config_builder  # noqa: E402
-
-# JSON-ish values that repr()->eval() round-trips (string keys, no NaN/inf).
-_json = st.recursive(
-    st.none()
-    | st.booleans()
-    | st.integers()
-    | st.floats(allow_nan=False, allow_infinity=False)
-    | st.text(st.characters(blacklist_categories=["Cs"]), max_size=8),
-    lambda children: (
-        st.lists(children, max_size=3)
-        | st.dictionaries(
-            st.text(st.characters(min_codepoint=97, max_codepoint=122), min_size=1, max_size=5),
-            children,
-            max_size=3,
-        )
-    ),
-    max_leaves=5,
-)
-
-_BY_KIND = {
-    "str": st.text(st.characters(blacklist_categories=["Cs"]), max_size=16),
-    "bool": st.booleans(),
-    "int": st.integers(),
-    "float": st.floats(allow_nan=False, allow_infinity=False),
-    "list": st.lists(st.text(st.characters(blacklist_categories=["Cs"]), max_size=8), max_size=4),
-    "json": _json,
-}
-
-
-def _value_for(field: str, kind: str):
-    # speech_model in the streaming table may be a SpeechModel enum in real merged dicts.
-    if field == "speech_model":
-        return st.sampled_from(list(SpeechModel)) | _BY_KIND["str"]
-    return _BY_KIND[kind]
-
-
-def merged_strategy(coerce_table: dict[str, str]) -> st.SearchStrategy:
-    """A hypothesis strategy yielding merged-kwargs dicts over the FULL field table."""
-    return st.fixed_dictionaries(
-        {}, optional={f: _value_for(f, kind) for f, kind in coerce_table.items()}
-    )
-
-
-@given(merged_strategy(config_builder.TRANSCRIBE_COERCE))
-def test_serializer_round_trips_full_transcribe_domain(merged):
-    lines = serialize.config_kwarg_lines(merged, indent=0)
-    src = "dict(\n" + "\n".join(lines) + "\n)"
-    assert eval(src, {"SpeechModel": SpeechModel}) == merged  # noqa: S307
-
-
-@given(merged_strategy(config_builder.STREAM_COERCE))
-def test_serializer_round_trips_full_stream_domain(merged):
-    lines = serialize.config_kwarg_lines(merged, indent=0)
-    src = "dict(\n" + "\n".join(lines) + "\n)"
-    assert eval(src, {"SpeechModel": SpeechModel}) == merged  # noqa: S307
 
 
 from aai_cli.code_gen import snippets  # noqa: E402
@@ -215,47 +152,14 @@ def test_agent_render_escapes_quotes_in_prompt():
 
 
 # ---------------------------------------------------------------------------
-# Exhaustive validity & fidelity harness (Task 10)
+# Validity & fidelity checks (the exhaustive hypothesis harness — Task 10 —
+# lives in test_code_gen_fuzz.py).
 # ---------------------------------------------------------------------------
 
 
 def _compiles(code: str) -> None:
     # compile() is stricter than ast.parse() and is what `python file.py` runs through.
     compile(code, "<generated>", "exec")
-
-
-@given(merged_strategy(config_builder.TRANSCRIBE_COERCE))
-def test_fuzz_transcribe_always_compiles(merged):
-    _compiles(code_gen.transcribe(merged, source="audio.mp3"))
-
-
-@given(merged_strategy(config_builder.STREAM_COERCE))
-def test_fuzz_stream_always_compiles(merged):
-    _compiles(code_gen.stream(merged))
-
-
-@given(
-    voice=st.text(st.characters(blacklist_categories=["Cs"]), max_size=20),
-    system_prompt=st.text(st.characters(blacklist_categories=["Cs"]), max_size=200),
-    greeting=st.text(st.characters(blacklist_categories=["Cs"]), max_size=200),
-)
-def test_fuzz_agent_always_compiles(voice, system_prompt, greeting):
-    # Arbitrary text (quotes, newlines, backslashes, unicode) must never break the script.
-    _compiles(code_gen.agent(voice=voice, system_prompt=system_prompt, greeting=greeting))
-
-
-@given(merged_strategy(config_builder.TRANSCRIBE_COERCE))
-def test_fuzz_transcribe_config_round_trips_in_generated_code(merged):
-    # The TranscriptionConfig(...) the generated code builds must equal the merged dict.
-    code = code_gen.transcribe(merged, source="audio.mp3")
-    if not merged:
-        assert "TranscriptionConfig(" not in code
-        return
-    # repr() escapes newlines, so no kwarg line contains a literal "\n)"; the first
-    # "\n)" after the constructor opens is always the config block's closer.
-    inner = code.split("aai.TranscriptionConfig(\n", 1)[1].split("\n)", 1)[0]
-    rebuilt = eval("dict(\n" + inner + "\n)", {"SpeechModel": SpeechModel})  # noqa: S307
-    assert rebuilt == merged
 
 
 class _Stub:
@@ -294,10 +198,57 @@ def test_every_snippet_execs_against_a_realistic_transcript() -> None:
     exec(compile(body, "<snippets>", "exec"), {"transcript": _Stub()})  # noqa: S102
 
 
-@given(merged_strategy(config_builder.TRANSCRIBE_COERCE))
-def test_fuzz_result_handling_always_execs(merged):
-    body = snippets.result_handling(merged)
-    exec(compile(body, "<snippets>", "exec"), {"transcript": _Stub(), "getattr": getattr})  # noqa: S102
+@pytest.mark.parametrize(
+    ("field", "fragment"),
+    [
+        ("text", "print(transcript.text)"),
+        ("id", "print(transcript.id)"),
+        ("status", "print(transcript.status.value)"),
+        ("utterances", 'print(f"Speaker {utt.speaker}: {utt.text}")'),
+        ("srt", "print(transcript.export_subtitles_srt())"),
+        ("json", "print(json.dumps(transcript.json_response, default=str))"),
+    ],
+)
+def test_transcribe_render_output_field_generates_matching_code(field, fragment):
+    # Each -o choice maps to result code faithful to client._FIELD_RENDERERS.
+    code = render_transcribe_code({}, "audio.mp3", output=field)
+    _compiles(code)
+    assert fragment in code
+
+
+def test_transcribe_render_output_json_imports_json_only_when_needed():
+    assert "import json" in render_transcribe_code({}, "audio.mp3", output="json")
+    assert "import json" not in render_transcribe_code({}, "audio.mp3", output="srt")
+    assert "import json" not in render_transcribe_code({}, "audio.mp3")
+
+
+def test_transcribe_render_output_replaces_analysis_result_handling():
+    # -o overrides the analysis sections, exactly like the real command's output path.
+    code = render_transcribe_code({"speaker_labels": True}, "audio.mp3", output="srt")
+    _compiles(code)
+    assert "print(transcript.export_subtitles_srt())" in code
+    assert "transcript.utterances" not in code
+
+
+def test_transcribe_render_output_takes_precedence_over_llm_gateway():
+    # The real command returns the -o field before the LLM chain runs; the generated
+    # script mirrors that and stays free of an unused OpenAI import.
+    code = render_transcribe_code(
+        {},
+        "audio.mp3",
+        llm_gateway={"prompts": ["summarize"], "model": "m", "max_tokens": 5},
+        output="srt",
+    )
+    _compiles(code)
+    assert "print(transcript.export_subtitles_srt())" in code
+    assert "from openai import OpenAI" not in code
+
+
+def test_transcribe_render_unknown_output_falls_back_to_text():
+    # Mirrors select_transcript_field's fallback for unrecognized field names.
+    code = render_transcribe_code({}, "audio.mp3", output="bogus")
+    _compiles(code)
+    assert "print(transcript.text)" in code
 
 
 def test_transcribe_show_code_includes_llm_gateway_transform():

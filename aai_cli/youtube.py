@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -10,6 +11,13 @@ _YOUTUBE_RE = re.compile(
     r"^(https?://)?(www\.|m\.|music\.)?(youtube\.com/|youtu\.be/)",
     re.IGNORECASE,
 )
+
+# yt-dlp's default logger prints its own "ERROR: …" line straight to stderr before the
+# CLI can raise its one clean error, duplicating the message. Route yt-dlp's output to
+# a swallow-everything logger (NullHandler, no propagation) instead.
+_YTDLP_LOGGER = logging.getLogger("aai_cli.youtube.yt_dlp")
+_YTDLP_LOGGER.addHandler(logging.NullHandler())
+_YTDLP_LOGGER.propagate = False
 
 
 def is_youtube_url(source: str | None) -> bool:
@@ -41,6 +49,7 @@ def download_audio(url: str, dest_dir: Path) -> Path:
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        "logger": _YTDLP_LOGGER,
     }
     try:
         # yt-dlp types `params` as a private `_Params` TypedDict, but a plain options

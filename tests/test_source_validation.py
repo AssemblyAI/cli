@@ -26,6 +26,59 @@ def test_resolve_audio_source_sample_explicit_and_missing(tmp_path):
     assert "--sample" in (exc.value.suggestion or "")
 
 
+def test_resolve_audio_source_rejects_explicit_source_plus_sample(tmp_path):
+    # Both an explicit source and --sample is a contradiction: neither may silently win.
+    clip = tmp_path / "clip.mp3"
+    clip.write_bytes(b"fake")
+    with pytest.raises(UsageError) as exc:
+        client.resolve_audio_source(str(clip), sample=True)
+    assert exc.value.exit_code == 2
+    assert exc.value.message == "An audio source and --sample cannot be combined."
+    assert exc.value.suggestion == "Pass the file/URL or --sample, not both."
+
+
+def test_resolve_audio_source_source_plus_sample_rejected_even_without_checks():
+    # The conflict fires before any existence check, including --show-code paths.
+    with pytest.raises(UsageError) as exc:
+        client.resolve_audio_source("missing.mp3", sample=True, check_local=False)
+    assert exc.value.message == "An audio source and --sample cannot be combined."
+
+
+def test_transcribe_source_plus_sample_exits_2(mocker, tmp_path):
+    # No key configured: the conflict must fail before credential resolution.
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    clip = tmp_path / "clip.mp3"
+    clip.write_bytes(b"fake")
+    result = runner.invoke(app, ["transcribe", str(clip), "--sample"])
+    assert result.exit_code == 2
+    assert "An audio source and --sample cannot be combined." in result.output
+    assert "starting browser login" not in result.output
+    tx.assert_not_called()
+
+
+def test_resolve_audio_source_rejects_directory(tmp_path):
+    # Path(...).exists() is true for a directory; it must still be rejected up front.
+    with pytest.raises(CLIError) as exc:
+        client.resolve_audio_source(str(tmp_path), sample=False)
+    assert exc.value.error_type == "not_a_file"
+    assert exc.value.exit_code == 2
+    assert exc.value.message == f"Not a file: {tmp_path}"
+    assert exc.value.suggestion == "Pass an audio file, not a directory."
+
+
+def test_transcribe_directory_source_fails_before_credentials(mocker, tmp_path):
+    # No key configured: a directory must read as "not a file", never trigger a login
+    # (or an upload attempt).
+    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", str(tmp_path)])
+    assert result.exit_code == 2
+    # Rich may wrap the long tmp path mid-message; compare on unwrapped text.
+    unwrapped = " ".join(result.output.split())
+    assert f"Not a file: {tmp_path}" in unwrapped
+    assert "starting browser login" not in result.output
+    tx.assert_not_called()
+
+
 def test_resolve_audio_source_missing_local_file_fails_cleanly():
     with pytest.raises(CLIError) as exc:
         client.resolve_audio_source("no-such-clip.mp3", sample=False)

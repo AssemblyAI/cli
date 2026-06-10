@@ -42,11 +42,15 @@ def stream(
     merged: dict[str, object],
     *,
     llm: dict[str, object] | None = None,
+    source: str | None = None,
 ) -> str:
     """Generate runnable Python that reproduces this streaming invocation.
 
-    With `llm` (a dict of ``prompts``/``model``/``max_tokens``/``interval``), the script
+    ``source`` mirrors the CLI argument: ``None`` streams the microphone, ``"-"``
+    reads raw PCM16 from stdin, and anything else is a file path/URL decoded through
+    ffmpeg — so the generated script reads the same input the real run would. With
+    `llm` (a dict of ``prompts``/``model``/``max_tokens``/``interval``), the script
     refreshes a prompt-chain over the growing transcript every ``interval`` seconds (0 =
     every turn) — the live sibling of `transcribe --llm` — mirroring how `stream --llm` runs.
     """
-    return _stream.render(merged, llm=llm)
+    return _stream.render(merged, llm=llm, source=source)

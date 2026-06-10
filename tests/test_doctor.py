@@ -107,11 +107,42 @@ def test_doctor_coding_agent_missing_warns(healthy, monkeypatch):
 
 def test_doctor_json_shape(healthy):
     payload = json.loads(runner.invoke(app, ["doctor", "--json"]).output)
-    assert set(payload) == {"ok", "checks"}
+    assert set(payload) == {"ok", "profile", "environment", "checks"}
     names = [c["name"] for c in payload["checks"]]
     assert names == ["python", "api-key", "ffmpeg", "audio", "coding-agent"]
     for c in payload["checks"]:
         assert set(c) == {"name", "status", "affects", "detail", "fix"}
+
+
+def test_doctor_json_reports_profile_and_environment(healthy):
+    payload = json.loads(runner.invoke(app, ["doctor", "--json"]).output)
+    assert payload["profile"] == "default"
+    assert payload["environment"] == "production"
+
+
+def test_doctor_json_reports_selected_env_and_profile(healthy):
+    payload = json.loads(
+        runner.invoke(app, ["--env", "sandbox000", "-p", "default", "doctor", "--json"]).output
+    )
+    assert payload["environment"] == "sandbox000"
+    assert payload["profile"] == "default"
+
+
+def test_doctor_network_fix_names_active_env_host(healthy, monkeypatch):
+    # Under --sandbox the fix must point at the sandbox API host, not hardcode
+    # api.assemblyai.com (which being reachable wouldn't help a sandbox user).
+    def boom(_key):
+        raise APIError("Network error contacting AssemblyAI: timeout")
+
+    monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", boom)
+    result = runner.invoke(app, ["--env", "sandbox000", "doctor", "--json"])
+    fix = _checks(result)["api-key"]["fix"]
+    assert "that api.sandbox000.assemblyai-labs.com is reachable" in fix
+    assert "api.assemblyai.com" not in fix
+    assert "https://" not in fix  # the scheme is stripped: it's a host, not a URL
+
+    prod = runner.invoke(app, ["doctor", "--json"])
+    assert "that api.assemblyai.com is reachable" in _checks(prod)["api-key"]["fix"]
 
 
 def test_doctor_human_output_renders(healthy):
@@ -166,6 +197,8 @@ def test_probe_input_devices_counts_integer_input_channels(monkeypatch):
 def test_render_ok_payload_shows_ready() -> None:
     payload: doctor.DoctorResult = {
         "ok": True,
+        "profile": "default",
+        "environment": "production",
         "checks": [
             {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
         ],
@@ -175,9 +208,47 @@ def test_render_ok_payload_shows_ready() -> None:
     assert "Everything looks good." in text
 
 
+def test_render_reports_profile_and_environment_line() -> None:
+    payload: doctor.DoctorResult = {
+        "ok": True,
+        "profile": "staging",
+        "environment": "sandbox000",
+        "checks": [
+            {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
+        ],
+    }
+    text = doctor.render(payload)
+    assert "profile: staging" in text
+    assert "environment: sandbox000" in text
+
+
+def test_render_omits_profile_line_for_partial_payloads() -> None:
+    # The onboarding wizard reuses render for a quick environment check with no
+    # profile/environment context — no half-empty "profile:" line may appear.
+    payload: doctor.DoctorResult = {
+        "ok": True,
+        "checks": [
+            {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
+        ],
+    }
+    text = doctor.render(payload)
+    assert "profile:" not in text
+    assert "environment:" not in text
+
+
+def test_doctor_human_output_shows_profile_and_environment(healthy, monkeypatch):
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 0, result.output
+    assert "profile: default" in result.output
+    assert "environment: production" in result.output
+
+
 def test_render_problem_payload_shows_fix_and_problem_banner() -> None:
     payload: doctor.DoctorResult = {
         "ok": False,
+        "profile": "default",
+        "environment": "production",
         "checks": [
             {
                 "name": "api-key",

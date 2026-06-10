@@ -85,6 +85,7 @@ def test_keys_create_rejects_default_project_without_int_id(mocker):
 
 
 def test_keys_list_without_session_runs_login(monkeypatch, mocker):
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     list_projects = mocker.patch(
         "aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=[]

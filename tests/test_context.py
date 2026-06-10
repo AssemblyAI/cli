@@ -1,9 +1,13 @@
+import json
+import sys
+
+import pytest
 import typer
 from typer.testing import CliRunner
 
 from aai_cli import config, environments
 from aai_cli.auth.flow import LoginResult
-from aai_cli.context import AppState, env_override_warning, run_command
+from aai_cli.context import AppState, _interactive_session, env_override_warning, run_command
 from aai_cli.errors import APIError, NotAuthenticated, auth_failure
 
 runner = CliRunner()
@@ -23,6 +27,94 @@ def _make_app(body, **run_options):
     return app
 
 
+def _force_interactive(monkeypatch):
+    """Pretend a human is at the terminal (CliRunner/pytest streams are never TTYs)."""
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+
+
+class _TtyProbe:
+    def __init__(self, tty):
+        self._tty = tty
+
+    def isatty(self):
+        return self._tty
+
+
+@pytest.mark.parametrize(
+    ("stdin_tty", "stderr_tty", "agentic", "expected"),
+    [
+        (True, True, False, True),  # a real terminal session
+        (False, True, False, False),  # stdin piped/redirected (CI input)
+        (True, False, False, False),  # stderr redirected (logged pipeline)
+        (True, True, True, False),  # agent/CI env detected despite TTYs
+    ],
+)
+def test_interactive_session_requires_both_ttys_and_no_agent(
+    monkeypatch, stdin_tty, stderr_tty, agentic, expected
+):
+    monkeypatch.setattr(sys, "stdin", _TtyProbe(stdin_tty))
+    monkeypatch.setattr(sys, "stderr", _TtyProbe(stderr_tty))
+    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: agentic)
+    assert _interactive_session() is expected
+
+
+def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
+    # CliRunner/pytest streams are not TTYs, so this is a genuine non-interactive
+    # session: no browser login may start (it would bind a port and block 120s),
+    # and the ORIGINAL NotAuthenticated must surface with its actionable suggestion.
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
+    )
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 4
+    assert "starting browser login" not in result.output
+    assert "You're not signed in." in result.output
+    assert "aai login" in result.output
+    assert "ASSEMBLYAI_API_KEY" in result.output
+
+
+def test_run_command_not_interactive_json_keeps_clean_error_shape(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
+    )
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body, json=True), ["go"])
+    assert result.exit_code == 4
+    payload = json.loads(result.output)  # the only output line is machine-readable
+    assert payload["error"]["type"] == "not_authenticated"
+    assert "aai login" in payload["error"]["suggestion"]
+    assert "ASSEMBLYAI_API_KEY" in payload["error"]["suggestion"]
+
+
+def test_run_command_auto_login_notice_suppressed_in_json_mode(monkeypatch):
+    # Even when auto-login runs, --json stderr must stay machine-readable: the
+    # human "starting browser login" prose is suppressed and only the JSON error
+    # shape is emitted.
+    _force_interactive(monkeypatch)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=1),
+    )
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body, json=True), ["go"])
+    assert result.exit_code == 4
+    assert "starting browser login" not in result.output
+    payload = json.loads(result.output)
+    assert payload["error"]["type"] == "login_required"
+
+
 def test_run_command_maps_cli_error_to_exit_code():
     def body(state, json_mode):
         raise NotAuthenticated()
@@ -32,6 +124,7 @@ def test_run_command_maps_cli_error_to_exit_code():
 
 
 def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
+    _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
         lambda: LoginResult(
@@ -59,6 +152,7 @@ def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
 
 
 def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
+    _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
         lambda: LoginResult(
@@ -83,8 +177,10 @@ def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
 
 
 def test_run_command_auto_login_failure_is_clean(monkeypatch):
+    _force_interactive(monkeypatch)
+
     def fail_login():
-        raise APIError("Login timed out waiting for the browser.")
+        raise APIError("Login failed: the server returned an unexpected response.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
 
@@ -93,10 +189,31 @@ def test_run_command_auto_login_failure_is_clean(monkeypatch):
 
     result = runner.invoke(_make_app(body), ["go"])
     assert result.exit_code == 1
-    assert "Login timed out" in result.output
+    assert "Login failed" in result.output
+
+
+def test_run_command_auto_login_timeout_maps_to_auth_error(monkeypatch):
+    # The loopback timeout is an auth failure (not_authenticated, exit 4), not a
+    # generic api_error.
+    _force_interactive(monkeypatch)
+
+    def fail_login():
+        raise NotAuthenticated("Login timed out waiting for the browser.")
+
+    monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body, json=True), ["go"])
+    assert result.exit_code == 4
+    payload = json.loads(result.output)
+    assert payload["error"]["type"] == "not_authenticated"
+    assert "Login timed out" in payload["error"]["message"]
 
 
 def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
+    _force_interactive(monkeypatch)
     monkeypatch.setenv(config.ENV_API_KEY, "sk_bad")
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
@@ -111,6 +228,7 @@ def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
 
 
 def test_run_command_never_auto_logs_in_login_command(monkeypatch):
+    _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
         lambda: (_ for _ in ()).throw(AssertionError("login command must not auto-login")),
@@ -240,6 +358,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
     # ENV key present but the failure is a generic NotAuthenticated (not a key
     # rejection): a browser login can still fix it, so we DO auto-login. This pins
     # the `and` in _should_auto_login — an `or` would wrongly skip the retry here.
+    _force_interactive(monkeypatch)
     monkeypatch.setenv(config.ENV_API_KEY, "sk_env")
     ran = {"login": 0}
 
