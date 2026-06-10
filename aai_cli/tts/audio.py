@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -16,7 +17,14 @@ class _OutputStream(Protocol):
     def start(self) -> None: ...
     def write(self, data: bytes, /) -> object: ...  # real write returns a bool we ignore
     def stop(self) -> None: ...
+    def abort(self) -> None: ...  # immediate stop: discards buffered frames (vs stop's drain)
     def close(self) -> None: ...
+
+
+# Write playback in ~4 KiB chunks (≈85 ms of 16-bit mono at 24 kHz) instead of one
+# big blocking write, so a Ctrl-C is delivered between chunks and cancels promptly
+# rather than only after the entire clip has been queued to the output device.
+_PLAYBACK_CHUNK_BYTES = 4096
 
 
 def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
@@ -39,6 +47,15 @@ def _default_output_stream(sample_rate: int) -> _OutputStream:
     return stream
 
 
+def _playback_error(exc: Exception) -> CLIError:
+    return CLIError(
+        f"Could not play audio: {exc}",
+        error_type="audio_output_error",
+        exit_code=1,
+        suggestion="Check your output device and run 'aai doctor', or use --out to save a WAV.",
+    )
+
+
 def play_pcm(
     pcm: bytes,
     sample_rate: int,
@@ -47,22 +64,33 @@ def play_pcm(
 ) -> None:
     """Play 16-bit mono PCM through the default output device (blocks until done).
 
-    ``stream_factory`` is injectable for tests; a device failure is wrapped in a
-    clean CLIError that points at --out as the headless escape hatch.
+    Audio is written in short chunks so a Ctrl-C interrupts promptly: on
+    KeyboardInterrupt the stream is aborted (buffered frames discarded) for an
+    immediate stop, then the cancel propagates. ``stream_factory`` is injectable
+    for tests; a device failure is wrapped in a clean CLIError that points at
+    --out as the headless escape hatch.
     """
     factory = stream_factory or _default_output_stream
     try:
         stream = factory(sample_rate)
-        stream.start()
-        stream.write(pcm)
-        stream.stop()
-        stream.close()
     except CLIError:
         raise  # audio_missing_error() is already user-facing
     except Exception as exc:
-        raise CLIError(
-            f"Could not play audio: {exc}",
-            error_type="audio_output_error",
-            exit_code=1,
-            suggestion="Check your output device and run 'aai doctor', or use --out to save a WAV.",
-        ) from exc
+        raise _playback_error(exc) from exc
+
+    try:
+        stream.start()
+        for offset in range(0, len(pcm), _PLAYBACK_CHUNK_BYTES):
+            stream.write(pcm[offset : offset + _PLAYBACK_CHUNK_BYTES])
+        stream.stop()
+    except KeyboardInterrupt:
+        # Cut sound immediately (discard whatever is still buffered in the device)
+        # instead of letting stop() drain the rest, then propagate the cancel.
+        with contextlib.suppress(Exception):
+            stream.abort()
+        raise
+    except Exception as exc:
+        raise _playback_error(exc) from exc
+    finally:
+        with contextlib.suppress(Exception):
+            stream.close()

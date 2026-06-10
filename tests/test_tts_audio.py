@@ -33,19 +33,28 @@ def test_write_wav_into_existing_dir(tmp_path: Path):
 
 
 class FakeStream:
-    def __init__(self) -> None:
+    def __init__(self, *, raise_on_write: BaseException | None = None) -> None:
         self.events: list[str] = []
         self.written: bytes = b""
+        self.writes: list[bytes] = []
+        self._raise_on_write = raise_on_write
 
     def start(self) -> None:
         self.events.append("start")
 
     def write(self, data: bytes) -> None:
-        self.written += bytes(data)
+        if self._raise_on_write is not None:
+            raise self._raise_on_write
+        chunk = bytes(data)
+        self.written += chunk
+        self.writes.append(chunk)
         self.events.append("write")
 
     def stop(self) -> None:
         self.events.append("stop")
+
+    def abort(self) -> None:
+        self.events.append("abort")
 
     def close(self) -> None:
         self.events.append("close")
@@ -56,6 +65,37 @@ def test_play_pcm_writes_to_started_stream_then_closes():
     audio.play_pcm(b"\x01\x02", 16000, stream_factory=lambda rate: stream)
     assert stream.events == ["start", "write", "stop", "close"]
     assert stream.written == b"\x01\x02"
+
+
+def test_play_pcm_writes_audio_in_bounded_chunks():
+    # A buffer larger than one chunk is written in fixed-size pieces (so a Ctrl-C
+    # can land between writes); the chunks reassemble to the original audio.
+    stream = FakeStream()
+    pcm = bytes(range(256)) * 40  # 10240 bytes > 2 * chunk
+    audio.play_pcm(pcm, 24000, stream_factory=lambda rate: stream)
+    assert [len(c) for c in stream.writes] == [4096, 4096, 2048]
+    assert b"".join(stream.writes) == pcm
+
+
+def test_play_pcm_aborts_and_propagates_on_ctrl_c():
+    # Ctrl-C mid-playback must stop the device immediately (abort, not just stop)
+    # and re-raise so the cancel reaches the CLI; the stream is still closed.
+    stream = FakeStream(raise_on_write=KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        audio.play_pcm(b"\x01\x02", 16000, stream_factory=lambda rate: stream)
+    assert "abort" in stream.events
+    assert "stop" not in stream.events  # aborted, never reached the draining stop()
+    assert stream.events[-1] == "close"  # finally still closed it
+
+
+def test_play_pcm_wraps_write_failure_in_cli_error():
+    # A device error mid-stream (not from the factory) maps to the same clean
+    # CLIError, and the stream is still closed via the finally block.
+    stream = FakeStream(raise_on_write=RuntimeError("device fell over"))
+    with pytest.raises(CLIError, match="Could not play audio") as excinfo:
+        audio.play_pcm(b"\x01\x02", 16000, stream_factory=lambda rate: stream)
+    assert excinfo.value.exit_code == 1
+    assert stream.events[-1] == "close"
 
 
 def test_play_pcm_wraps_device_failure_in_cli_error():
