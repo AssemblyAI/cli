@@ -659,7 +659,7 @@
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --voice                TEXT     Voice id. [default: Vivian]                  │
+  │ --voice                TEXT     Voice id. [default: jane]                    │
   │ --language             TEXT     Language of the text. [default: English]     │
   │ --sample-rate          INTEGER  Output sample rate in Hz. Server default if  │
   │                                 omitted.                                     │

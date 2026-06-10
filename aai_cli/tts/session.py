@@ -34,6 +34,12 @@ _HTTP_FORBIDDEN = 403
 # internal "stream ended" traceback never lands on stderr next to our clean error.
 _WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
 
+# The streaming-TTS server synthesizes at 24 kHz unless a sample_rate is requested,
+# and echoes the resolved value back in the Begin frame's configuration. Audio frames
+# carry only the PCM payload, so Begin is the single source of truth for the rate; this
+# is the fallback if that field is ever absent.
+_DEFAULT_SAMPLE_RATE = 24000
+
 
 @dataclass(frozen=True)
 class SpeakConfig:
@@ -122,26 +128,22 @@ def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
 def _run_protocol(
     ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
 ) -> SpeakResult:
-    """Send Generate+Flush, collect Audio until is_final_for_flush, then Terminate."""
+    """Send Generate + ForceFlushTextBuffer, collect Audio until is_final, then Terminate."""
     begin = json.loads(ws.recv())
     if begin.get("type") != "Begin":
         raise APIError(f"TTS service did not start the session (got {begin.get('type')!r}).")
+    sample_rate = int(begin.get("configuration", {}).get("sample_rate", _DEFAULT_SAMPLE_RATE))
 
     ws.send(json.dumps({"type": "Generate", "text": config.text}))
-    ws.send(json.dumps({"type": "Flush"}))
+    ws.send(json.dumps({"type": "ForceFlushTextBuffer"}))
 
     pcm = bytearray()
-    # Bound only so the post-loop duration calc has a name; the value is never
-    # observed (the sole loop break is inside the Audio branch, after sample_rate
-    # is reassigned from the frame), so its literal can't be asserted.
-    sample_rate = 0  # pragma: no mutate
     while True:
         msg = json.loads(ws.recv())
         mtype = msg.get("type")
         if mtype == "Audio":
             pcm.extend(base64.b64decode(msg["audio"]))
-            sample_rate = int(msg["sample_rate"])
-            if msg.get("is_final_for_flush"):
+            if msg.get("is_final"):
                 break
         elif mtype == "Error":
             raise APIError(

@@ -82,14 +82,25 @@ class FakeWS:
         self.closed = True
 
 
-def _audio_frame(pcm: bytes, *, sample_rate: int = 24000, final: bool) -> str:
+def _audio_frame(pcm: bytes, *, final: bool) -> str:
+    # The real server's Audio frames carry only the PCM payload and the final flag;
+    # the sample rate is reported once, up front, in the Begin frame's configuration.
     return json.dumps(
         {
             "type": "Audio",
             "audio": base64.b64encode(pcm).decode("ascii"),
-            "sample_rate": sample_rate,
-            "encoding": "pcm_s16le",
-            "is_final_for_flush": final,
+            "is_final": final,
+        }
+    )
+
+
+def _begin_frame(*, sample_rate: int = 24000) -> str:
+    return json.dumps(
+        {
+            "type": "Begin",
+            "id": "s1",
+            "expires_at": 1,
+            "configuration": {"voice": "jane", "language": "english", "sample_rate": sample_rate},
         }
     )
 
@@ -107,7 +118,7 @@ def test_synthesize_drives_the_full_protocol():
     captured: dict = {}
     ws = FakeWS(
         [
-            json.dumps({"type": "Begin", "id": "s1", "expires_at": 1}),
+            _begin_frame(sample_rate=24000),
             _audio_frame(b"\x01\x02\x03\x04", final=False),
             _audio_frame(b"\x05\x06", final=True),
         ]
@@ -115,17 +126,39 @@ def test_synthesize_drives_the_full_protocol():
     cfg = session.SpeakConfig(text="hello", voice="jane")
     result = session.synthesize("k", cfg, connect=_connect_returning(ws, captured))
 
-    # Sends Generate(text), then Flush, then Terminate — in that order.
-    assert [m["type"] for m in ws.sent] == ["Generate", "Flush", "Terminate"]
+    # Sends Generate(text), then ForceFlushTextBuffer, then Terminate — in that order.
+    assert [m["type"] for m in ws.sent] == ["Generate", "ForceFlushTextBuffer", "Terminate"]
     assert ws.sent[0]["text"] == "hello"
-    # Accumulates decoded PCM across chunks and stops on is_final_for_flush.
+    # Accumulates decoded PCM across chunks and stops on the is_final frame.
     assert result.pcm == b"\x01\x02\x03\x04\x05\x06"
+    # The sample rate comes from the Begin frame's configuration, not the Audio frames.
     assert result.sample_rate == 24000
     # 6 bytes / 2 bytes-per-sample / 24000 Hz.
     assert result.audio_duration_seconds == pytest.approx(6 / 2 / 24000)
     # Auth header carries the key as a Bearer token.
     assert captured["kwargs"]["additional_headers"]["Authorization"] == "Bearer k"
     assert ws.closed is True
+
+
+def test_synthesize_reads_sample_rate_from_begin_configuration():
+    # A non-default rate in the Begin frame flows into the result and its duration,
+    # proving the rate is read from Begin.configuration rather than hardcoded.
+    ws = FakeWS([_begin_frame(sample_rate=16000), _audio_frame(b"\x01\x02\x03\x04", final=True)])
+    result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert result.sample_rate == 16000
+    assert result.audio_duration_seconds == pytest.approx(4 / 2 / 16000)
+
+
+def test_synthesize_falls_back_to_default_rate_when_begin_omits_configuration():
+    # Begin without a configuration block -> the 24 kHz fallback, not a KeyError.
+    ws = FakeWS(
+        [
+            json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
+            _audio_frame(b"\x01\x02", final=True),
+        ]
+    )
+    result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert result.sample_rate == 24000
 
 
 def test_synthesize_raises_on_missing_begin():

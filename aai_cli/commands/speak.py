@@ -13,10 +13,10 @@ from aai_cli.tts import audio, session
 
 app = typer.Typer()
 
-# The streaming-TTS server requires an explicit voice and language on the
-# connection (it does not backfill them), so the CLI always sends a value. These
-# mirror the service's own documented defaults; override with --voice/--language.
-DEFAULT_VOICE = "Vivian"
+# The streaming-TTS reference client defaults to the PocketTTS "jane" voice and
+# English, so the CLI sends the same and a bare `aai speak` works out of the box.
+# Override either with --voice/--language.
+DEFAULT_VOICE = "jane"
 DEFAULT_LANGUAGE = "English"
 
 

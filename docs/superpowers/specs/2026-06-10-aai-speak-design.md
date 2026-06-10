@@ -30,10 +30,14 @@ aai speak "Hi" --json                                  # machine-readable metada
   (exit 4). No `--api-key` flag (keys must not leak into shell history / `ps`).
 - **Text source:** the positional `TEXT` argument, or stdin when the argument is
   omitted (`echo … | aai speak`). Empty text from both → usage error (exit 2).
-- **Connection params** (`--voice`, `--language`, `--sample-rate`) are only added
-  to the WebSocket query string when explicitly passed; otherwise the server
-  applies its own defaults (currently `Vivian` / `English` / `24000`). The server
-  stays the source of truth — no hardcoded client-side voice list.
+- **Connection params** (`--voice`, `--language`, `--sample-rate`) are added to
+  the WebSocket query string. `--voice`/`--language` default to the reference
+  client's defaults (`jane` / `English`) so a bare `aai speak` works out of the
+  box; `--sample-rate` is only sent when explicitly passed (the server defaults it
+  to `24000` and echoes the resolved value back in the `Begin` frame). The server
+  stays the source of truth for the voice catalog — no hardcoded client-side
+  voice list. (The server's *own* default voice routes to a backend that currently
+  errors, which is why the CLI sends `jane` explicitly rather than relying on it.)
 - **Output:** with no `--out`, play the audio through the speakers (uses
   `sounddevice`, the dependency `agent` already relies on). With `--out PATH`,
   write a WAV instead. Headless machines have no speakers — documented; use
@@ -45,25 +49,28 @@ Reference: `assemblyai/engineering/projects/realtime/api_tts/scripts/sample_sess
 in the DeepLearning monorepo. A synchronous `websockets` client (same library and
 pattern as `aai_cli/agent/session.py`):
 
-1. Connect to `wss://{tts_host}/v1/ws/?voice=…&language=…&sample_rate=…` — only
-   the params the user set are included in the query string.
-2. Receive a `Begin` frame (`{"type":"Begin","id":…,"expires_at":…}`); anything
-   else is an error.
+1. Connect to `wss://{tts_host}/v1/ws/?voice=…&language=…&sample_rate=…`.
+2. Receive a `Begin` frame
+   (`{"type":"Begin","id":…,"expires_at":…,"configuration":{"voice":…,"language":…,"sample_rate":int}}`);
+   anything else is an error. The server echoes the resolved synthesis settings in
+   `configuration` — `sample_rate` is read from here (the `Audio` frames don't
+   carry it), falling back to `24000` if absent.
 3. Send one `Generate` frame: `{"type":"Generate","text": <text>}`.
-4. Send a `Flush` frame: `{"type":"Flush"}` to trigger synthesis.
+4. Send a `ForceFlushTextBuffer` frame: `{"type":"ForceFlushTextBuffer"}` to
+   trigger synthesis of the buffered text. (A plain `{"type":"Flush"}` is *not* a
+   valid message — the server rejects it with `InputParseError`.)
 5. Receive `Audio` frames: `{"type":"Audio","audio": <base64 pcm>,
-   "sample_rate": int, "encoding": str, "is_final_for_flush": bool}`. Base64-decode
-   `audio`, accumulate PCM, track `sample_rate`, and stop when
-   `is_final_for_flush` is `true`.
+   "is_final": bool}`. Base64-decode `audio`, accumulate PCM, and stop when
+   `is_final` is `true`.
    - `Warning` frames → printed to stderr, non-fatal.
    - `Error` frames (`{"type":"Error","error_code":int,"error":str}`) → mapped to
      a clean `CLIError`.
-6. Send `Terminate` (`{"type":"Terminate"}`); read the optional `Termination`
-   frame (`session_duration_seconds`, `total_input_char_length`,
-   `generated_audio_duration_seconds`) for the final stats.
+6. Send `Terminate` (`{"type":"Terminate"}`); the optional `Termination` frame
+   (`session_duration_seconds`, `total_input_char_length`,
+   `audio_duration_seconds`) carries final stats.
 
 Audio is 16-bit mono PCM. The WAV is written with `nchannels=1`, `sampwidth=2`,
-`framerate=sample_rate` (read from the `Audio` frames, not assumed).
+`framerate=sample_rate` (the rate from the `Begin` configuration, not assumed).
 
 ## Components
 
@@ -75,7 +82,7 @@ Mirrors the existing `streaming/` and `agent/` feature subsystems.
   empty string is the sandbox-only signal the command checks).
 
 - **`aai_cli/tts/session.py`** — the protocol client. Connects, drives
-  Begin→Generate→Flush→Audio→Terminate, and returns
+  Begin→Generate→ForceFlushTextBuffer→Audio→Terminate, and returns
   `(pcm_bytes, sample_rate, termination_stats)`. The `connect` factory is
   injectable (defaults to the `websockets` sync client) so tests run hermetically
   with a fake socket. Connect/auth failures map through the existing
@@ -110,9 +117,10 @@ Must clear the project's mutation and 100%-patch-coverage tail gates, so tests
 assert *behavior*, not just line execution.
 
 - `tts/session.py`: a fake injected websocket drives the full
-  Begin→Generate→Flush→Audio→Terminate flow. Assert the exact frames sent, the
-  base64 decode, stop-on-`is_final_for_flush`, `Error`/`Warning` handling, and
-  auth-failure mapping (rejected key → exit 4).
+  Begin→Generate→ForceFlushTextBuffer→Audio→Terminate flow. Assert the exact
+  frames sent, the base64 decode, stop-on-`is_final`, the `sample_rate` read from
+  the `Begin` configuration (and its `24000` fallback), `Error`/`Warning`
+  handling, and auth-failure mapping (rejected key → exit 4).
 - `tts/audio.py`: `write_wav` produces a WAV with the correct header
   (mono / 16-bit / given rate) and body bytes; `play_pcm` invokes a monkeypatched
   `sounddevice`.
