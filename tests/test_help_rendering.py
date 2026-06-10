@@ -15,15 +15,26 @@ from tests._cli_tree import leaf_command_argvs
 
 runner = CliRunner()
 
+# Matches SGR (color/style) ANSI escape sequences. CI runners force color on (Rich
+# enables it under GITHUB_ACTIONS), which interleaves style codes mid-message —
+# e.g. the option highlighter styles "--zzqq" inside "No such option: --zzqq" —
+# so every text assertion here runs on the color-free render.
+_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
+
 # A long-option token cut off by Rich's ellipsis overflow, e.g. "--end-of-turn-c…".
 _CLIPPED_FLAG = re.compile(r"--[\w-]*…")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_SGR.sub("", text)
 
 
 @pytest.mark.parametrize("argv", leaf_command_argvs(), ids=" ".join)
 def test_no_flag_name_is_clipped_at_80_columns(argv):
     result = runner.invoke(app, [*argv, "--help"], env={"COLUMNS": "80"})
     assert result.exit_code == 0
-    assert not _CLIPPED_FLAG.search(result.output), _CLIPPED_FLAG.search(result.output)
+    plain = _plain(result.output)
+    assert not _CLIPPED_FLAG.search(plain), _CLIPPED_FLAG.search(plain)
 
 
 def test_root_help_documents_authentication():
@@ -31,8 +42,9 @@ def test_root_help_documents_authentication():
     # discoverable from the CLI itself, not only from external docs.
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "ASSEMBLYAI_API_KEY" in result.output
-    assert "AAI_ENV" in result.output
+    plain = _plain(result.output)
+    assert "ASSEMBLYAI_API_KEY" in plain
+    assert "AAI_ENV" in plain
 
 
 def test_unknown_flag_suggestion_renders_clean():
@@ -40,15 +52,17 @@ def test_unknown_flag_suggestion_renders_clean():
     # --json)',)"); main.py folds the suggestion into the message instead.
     result = runner.invoke(app, ["transcribe", "x.wav", "--jsno"])
     assert result.exit_code == 2
-    assert "(Possible options: --json)" in result.output
-    assert "',)" not in result.output
+    plain = _plain(result.output)
+    assert "(Possible options: --json)" in plain
+    assert "',)" not in plain
 
 
 def test_unknown_flag_without_suggestion_renders_plain():
     result = runner.invoke(app, ["transcribe", "x.wav", "--zzqq"])
     assert result.exit_code == 2
-    assert "No such option: --zzqq" in result.output
-    assert "Possible options" not in result.output
+    plain = _plain(result.output)
+    assert "No such option: --zzqq" in plain
+    assert "Possible options" not in plain
 
 
 def test_noclip_table_pins_leading_columns_and_passes_row_args_through():
