@@ -1,0 +1,549 @@
+{
+  "usage_items": [
+    {
+      "start_timestamp": "2026-06-01T00:00:00.000Z",
+      "end_timestamp": "2026-06-02T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": []
+    },
+    {
+      "start_timestamp": "2026-06-02T00:00:00.000Z",
+      "end_timestamp": "2026-06-03T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": [
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 14.100000000000001,
+          "group_value": "1751655",
+          "quantity": 0.9400000000000001,
+          "region": "US"
+        },
+        {
+          "id": "8584277b-dfe6-46e2-96aa-3829042e37a5",
+          "category": "Speech Understanding",
+          "name": "Entity Detection",
+          "price": 0.6266666666666667,
+          "group_value": "1751655",
+          "quantity": 0.07833333333333334,
+          "region": "US"
+        },
+        {
+          "id": "734606d5-cb76-4435-bcab-769b4dfd71c2",
+          "category": "Speech Understanding",
+          "name": "Sentiment Analysis",
+          "price": 0.15666666666666668,
+          "group_value": "1751655",
+          "quantity": 0.07833333333333334,
+          "region": "US"
+        },
+        {
+          "id": "c7fd4dc0-73c0-484f-8d31-4a6afbd7b520",
+          "category": "Speech Understanding",
+          "name": "Summarization",
+          "price": 0.47000000000000003,
+          "group_value": "1751655",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 1.0966666666666667,
+          "group_value": "1751655",
+          "quantity": 0.5483333333333333,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-5-20250929_US_0-200K",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-5-20250929 (0-200K)",
+          "price": 0.0057,
+          "group_value": "1751655",
+          "quantity": 1.9e-05,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.6888,
+          "group_value": "1751655",
+          "quantity": 0.002296,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-5-20250929_US_0-200K",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-5-20250929 (0-200K)",
+          "price": 0.006,
+          "group_value": "1751655",
+          "quantity": 4e-06,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.378,
+          "group_value": "1751655",
+          "quantity": 0.000252,
+          "region": "US"
+        },
+        {
+          "id": "e95dac15-5306-458b-a979-d351af209462",
+          "category": "Speech-to-Text",
+          "name": "Universal-3 Pro",
+          "price": 9.870000000000001,
+          "group_value": "1751655",
+          "quantity": 0.47000000000000003,
+          "region": "US"
+        }
+      ]
+    },
+    {
+      "start_timestamp": "2026-06-03T00:00:00.000Z",
+      "end_timestamp": "2026-06-04T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": [
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 17.70416666666667,
+          "group_value": "1751655",
+          "quantity": 1.180277777777778,
+          "region": "US"
+        },
+        {
+          "id": "3ec7e78d-2d80-4f18-aac7-59bb27cf4518",
+          "category": "Streaming Speech-to-Text",
+          "name": "Universal-Streaming",
+          "price": 1.9003826870372167,
+          "group_value": "1751655",
+          "quantity": 0.12669217913581443,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 0.9400000000000001,
+          "group_value": "1751655",
+          "quantity": 0.47000000000000003,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 1.356,
+          "group_value": "1751655",
+          "quantity": 0.00452,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.363,
+          "group_value": "1751655",
+          "quantity": 0.000242,
+          "region": "US"
+        },
+        {
+          "id": "e95dac15-5306-458b-a979-d351af209462",
+          "category": "Speech-to-Text",
+          "name": "Universal-3 Pro",
+          "price": 8.225000000000001,
+          "group_value": "1751655",
+          "quantity": 0.3916666666666667,
+          "region": "US"
+        },
+        {
+          "id": "c7c7c8e3-71ef-4a21-bf8d-c599a0413f31",
+          "category": "Streaming Speech-to-Text",
+          "name": "Streaming",
+          "price": 4.9886541956878006,
+          "group_value": "1751655",
+          "quantity": 0.11085898212639557,
+          "region": "US"
+        },
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 40.987122625,
+          "group_value": "1751655",
+          "quantity": 0.09108249472222223,
+          "region": "US"
+        },
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 128.10833333333335,
+          "group_value": "577378",
+          "quantity": 8.540555555555557,
+          "region": "US"
+        },
+        {
+          "id": "3ec7e78d-2d80-4f18-aac7-59bb27cf4518",
+          "category": "Streaming Speech-to-Text",
+          "name": "Universal-Streaming",
+          "price": 1.5253004030708126,
+          "group_value": "577378",
+          "quantity": 0.10168669353805418,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 15.335555555555556,
+          "group_value": "577378",
+          "quantity": 7.667777777777778,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.315,
+          "group_value": "577378",
+          "quantity": 0.00105,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 1.5,
+          "group_value": "577378",
+          "quantity": 0.001,
+          "region": "US"
+        },
+        {
+          "id": "c7c7c8e3-71ef-4a21-bf8d-c599a0413f31",
+          "category": "Streaming Speech-to-Text",
+          "name": "Streaming",
+          "price": 1.0001762808749846,
+          "group_value": "577378",
+          "quantity": 0.022226139574999658,
+          "region": "US"
+        },
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 146.505187625,
+          "group_value": "577378",
+          "quantity": 0.32556708361111114,
+          "region": "US"
+        }
+      ]
+    },
+    {
+      "start_timestamp": "2026-06-04T00:00:00.000Z",
+      "end_timestamp": "2026-06-05T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": [
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 4.784136,
+          "group_value": "1172009",
+          "quantity": 0.010631413333333334,
+          "region": "US"
+        },
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 3.5250000000000004,
+          "group_value": "1751655",
+          "quantity": 0.23500000000000001,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 0.9400000000000001,
+          "group_value": "1751655",
+          "quantity": 0.47000000000000003,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.63,
+          "group_value": "1751655",
+          "quantity": 0.0021,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 3.0,
+          "group_value": "1751655",
+          "quantity": 0.002,
+          "region": "US"
+        },
+        {
+          "id": "e95dac15-5306-458b-a979-d351af209462",
+          "category": "Speech-to-Text",
+          "name": "Universal-3 Pro",
+          "price": 4.9350000000000005,
+          "group_value": "1751655",
+          "quantity": 0.23500000000000001,
+          "region": "US"
+        },
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 30.036963250000003,
+          "group_value": "1751655",
+          "quantity": 0.06674880722222222,
+          "region": "US"
+        },
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 18.09166666666667,
+          "group_value": "577378",
+          "quantity": 1.2061111111111111,
+          "region": "US"
+        },
+        {
+          "id": "3ec7e78d-2d80-4f18-aac7-59bb27cf4518",
+          "category": "Streaming Speech-to-Text",
+          "name": "Universal-Streaming",
+          "price": 14.554199406687523,
+          "group_value": "577378",
+          "quantity": 0.9702799604458349,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 1.0966666666666667,
+          "group_value": "577378",
+          "quantity": 0.5483333333333333,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-haiku-4-5-20251001_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-haiku-4-5-20251001",
+          "price": 17.2369,
+          "group_value": "577378",
+          "quantity": 0.172369,
+          "region": "US"
+        },
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 0.8373,
+          "group_value": "577378",
+          "quantity": 0.002791,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-haiku-4-5-20251001_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-haiku-4-5-20251001",
+          "price": 13.348,
+          "group_value": "577378",
+          "quantity": 0.026696,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-sonnet-4-6_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-sonnet-4-6",
+          "price": 5.07,
+          "group_value": "577378",
+          "quantity": 0.00338,
+          "region": "US"
+        },
+        {
+          "id": "e95dac15-5306-458b-a979-d351af209462",
+          "category": "Speech-to-Text",
+          "name": "Universal-3 Pro",
+          "price": 8.225000000000001,
+          "group_value": "577378",
+          "quantity": 0.3916666666666667,
+          "region": "US"
+        },
+        {
+          "id": "c7c7c8e3-71ef-4a21-bf8d-c599a0413f31",
+          "category": "Streaming Speech-to-Text",
+          "name": "Streaming",
+          "price": 0.11275982380011555,
+          "group_value": "577378",
+          "quantity": 0.00250577386222479,
+          "region": "US"
+        },
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 4.893847,
+          "group_value": "577378",
+          "quantity": 0.010875215555555555,
+          "region": "US"
+        }
+      ]
+    },
+    {
+      "start_timestamp": "2026-06-05T00:00:00.000Z",
+      "end_timestamp": "2026-06-06T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": []
+    },
+    {
+      "start_timestamp": "2026-06-06T00:00:00.000Z",
+      "end_timestamp": "2026-06-07T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": []
+    },
+    {
+      "start_timestamp": "2026-06-07T00:00:00.000Z",
+      "end_timestamp": "2026-06-08T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": []
+    },
+    {
+      "start_timestamp": "2026-06-08T00:00:00.000Z",
+      "end_timestamp": "2026-06-09T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": [
+        {
+          "id": "b477f3ec-9391-4a40-813b-987ebdb9c973_claude-haiku-4-5-20251001_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-haiku-4-5-20251001",
+          "price": 0.2864,
+          "group_value": "1884534",
+          "quantity": 0.002864,
+          "region": "US"
+        },
+        {
+          "id": "a540fa73-d586-46bd-9809-9a9b36dd9b1f_claude-haiku-4-5-20251001_US_all",
+          "category": "LLM Gateway",
+          "name": "claude-haiku-4-5-20251001",
+          "price": 0.783,
+          "group_value": "1884534",
+          "quantity": 0.001566,
+          "region": "US"
+        },
+        {
+          "id": "c7c7c8e3-71ef-4a21-bf8d-c599a0413f31",
+          "category": "Streaming Speech-to-Text",
+          "name": "Streaming",
+          "price": 195.35711923998733,
+          "group_value": "1884534",
+          "quantity": 4.341269316444163,
+          "region": "US"
+        },
+        {
+          "id": "bed9c56f-8120-46ef-a2ca-e42d1575d169",
+          "category": "Streaming Speech-to-Text",
+          "name": "Speaker Labels",
+          "price": 7.160652686996691,
+          "group_value": "1884534",
+          "quantity": 0.5967210572497244,
+          "region": "US"
+        }
+      ]
+    },
+    {
+      "start_timestamp": "2026-06-09T00:00:00.000Z",
+      "end_timestamp": "2026-06-10T00:00:00.000Z",
+      "total": 0.0,
+      "line_items": [
+        {
+          "id": "df3075a5-a470-4ba1-9e45-8432a2fec09f",
+          "category": "Speech-to-Text",
+          "name": "Universal",
+          "price": 11.266666666666667,
+          "group_value": "1884534",
+          "quantity": 0.7511111111111112,
+          "region": "US"
+        },
+        {
+          "id": "8e447f9d-b2eb-4860-9881-49869e5c56f2",
+          "category": "Speech Understanding",
+          "name": "Auto Chapters",
+          "price": 1.2533333333333334,
+          "group_value": "1884534",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "8584277b-dfe6-46e2-96aa-3829042e37a5",
+          "category": "Speech Understanding",
+          "name": "Entity Detection",
+          "price": 1.2533333333333334,
+          "group_value": "1884534",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "e002ac18-2888-4204-af2f-ab6c6bece24a",
+          "category": "Speech Understanding",
+          "name": "Key Phrases",
+          "price": 0.15666666666666668,
+          "group_value": "1884534",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "734606d5-cb76-4435-bcab-769b4dfd71c2",
+          "category": "Speech Understanding",
+          "name": "Sentiment Analysis",
+          "price": 0.31333333333333335,
+          "group_value": "1884534",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "ddb69cce-d4ca-4913-a7fe-faa4f968d531",
+          "category": "Speech-to-Text",
+          "name": "Speaker Diarization",
+          "price": 0.31333333333333335,
+          "group_value": "1884534",
+          "quantity": 0.15666666666666668,
+          "region": "US"
+        },
+        {
+          "id": "c7c7c8e3-71ef-4a21-bf8d-c599a0413f31",
+          "category": "Streaming Speech-to-Text",
+          "name": "Streaming",
+          "price": 0.12505100345000528,
+          "group_value": "1884534",
+          "quantity": 0.002778911187777895,
+          "region": "US"
+        },
+        {
+          "id": "9744c9a9-97e4-4fae-98f4-fda3161d73d2",
+          "category": "Voice Agent",
+          "name": "Voice Agent API",
+          "price": 301.631283875,
+          "group_value": "1884534",
+          "quantity": 0.6702917419444444,
+          "region": "US"
+        }
+      ]
+    }
+  ]
+}

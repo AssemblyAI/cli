@@ -1,0 +1,53 @@
+{
+  "id": null,
+  "choices": [
+    {
+      "finish_reason": "end_turn",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "PONG",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": null
+      }
+    }
+  ],
+  "created": null,
+  "model": null,
+  "object": null,
+  "moderation": null,
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "completion_tokens": null,
+    "prompt_tokens": null,
+    "total_tokens": 22,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "prompt_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      }
+    },
+    "input_tokens": 16,
+    "output_tokens": 6
+  },
+  "request": {
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 16
+  },
+  "request_id": "0554b22b-7ea3-4e28-8306-8aeee83ca384",
+  "response_time": 1030392710,
+  "llm_status_code": 200
+}
