@@ -40,6 +40,18 @@ uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=100    
 uv run python scripts/mutation_gate.py origin/main                                       # mutation gate
 ```
 
+The gate is diff-scoped, so code predating it is never mutation-tested. To audit
+existing code (or a whole module) against the same bar, `scripts/mutation_sweep.py`
+reuses the gate's engine over *every* line of the files you name (or the whole
+package). Refresh coverage first, and pass `--timeout` to that pytest step — the
+default suite has no per-test timeout (it's opt-in; see `pyproject.toml`), so a
+deadlocked test would wedge the run instead of failing fast:
+
+```sh
+uv run pytest -q -n auto --timeout=60 --cov=aai_cli --cov-branch --cov-context=test --cov-report=
+uv run python scripts/mutation_sweep.py aai_cli/config.py   # or omit paths for the whole package
+```
+
 ### Test markers
 
 The default suite **excludes** three slow/credentialed marker sets — `pyproject.toml`'s `addopts` carries `-m "not e2e and not install and not install_script"`, so a bare `pytest` matches what `check.sh` gates. An explicit command-line `-m` overrides it for the opt-in runs:
