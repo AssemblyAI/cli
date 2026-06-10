@@ -25,4 +25,4 @@ def test_render_steps_colors_status() -> None:
     assert "installed" in out
     assert "failed" in out
     assert "\x1b[1;32m" in out  # aai.success (bold green) → "installed"
-    assert "\x1b[1;31m" in out  # aai.error (bold red) → "failed"
+    assert "\x1b[1;38;2;240;68;56m" in out  # aai.error (bold brand red #F04438) → "failed"
