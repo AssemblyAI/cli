@@ -41,16 +41,21 @@ repos:
 
   - repo: local
     hooks:
+      # Run through `uv run --frozen` so tests resolve the LOCKED dependency
+      # versions (uv.lock), not whatever `pip install -e .` happened to pull. The
+      # byte-exact `--help` snapshots are pinned to the locked deps (e.g. the
+      # assemblyai SDK's SpeechModel enum); an unpinned `python -m pytest` breaks
+      # them the moment an upstream release adds a value.
       - id: pytest
         name: pytest
-        entry: python -m pytest -q -m "not e2e"
+        entry: uv run --frozen python -m pytest -q -m "not e2e"
         language: system
         types: [python]
         pass_filenames: false
         always_run: true
       - id: pytest-e2e
         name: pytest-e2e (real API; skips without ASSEMBLYAI_API_KEY + kokoro)
-        entry: python -m pytest -q -m e2e
+        entry: uv run --frozen python -m pytest -q -m e2e
         language: system
         types: [python]
         pass_filenames: false
