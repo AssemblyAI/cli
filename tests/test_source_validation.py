@@ -72,7 +72,9 @@ def test_transcribe_directory_source_fails_before_credentials(mocker, tmp_path):
     tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", str(tmp_path)])
     assert result.exit_code == 2
-    assert f"Not a file: {tmp_path}" in result.output
+    # Rich may wrap the long tmp path mid-message; compare on unwrapped text.
+    unwrapped = " ".join(result.output.split())
+    assert f"Not a file: {tmp_path}" in unwrapped
     assert "starting browser login" not in result.output
     tx.assert_not_called()
 
