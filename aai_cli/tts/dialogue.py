@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from aai_cli.errors import UsageError
 
 # A rendered transcript line: "Speaker A: text". The id is a non-space run; the
 # colon may be followed by a single space (label-only lines can lack trailing text).
@@ -60,3 +63,56 @@ def parse_segments(text: str) -> list[Segment]:
         else:
             merged.append(turn)
     return [turn for turn in merged if turn.text]
+
+
+DEFAULT_VOICE_ROTATION = ("jane", "michael", "mary", "paul", "eve", "george")
+
+
+def parse_voice_overrides(values: list[str]) -> tuple[str | None, dict[str, str]]:
+    """Split repeatable ``--voice`` values into ``(bare_voice, {speaker_id: voice})``.
+
+    A value containing ``=`` is a ``SPEAKER=VOICE`` mapping (ids casefolded so the
+    match is case-insensitive); a bare value sets the single-voice default, last
+    one wins. Raises ``UsageError`` on a malformed pair (empty side).
+    """
+    bare: str | None = None
+    overrides: dict[str, str] = {}
+    for value in values:
+        if "=" in value:
+            speaker, _, voice = value.partition("=")
+            speaker, voice = speaker.strip(), voice.strip()
+            if not speaker or not voice:
+                raise UsageError(
+                    f"Invalid --voice mapping {value!r}.",
+                    suggestion="Use SPEAKER=VOICE, e.g. --voice A=jane.",
+                )
+            overrides[speaker.casefold()] = voice
+        elif value.strip():
+            bare = value.strip()
+    return bare, overrides
+
+
+def assign_voices(
+    segments: list[Segment],
+    rotation: Sequence[str],
+    overrides: dict[str, str],
+) -> tuple[list[tuple[str, str]], dict[str, str]]:
+    """Resolve each segment to ``(voice, text)`` and return the id→voice map.
+
+    A speaker uses its override if present, else the next rotation voice in
+    first-appearance order (wrapping). Overrides do not consume rotation slots.
+    The returned map is ordered by first appearance.
+    """
+    id_to_voice: dict[str, str] = {}
+    next_index = 0
+    resolved: list[tuple[str, str]] = []
+    for segment in segments:
+        if segment.speaker_id not in id_to_voice:
+            override = overrides.get(segment.speaker_id.casefold())
+            if override is not None:
+                id_to_voice[segment.speaker_id] = override
+            else:
+                id_to_voice[segment.speaker_id] = rotation[next_index % len(rotation)]
+                next_index += 1
+        resolved.append((id_to_voice[segment.speaker_id], segment.text))
+    return resolved, id_to_voice

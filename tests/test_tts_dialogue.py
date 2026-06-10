@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from aai_cli.errors import UsageError
 from aai_cli.tts import dialogue
 
 
@@ -51,3 +54,45 @@ def test_parse_label_only_line_with_continuation():
         ("A", "continuation text"),
         ("B", "Ok."),
     ]
+
+
+def test_parse_voice_overrides_splits_bare_and_mapped():
+    bare, overrides = dialogue.parse_voice_overrides(["A=vera", "mary", "B=paul"])
+    assert bare == "mary"
+    assert overrides == {"a": "vera", "b": "paul"}  # ids casefolded
+
+
+def test_parse_voice_overrides_bare_last_wins_and_empty_default():
+    assert dialogue.parse_voice_overrides([]) == (None, {})
+    assert dialogue.parse_voice_overrides(["jane", "mary"]) == ("mary", {})
+
+
+def test_parse_voice_overrides_rejects_malformed_pair():
+    for bad in ["=vera", "A=", "  =  "]:
+        with pytest.raises(UsageError):
+            dialogue.parse_voice_overrides([bad])
+
+
+def test_assign_voices_rotates_in_first_appearance_order():
+    segs = [dialogue.Segment(s, "x") for s in ("A", "B", "A", "C")]
+    resolved, mapping = dialogue.assign_voices(segs, ["jane", "michael", "mary"], {})
+    assert [v for v, _ in resolved] == ["jane", "michael", "jane", "mary"]
+    assert mapping == {"A": "jane", "B": "michael", "C": "mary"}
+
+
+def test_assign_voices_wraps_past_rotation_length():
+    segs = [dialogue.Segment(s, "x") for s in ("A", "B", "C")]
+    resolved, _ = dialogue.assign_voices(segs, ["jane", "michael"], {})
+    assert [v for v, _ in resolved] == ["jane", "michael", "jane"]
+
+
+def test_assign_voices_override_beats_rotation_without_consuming_a_slot():
+    segs = [dialogue.Segment(s, "x") for s in ("A", "B")]
+    # A is overridden, so B still gets the FIRST rotation voice, not the second.
+    resolved, mapping = dialogue.assign_voices(segs, ["jane", "michael"], {"a": "vera"})
+    assert [v for v, _ in resolved] == ["vera", "jane"]
+    assert mapping == {"A": "vera", "B": "jane"}
+
+
+def test_default_rotation_is_the_confirmed_working_voices():
+    assert dialogue.DEFAULT_VOICE_ROTATION == ("jane", "michael", "mary", "paul", "eve", "george")
