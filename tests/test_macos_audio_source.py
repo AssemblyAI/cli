@@ -54,6 +54,7 @@ def test_build_helper_requires_swiftc(monkeypatch):
     with pytest.raises(CLIError) as exc:
         macos.build_helper()
     assert "xcode-select" in (exc.value.suggestion or "")
+    assert exc.value.exit_code == 2
 
 
 def test_build_helper_compiles_to_cache(monkeypatch, tmp_path):
@@ -65,6 +66,7 @@ def test_build_helper_compiles_to_cache(monkeypatch, tmp_path):
 
     def fake_run(cmd, **kwargs):
         seen["cmd"] = cmd
+        seen["kwargs"] = kwargs
         Path(cmd[-1]).write_bytes(b"binary")
         return types.SimpleNamespace(returncode=0, stderr="", stdout="")
 
@@ -73,6 +75,51 @@ def test_build_helper_compiles_to_cache(monkeypatch, tmp_path):
     assert helper.read_bytes() == b"binary"
     assert "-parse-as-library" in seen["cmd"]
     assert "ScreenCaptureKit" in seen["cmd"]
+    # stderr/stdout are captured as text, and a non-zero compile is inspected (not
+    # raised): check must stay False so build_helper surfaces its own error.
+    assert seen["kwargs"]["capture_output"] is True
+    assert seen["kwargs"]["text"] is True
+    assert seen["kwargs"]["check"] is False
+
+
+def test_build_helper_creates_missing_cache_parents(monkeypatch, tmp_path):
+    # The cache dir's parents may not exist yet; build_helper must create the whole
+    # chain (cache_dir.mkdir parents=True), not just the leaf.
+    nested = tmp_path / "missing1" / "missing2"  # parents do not exist
+    monkeypatch.setattr(macos.sys, "platform", "darwin")
+    monkeypatch.setattr(macos.shutil, "which", lambda _tool: "/usr/bin/swiftc")
+    monkeypatch.setattr(macos, "_resource_bytes", lambda: b"swift source")
+    monkeypatch.setattr(macos, "user_cache_path", lambda _app: nested)
+    monkeypatch.setattr(
+        macos.subprocess,
+        "run",
+        lambda cmd, **k: (
+            Path(cmd[-1]).write_bytes(b"bin"),
+            types.SimpleNamespace(returncode=0, stderr="", stdout=""),
+        )[1],
+    )
+    helper = macos.build_helper()
+    assert helper.read_bytes() == b"bin"
+
+
+def test_build_helper_tolerates_existing_cache_dirs(monkeypatch, tmp_path):
+    # A rebuild (new source digest) runs with the cache dir and module cache already
+    # present, so their mkdirs must tolerate existing dirs (exist_ok=True).
+    monkeypatch.setattr(macos.sys, "platform", "darwin")
+    monkeypatch.setattr(macos.shutil, "which", lambda _tool: "/usr/bin/swiftc")
+    monkeypatch.setattr(macos, "_resource_bytes", lambda: b"swift source")
+    monkeypatch.setattr(macos, "user_cache_path", lambda _app: tmp_path)
+    (tmp_path / "macos-system-audio" / "swift-module-cache").mkdir(parents=True)  # pre-exist
+    monkeypatch.setattr(
+        macos.subprocess,
+        "run",
+        lambda cmd, **k: (
+            Path(cmd[-1]).write_bytes(b"bin"),
+            types.SimpleNamespace(returncode=0, stderr="", stdout=""),
+        )[1],
+    )
+    helper = macos.build_helper()  # must not raise FileExistsError on the mkdirs
+    assert helper.read_bytes() == b"bin"
 
 
 def test_build_helper_reuses_cached_binary(monkeypatch, tmp_path):
@@ -106,6 +153,7 @@ def test_build_helper_compile_failure_surfaces_stderr(monkeypatch, tmp_path):
     with pytest.raises(CLIError) as exc:
         macos.build_helper()
     assert exc.value.error_type == "mac_system_audio_unavailable"
+    assert exc.value.exit_code == 2
     assert exc.value.suggestion == "compile broke"
 
 
@@ -140,9 +188,11 @@ def test_cleanup_process_kills_after_wait_timeout():
         def __init__(self):
             super().__init__(stdout=b"")
             self.waits = 0
+            self.wait_timeouts = []
 
         def wait(self, timeout=None):
             self.waits += 1
+            self.wait_timeouts.append(timeout)
             if self.waits == 1:
                 raise macos.subprocess.TimeoutExpired("helper", timeout or 0.0)
             return self.returncode
@@ -152,6 +202,8 @@ def test_cleanup_process_kills_after_wait_timeout():
     macos._cleanup_process(proc, proc.stdout, completed=True)
     assert proc.killed is True
     assert proc.waits == 2
+    assert proc.terminated is False  # completed=True -> the `and` guard skips terminate()
+    assert proc.wait_timeouts == [2.0, 2.0]  # both waits use the 2s backstop
 
 
 def test_raise_helper_exit_handles_clean_eof():
@@ -166,6 +218,7 @@ def test_returncode_detail_names_signals():
     assert macos._returncode_detail(-5) == "SIGTRAP (-5)"
     assert macos._returncode_detail(-99999) == "signal 99999 (-99999)"
     assert macos._returncode_detail(2) == "exit 2"
+    assert macos._returncode_detail(0) == "exit 0"  # 0 is a clean exit (pins `>= 0`)
     assert macos._returncode_detail(None) == "unknown exit"
 
 
@@ -201,6 +254,12 @@ def test_source_starts_helper_and_yields_pcm(tmp_path):
     assert events == ["open"]
     assert "--system-only" in commands[0]
     assert procs[0].terminated is True
+    # On a non-completed teardown the helper's stderr pipe is closed too (pins the
+    # `proc.stderr is not None` guard against an `is None` flip that would leak it).
+    assert procs[0].stderr is not None and procs[0].stderr.closed is True
+    # chunk-frames is ~100 ms of frames at the target rate (sample_rate // 10).
+    cmd = commands[0]
+    assert cmd[cmd.index("--chunk-frames") + 1] == str(src.sample_rate // 10)
 
 
 def test_source_start_failure_is_cli_error(tmp_path):
