@@ -1,37 +1,82 @@
-/* THEME TOKENS: edit this block first for monotone colors, spacing, radii, and width. */
+/* THEME TOKENS — AssemblyAI design system. Edit this block first to retheme.
+   Brand fonts hotlink from assemblyai.com (CORS-open) with system fallbacks. */
+@font-face {
+  font-family: "Oceanic Text";
+  src: url("https://www.assemblyai.com/_aai/fonts/rebrand/OceanicText-Regular.otf")
+    format("opentype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "UN 11ST";
+  src: url("https://www.assemblyai.com/_aai/fonts/rebrand/UN_11ST_Regular.woff2")
+    format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "UN 11ST";
+  src: url("https://www.assemblyai.com/_aai/fonts/rebrand/UN_11ST_Bold.woff2")
+    format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Modern Gothic Mono";
+  src: url("https://www.assemblyai.com/_aai/fonts/rebrand/ModernGothicMono-Regular.woff2")
+    format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.12 0 0);
-  --card: oklch(1 0 0);
-  --primary: oklch(0.12 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0 0);
-  --secondary-foreground: oklch(0.38 0 0);
-  --muted-foreground: oklch(0.58 0 0);
-  --border: oklch(0.9 0 0);
-  --shadow-focus:
-    0 0 0 1px oklch(0 0 0 / 0.08), 0 2px 8px -2px oklch(0 0 0 / 0.08);
-  --color-bg: var(--background);
-  --color-surface: var(--card);
-  --color-text: var(--foreground);
-  --color-text-muted: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-accent: var(--primary);
-  --color-accent-contrast: var(--primary-foreground);
-  --color-user: oklch(0.42 0 0);
-  --color-success: var(--foreground);
-  --color-success-soft: var(--secondary);
-  --color-danger: var(--foreground);
-  --color-danger-strong: var(--foreground);
-  --color-danger-soft: var(--secondary);
-  --color-neutral: var(--secondary-foreground);
-  --color-neutral-soft: var(--secondary);
+  /* Brand fonts */
+  --font-display: "Oceanic Text", Georgia, serif;
+  --font-body: "UN 11ST", system-ui, sans-serif;
+  --font-mono: "Modern Gothic Mono", "JetBrains Mono", monospace;
+
+  /* Cobolt (brand purple — the only accent) */
+  --color-cobolt-500: #3923c7;
+  --color-cobolt-300: #887bdd;
+  --color-cobolt-200: #b0a7e9;
+  --color-cobolt-100: #d7d3f4;
+
+  /* Warm neutrals */
+  --color-black-500: #1d1b16;
+  --color-black-400: #4a4945;
+  --color-black-300: #777673;
+  --color-white-100: #ffffff;
+  --color-white-200: #fdfcf8;
+  --color-white-300: #f5f3eb;
+  --color-neutral-100: #ecebe5;
+  --color-neutral-200: #dad7cb;
+  --color-neutral-300: #c7c3b2;
+
+  /* Blush (error highlight only) */
+  --color-blush-200: #f4d4d0;
+  --color-blush-500: #e39389;
+
+  /* Semantic aliases — downstream rules use these */
+  --color-bg: var(--color-white-200);
+  --color-surface: var(--color-white-100);
+  --color-text: var(--color-black-400);
+  --color-text-dark: var(--color-black-500);
+  --color-text-muted: var(--color-black-300);
+  --color-border: var(--color-neutral-300);
+  --color-accent: var(--color-cobolt-500);
+  --color-accent-hover: var(--color-cobolt-300);
+  --color-accent-contrast: var(--color-white-100);
+  --color-user: var(--color-black-400);
+  --color-connected: var(--color-black-500);
+
+  --shadow-focus: 0 0 0 3px var(--color-cobolt-100);
+
+  --radius-cta: 4px;
   --radius-control: 8px;
-  --radius-pill: 999px;
-  --space-page-block: 48px;
-  --space-page-inline: 16px;
+  --radius-panel: 12px;
+  --radius-pill: 9999px;
+  --space-page-block: 64px;
+  --space-page-inline: 24px;
   --content-width: 720px;
 }
 
@@ -46,10 +91,22 @@ body {
   padding: var(--space-page-block) var(--space-page-inline);
   background: var(--color-bg);
   color: var(--color-text);
-  font: 15px/1.6 var(--font-sans);
+  font: 16px/1.3 var(--font-body);
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--color-text-dark);
 }
 
 button {
@@ -63,20 +120,76 @@ button {
   margin: 0 auto;
 }
 
+/* BRAND CHROME */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 20px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-cta);
+  color: var(--color-black-400);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-feature-settings: "ss09" 1;
+}
+
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .page-title {
-  margin: 0 0 4px;
-  font-size: 22px;
-  line-height: 1.25;
+  margin: 0 0 12px;
+  font-size: 48px;
+  letter-spacing: -2.4px;
 }
 
 .page-subtitle {
-  max-width: 68ch;
+  max-width: 60ch;
   margin: 0;
+  font-size: 18px;
   color: var(--color-text-muted);
+}
+
+.page-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.footer-link {
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+  color: var(--color-accent-hover);
 }
 
 .control-bar {
@@ -91,22 +204,25 @@ button {
   --button-bg: var(--color-accent);
   --button-fg: var(--color-accent-contrast);
   display: inline-flex;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-cta);
   background: var(--button-bg);
   color: var(--button-fg);
   cursor: pointer;
+  font-family: var(--font-mono);
   font-size: 14px;
-  font-weight: 600;
-  padding: 0 20px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  padding: 0 18px;
   white-space: nowrap;
+  transition: background-color 0.2s ease;
 }
 
 .button:hover:not(:disabled) {
-  filter: brightness(0.96);
+  --button-bg: var(--color-accent-hover);
 }
 
 .button:focus-visible {
@@ -114,17 +230,29 @@ button {
   outline: none;
 }
 
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .connection-button[data-state="connected"] {
-  --button-bg: var(--color-danger-strong);
+  --button-bg: var(--color-connected);
+}
+
+.connection-button[data-state="connected"]:hover:not(:disabled) {
+  --button-bg: var(--color-black-400);
 }
 
 /* STATUS STATES */
 .status-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-neutral-300);
   border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 5px 12px;
+  background: var(--color-neutral-200);
+  color: var(--color-black-300);
+  font-size: 14px;
+  padding: 5px 14px;
 }
 
 .status-pill:empty {
@@ -132,18 +260,21 @@ button {
 }
 
 .status-pill[data-state="live"] {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+  border-color: var(--color-cobolt-200);
+  background: var(--color-cobolt-100);
+  color: var(--color-cobolt-500);
 }
 
 .status-pill[data-state="idle"] {
-  background: var(--color-neutral-soft);
-  color: var(--color-neutral);
+  border-color: var(--color-neutral-300);
+  background: var(--color-neutral-200);
+  color: var(--color-black-300);
 }
 
 .status-pill[data-state="error"] {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
+  border-color: var(--color-blush-500);
+  background: var(--color-blush-200);
+  color: var(--color-black-500);
 }
 
 /* CONVERSATION VIEW */
@@ -167,7 +298,10 @@ button {
 }
 
 .turn-speaker {
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
 }
 
 .conversation-turn[data-speaker="you"] .turn-speaker {
@@ -178,9 +312,14 @@ button {
   color: var(--color-accent);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   :root {
-    --space-page-block: 32px;
+    --space-page-block: 40px;
+  }
+
+  .page-title {
+    font-size: 30px;
+    letter-spacing: -1.5px;
   }
 
   .button,

@@ -67,6 +67,14 @@ dev = [
     "pytest-mock>=3.14.0",
     "pytest-randomly>=3.16.0",
     "pytest-xdist>=3.6.0",
+    # Hermeticity guards beyond order-randomization (pytest-randomly):
+    #   pytest-socket blocks real network in the unit suite so an unmocked SDK/HTTP
+    #     call fails loudly instead of silently hitting the API (see addopts below);
+    #   time-machine lets tests freeze the clock, complementing the TZ pin in
+    #     tests/conftest.py so time rendering is deterministic across machines.
+    # Floors sit at the second-newest release so safe-chain's min-age gate can resolve.
+    "pytest-socket>=0.7.0",
+    "time-machine>=3.1.0",
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
     "mypy>=2.1.0",
@@ -106,6 +114,14 @@ exclude = ["**/__pycache__", "**/*.pyc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Block real network in every pytest invocation (pytest-socket). The unit suite is
+# fully mocked, so an accidental real SDK/HTTP call now raises SocketBlockedError
+# instead of silently reaching the API — hard-enforcing the unit/e2e split we keep
+# by convention. --allow-unix-socket keeps AF_UNIX (used by some libs) working. Tests
+# that bind a loopback server (OAuth callback, dev server, tunnel) opt back in with
+# `@pytest.mark.allow_hosts([...])`. The e2e/install suites drive the CLI as a
+# subprocess, whose sockets this in-process patch never sees, so they're unaffected.
+addopts = "--disable-socket --allow-unix-socket"
 # Treat warnings as errors so a deprecation or resource leak introduced in a change
 # fails the build instead of scrolling past. Listed-later filters take precedence, so
 # the targeted ignores below override the blanket `error`.

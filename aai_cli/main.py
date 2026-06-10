@@ -95,11 +95,21 @@ class _OrderedGroup(TyperGroup):
         return super().parse_args(ctx, args)
 
 
-# Typer renders option flags and command names in "bold cyan" by default; retint
-# both to the brand accent (the logo blue) so the help screen matches the rest of
-# the CLI. Set before the app renders any help.
+# Typer's default help palette is a rainbow: option flags/command names in "bold cyan",
+# the short switch (e.g. -p) in "bold green", and the type metavar (e.g. TEXT) in "bold
+# yellow". Retint the whole panel into the Cobolt brand family so help reads as one
+# monochrome hierarchy: flags and command names in the bold primary accent, their short
+# aliases matching, and the type metavar in the lighter secondary Cobolt so it recedes.
+# Set before the app renders any help.
 rich_utils.STYLE_OPTION = f"bold {theme.BRAND}"
 rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {theme.BRAND}"
+rich_utils.STYLE_SWITCH = f"bold {theme.BRAND}"
+rich_utils.STYLE_METAVAR = theme.ACCENT
+# The usage line ("Usage: aai [OPTIONS] COMMAND [ARGS]...") defaults to yellow. Keep the
+# program name in the bold brand accent so it matches command names elsewhere, but drop
+# the "Usage:" label and arg spec to muted warm gray — it's boilerplate that should recede.
+rich_utils.STYLE_USAGE = theme.MUTED
+rich_utils.STYLE_USAGE_COMMAND = f"bold {theme.BRAND}"
 
 # Typer's built-in `--show-completion` help is long enough to wrap several lines in
 # the options panel. Trim it so it fits on fewer rows. The OptionInfo objects live on

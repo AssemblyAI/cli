@@ -2,12 +2,12 @@ const APP_CONFIG = {
   sampleUrl: "https://assembly.ai/wildfires.mp3",
   pollIntervalMs: 2000,
   speakerPalette: [
-    "#171717",
-    "#525252",
-    "#737373",
-    "#262626",
-    "#404040",
-    "#a3a3a3",
+    "#3923c7",
+    "#1d1b16",
+    "#614fd2",
+    "#4a4945",
+    "#887bdd",
+    "#777673",
   ],
 };
 
