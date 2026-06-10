@@ -84,14 +84,21 @@ def spawn(
     used to capture cloudflared's output for URL discovery. Without it, stdio is inherited.
     """
     if log_path is not None:
-        return subprocess.Popen(
-            command,
-            cwd=cwd,
-            env=env,
-            stdout=log_path.open("w"),
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        # The child gets its own dup of the fd once Popen returns, so close the
+        # parent's handle straight away instead of leaking it for the (long-lived)
+        # process's whole lifetime.
+        log = log_path.open("w")
+        try:
+            return subprocess.Popen(
+                command,
+                cwd=cwd,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        finally:
+            log.close()
     return subprocess.Popen(command, cwd=cwd, env=env, text=True)
 
 

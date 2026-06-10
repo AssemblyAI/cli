@@ -220,9 +220,12 @@ def test_spawn_writes_to_log_when_given(monkeypatch, tmp_path):
     runner.spawn(["cloudflared"], cwd=tmp_path, log_path=log)
     assert captured["kwargs"]["stderr"] is runner.subprocess.STDOUT
     assert captured["kwargs"]["text"] is True
-    # stdout is an open writable handle to the log file
-    assert captured["kwargs"]["stdout"].writable()
-    captured["kwargs"]["stdout"].close()
+    stdout = captured["kwargs"]["stdout"]
+    # spawn writes the child's stdout to the log file...
+    assert stdout.name == str(log)
+    # ...and closes the parent's handle once Popen returns (the child keeps its dup),
+    # so the file descriptor isn't leaked for the process's whole lifetime.
+    assert stdout.closed is True
 
 
 def test_run_server_passes_command_and_env(monkeypatch):
