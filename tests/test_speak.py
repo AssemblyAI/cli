@@ -129,3 +129,73 @@ def test_human_mode_keeps_stdout_clean(monkeypatch, fake_synthesize):
     assert result.exit_code == 0
     # Human summary goes to stderr; stdout stays empty (audio went to the speaker).
     assert result.stdout.strip() == ""
+
+
+from aai_cli.tts import session as tts_session
+
+
+@pytest.fixture
+def fake_dialogue(monkeypatch: pytest.MonkeyPatch):
+    calls: dict[str, object] = {}
+
+    def _fake(api_key, segments, *, language=None, sample_rate=None, connect=None, on_warning=None):
+        calls["segments"] = segments
+        calls["language"] = language
+        return tts_session.SpeakResult(
+            pcm=b"\x01\x02", sample_rate=24000, audio_duration_seconds=1.5
+        )
+
+    monkeypatch.setattr(tts_session, "synthesize_dialogue", _fake)
+    monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
+    return calls
+
+
+def test_labeled_stdin_uses_dialogue_path_with_default_rotation(fake_dialogue):
+    text = "Speaker A: Hello there.\nSpeaker B: Hi.\nSpeaker A: Bye."
+    result = runner.invoke(app, ["--sandbox", "speak"], input=text)
+    assert result.exit_code == 0
+    # Labels stripped; consecutive A turns are NOT merged (B between); voices rotate.
+    assert fake_dialogue["segments"] == [
+        ("jane", "Hello there."),
+        ("michael", "Hi."),
+        ("jane", "Bye."),
+    ]
+
+
+def test_speaker_voice_override_is_applied(fake_dialogue):
+    text = "Speaker A: One.\nSpeaker B: Two."
+    result = runner.invoke(
+        app, ["--sandbox", "speak", "--voice", "A=vera", "--voice", "B=paul"], input=text
+    )
+    assert result.exit_code == 0
+    assert fake_dialogue["segments"] == [("vera", "One."), ("paul", "Two.")]
+
+
+def test_bare_voice_in_dialogue_mode_is_ignored_with_a_note(fake_dialogue):
+    text = "Speaker A: One.\nSpeaker B: Two."
+    result = runner.invoke(app, ["--sandbox", "speak", "--voice", "mary"], input=text)
+    assert result.exit_code == 0
+    # The rotation still drives voices (bare voice ignored)...
+    assert fake_dialogue["segments"] == [("jane", "One."), ("michael", "Two.")]
+    # ...and the user is told why, pointed at the per-speaker form.
+    assert "A=NAME" in result.stderr
+
+
+def test_dialogue_json_reports_speaker_voice_map(fake_dialogue):
+    text = "Speaker A: One.\nSpeaker B: Two."
+    result = runner.invoke(app, ["--sandbox", "speak", "--json"], input=text)
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout.strip())
+    assert payload["mode"] == "multi"
+    assert payload["speakers"] == {"A": "jane", "B": "michael"}
+    assert payload["segments"] == 2
+    assert payload["sample_rate"] == 24000
+
+
+def test_unlabeled_text_still_uses_single_voice_path(fake_synthesize, monkeypatch):
+    # A bare --voice still selects the single-voice voice for ordinary prose.
+    monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(app, ["--sandbox", "speak", "Just prose.", "--voice", "mary"])
+    assert result.exit_code == 0
+    assert fake_synthesize["cfg"].voice == "mary"
+    assert fake_synthesize["cfg"].text == "Just prose."

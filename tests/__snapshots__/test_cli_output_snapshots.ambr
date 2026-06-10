@@ -653,13 +653,16 @@
    Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
   
    Plays the audio through your speakers by default, or writes a WAV with --out.
-   This feature only exists in the sandbox today — run it with --sandbox.
+   Speaker-labeled input (from 'aai transcribe --speaker-labels') is detected
+   automatically: the labels are stripped and each speaker gets a different
+   voice. This feature only exists in the sandbox today — run it with --sandbox.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --voice                TEXT     Voice id. [default: jane]                    │
+  │ --voice                TEXT     Voice id, or SPEAKER=VOICE for diarized      │
+  │                                 input (repeatable, e.g. --voice A=jane).     │
   │ --language             TEXT     Language of the text. [default: English]     │
   │ --sample-rate          INTEGER  Output sample rate in Hz. Server default if  │
   │                                 omitted.                                     │
@@ -675,10 +678,12 @@
    $ aai speak "Hello there, friend." --sandbox
    Pick a voice and language
    $ aai speak "Bonjour" --voice jane --language French --sandbox
+   Speak a diarized transcript, one voice per speaker
+   $ aai transcribe meeting.mp3 --speaker-labels | aai speak --sandbox
+   Override a speaker's voice
+   $ … | aai speak --voice A=vera --voice B=paul --sandbox
    Save to a WAV instead of playing
    $ aai speak "Hello" --out /tmp/hello.wav --sandbox
-   Speak text piped from stdin
-   $ echo "Hello" | aai speak --sandbox
   
   
   
