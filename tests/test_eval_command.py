@@ -7,6 +7,7 @@ temp manifests so the command exercises the loader end to end.
 import contextlib
 import dataclasses
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -147,7 +148,10 @@ def test_no_speech_model_leaves_speech_models_unset(tmp_path, mocker):
 def test_legacy_models_are_a_usage_error(model):
     result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model])
     assert result.exit_code == 2
-    assert "--speech-model" in result.output
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "Invalid value for '--speech-model'" in plain
 
 
 def test_speech_model_named_in_human_header(tmp_path, mocker):
