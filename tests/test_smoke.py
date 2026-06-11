@@ -102,6 +102,7 @@ def test_help_lists_commands_in_workflow_order():
         "transcribe",
         "stream",
         "agent",
+        "speak",
         "llm",
         # Setup & Tools
         "doctor",

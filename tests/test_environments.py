@@ -55,3 +55,15 @@ def test_profile_env_roundtrip():
     assert config.get_profile_env("default") is None
     config.set_profile_env("default", "sandbox000")
     assert config.get_profile_env("default") == "sandbox000"
+
+
+def test_sandbox_has_streaming_tts_host():
+    assert (
+        environments.get("sandbox000").streaming_tts_host
+        == "streaming-tts.sandbox000.assemblyai-labs.com"
+    )
+
+
+def test_production_has_no_streaming_tts_host():
+    # Empty host is the "TTS not available here" signal the speak command checks.
+    assert environments.get("production").streaming_tts_host == ""
