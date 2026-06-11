@@ -152,8 +152,12 @@ def _scaffold_report(chosen: str, target: Path, api_key: str | None) -> list[ste
     return report
 
 
-def _launch(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: bool) -> None:
-    """Start the scaffolded app on a free port and open the browser, then block."""
+def launch_app(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: bool) -> None:
+    """Start the scaffolded app on a free port and open the browser, then block.
+
+    Public (not underscore-private) because the onboarding wizard launches the
+    scaffolded app as its final step, after the remaining wizard sections have run.
+    """
     chosen_port = runner.find_free_port(port)
     url = f"http://localhost:{chosen_port}"
     if not json_mode:
@@ -182,7 +186,8 @@ def run_init(
     """Scaffold (and optionally install/launch) a template; return the target dir.
 
     `launch=False` is for callers like the onboarding wizard that must not block on a
-    running dev server — it stops after install and leaves the run command as a hint.
+    running dev server mid-flow — it stops after install and leaves the run command as
+    a hint (the wizard calls `launch_app` itself once its remaining sections are done).
     """
     if not json_mode:
         # Vercel-style banner at the top of the run. Decoration goes to stderr (data →
@@ -218,7 +223,7 @@ def run_init(
         raise typer.Exit(code=1)
 
     if launch and will_launch:
-        _launch(target, port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
+        launch_app(target, port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
     elif not json_mode:
         # Scaffolded but not launched (no key, or --no-install, or launch=False): leave the
         # user with the one command that starts their app, the way `vercel`/`supabase` sign off.
