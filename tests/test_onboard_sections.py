@@ -11,6 +11,7 @@ from aai_cli import output, transcribe_exec, transcribe_render
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState
+from aai_cli.errors import CLIError
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
 from aai_cli.onboard.sections import SectionResult, WizardContext
@@ -35,12 +36,13 @@ class _ScriptedPrompter:
         self._text = text
         self.confirm_defaults: list[bool] = []
         self.text_titles: list[str] = []
+        self.notes: list[str] = []
 
     def section(self, title: str) -> None:
         pass
 
     def note(self, message: str) -> None:
-        pass
+        self.notes.append(message)
 
     def confirm(self, title: str, *, default: bool = True) -> bool:
         self.confirm_defaults.append(default)
@@ -216,13 +218,15 @@ def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatc
         nonlocal calls
         calls += 1
         seen.update(k)
-        return Path()
+        return Path("/scaffolded/app")
 
     monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
     prompter = _ScriptedPrompter(select="audio-transcription", confirm=True)
     result = sections.build_path(prompter, ctx)
     assert result is SectionResult.DONE
     assert calls == 1
+    # The scaffold target is recorded so launch_app can start it at the end of the wizard.
+    assert ctx.scaffolded == Path("/scaffolded/app")
     # The scaffold confirmation defaults to Yes (a False mutant would change the prompt).
     assert prompter.confirm_defaults == [True]
     # Pin the exact run_init kwargs the wizard relies on (each is a mutated literal):
@@ -261,6 +265,8 @@ def test_build_path_run_init_failure(ctx: WizardContext, monkeypatch: pytest.Mon
     monkeypatch.setattr(init_cmd, "run_init", _boom)
     result = sections.build_path(_ScriptedPrompter(select="live-captions", confirm=True), ctx)
     assert result is SectionResult.FAILED
+    # Nothing scaffolded, so launch_app must have nothing to launch.
+    assert ctx.scaffolded is None
 
 
 def test_claude_code_skipped(ctx: WizardContext) -> None:
@@ -302,3 +308,86 @@ def test_claude_code_failed(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(setup_cmd, "install_skill", _failing_step)
     monkeypatch.setattr(setup_cmd, "install_cli_skill", _passing_step)
     assert sections.claude_code(_ScriptedPrompter(confirm=True), ctx) is SectionResult.FAILED
+
+
+def _spy_launch(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    """Replace init's launch_app with a recorder; returns the captured target + kwargs."""
+    captured: dict[str, object] = {}
+
+    def _fake_launch(target: Path, **k: object) -> None:
+        captured["target"] = target
+        captured.update(k)
+
+    monkeypatch.setattr(init_cmd, "launch_app", _fake_launch)
+    return captured
+
+
+def test_launch_app_skipped_when_nothing_scaffolded(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _spy_launch(monkeypatch)
+    assert sections.launch_app(_ScriptedPrompter(confirm=True), ctx) is SectionResult.SKIPPED
+    assert captured == {}
+
+
+def test_launch_app_noninteractive_hints_instead_of_blocking(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A headless run must never start a blocking dev server; it leaves the run command.
+    captured = _spy_launch(monkeypatch)
+    ctx.scaffolded = Path("/scaffolded/app")
+
+    class _RecordingNonInteractive(NonInteractivePrompter):
+        def __init__(self) -> None:
+            self.notes: list[str] = []
+
+        def note(self, message: str) -> None:
+            self.notes.append(message)
+
+    prompter = _RecordingNonInteractive()
+    assert sections.launch_app(prompter, ctx) is SectionResult.SKIPPED
+    assert captured == {}
+    assert any("cd /scaffolded/app && assembly dev" in note for note in prompter.notes)
+
+
+def test_launch_app_declined_leaves_hint(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _spy_launch(monkeypatch)
+    ctx.scaffolded = Path("/scaffolded/app")
+    prompter = _ScriptedPrompter(confirm=False)
+    assert sections.launch_app(prompter, ctx) is SectionResult.SKIPPED
+    assert captured == {}
+    assert any("cd /scaffolded/app && assembly dev" in note for note in prompter.notes)
+
+
+@pytest.mark.parametrize("uv", [True, False])
+def test_launch_app_launches_scaffolded_app(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch, uv: bool
+) -> None:
+    captured = _spy_launch(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.has_uv", lambda: uv)
+    ctx.scaffolded = Path("/scaffolded/app")
+    prompter = _ScriptedPrompter(confirm=True)
+    assert sections.launch_app(prompter, ctx) is SectionResult.DONE
+    # Launching defaults to Yes (an Enter keypress starts the server).
+    assert prompter.confirm_defaults == [True]
+    # Pin the exact launch kwargs (each is a mutable literal): the default port, the
+    # detected runner, a browser that actually opens, and the wizard's human output mode.
+    assert captured["target"] == Path("/scaffolded/app")
+    assert captured["port"] == 3000
+    assert captured["use_uv"] is uv
+    assert captured["no_open"] is False
+    assert captured["json_mode"] is False
+
+
+@pytest.mark.parametrize("exc", [typer.Exit(code=1), CLIError("boom")])
+def test_launch_app_failure(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch, exc: Exception
+) -> None:
+    def _boom(*a: object, **k: object) -> None:
+        raise exc
+
+    monkeypatch.setattr(init_cmd, "launch_app", _boom)
+    ctx.scaffolded = Path("/scaffolded/app")
+    assert sections.launch_app(_ScriptedPrompter(confirm=True), ctx) is SectionResult.FAILED
