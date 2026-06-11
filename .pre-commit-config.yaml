@@ -24,7 +24,7 @@ repos:
   # Lint the GitHub Actions workflows themselves (the jobs in ci.yml). Both hooks
   # self-scope to .github/workflows/. actionlint-py is the pip-packaged wrapper
   # (bundles the actionlint binary; no Go/Docker), and brings shellcheck-py so
-  # embedded `run:` shell is shellcheck'd the same way check.sh checks install.sh.
+  # embedded `run:` shell is shellcheck'd the same way check.sh checks scripts/check.sh.
   - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
     rev: v1.7.12.24
     hooks:
@@ -48,11 +48,10 @@ repos:
       # them the moment an upstream release adds a value.
       - id: pytest
         name: pytest
-        # Mirror check.sh: exclude both e2e (real API) and install_script (builds a
-        # wheel + runs install.sh / pip --user). install_script has its own dedicated
-        # "package install — real" CI jobs; running it here is slow and breaks under
-        # the locked .venv (the user-site install can't import aai_cli).
-        entry: uv run --frozen python -m pytest -q -m "not e2e and not install_script"
+        # Mirror check.sh: exclude both e2e (real API) and install (real
+        # init-template dependency installs — slow, needs network). Running either
+        # here would be slow and would reach the network under the locked .venv.
+        entry: uv run --frozen python -m pytest -q -m "not e2e and not install"
         language: system
         types: [python]
         pass_filenames: false

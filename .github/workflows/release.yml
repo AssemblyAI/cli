@@ -1,0 +1,159 @@
+name: Release
+
+# Cut a release by pushing a vX.Y.Z tag (after the version-bump PR merges).
+# Builds the arm64 macOS bottle, publishes it to the tag's GitHub Release, and
+# opens a formula PR (url + sha256 + bottle block) for a maintainer to merge.
+on:
+  push:
+    tags: ["v*"]
+  # Manual dry-run: build the bottle for an existing tag WITHOUT publishing.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build a bottle for (dry-run; no publish)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bottle:
+    name: build arm64 bottle (macOS)
+    runs-on: macos-14
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false # this job doesn't push
+      # Homebrew/actions is a monorepo (setup-homebrew is a subpath); pin it to a
+      # commit SHA like every other action here — Dependabot keeps it current.
+      - uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1
+
+      - name: Resolve tag + source sha256
+        id: meta
+        env:
+          # Pass via env (not inline ${{ }}) to satisfy zizmor template-injection.
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$REF_NAME}"
+          url="https://github.com/${REPO}/archive/refs/tags/${tag}.tar.gz"
+          curl -fL "$url" -o source.tar.gz
+          sha="$(shasum -a 256 source.tar.gz | awk '{print $1}')"
+          {
+            echo "tag=${tag}"
+            echo "source_sha=${sha}"
+            echo "root_url=https://github.com/${REPO}/releases/download/${tag}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pin the formula to the release tag
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          SOURCE_SHA: ${{ steps.meta.outputs.source_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, pathlib
+          tag, sha, repo = os.environ["TAG"], os.environ["SOURCE_SHA"], os.environ["REPO"]
+          url = f"https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz"
+          p = pathlib.Path("Formula/assembly.rb")
+          src = p.read_text()
+          src = re.sub(r'url ".*?"', f'url "{url}"', src, count=1)
+          src = re.sub(r"sha256 .*", f'sha256 "{sha}"', src, count=1)
+          p.write_text(src)
+          PY
+          grep -nE '^  (url|sha256) ' Formula/assembly.rb | head -2
+
+      - name: Build the bottle + merge the block into the formula
+        env:
+          ROOT_URL: ${{ steps.meta.outputs.root_url }}
+        run: |
+          set -euo pipefail
+          brew tap-new --no-git assembly/local
+          tap_formula="$(brew --repository assembly/local)/Formula/assembly.rb"
+          cp Formula/assembly.rb "$tap_formula"
+          brew install --build-bottle --formula assembly/local/assembly
+          brew bottle --json --no-rebuild --root-url="$ROOT_URL" assembly/local/assembly
+          for f in assembly--*.bottle.tar.gz; do mv "$f" "${f/--/-}"; done
+          shopt -s nullglob
+          tarballs=( assembly-*.bottle.tar.gz )
+          shopt -u nullglob
+          if [[ ${#tarballs[@]} -ne 1 ]]; then
+            echo "Expected exactly one bottle tarball, found ${#tarballs[@]}: ${tarballs[*]:-none}" >&2
+            exit 1
+          fi
+          brew bottle --merge --write --no-commit assembly--*.bottle.json
+          cp "$tap_formula" Formula/assembly.rb
+          echo "--- finalized formula head ---"
+          sed -n '1,20p' Formula/assembly.rb
+
+      - name: Upload bottle + finalized formula
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-artifacts
+          path: |
+            assembly-*.bottle.tar.gz
+            Formula/assembly.rb
+          if-no-files-found: error
+
+  publish:
+    name: publish release + open formula PR
+    needs: [bottle]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false # push via explicit tokened remote instead
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-artifacts
+          path: artifacts
+
+      - name: Create the GitHub Release with the bottle attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.bottle.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" artifacts/assembly-*.bottle.tar.gz --clobber
+
+      - name: Open the formula PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.bottle.outputs.tag }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          branch="release/${TAG}-formula"
+          cp artifacts/Formula/assembly.rb Formula/assembly.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add Formula/assembly.rb
+          git commit -m "Bottle ${TAG}: pin url + sha256, add arm64_sonoma bottle"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          if ! gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr create --base main --head "$branch" \
+              --title "Bottle ${TAG}" \
+              --body "Automated by release.yml: pins the formula to the ${TAG} source tarball and adds the arm64_sonoma bottle block. Merge with the admin override (a GITHUB_TOKEN PR does not trigger CI, so the required check will not report). The diff is formula-only."
+          fi

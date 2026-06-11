@@ -31,10 +31,11 @@
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
-brew install --HEAD assembly
+brew trust assemblyai/cli
+brew install assembly
 ```
 
-`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. While the repo is private and pre-release, `--HEAD` builds from the latest `main` (the tap clone uses your existing GitHub credentials); once the first release is tagged, drop the flag and just `brew install assembly`. Upgrade with `brew upgrade --fetch-HEAD assembly`; remove with `brew uninstall assembly`.
+`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. Releases ship a prebuilt arm64 bottle, so `brew install`/`brew upgrade assembly` is a fast binary install (no compiler toolchain); Intel Macs build from source or can use the pipx/uv path below. Remove with `brew uninstall assembly`.
 
 ### pipx / uv
 
@@ -47,14 +48,6 @@ uv tool install "git+https://github.com/AssemblyAI/cli.git"
 ```
 
 Requires Python 3.12+. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`. You'll also want [`ffmpeg`](https://ffmpeg.org) on `PATH` to decode non-WAV/URL audio.
-
-### One-liner
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
-```
-
-Prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`.
 
 ## Quick Start
 
@@ -306,11 +299,20 @@ assembly stream --help
 This project uses [uv](https://docs.astral.sh/uv/). Run tools through `uv run` so they use the locked environment (`pyproject.toml` + `uv.lock`):
 
 ```sh
-uv sync --extra dev        # create/refresh the venv with dev dependencies
+uv sync                    # create/refresh the venv (the dev group installs by default)
 uv run assembly --help          # run the CLI from the locked environment
 uv run pytest              # run the test suite (uv run mypy / ruff likewise)
 ./scripts/check.sh         # ruff + mypy + pytest — the same checks CI runs on every PR
 ```
+
+### Releasing
+
+Releases ship as a prebuilt arm64 Homebrew bottle, so `brew install`/`brew upgrade assembly` is a fast binary install. To cut one:
+
+1. Bump `version` in `pyproject.toml` (keep `aai_cli/__init__.py` `__version__` in sync) and merge that PR.
+2. From an up-to-date `main`, run `./scripts/cut_release.sh` — it checks the tree is clean, on `main`, and in sync with origin, then tags `vX.Y.Z` and pushes it. (`--dry-run` verifies without tagging.)
+3. The tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml): it builds the bottle, creates the GitHub Release, and opens a `release/vX.Y.Z-formula` PR pinning the formula and adding the bottle block.
+4. Merge that formula PR with the repo-admin "merge without waiting for requirements" override — a `GITHUB_TOKEN`-opened PR doesn't trigger CI, so the required check won't report on its own.
 
 ## License
 

@@ -54,12 +54,11 @@ uv run python scripts/mutation_sweep.py aai_cli/config.py   # or omit paths for 
 
 ### Test markers
 
-The default suite **excludes** three slow/credentialed marker sets — `pyproject.toml`'s `addopts` carries `-m "not e2e and not install and not install_script"`, so a bare `pytest` matches what `check.sh` gates. An explicit command-line `-m` overrides it for the opt-in runs:
+The default suite **excludes** two slow/credentialed marker sets — `pyproject.toml`'s `addopts` carries `-m "not e2e and not install"`, so a bare `pytest` matches what `check.sh` gates. An explicit command-line `-m` overrides it for the opt-in runs:
 
 ```sh
 uv run pytest -m e2e             # real-API end-to-end; needs ASSEMBLYAI_API_KEY, else skips
 uv run pytest -m install         # installs each init template's requirements for real; needs network + uv
-uv run pytest -m install_script  # builds a wheel and runs install.sh for real; needs network + uv/pipx
 ```
 
 `check.sh` runs the default suite with a **90% branch-coverage gate** (`--cov-fail-under=90`). New code generally needs tests to clear that gate.
@@ -68,7 +67,7 @@ CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`)
 
 The post-edit hook (`.claude/settings.json`) runs `ruff check --fix --unfixable F401` + `ruff format` on every edited `*.py`. `--unfixable F401` means a just-added import is **not** auto-deleted while it's momentarily unused — so adding an import in one edit and its usage in the next is safe. The flip side: a genuinely unused import survives the hook and only fails at `ruff check` in the gate, so still prefer making the import and its first usage land in the same edit.
 
-The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install`/`install_script` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
+The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
 
 ### Writing tests that pass the diff gates
 
