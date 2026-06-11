@@ -52,7 +52,15 @@ def test_is_downloadable_url_without_ytdlp_still_matches_youtube(monkeypatch):
 
 
 def _fake_ytdlp(monkeypatch, ydl_cls):
+    # download_audio lazily does `from yt_dlp.utils import download_range_func`. With the
+    # fake (non-package) yt_dlp below in sys.modules, that import only resolves through a
+    # cached sys.modules["yt_dlp.utils"] — import the real submodule eagerly so the tests
+    # don't depend on an earlier test in the same worker having imported it (flaky under
+    # pytest-randomly/xdist otherwise).
+    import yt_dlp.utils
+
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
+    monkeypatch.setitem(sys.modules, "yt_dlp.utils", yt_dlp.utils)
 
 
 def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
