@@ -4,7 +4,6 @@ from pathlib import Path
 
 import assemblyai as aai
 import typer
-from rich.markup import escape
 
 from aai_cli import (
     choices,
@@ -17,14 +16,12 @@ from aai_cli import (
     options,
     output,
     transcribe_exec,
-    transcribe_render,
 )
 
 # The package attribute `code_gen.transcribe` is the wrapper function, so the module's
 # render() (which also takes the -o output field) is imported from the submodule itself.
 from aai_cli.code_gen.transcribe import render as render_transcribe_code
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
@@ -398,12 +395,7 @@ def transcribe(
         }
         flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
-        if out is not None and llm_prompt:
-            # --out captures the transcript itself; an LLM transform is a separate step.
-            raise UsageError(
-                "--out can't be combined with --llm.",
-                suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
-            )
+        transcribe_exec.validate_out_with_llm(out, llm_prompt)
 
         merged = config_builder.merge_transcribe_config(
             flags=flags, overrides=config_kv, config_file=config_file
@@ -447,43 +439,16 @@ def transcribe(
                 download_sections=list(download_sections or []),
             )
 
-        if out is not None:
-            # Write a clean file artifact and confirm on stderr; stdout stays empty.
-            if ".." in out.parts:  # reject path-traversal segments in --out
-                raise UsageError(f"--out path can't contain '..': {out}")
-            out.write_text(
-                transcribe_exec.out_payload(transcript, output_field, json_mode=json_mode) + "\n"
-            )
-            if not state.quiet:
-                output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
-            return
-
-        if output_field is not None:
-            # Raw single-field output for pipelines (overrides --json and analysis render).
-            output.emit_text(client.select_transcript_field(transcript, output_field))
-            return
-
-        if llm_prompt:
-            # Chain the prompts: the first runs over the transcript (injected server-side
-            # via transcript_id); each subsequent prompt runs over the prior response.
-            steps = llm.run_chain_steps(
-                api_key,
-                llm_prompt,
-                transcript_id=transcript.id,
-                model=model,
-                max_tokens=max_tokens,
-            )
-            output.emit(
-                client.transcript_summary(transcript)
-                | {"transform": {"model": model, "steps": steps}},
-                transcribe_exec.render_transform_steps,
-                json_mode=json_mode,
-            )
-            return
-
-        if json_mode:
-            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
-        else:
-            transcribe_render.render_transcript_result(transcript, output.console)
+        transcribe_exec.deliver_result(
+            transcript,
+            api_key=api_key,
+            out=out,
+            output_field=output_field,
+            transform=transcribe_exec.TransformOptions(
+                prompts=list(llm_prompt or []), model=model, max_tokens=max_tokens
+            ),
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
 
     run_command(ctx, body, json=json_out)
