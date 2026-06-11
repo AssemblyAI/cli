@@ -50,6 +50,8 @@ class Config(BaseModel):
     # as enabled — distinct from an explicit False written by `assembly telemetry disable`.
     device_id: str | None = None
     telemetry_enabled: bool | None = None
+    update_last_check: float | None = None
+    update_latest_version: str | None = None
 
 
 class StoredSession(BaseModel):
@@ -374,6 +376,21 @@ def get_telemetry_enabled() -> bool | None:
 def set_telemetry_enabled(*, enabled: bool) -> None:
     cfg = _load()
     cfg.telemetry_enabled = enabled
+    _dump(cfg)
+
+
+def get_update_cache() -> tuple[float | None, str | None]:
+    """The cached (last-check unix ts, latest version seen) for the update notifier."""
+    cfg = _load()
+    return cfg.update_last_check, cfg.update_latest_version
+
+
+def set_update_cache(*, last_check: float, latest_version: str | None) -> None:
+    """Persist the update-notifier cache. ``latest_version`` is None when the last
+    fetch failed — the timestamp is still recorded so we don't re-spawn every run."""
+    cfg = _load()
+    cfg.update_last_check = last_check
+    cfg.update_latest_version = latest_version
     _dump(cfg)
 
 
