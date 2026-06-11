@@ -26,6 +26,7 @@ source_modules =
     aai_cli.render
     aai_cli.stdio
     aai_cli.streaming
+    aai_cli.telemetry
     aai_cli.theme
     aai_cli.transcribe_render
     aai_cli.ws
@@ -51,6 +52,7 @@ modules =
     aai_cli.commands.setup
     aai_cli.commands.share
     aai_cli.commands.stream
+    aai_cli.commands.telemetry
     aai_cli.commands.transcribe
     aai_cli.commands.transcripts
 
@@ -64,5 +66,6 @@ source_modules =
     aai_cli.environments
     aai_cli.errors
     aai_cli.llm
+    aai_cli.telemetry
 forbidden_modules =
     rich

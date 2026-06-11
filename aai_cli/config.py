@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 import tomllib
+import uuid
 from pathlib import Path
 
 import keyring
@@ -44,6 +45,11 @@ class Config(BaseModel):
 
     active_profile: str | None = None
     profiles: dict[str, Profile] = Field(default_factory=dict)
+    # Telemetry state (see telemetry.py): a random anonymous install id, and the
+    # persisted opt-out. None means "never chosen", which the opt-out model reads
+    # as enabled — distinct from an explicit False written by `aai telemetry disable`.
+    device_id: str | None = None
+    telemetry_enabled: bool | None = None
 
 
 class StoredSession(BaseModel):
@@ -346,6 +352,29 @@ def persist_login(
             _keyring_restore(profile, prior_api_key)
             _keyring_restore(_session_username(profile), prior_session)
             _dump(prior_cfg)
+
+
+def get_device_id() -> str:
+    """A stable anonymous install id for telemetry: a random UUID minted locally on
+    first use and persisted in config.toml. Carries nothing derivable from the
+    machine or account."""
+    cfg = _load()
+    if cfg.device_id is None:
+        cfg.device_id = str(uuid.uuid4())
+        _dump(cfg)
+    return cfg.device_id
+
+
+def get_telemetry_enabled() -> bool | None:
+    """The persisted telemetry choice: True/False if the user ran
+    `aai telemetry enable/disable`, None if they never chose."""
+    return _load().telemetry_enabled
+
+
+def set_telemetry_enabled(*, enabled: bool) -> None:
+    cfg = _load()
+    cfg.telemetry_enabled = enabled
+    _dump(cfg)
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:

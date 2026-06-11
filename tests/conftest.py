@@ -64,6 +64,12 @@ def isolate_env(monkeypatch):
         "CLAUDECODE",
         "CLAUDE_CODE_ENTRYPOINT",
         "NO_COLOR",
+        # With these cleared (and SHIPPED_CLIENT_TOKEN empty in source), telemetry
+        # is inert in every test unless one opts in explicitly.
+        "AAI_TELEMETRY_CLIENT_TOKEN",
+        "AAI_TELEMETRY_INTAKE_URL",
+        "AAI_TELEMETRY_DISABLED",
+        "DO_NOT_TRACK",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -95,6 +101,20 @@ def memory_keyring():
     backend = MemoryKeyring()
     keyring.set_keyring(backend)
     return backend
+
+
+@pytest.fixture(autouse=True)
+def neutralize_shipped_token(monkeypatch):
+    # The shipped Datadog client token makes telemetry live by default. In-process
+    # patches (pytest-socket, mocked boundaries) never reach the detached flusher
+    # *subprocess* telemetry spawns, so blank the token suite-wide: tests exercise
+    # telemetry by opting in via AAI_TELEMETRY_CLIENT_TOKEN and patching dispatch.
+    # Returns the real shipped value so its own tests can still assert its shape.
+    from aai_cli import telemetry
+
+    original = telemetry.SHIPPED_CLIENT_TOKEN
+    monkeypatch.setattr(telemetry, "SHIPPED_CLIENT_TOKEN", "")
+    return original
 
 
 @pytest.fixture(autouse=True)

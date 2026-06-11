@@ -832,6 +832,68 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[telemetry_disable]
+  '''
+  
+   Usage: aai telemetry disable [OPTIONS]
+  
+   Opt out of anonymous usage telemetry for this machine.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Opt out of telemetry
+   $ aai telemetry disable
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_enable]
+  '''
+  
+   Usage: aai telemetry enable [OPTIONS]
+  
+   Re-enable anonymous usage telemetry for this machine.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Re-enable telemetry
+   $ aai telemetry enable
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_status]
+  '''
+  
+   Usage: aai telemetry status [OPTIONS]
+  
+   Show whether anonymous usage telemetry is active, and why.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show whether telemetry is active
+   $ aai telemetry status
+   As JSON for scripting
+   $ aai telemetry status --json
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[transcribe]
   '''
   

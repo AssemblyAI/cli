@@ -15,6 +15,11 @@ regexTarget = "match"
 regexes = [
   '''sk_abcdef1234''',
   '''sk_zzzzzz9999''',
+  # The shipped telemetry credential (aai_cli/telemetry.py SHIPPED_CLIENT_TOKEN) is a
+  # Datadog *client token*: write-only and designed to be embedded in client apps, so
+  # committing it is deliberate (the Supabase-CLI model). Only this exact value is
+  # allowlisted -- any other real-looking token still fails the gate.
+  '''pub0d633113b9f7d22faff215fefaf30b43''',
 ]
 # `gitleaks dir` scans the working tree regardless of .gitignore, so high-entropy values
 # in a developer's gitignored `.claude/settings.local.json` (a personal Claude Code file
