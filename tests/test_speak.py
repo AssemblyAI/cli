@@ -49,6 +49,8 @@ def test_plays_audio_by_default(monkeypatch, fake_synthesize):
     assert result.exit_code == 0
     assert played == {"pcm": b"\x01\x02\x03\x04", "rate": 24000}
     assert fake_synthesize["cfg"].text == "Hello there"
+    # No --voice given -> single-voice path falls back to the default "jane".
+    assert fake_synthesize["cfg"].voice == "jane"
     # Human summary (stderr) reports the default "played" disposition.
     assert "played" in result.stderr
     assert "saved to" not in result.stderr
@@ -131,9 +133,6 @@ def test_human_mode_keeps_stdout_clean(monkeypatch, fake_synthesize):
     assert result.stdout.strip() == ""
 
 
-from aai_cli.tts import session as tts_session
-
-
 @pytest.fixture
 def fake_dialogue(monkeypatch: pytest.MonkeyPatch):
     calls: dict[str, object] = {}
@@ -141,11 +140,11 @@ def fake_dialogue(monkeypatch: pytest.MonkeyPatch):
     def _fake(api_key, segments, *, language=None, sample_rate=None, connect=None, on_warning=None):
         calls["segments"] = segments
         calls["language"] = language
-        return tts_session.SpeakResult(
-            pcm=b"\x01\x02", sample_rate=24000, audio_duration_seconds=1.5
+        return session.SpeakResult(
+            pcm=b"\x01\x02", sample_rate=24000, audio_duration_seconds=1.23456
         )
 
-    monkeypatch.setattr(tts_session, "synthesize_dialogue", _fake)
+    monkeypatch.setattr(session, "synthesize_dialogue", _fake)
     monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
     return calls
 
@@ -179,6 +178,8 @@ def test_bare_voice_in_dialogue_mode_is_ignored_with_a_note(fake_dialogue):
     assert fake_dialogue["segments"] == [("jane", "One."), ("michael", "Two.")]
     # ...and the user is told why, pointed at the per-speaker form.
     assert "A=NAME" in result.stderr
+    # The human note reports the speaker count, pinning len(speakers) in _emit_multi.
+    assert "2 voices" in result.stderr
 
 
 def test_dialogue_json_reports_speaker_voice_map(fake_dialogue):
@@ -190,6 +191,17 @@ def test_dialogue_json_reports_speaker_voice_map(fake_dialogue):
     assert payload["speakers"] == {"A": "jane", "B": "michael"}
     assert payload["segments"] == 2
     assert payload["sample_rate"] == 24000
+    # 1.23456 rounded to 3 decimals -> pins the round(...) precision in _emit_multi.
+    assert payload["audio_duration_seconds"] == 1.235
+
+
+def test_empty_speaker_labels_raises_usage_error():
+    # Speaker-labeled input with no spoken text: detected as labeled, parses to zero
+    # segments, and raises the usage error before any synthesis.
+    result = runner.invoke(app, ["--sandbox", "speak"], input="Speaker A:\nSpeaker B:")
+    assert result.exit_code == 2
+    assert "No text to speak" in result.output
+    assert "speaker labels" in result.output
 
 
 def test_unlabeled_text_still_uses_single_voice_path(fake_synthesize, monkeypatch):
