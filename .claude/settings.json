@@ -94,6 +94,15 @@
             "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *uv.lock|*.env|*/.env) echo \"Blocked: $f is a protected lock/secret file. Edit it by hand if you really intend to.\" >&2; exit 2;; esac; exit 0"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/require-gate-before-commit.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

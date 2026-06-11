@@ -126,7 +126,7 @@ if command -v shellcheck >/dev/null 2>&1; then
   # (paths resolve from the repo root, where this script always runs).
   shellcheck -x --source-path=. scripts/check.sh scripts/docker_build_check.sh \
     scripts/cut_release.sh scripts/bump_minor.sh scripts/gate_tool_pins.sh \
-    .claude/hooks/session-start.sh
+    .claude/hooks/session-start.sh .claude/hooks/require-gate-before-commit.sh
 else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi
@@ -257,5 +257,11 @@ echo "==> build + twine check (PyPI publish readiness)"
 rm -rf dist
 uv build
 uvx twine check --strict dist/*
+
+# Record that this exact working tree passed, so the pre-commit gate hook
+# (.claude/hooks/require-gate-before-commit.sh) can let a `git commit` through.
+# Any later edit changes the signature and re-requires a green gate. Never fail
+# the gate over the marker itself.
+python3 scripts/gate_marker.py record || true
 
 echo "All checks passed."
