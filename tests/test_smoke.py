@@ -107,6 +107,7 @@ def test_help_lists_commands_in_workflow_order():
         # Setup & Tools
         "doctor",
         "setup",
+        "telemetry",
         # History
         "transcripts",
         "sessions",

@@ -245,6 +245,9 @@ max-statements = 40
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
 "aai_cli/init/templates/**" = ["S105"]
+# ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
+# source (release builds inject the write-only client token).
+"aai_cli/telemetry.py" = ["S105"]
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]

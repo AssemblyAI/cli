@@ -36,6 +36,7 @@ from aai_cli.commands import (
     share,
     speak,
     stream,
+    telemetry,
     transcribe,
     transcripts,
 )
@@ -66,6 +67,7 @@ _COMMAND_ORDER = (
     # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
+    "telemetry",
     # History — browse past work
     "transcripts",
     "sessions",
@@ -326,6 +328,7 @@ app.add_typer(share.app)
 app.add_typer(deploy.app)
 app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
+app.add_typer(telemetry.app, name="telemetry", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 
 

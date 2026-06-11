@@ -248,6 +248,19 @@ op run -- assembly transcribe call.mp3                    # …or wrap the whole
 
 In CI, set `ASSEMBLYAI_API_KEY` as a masked secret. `assembly logout` purges the keyring entry; `assembly whoami` / `assembly doctor` confirm the active source without printing the key.
 
+## Telemetry
+
+`assembly` collects **anonymous** usage telemetry to help improve the CLI: the command name (never its arguments), outcome class and exit code, duration, CLI version, OS, Python version, whether it ran in CI, and a random install id. It never collects arguments, file paths or contents, transcripts, API keys, or account data — and delivery runs in a detached background process, so it never slows a command down.
+
+Opt out any time, persistently or per-environment:
+
+```sh
+assembly telemetry disable     # persisted on this machine (assembly telemetry status to inspect)
+export AAI_TELEMETRY_DISABLED=1   # env kill-switch; the cross-tool DO_NOT_TRACK=1 also works
+```
+
+The ingestion credential in the source is a Datadog **client token** — the write-only, embeddable credential class (it can submit events, read nothing). No account secret ships with the CLI.
+
 ## Account Self-Service
 
 These commands use your browser login session (run `assembly login`), not your API key:
