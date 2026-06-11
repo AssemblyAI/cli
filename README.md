@@ -31,10 +31,11 @@
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
-brew install --HEAD assembly
+brew trust assemblyai/cli
+brew install assembly
 ```
 
-`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. While the repo is private and pre-release, `--HEAD` builds from the latest `main` (the tap clone uses your existing GitHub credentials); once the first release is tagged, drop the flag and just `brew install assembly`. Upgrade with `brew upgrade --fetch-HEAD assembly`; remove with `brew uninstall assembly`.
+`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. Upgrade with `brew upgrade assembly`; remove with `brew uninstall assembly`.
 
 ### pipx / uv
 
