@@ -24,9 +24,18 @@ def venv_python(target: Path) -> Path:
 
 
 def env_setup_commands(target: Path, *, use_uv: bool) -> list[list[str]]:
-    """Commands (run with cwd=target) to create a venv and install requirements."""
+    """Commands (run with cwd=target) to create a venv and install requirements.
+
+    `--allow-existing` keeps the uv path idempotent: `assembly init` creates `.venv`,
+    and a later `assembly dev` runs this setup again — without the flag, uv refuses
+    with "A virtual environment already exists" instead of reusing it (the stdlib
+    `python -m venv` path already reuses an existing venv).
+    """
     if use_uv:
-        return [["uv", "venv"], ["uv", "pip", "install", "-r", "requirements.txt"]]
+        return [
+            ["uv", "venv", "--allow-existing"],
+            ["uv", "pip", "install", "-r", "requirements.txt"],
+        ]
     py = str(venv_python(target))
     return [
         [sys.executable, "-m", "venv", ".venv"],
