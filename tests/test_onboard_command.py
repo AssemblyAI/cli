@@ -150,11 +150,12 @@ def test_bare_aai_with_key_shows_help_no_offer(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_bare_aai_prints_wordmark_banner(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The welcome screen leads with the `aai` wordmark; its block glyphs are present.
+    # The welcome screen leads with the `assembly` wordmark; its block glyphs are present.
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     result = CliRunner().invoke(app, [])
     assert result.exit_code == 0, result.output
-    assert "▄▀█ ▄▀█" in result.output
+    assert "▄▀█ █▀ █▀ █▀▀ █▀▄▀█ █▄▄ █   █▄█" in result.output
+    assert "█▀█ ▄█ ▄█ ██▄ █ ▀ █ █▄█ █▄▄  █" in result.output
 
 
 def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,7 +164,7 @@ def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     result = CliRunner().invoke(app, ["--quiet"])
     assert result.exit_code == 0, result.output
-    assert "▄▀█ ▄▀█" not in result.output
+    assert "▄▀█ █▀ █▀" not in result.output
     assert "Usage" in result.output or "Commands" in result.output
 
 

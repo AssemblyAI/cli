@@ -2,7 +2,7 @@
 # name: test_command_help_matches_snapshot[agent]
   '''
   
-   Usage: aai agent [OPTIONS] [SOURCE]
+   Usage: assembly agent [OPTIONS] [SOURCE]
   
    Have a live two-way voice conversation with an AssemblyAI voice agent.
   
@@ -14,7 +14,7 @@
    reply.
   
    This only runs a conversation in the terminal — it writes no code. To build
-   a voice agent app, run 'aai init voice-agent' instead.
+   a voice agent app, run 'assembly init voice-agent' instead.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
@@ -55,15 +55,15 @@
   
    Examples
    Start a live voice conversation
-   $ aai agent
+   $ assembly agent
    Pick a voice and opening line
-   $ aai agent --voice james --greeting "Hi there"
+   $ assembly agent --voice james --greeting "Hi there"
    Give the agent a persona
-   $ aai agent --system-prompt "You are a terse pirate."
+   $ assembly agent --system-prompt "You are a terse pirate."
    See available voices
-   $ aai agent --list-voices
+   $ assembly agent --list-voices
    Print equivalent Python instead of running
-   $ aai agent --show-code
+   $ assembly agent --show-code
   
   
   
@@ -72,7 +72,7 @@
 # name: test_command_help_matches_snapshot[audit]
   '''
   
-   Usage: aai audit [OPTIONS]
+   Usage: assembly audit [OPTIONS]
   
    List recent audit-log entries for your account.
   
@@ -87,15 +87,15 @@
   
    Examples
    Recent audit-log entries
-   $ aai audit
+   $ assembly audit
    Show more entries
-   $ aai audit --limit 100
+   $ assembly audit --limit 100
    Include login events
-   $ aai audit --include-logins
+   $ assembly audit --include-logins
    Filter by action
-   $ aai audit --action token.create
+   $ assembly audit --action token.create
    Filter by resource, as JSON
-   $ aai audit --resource token --json
+   $ assembly audit --resource token --json
   
   
   
@@ -104,7 +104,7 @@
 # name: test_command_help_matches_snapshot[balance]
   '''
   
-   Usage: aai balance [OPTIONS]
+   Usage: assembly balance [OPTIONS]
   
    Show your remaining account balance.
   
@@ -115,9 +115,9 @@
   
    Examples
    Show your remaining balance
-   $ aai balance
+   $ assembly balance
    Get the raw cents for scripting
-   $ aai balance --json | jq '.balance_in_cents'
+   $ assembly balance --json | jq '.balance_in_cents'
   
   
   
@@ -126,7 +126,7 @@
 # name: test_command_help_matches_snapshot[deploy]
   '''
   
-   Usage: aai deploy [OPTIONS]
+   Usage: assembly deploy [OPTIONS]
   
    Deploy the current project to Vercel (default), Railway, or Fly.io.
   
@@ -145,13 +145,13 @@
   
    Examples
    Deploy a preview to Vercel (asks first)
-   $ aai deploy
+   $ assembly deploy
    Deploy to production on Vercel
-   $ aai deploy --prod --yes
+   $ assembly deploy --prod --yes
    Deploy to Railway
-   $ aai deploy --railway
+   $ assembly deploy --railway
    Deploy to Fly.io
-   $ aai deploy --fly
+   $ assembly deploy --fly
   
   
   
@@ -160,11 +160,12 @@
 # name: test_command_help_matches_snapshot[dev]
   '''
   
-   Usage: aai dev [OPTIONS]
+   Usage: assembly dev [OPTIONS]
   
    Launch the dev server for the app in the current directory.
   
-   Run this from inside a project created by `aai init`. It installs dependencies
+   Run this from inside a project created by `assembly init`. It installs
+   dependencies
    if needed, then starts the FastAPI server with live reload and opens the
    browser.
   
@@ -181,13 +182,13 @@
   
    Examples
    Launch the app in the current directory
-   $ aai dev
+   $ assembly dev
    Use a specific port
-   $ aai dev --port 8000
+   $ assembly dev --port 8000
    Launch without opening a browser
-   $ aai dev --no-open
+   $ assembly dev --no-open
    Skip the dependency install step
-   $ aai dev --no-install
+   $ assembly dev --no-install
   
   
   
@@ -196,7 +197,7 @@
 # name: test_command_help_matches_snapshot[doctor]
   '''
   
-   Usage: aai doctor [OPTIONS]
+   Usage: assembly doctor [OPTIONS]
   
    Check that your environment is ready to use AssemblyAI.
   
@@ -207,9 +208,9 @@
   
    Examples
    Check your environment is ready
-   $ aai doctor
+   $ assembly doctor
    Output results as JSON
-   $ aai doctor --json
+   $ assembly doctor --json
   
   
   
@@ -218,12 +219,13 @@
 # name: test_command_help_matches_snapshot[init]
   '''
   
-   Usage: aai init [OPTIONS] [TEMPLATE] [DIRECTORY]
+   Usage: assembly init [OPTIONS] [TEMPLATE] [DIRECTORY]
   
    Scaffold a new project from a template, then launch it.
   
    This is the starting point for creating an app — including a voice agent app
-   ('aai init voice-agent'). The 'aai agent' command only runs a live mic
+   ('assembly init voice-agent'). The 'assembly agent' command only runs a live
+   mic
    conversation and writes no code.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
@@ -244,15 +246,15 @@
   
    Examples
    Scaffold a new app interactively
-   $ aai init
+   $ assembly init
    Scaffold an audio transcription app into ./my-app
-   $ aai init audio-transcription my-app
+   $ assembly init audio-transcription my-app
    Scaffold a voice agent app
-   $ aai init voice-agent
+   $ assembly init voice-agent
    Scaffold into the current directory
-   $ aai init audio-transcription --here
+   $ assembly init audio-transcription --here
    Scaffold only, without installing or launching
-   $ aai init audio-transcription --no-install
+   $ assembly init audio-transcription --no-install
   
   
   
@@ -261,7 +263,7 @@
 # name: test_command_help_matches_snapshot[keys_create]
   '''
   
-   Usage: aai keys create [OPTIONS]
+   Usage: assembly keys create [OPTIONS]
   
    Create a new API key. Prints the key value once — copy it now.
   
@@ -275,11 +277,11 @@
   
    Examples
    Create a key in your default project
-   $ aai keys create --name ci-pipeline
+   $ assembly keys create --name ci-pipeline
    Create a key in a specific project
-   $ aai keys create --name prod --project 7
+   $ assembly keys create --name prod --project 7
    Capture the new key into an env var
-   $ export ASSEMBLYAI_API_KEY=$(aai keys create --name ci --json | jq -r
+   $ export ASSEMBLYAI_API_KEY=$(assembly keys create --name ci --json | jq -r
    '.api_key')
   
   
@@ -289,7 +291,7 @@
 # name: test_command_help_matches_snapshot[keys_list]
   '''
   
-   Usage: aai keys list [OPTIONS]
+   Usage: assembly keys list [OPTIONS]
   
    List API keys across your projects (keys shown masked).
   
@@ -300,11 +302,11 @@
   
    Examples
    List your API keys (masked)
-   $ aai keys list
+   $ assembly keys list
    As JSON for scripting
-   $ aai keys list --json
+   $ assembly keys list --json
    Get key ids to use with rename
-   $ aai keys list --json | jq '.[].id'
+   $ assembly keys list --json | jq '.[].id'
   
   
   
@@ -313,12 +315,13 @@
 # name: test_command_help_matches_snapshot[keys_rename]
   '''
   
-   Usage: aai keys rename [OPTIONS] TOKEN_ID NEW_NAME
+   Usage: assembly keys rename [OPTIONS] TOKEN_ID NEW_NAME
   
    Rename an existing API key.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    token_id      INTEGER  The key id (see `aai keys list`). [required]     │
+  │ *    token_id      INTEGER  The key id (see `assembly keys list`).           │
+  │                             [required]                                       │
   │ *    new_name      TEXT     The new label. [required]                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
@@ -327,8 +330,8 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Relabel a key (id from `aai keys list`)
-   $ aai keys rename 123 "prod"
+   Relabel a key (id from `assembly keys list`)
+   $ assembly keys rename 123 "prod"
   
   
   
@@ -337,7 +340,7 @@
 # name: test_command_help_matches_snapshot[limits]
   '''
   
-   Usage: aai limits [OPTIONS]
+   Usage: assembly limits [OPTIONS]
   
    Show your account's rate limits per service.
   
@@ -348,9 +351,9 @@
   
    Examples
    Show rate limits per service
-   $ aai limits
+   $ assembly limits
    As JSON for scripting
-   $ aai limits --json
+   $ assembly limits --json
   
   
   
@@ -359,12 +362,12 @@
 # name: test_command_help_matches_snapshot[llm]
   '''
   
-   Usage: aai llm [OPTIONS] [PROMPT]
+   Usage: assembly llm [OPTIONS] [PROMPT]
   
    Send a prompt to AssemblyAI's LLM Gateway and print the response.
   
    With --transcript-id the transcript's text is injected server-side, so you
-   can ask questions about a past transcription (e.g. aai llm "summarize"
+   can ask questions about a past transcription (e.g. assembly llm "summarize"
    --transcript-id ID).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
@@ -379,9 +382,9 @@
   │ --follow         -f                   Re-run the prompt over a growing       │
   │                                       transcript piped on stdin, refreshing  │
   │                                       the answer in place on every finalized │
-  │                                       turn (e.g. aai stream -o text | aai    │
-  │                                       llm -f "summarize action items as I    │
-  │                                       talk"). Ctrl-C to stop.                │
+  │                                       turn (e.g. assembly stream -o text |   │
+  │                                       assembly llm -f "summarize action      │
+  │                                       items as I talk"). Ctrl-C to stop.     │
   │ --output         -o      [text|json]  Print one field of the result: text    │
   │                                       (just the answer, pipe-friendly) or    │
   │                                       json.                                  │
@@ -395,14 +398,14 @@
   
    Examples
    Ask about a past transcript
-   $ aai llm "summarize the key decisions" --transcript-id 5551234-abcd
+   $ assembly llm "summarize the key decisions" --transcript-id 5551234-abcd
    Pipe any text in
-   $ echo "meeting notes" | aai llm "turn into action items"
+   $ echo "meeting notes" | assembly llm "turn into action items"
    Pick a model and add a system prompt
-   $ aai llm "draft a follow-up email" --model claude-opus-4-7 --system "Be
+   $ assembly llm "draft a follow-up email" --model claude-opus-4-7 --system "Be
    concise."
    See available models
-   $ aai llm --list-models
+   $ assembly llm --list-models
   
   
   
@@ -411,7 +414,7 @@
 # name: test_command_help_matches_snapshot[login]
   '''
   
-   Usage: aai login [OPTIONS]
+   Usage: assembly login [OPTIONS]
   
    Authenticate via your browser; stores a CLI API key.
   
@@ -423,9 +426,9 @@
   
    Examples
    Log in with your browser
-   $ aai login
+   $ assembly login
    Log in non-interactively (CI)
-   $ aai login --api-key sk_...
+   $ assembly login --api-key sk_...
   
   
   
@@ -434,7 +437,7 @@
 # name: test_command_help_matches_snapshot[logout]
   '''
   
-   Usage: aai logout [OPTIONS]
+   Usage: assembly logout [OPTIONS]
   
    Clear stored credentials for the active profile.
   
@@ -445,7 +448,7 @@
   
    Examples
    Clear stored credentials for the active profile
-   $ aai logout
+   $ assembly logout
   
   
   
@@ -454,7 +457,7 @@
 # name: test_command_help_matches_snapshot[onboard]
   '''
   
-   Usage: aai onboard [OPTIONS]
+   Usage: assembly onboard [OPTIONS]
   
    Guided setup: sign in, run your first transcription, and start building.
   
@@ -467,7 +470,7 @@
   
    Examples
    Run the guided setup
-   $ aai onboard
+   $ assembly onboard
   
   
   
@@ -476,7 +479,7 @@
 # name: test_command_help_matches_snapshot[sessions_get]
   '''
   
-   Usage: aai sessions get [OPTIONS] SESSION_ID
+   Usage: assembly sessions get [OPTIONS] SESSION_ID
   
    Show details for one streaming session.
   
@@ -490,11 +493,12 @@
   
    Examples
    Show one session's details
-   $ aai sessions get sess_5551234
+   $ assembly sessions get sess_5551234
    Raw JSON for one session
-   $ aai sessions get sess_5551234 --json
+   $ assembly sessions get sess_5551234 --json
    Drill into the latest session
-   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
+   $ assembly sessions get $(assembly sessions list --json | jq -r
+   '.[0].session_id')
   
   
   
@@ -503,7 +507,7 @@
 # name: test_command_help_matches_snapshot[sessions_list]
   '''
   
-   Usage: aai sessions list [OPTIONS]
+   Usage: assembly sessions list [OPTIONS]
   
    List recent streaming sessions.
   
@@ -516,13 +520,14 @@
   
    Examples
    List recent streaming sessions
-   $ aai sessions list
+   $ assembly sessions list
    Find failed sessions
-   $ aai sessions list --status error
+   $ assembly sessions list --status error
    Inspect the most recent session
-   $ aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')
+   $ assembly sessions get $(assembly sessions list --json | jq -r
+   '.[0].session_id')
    Total audio across recent sessions (seconds)
-   $ aai sessions list --json | jq '[.[].audio_duration_sec] | add'
+   $ assembly sessions list --json | jq '[.[].audio_duration_sec] | add'
   
   
   
@@ -531,7 +536,7 @@
 # name: test_command_help_matches_snapshot[setup_install]
   '''
   
-   Usage: aai setup install [OPTIONS]
+   Usage: assembly setup install [OPTIONS]
   
    Set up your coding agent for AssemblyAI (docs MCP server + skills).
   
@@ -553,11 +558,11 @@
   
    Examples
    Set up your coding agent for AssemblyAI
-   $ aai setup install
+   $ assembly setup install
    Install for the current project only
-   $ aai setup install --scope project
+   $ assembly setup install --scope project
    Reinstall everything even if already present
-   $ aai setup install --force
+   $ assembly setup install --force
   
   
   
@@ -566,7 +571,7 @@
 # name: test_command_help_matches_snapshot[setup_remove]
   '''
   
-   Usage: aai setup remove [OPTIONS]
+   Usage: assembly setup remove [OPTIONS]
   
    Remove the AssemblyAI MCP server and skills from your coding agent.
   
@@ -580,9 +585,9 @@
   
    Examples
    Remove the AssemblyAI MCP server and skills
-   $ aai setup remove
+   $ assembly setup remove
    Remove only from the project scope
-   $ aai setup remove --scope project
+   $ assembly setup remove --scope project
   
   
   
@@ -591,7 +596,7 @@
 # name: test_command_help_matches_snapshot[setup_status]
   '''
   
-   Usage: aai setup status [OPTIONS]
+   Usage: assembly setup status [OPTIONS]
   
    Show whether the AssemblyAI MCP server and skills are set up in your coding
    agent.
@@ -603,9 +608,9 @@
   
    Examples
    Show what's set up
-   $ aai setup status
+   $ assembly setup status
    Print status as JSON
-   $ aai setup status --json
+   $ assembly setup status --json
   
   
   
@@ -614,12 +619,12 @@
 # name: test_command_help_matches_snapshot[share]
   '''
   
-   Usage: aai share [OPTIONS]
+   Usage: assembly share [OPTIONS]
   
    Boot the app and expose it on a public URL via a cloudflared tunnel.
   
-   Run this from inside a project created by `aai init`. It starts the dev server
-   and
+   Run this from inside a project created by `assembly init`. It starts the dev
+   server and
    opens a cloudflared quick tunnel, printing a shareable
    https://*.trycloudflare.com
    URL. Requires cloudflared (macOS: `brew install cloudflared`; other platforms:
@@ -635,11 +640,11 @@
   
    Examples
    Share the running app on a public URL
-   $ aai share
+   $ assembly share
    Use a specific local port
-   $ aai share --port 8000
+   $ assembly share --port 8000
    Skip the dependency install step
-   $ aai share --no-install
+   $ assembly share --no-install
   
   
   
@@ -648,12 +653,13 @@
 # name: test_command_help_matches_snapshot[speak]
   '''
   
-   Usage: aai speak [OPTIONS] [TEXT]
+   Usage: assembly speak [OPTIONS] [TEXT]
   
    Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
   
    Plays the audio through your speakers by default, or writes a WAV with --out.
-   Speaker-labeled input (from 'aai transcribe --speaker-labels') is detected
+   Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
+   detected
    automatically: the labels are stripped and each speaker gets a different
    voice. This feature only exists in the sandbox today — run it with --sandbox.
   
@@ -675,15 +681,15 @@
   
    Examples
    Speak text aloud (sandbox only)
-   $ aai speak "Hello there, friend." --sandbox
+   $ assembly speak "Hello there, friend." --sandbox
    Pick a voice and language
-   $ aai speak "Bonjour" --voice jane --language French --sandbox
+   $ assembly speak "Bonjour" --voice jane --language French --sandbox
    Speak a diarized transcript, one voice per speaker
-   $ aai transcribe meeting.mp3 --speaker-labels | aai speak --sandbox
+   $ assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox
    Override a speaker's voice
-   $ … | aai speak --voice A=vera --voice B=paul --sandbox
+   $ … | assembly speak --voice A=vera --voice B=paul --sandbox
    Save to a WAV instead of playing
-   $ aai speak "Hello" --out /tmp/hello.wav --sandbox
+   $ assembly speak "Hello" --out /tmp/hello.wav --sandbox
   
   
   
@@ -692,16 +698,16 @@
 # name: test_command_help_matches_snapshot[stream]
   '''
   
-   Usage: aai stream [OPTIONS] [SOURCE]
+   Usage: assembly stream [OPTIONS] [SOURCE]
   
    Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
   
    Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
-   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -.
+   ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | assembly stream -.
   
    --prompt biases the speech model. --llm runs a prompt over the live transcript
    in-process, refreshing the answer on every finalized turn; for a separate step
-   instead, pipe the text out with -o text | aai llm -f "…".
+   instead, pipe the text out with -o text | assembly llm -f "…".
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path, URL, or YouTube/podcast page URL to │
@@ -814,19 +820,19 @@
   
    Examples
    Stream from your microphone
-   $ aai stream
+   $ assembly stream
    Stream a file or URL in real time
-   $ aai stream recording.wav
+   $ assembly stream recording.wav
    Stream the hosted sample
-   $ aai stream --sample
+   $ assembly stream --sample
    Label speakers in the live transcript
-   $ aai stream --speaker-labels
+   $ assembly stream --speaker-labels
    Boost domain terms with keyterm prompts
-   $ aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
+   $ assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk
-   $ aai stream --llm "summarize action items"
+   $ assembly stream --llm "summarize action items"
    Print equivalent Python instead of running
-   $ aai stream --show-code
+   $ assembly stream --show-code
   
   
   
@@ -835,7 +841,7 @@
 # name: test_command_help_matches_snapshot[telemetry_disable]
   '''
   
-   Usage: aai telemetry disable [OPTIONS]
+   Usage: assembly telemetry disable [OPTIONS]
   
    Opt out of anonymous usage telemetry for this machine.
   
@@ -846,7 +852,7 @@
   
    Examples
    Opt out of telemetry
-   $ aai telemetry disable
+   $ assembly telemetry disable
   
   
   
@@ -855,7 +861,7 @@
 # name: test_command_help_matches_snapshot[telemetry_enable]
   '''
   
-   Usage: aai telemetry enable [OPTIONS]
+   Usage: assembly telemetry enable [OPTIONS]
   
    Re-enable anonymous usage telemetry for this machine.
   
@@ -866,7 +872,7 @@
   
    Examples
    Re-enable telemetry
-   $ aai telemetry enable
+   $ assembly telemetry enable
   
   
   
@@ -875,7 +881,7 @@
 # name: test_command_help_matches_snapshot[telemetry_flush]
   '''
   
-   Usage: aai telemetry flush [OPTIONS] PAYLOAD
+   Usage: assembly telemetry flush [OPTIONS] PAYLOAD
   
    Deliver one serialized telemetry event to the intake (internal).
   
@@ -894,7 +900,7 @@
   
    Examples
    Internal plumbing, spawned by the CLI itself
-   $ aai telemetry flush '<payload-json>'
+   $ assembly telemetry flush '<payload-json>'
   
   
   
@@ -903,7 +909,7 @@
 # name: test_command_help_matches_snapshot[telemetry_status]
   '''
   
-   Usage: aai telemetry status [OPTIONS]
+   Usage: assembly telemetry status [OPTIONS]
   
    Show whether anonymous usage telemetry is active, and why.
   
@@ -914,9 +920,9 @@
   
    Examples
    Show whether telemetry is active
-   $ aai telemetry status
+   $ assembly telemetry status
    As JSON for scripting
-   $ aai telemetry status --json
+   $ assembly telemetry status --json
   
   
   
@@ -925,11 +931,12 @@
 # name: test_command_help_matches_snapshot[transcribe]
   '''
   
-   Usage: aai transcribe [OPTIONS] [SOURCE]
+   Usage: assembly transcribe [OPTIONS] [SOURCE]
   
    Transcribe an audio file, URL, or YouTube/podcast link.
   
-   Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
+   Quickest start: assembly transcribe call.mp3 (or --sample for the hosted
+   demo).
   
    Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
@@ -1061,21 +1068,21 @@
   
    Examples
    Transcribe a local file
-   $ aai transcribe call.mp3
+   $ assembly transcribe call.mp3
    Try it with the hosted sample
-   $ aai transcribe --sample
+   $ assembly transcribe --sample
    Transcribe a YouTube video
-   $ aai transcribe https://youtu.be/dtp6b76pMak
-   Transcribe a podcast episode page
-   $ aai transcribe "https://podcasts.apple.com/…"
+   $ assembly transcribe https://youtu.be/dtp6b76pMak
+   Transcribe a podcast page
+   $ assembly transcribe "https://podcasts.apple.com/…"
    Label who said what
-   $ aai transcribe call.mp3 --speaker-labels
+   $ assembly transcribe call.mp3 --speaker-labels
    Redact PII for compliance
-   $ aai transcribe call.mp3 --redact-pii
+   $ assembly transcribe call.mp3 --redact-pii
    Summarize a recording
-   $ aai transcribe call.mp3 --summarization
+   $ assembly transcribe call.mp3 --summarization
    Ask about the transcript
-   $ aai transcribe call.mp3 --llm "List the action items"
+   $ assembly transcribe call.mp3 --llm "List action items"
   
   
   
@@ -1084,7 +1091,7 @@
 # name: test_command_help_matches_snapshot[transcripts_get]
   '''
   
-   Usage: aai transcripts get [OPTIONS] TRANSCRIPT_ID
+   Usage: assembly transcripts get [OPTIONS] TRANSCRIPT_ID
   
    Fetch a past transcript by id and print its text.
   
@@ -1100,13 +1107,13 @@
   
    Examples
    Fetch a transcript's text by id
-   $ aai transcripts get 5551234-abcd
+   $ assembly transcripts get 5551234-abcd
    Speaker-labeled turns
-   $ aai transcripts get 5551234-abcd -o utterances
+   $ assembly transcripts get 5551234-abcd -o utterances
    Save SRT subtitles
-   $ aai transcripts get 5551234-abcd -o srt > captions.srt
+   $ assembly transcripts get 5551234-abcd -o srt > captions.srt
    Get the raw JSON
-   $ aai transcripts get 5551234-abcd --json
+   $ assembly transcripts get 5551234-abcd --json
   
   
   
@@ -1115,7 +1122,7 @@
 # name: test_command_help_matches_snapshot[transcripts_list]
   '''
   
-   Usage: aai transcripts list [OPTIONS]
+   Usage: assembly transcripts list [OPTIONS]
   
    List recent transcripts.
   
@@ -1128,14 +1135,14 @@
   
    Examples
    List your recent transcripts
-   $ aai transcripts list
+   $ assembly transcripts list
    Show more at once
-   $ aai transcripts list --limit 50
+   $ assembly transcripts list --limit 50
    Grab the latest transcript id
-   $ aai transcripts list --json | jq -r '.[0].id'
+   $ assembly transcripts list --json | jq -r '.[0].id'
    Summarize your latest transcript
-   $ aai llm "summarize" --transcript-id $(aai transcripts list --json | jq -r
-   '.[0].id')
+   $ assembly llm "summarize" --transcript-id $(assembly transcripts list --json
+   | jq -r '.[0].id')
   
   
   
@@ -1144,7 +1151,7 @@
 # name: test_command_help_matches_snapshot[usage]
   '''
   
-   Usage: aai usage [OPTIONS]
+   Usage: assembly usage [OPTIONS]
   
    Show usage over a date range (defaults to the last 30 days).
   
@@ -1154,20 +1161,20 @@
   │ --end                         TEXT  End date (YYYY-MM-DD). Default: today.   │
   │ --window                      TEXT  Window size, e.g. 'day' or 'month'.      │
   │ --include-zero,--all                Include zero-usage windows (matches      │
-  │                                     --include-logins on `aai audit`).        │
+  │                                     --include-logins on `assembly audit`).   │
   │ --json                -j            Output raw JSON.                         │
   │ --help                              Show this message and exit.              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Usage over the last 30 days
-   $ aai usage
+   $ assembly usage
    A specific date range
-   $ aai usage --start 2026-05-01 --end 2026-06-01
+   $ assembly usage --start 2026-05-01 --end 2026-06-01
    Break spend down by month
-   $ aai usage --window month
+   $ assembly usage --window month
    Total spend in cents for scripting
-   $ aai usage --json | jq '[.usage_items[].line_items[].price] | add'
+   $ assembly usage --json | jq '[.usage_items[].line_items[].price] | add'
   
   
   
@@ -1176,7 +1183,7 @@
 # name: test_command_help_matches_snapshot[whoami]
   '''
   
-   Usage: aai whoami [OPTIONS]
+   Usage: assembly whoami [OPTIONS]
   
    Show the active profile and whether its key is usable.
   
@@ -1187,7 +1194,7 @@
   
    Examples
    Show the active profile and whether its key works
-   $ aai whoami
+   $ assembly whoami
   
   
   
@@ -1202,8 +1209,8 @@
 # name: test_error_human_render_matches_snapshot[not_authenticated]
   '''
   Error: You're not signed in.
-  Suggestion: Run 'aai onboard' for guided setup, 'aai login' if you have an
-  account, or set ASSEMBLYAI_API_KEY.
+  Suggestion: Run 'assembly onboard' for guided setup, 'assembly login' if you
+  have an account, or set ASSEMBLYAI_API_KEY.
   
   '''
 # ---
@@ -1216,14 +1223,14 @@
 # name: test_error_human_render_matches_snapshot[rejected_key]
   '''
   Error: Your API key was rejected.
-  Suggestion: Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY.
+  Suggestion: Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY.
   
   '''
 # ---
 # name: test_error_human_render_matches_snapshot[usage_with_suggestion]
   '''
   Error: Unknown voice 'nope'.
-  Suggestion: Run 'aai agent --list-voices' to see the options.
+  Suggestion: Run 'assembly agent --list-voices' to see the options.
   
   '''
 # ---
@@ -1235,7 +1242,7 @@
 # ---
 # name: test_error_json_render_matches_snapshot[not_authenticated]
   '''
-  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'aai onboard' for guided setup, 'aai login' if you have an account, or set ASSEMBLYAI_API_KEY."}}
+  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'assembly onboard' for guided setup, 'assembly login' if you have an account, or set ASSEMBLYAI_API_KEY."}}
   
   '''
 # ---
@@ -1247,13 +1254,13 @@
 # ---
 # name: test_error_json_render_matches_snapshot[rejected_key]
   '''
-  {"error": {"type": "not_authenticated", "message": "Your API key was rejected.", "suggestion": "Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY."}}
+  {"error": {"type": "not_authenticated", "message": "Your API key was rejected.", "suggestion": "Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY."}}
   
   '''
 # ---
 # name: test_error_json_render_matches_snapshot[usage_with_suggestion]
   '''
-  {"error": {"type": "usage_error", "message": "Unknown voice 'nope'.", "suggestion": "Run 'aai agent --list-voices' to see the options."}}
+  {"error": {"type": "usage_error", "message": "Unknown voice 'nope'.", "suggestion": "Run 'assembly agent --list-voices' to see the options."}}
   
   '''
 # ---

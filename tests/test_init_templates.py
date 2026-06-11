@@ -18,7 +18,7 @@ def test_order_matches_registry():
 
 def test_every_registered_template_has_a_directory():
     # The registry must never advertise a template whose files don't ship — that
-    # would crash `aai init <id>` with a FileNotFoundError. This guards the picker.
+    # would crash `assembly init <id>` with a FileNotFoundError. This guards the picker.
     for tid in templates.TEMPLATES:
         assert (_TEMPLATES_ROOT / tid / "api" / "index.py").exists(), (
             f"template {tid!r} is registered but aai_cli/init/templates/{tid}/ is missing"
@@ -27,7 +27,7 @@ def test_every_registered_template_has_a_directory():
 
 def test_every_shipped_directory_is_registered():
     # The other direction: a template dir that ships but isn't registered is invisible
-    # in the picker and unreachable via `aai init <id>`. Together with the test above
+    # in the picker and unreachable via `assembly init <id>`. Together with the test above
     # this enforces registry == shipped directories.
     for path in _TEMPLATES_ROOT.iterdir():
         if path.is_dir() and not path.name.startswith("__"):

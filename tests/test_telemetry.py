@@ -207,7 +207,7 @@ def test_flush_payload_posts_to_intake(monkeypatch):
 
 
 def test_flush_command_delivers_payload(monkeypatch):
-    # The hidden `aai telemetry flush` subcommand is what dispatch() spawns; drive it
+    # The hidden `assembly telemetry flush` subcommand is what dispatch() spawns; drive it
     # through the real CLI so the spawned argv is known to be invocable end to end.
     from typer.testing import CliRunner
 

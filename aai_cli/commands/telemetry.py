@@ -1,4 +1,4 @@
-"""`aai telemetry` — inspect or change anonymous usage telemetry.
+"""`assembly telemetry` — inspect or change anonymous usage telemetry.
 
 The collection itself lives in ``aai_cli/telemetry.py``; this command is the
 user-facing consent surface: see what would be sent and turn it off (or back
@@ -24,8 +24,8 @@ def _consent_label() -> str:
 @app.command(
     epilog=examples_epilog(
         [
-            ("Show whether telemetry is active", "aai telemetry status"),
-            ("As JSON for scripting", "aai telemetry status --json"),
+            ("Show whether telemetry is active", "assembly telemetry status"),
+            ("As JSON for scripting", "assembly telemetry status --json"),
         ]
     )
 )
@@ -53,7 +53,7 @@ def status(
                 f"{'yes' if d['token_configured'] else 'no'}."
             )
             hint = output.hint(
-                "Opt out any time: 'aai telemetry disable' or AAI_TELEMETRY_DISABLED=1."
+                "Opt out any time: 'assembly telemetry disable' or AAI_TELEMETRY_DISABLED=1."
             )
             return output.stack(state_line, detail, hint)
 
@@ -63,7 +63,7 @@ def status(
 
 
 @app.command(
-    epilog=examples_epilog([("Re-enable telemetry", "aai telemetry enable")]),
+    epilog=examples_epilog([("Re-enable telemetry", "assembly telemetry enable")]),
 )
 def enable(
     ctx: typer.Context,
@@ -85,7 +85,12 @@ def enable(
 @app.command(
     hidden=True,
     epilog=examples_epilog(
-        [("Internal plumbing, spawned by the CLI itself", "aai telemetry flush '<payload-json>'")]
+        [
+            (
+                "Internal plumbing, spawned by the CLI itself",
+                "assembly telemetry flush '<payload-json>'",
+            )
+        ]
     ),
 )
 def flush(
@@ -102,7 +107,7 @@ def flush(
 
 
 @app.command(
-    epilog=examples_epilog([("Opt out of telemetry", "aai telemetry disable")]),
+    epilog=examples_epilog([("Opt out of telemetry", "assembly telemetry disable")]),
 )
 def disable(
     ctx: typer.Context,

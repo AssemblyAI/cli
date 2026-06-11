@@ -45,7 +45,7 @@ class StreamRenderer(BaseRenderer):
 
     - JSON: newline-delimited JSON to stdout (pipe-safe, machine-readable).
     - text: only finalized turn transcripts, one plain line each, to stdout; status
-      notices ("Listening…") go to stderr. Lets `aai stream -o text | aai llm "…"`
+      notices ("Listening…") go to stderr. Lets `assembly stream -o text | assembly llm "…"`
       pipe clean transcript text downstream.
     - human (default): a live-updating line through Rich.
 

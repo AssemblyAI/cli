@@ -1,4 +1,4 @@
-"""Shared scaffolding for the `aai setup` test modules.
+"""Shared scaffolding for the `assembly setup` test modules.
 
 Not a test module itself (no ``test_`` prefix, so pytest won't collect it): it
 holds the fakes and helpers reused across ``test_setup.py`` and

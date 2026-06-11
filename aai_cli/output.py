@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from aai_cli.errors import CLIError
 
 console = theme.make_console()
-# Errors go to stderr so they never pollute piped stdout (e.g. `aai transcribe x -o text > out`).
+# Errors go to stderr so they never pollute piped stdout (e.g. `assembly transcribe x -o text > out`).
 error_console = theme.make_console(stderr=True)
 
 _AGENT_ENV_VARS = ("CI", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
@@ -46,7 +46,7 @@ def resolve_json(*, explicit: bool) -> bool:
     Human-readable text is the default for every command, in every context — a
     terminal, a pipe, CI, or an agent. We deliberately do NOT switch the output
     *shape* to JSON just because stdout is piped or a ``CI``/``CLAUDECODE`` env var
-    is set: that surprised plain-text pipelines like ``aai transcribe x | grep word``
+    is set: that surprised plain-text pipelines like ``assembly transcribe x | grep word``
     by handing them a JSON blob instead of the transcript. Being off a TTY still
     drops color and interactivity (Rich handles that automatically); it just no
     longer changes the structure. This matches gh/docker/kubectl, which keep their
@@ -59,7 +59,7 @@ def stream_output_modes(field: choices.TextOrJson | None, *, json_mode: bool) ->
     """Fold a streaming command's ``-o/--output`` into ``(text_mode, json_mode)``.
 
     Shared by `stream` and `agent`. ``-o text`` emits plain finalized lines (handy for
-    ``aai stream -o text | aai llm -f``); ``-o json`` or ``--json`` forces NDJSON; an
+    ``assembly stream -o text | assembly llm -f``); ``-o json`` or ``--json`` forces NDJSON; an
     unset field renders the live human panel. With output now human-by-default
     (`resolve_json` only flips on an explicit `--json`), `json_mode` here is simply
     whether `--json` was passed — we never auto-switch to NDJSON just because piped.
@@ -172,7 +172,7 @@ def status(message: str, *, json_mode: bool, quiet: bool = False) -> Generator[N
 
     A no-op in JSON or non-interactive mode (piped / agent-run), under ``--quiet``,
     so stdout stays clean for pipelines and machine output is never decorated.
-    Rendered on the stderr console so even an interactive `aai transcribe x -o text`
+    Rendered on the stderr console so even an interactive `assembly transcribe x -o text`
     keeps stdout pristine.
     """
     if json_mode or quiet or is_agentic():
@@ -196,7 +196,7 @@ def emit_warning(message: str, *, json_mode: bool) -> None:
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:
-    # Always to stderr, so stdout stays clean for `aai … | next-tool` pipelines.
+    # Always to stderr, so stdout stays clean for `assembly … | next-tool` pipelines.
     if json_mode:
         print(json.dumps(err.to_dict(), default=str), file=sys.stderr)
     else:
@@ -205,20 +205,20 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
             error_console.print(f"[aai.muted]Suggestion:[/aai.muted] {escape(err.suggestion)}")
 
 
-# The `aai` wordmark for the bare-command welcome screen: a compact two-row
+# The `assembly` wordmark for the bare-command welcome screen: a compact two-row
 # half-block letterform, tinted to the brand accent (see theme.BRAND). Interior
 # spaces are load-bearing (they separate the glyphs); trailing spaces are not, so
 # they're dropped to survive whitespace-trimming tooling.
 _BANNER = """\
-▄▀█ ▄▀█ █
-█▀█ █▀█ █"""
+▄▀█ █▀ █▀ █▀▀ █▀▄▀█ █▄▄ █   █▄█
+█▀█ ▄█ ▄█ ██▄ █ ▀ █ █▄█ █▄▄  █"""
 
 # A one-line header: emoji + product + version, then the product tagline.
 _TAGLINE = "AssemblyAI from your terminal"
 
 
 def print_banner() -> None:
-    """Print the welcome header — a version + tagline line, then the `aai` wordmark in
+    """Print the welcome header — a version + tagline line, then the `assembly` wordmark in
     the brand accent (the bare-command welcome screen)."""
     # highlight=False so Rich's repr-highlighter doesn't recolor the version digits or
     # the quoted tagline — the line stays a single muted tone behind the brand label.
@@ -234,7 +234,7 @@ def print_banner() -> None:
 def print_code(code: str, *, language: str = "python") -> None:
     """Print generated source: syntax-highlighted for an interactive human, raw text
     otherwise. Piping/redirecting (or an agent) yields plain text with no ANSI, so
-    `aai … --show-code > script.py` stays byte-clean and runnable.
+    `assembly … --show-code > script.py` stays byte-clean and runnable.
     """
     if not _stdout_is_tty():
         print(code)

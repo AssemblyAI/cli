@@ -3,7 +3,7 @@
 This is a buildless FastAPI + browser microphone starter. Run it with:
 
 ```sh
-aai dev
+assembly dev
 ```
 
 ## Map

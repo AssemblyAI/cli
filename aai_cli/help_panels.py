@@ -1,4 +1,4 @@
-"""Named help panels for `aai --help`.
+"""Named help panels for `assembly --help`.
 
 Rich groups top-level commands under these headings (via each command's
 ``rich_help_panel``), so the root help reads as a journey rather than a flat

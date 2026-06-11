@@ -12,7 +12,7 @@ Exit codes (stable; mirrored in the README "Exit codes" table):
   gh-style split keeps "you're not signed in" distinct from a usage error.
 * ``130`` — cancelled with Ctrl-C.
 
-A subprocess the CLI shells out to (``aai deploy``/``dev``) propagates that
+A subprocess the CLI shells out to (``assembly deploy``/``dev``) propagates that
 process's own exit code unchanged. Each :class:`CLIError` carries an
 ``error_type`` (the JSON ``error.type``) paired 1:1 with its ``exit_code``.
 """
@@ -58,7 +58,7 @@ class NotAuthenticated(CLIError):
         message: str = "You're not signed in.",
         *,
         suggestion: str | None = (
-            "Run 'aai onboard' for guided setup, 'aai login' if you have an account, "
+            "Run 'assembly onboard' for guided setup, 'assembly login' if you have an account, "
             "or set ASSEMBLYAI_API_KEY."
         ),
         rejected_key: bool = False,
@@ -108,7 +108,7 @@ _AUTH_FAILURE_HINTS = (
 )
 
 REJECTED_KEY_MESSAGE = "Your API key was rejected."
-REJECTED_KEY_SUGGESTION = "Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY."
+REJECTED_KEY_SUGGESTION = "Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY."
 _VOICE_AGENT_POLICY_VIOLATION_CODE = 1008
 
 

@@ -47,9 +47,9 @@ def _default_project_id(account_id: int, jwt: str) -> int:
     name="list",
     epilog=examples_epilog(
         [
-            ("List your API keys (masked)", "aai keys list"),
-            ("As JSON for scripting", "aai keys list --json"),
-            ("Get key ids to use with rename", "aai keys list --json | jq '.[].id'"),
+            ("List your API keys (masked)", "assembly keys list"),
+            ("As JSON for scripting", "assembly keys list --json"),
+            ("Get key ids to use with rename", "assembly keys list --json | jq '.[].id'"),
         ]
     ),
 )
@@ -99,11 +99,11 @@ def list_(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Create a key in your default project", "aai keys create --name ci-pipeline"),
-            ("Create a key in a specific project", "aai keys create --name prod --project 7"),
+            ("Create a key in your default project", "assembly keys create --name ci-pipeline"),
+            ("Create a key in a specific project", "assembly keys create --name prod --project 7"),
             (
                 "Capture the new key into an env var",
-                "export ASSEMBLYAI_API_KEY=$(aai keys create --name ci --json | jq -r '.api_key')",
+                "export ASSEMBLYAI_API_KEY=$(assembly keys create --name ci --json | jq -r '.api_key')",
             ),
         ]
     )
@@ -138,13 +138,13 @@ def create(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Relabel a key (id from `aai keys list`)", 'aai keys rename 123 "prod"'),
+            ("Relabel a key (id from `assembly keys list`)", 'assembly keys rename 123 "prod"'),
         ]
     )
 )
 def rename(
     ctx: typer.Context,
-    token_id: int = typer.Argument(..., help="The key id (see `aai keys list`)."),
+    token_id: int = typer.Argument(..., help="The key id (see `assembly keys list`)."),
     new_name: str = typer.Argument(..., help="The new label."),
     json_out: bool = options.json_option(),
 ) -> None:

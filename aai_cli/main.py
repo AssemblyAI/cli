@@ -46,7 +46,7 @@ from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
 from aai_cli.onboard.sections import WizardContext
 
-# The order commands appear under `aai --help`. Commands are grouped into named
+# The order commands appear under `assembly --help`. Commands are grouped into named
 # Rich panels (see `help_panels.py`); panels render in the order their first
 # command appears here, so keep each panel's commands contiguous and ordered
 # most-common-first. Names not listed fall to the end, sorted alphabetically.
@@ -115,7 +115,7 @@ rich_utils.STYLE_OPTION = f"bold {theme.BRAND}"
 rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {theme.BRAND}"
 rich_utils.STYLE_SWITCH = f"bold {theme.BRAND}"
 rich_utils.STYLE_METAVAR = theme.ACCENT
-# The usage line ("Usage: aai [OPTIONS] COMMAND [ARGS]...") defaults to yellow. Keep the
+# The usage line ("Usage: assembly [OPTIONS] COMMAND [ARGS]...") defaults to yellow. Keep the
 # program name in the bold brand accent so it matches command names elsewhere, but drop
 # the "Usage:" label and arg spec to muted warm gray — it's boilerplate that should recede.
 rich_utils.STYLE_USAGE = theme.MUTED
@@ -147,7 +147,7 @@ def _patch_module(module: ModuleType, **attrs: object) -> None:
 
 
 # Typer's own help/error consoles must also honor the closed-pipe contract: with
-# Rich's default Console, `aai --help | head -2` exits 1 via Console.on_broken_pipe.
+# Rich's default Console, `assembly --help | head -2` exits 1 via Console.on_broken_pipe.
 _patch_module(rich_utils, Table=_NoClipTable, Console=theme.PipeSafeConsole)
 
 _format_click_error = rich_utils.rich_format_error
@@ -176,10 +176,10 @@ for _opt in _completion_placeholder.__defaults__ or ():
 
 
 app = typer.Typer(
-    name="aai",
-    # No top-level `help=`: the bare-`aai` welcome banner already carries the
+    name="assembly",
+    # No top-level `help=`: the bare-`assembly` welcome banner already carries the
     # "AssemblyAI from your terminal" tagline, so a description here would duplicate it.
-    # `aai --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
+    # `assembly --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
     # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
     cls=_OrderedGroup,
@@ -187,7 +187,7 @@ app = typer.Typer(
 
 
 def _version_callback(value: bool) -> None:
-    """Print the version and exit when `aai --version`/`-V` is passed, before any command
+    """Print the version and exit when `assembly --version`/`-V` is passed, before any command
     runs. Mirrors the reflex (`tool --version`) every other CLI answers; the `version`
     subcommand stays for parity."""
     if value:
@@ -249,13 +249,13 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     invoke_without_command=True,
     epilog=examples_epilog(
         [
-            ("Guided setup (start here)", "aai onboard"),
-            ("Transcribe a file", "aai transcribe call.mp3"),
-            ("Stream live audio in real time", "aai stream"),
-            ("Talk to a voice agent", "aai agent"),
+            ("Guided setup (start here)", "assembly onboard"),
+            ("Transcribe a file", "assembly transcribe call.mp3"),
+            ("Stream live audio in real time", "assembly stream"),
+            ("Talk to a voice agent", "assembly agent"),
             (
                 "Summarize while transcribing",
-                'aai transcribe call.mp3 --llm "summarize action items"',
+                'assembly transcribe call.mp3 --llm "summarize action items"',
             ),
         ]
     ),
@@ -279,7 +279,7 @@ def main(
         help="Show the CLI version and exit.",
         callback=_version_callback,
         # Eager so --version short-circuits before subcommand/arg parsing — the idiomatic
-        # default. The plain `aai --version` path behaves identically with or without this,
+        # default. The plain `assembly --version` path behaves identically with or without this,
         # so there's no cheap test that distinguishes it.
         is_eager=True,  # pragma: no mutate
     ),
@@ -335,14 +335,14 @@ app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 def run() -> None:
     """Console-script entry point: run the app, exiting cleanly on a closed pipe.
 
-    A downstream consumer (e.g. `aai … | head`) can close the pipe before we finish
+    A downstream consumer (e.g. `assembly … | head`) can close the pipe before we finish
     writing. Without this, the write — or Python's flush at shutdown — raises
     BrokenPipeError and prints an ugly "Exception ignored" traceback. We treat a
     closed pipe as success: silence stdout and exit 0. Streaming commands also catch
     it earlier; this is the catch-all for the one-shot `output.emit`/`print` paths.
     """
     try:
-        app(prog_name="aai")
+        app(prog_name="assembly")
     except BrokenPipeError:
         stdio.silence_stdout()
         sys.exit(0)

@@ -13,9 +13,9 @@ from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import keys, runner, scaffold, templates
 
-# Single-command sub-typer flattened to `aai init` (the exact pattern `aai transcribe`
+# Single-command sub-typer flattened to `assembly init` (the exact pattern `assembly transcribe`
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
-# no name. Bare `aai init` runs the command with template=None -> the interactive picker.
+# no name. Bare `assembly init` runs the command with template=None -> the interactive picker.
 app = typer.Typer()
 
 
@@ -74,7 +74,7 @@ def _resolve_template(template: str | None) -> str:
 def _active_env_vars() -> dict[str, str]:
     """Pin the scaffolded app to the active environment's hosts.
 
-    A sandbox key (minted by `aai login` against a non-prod env) would otherwise be
+    A sandbox key (minted by `assembly login` against a non-prod env) would otherwise be
     rejected by the production defaults baked into the template.
     """
     env = environments.active()
@@ -146,7 +146,7 @@ def _scaffold_report(chosen: str, target: Path, api_key: str | None) -> list[ste
             {
                 "name": "key",
                 "status": "skipped",
-                "detail": "no API key found; wrote a placeholder to .env (run `aai login`)",
+                "detail": "no API key found; wrote a placeholder to .env (run `assembly login`)",
             }
         )
     return report
@@ -209,7 +209,7 @@ def run_init(
             {
                 "name": "launch",
                 "status": "skipped",
-                "detail": f"no API key; run `aai login`, then: cd {target} && aai dev",
+                "detail": f"no API key; run `assembly login`, then: cd {target} && assembly dev",
             }
         )
 
@@ -222,7 +222,7 @@ def run_init(
     elif not json_mode:
         # Scaffolded but not launched (no key, or --no-install, or launch=False): leave the
         # user with the one command that starts their app, the way `vercel`/`supabase` sign off.
-        output.console.print(output.hint(f"Run `cd {escape(str(target))} && aai dev`."))
+        output.console.print(output.hint(f"Run `cd {escape(str(target))} && assembly dev`."))
     return target
 
 
@@ -230,16 +230,16 @@ def run_init(
     rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
-            ("Scaffold a new app interactively", "aai init"),
+            ("Scaffold a new app interactively", "assembly init"),
             (
                 "Scaffold an audio transcription app into ./my-app",
-                "aai init audio-transcription my-app",
+                "assembly init audio-transcription my-app",
             ),
-            ("Scaffold a voice agent app", "aai init voice-agent"),
-            ("Scaffold into the current directory", "aai init audio-transcription --here"),
+            ("Scaffold a voice agent app", "assembly init voice-agent"),
+            ("Scaffold into the current directory", "assembly init audio-transcription --here"),
             (
                 "Scaffold only, without installing or launching",
-                "aai init audio-transcription --no-install",
+                "assembly init audio-transcription --no-install",
             ),
         ]
     ),
@@ -270,7 +270,7 @@ def init(
     """Scaffold a new project from a template, then launch it.
 
     This is the starting point for creating an app — including a voice agent app
-    ('aai init voice-agent'). The 'aai agent' command only runs a live mic
+    ('assembly init voice-agent'). The 'assembly agent' command only runs a live mic
     conversation and writes no code.
     """
 

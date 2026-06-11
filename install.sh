@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the AssemblyAI CLI (`aai`) without cloning the repo:
+# Install the AssemblyAI CLI (`assembly`) without cloning the repo:
 #
 #   curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
 #
@@ -29,7 +29,7 @@ fi
 
 # --- Install (prefer pipx for an isolated env; fall back to pip --user) ----
 if command -v pipx >/dev/null 2>&1; then
-  info "Installing aai with pipx from ${REPO}@${REF}..."
+  info "Installing assembly with pipx from ${REPO}@${REF}..."
   pipx install --force "$SPEC"
 else
   info "pipx not found; installing with pip --user from ${REPO}@${REF}..."
@@ -37,9 +37,9 @@ else
 fi
 
 # --- Next steps -----------------------------------------------------------
-if command -v aai >/dev/null 2>&1; then
-  info "Installed. Next: run 'aai onboard'."
+if command -v assembly >/dev/null 2>&1; then
+  info "Installed. Next: run 'assembly onboard'."
 else
-  info "Installed, but 'aai' isn't on your PATH yet."
+  info "Installed, but 'assembly' isn't on your PATH yet."
   info "Run 'pipx ensurepath' (or add ~/.local/bin to PATH), then restart your shell."
 fi

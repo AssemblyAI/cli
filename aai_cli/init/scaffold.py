@@ -100,7 +100,7 @@ def scaffold(
     # only (0600) instead of the umask default (commonly 0644) — otherwise the key
     # would be world/group-readable on a shared host. Open with the 0600 mode so the
     # secret is never briefly world-readable; the explicit chmod then also tightens an
-    # existing file when `aai init --force` overwrites one (O_CREAT's mode is ignored
+    # existing file when `assembly init --force` overwrites one (O_CREAT's mode is ignored
     # for a file that already exists).
     fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
     with os.fdopen(fd, "w") as fh:

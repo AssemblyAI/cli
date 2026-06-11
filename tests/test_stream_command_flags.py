@@ -1,4 +1,4 @@
-"""`aai stream` flag handling: flag-to-params mapping and conflicting-flag validation.
+"""`assembly stream` flag handling: flag-to-params mapping and conflicting-flag validation.
 
 Source/streaming behavior and --show-code tests live in test_stream_command.py.
 """

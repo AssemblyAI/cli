@@ -17,7 +17,7 @@ from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import devserver, procfile, runner, tunnel
 
-# Flattened single-command sub-typer (same pattern as `aai dev`).
+# Flattened single-command sub-typer (same pattern as `assembly dev`).
 app = typer.Typer()
 
 
@@ -118,9 +118,9 @@ def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
     rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
-            ("Share the running app on a public URL", "aai share"),
-            ("Use a specific local port", "aai share --port 8000"),
-            ("Skip the dependency install step", "aai share --no-install"),
+            ("Share the running app on a public URL", "assembly share"),
+            ("Use a specific local port", "assembly share --port 8000"),
+            ("Skip the dependency install step", "assembly share --no-install"),
         ]
     ),
 )
@@ -134,7 +134,7 @@ def share(
 ) -> None:
     """Boot the app and expose it on a public URL via a cloudflared tunnel.
 
-    Run this from inside a project created by `aai init`. It starts the dev server and
+    Run this from inside a project created by `assembly init`. It starts the dev server and
     opens a cloudflared quick tunnel, printing a shareable https://*.trycloudflare.com
     URL. Requires cloudflared (macOS: `brew install cloudflared`; other platforms:
     https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).

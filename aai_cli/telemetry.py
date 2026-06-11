@@ -8,7 +8,7 @@ it (it is public by design — never put an API key there);
 ``AAI_TELEMETRY_CLIENT_TOKEN`` overrides it without a release.
 
 Telemetry is opt-out (``AAI_TELEMETRY_DISABLED=1``, the cross-tool
-``DO_NOT_TRACK=1``, or ``aai telemetry disable``) and must never slow down or
+``DO_NOT_TRACK=1``, or ``assembly telemetry disable``) and must never slow down or
 break the command it observes: delivery happens in a detached flusher process,
 and every send-side failure is swallowed.
 """
@@ -102,7 +102,7 @@ def build_event(
 
 
 def dispatch(event: Mapping[str, object]) -> None:
-    """Hand one event to a detached `aai telemetry flush` process; return immediately.
+    """Hand one event to a detached `assembly telemetry flush` process; return immediately.
 
     The child is the CLI's own (hidden) ``telemetry flush`` subcommand — an explicit,
     reviewable entry point, the same shape as the Vercel CLI's ``telemetry flush``.
@@ -127,7 +127,7 @@ def flush_payload(raw: str) -> None:
     The token rides both as the ``DD-API-KEY`` header (the v2 logs API form) and
     the ``dd-api-key`` query param (the browser-intake form the client-token
     endpoints expect), so either intake host accepts it. Runs in the detached
-    flusher (`aai telemetry flush`) with stdio discarded, so failures need no
+    flusher (`assembly telemetry flush`) with stdio discarded, so failures need no
     handling here.
     """
     import httpx2 as httpx

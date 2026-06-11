@@ -1,7 +1,7 @@
 """Real install-and-run smoke tests for the documented install paths.
 
 Builds a wheel from the checkout once, then installs it into hermetic locations
-and asserts the resulting `aai` binary actually runs — exercising dependency
+and asserts the resulting `assembly` binary actually runs — exercising dependency
 resolution + the console entrypoint for each documented installer:
 
 * install.sh's pipx and pip --user branches (via the test-only AAI_SPEC
@@ -100,7 +100,7 @@ def test_install_via_pipx(built_wheel: Path, tmp_path: Path) -> None:
     }
     run = subprocess.run([_sh(), str(INSTALL_SH)], env=env, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
-    _assert_aai_runs(pipx_bin / "aai")
+    _assert_aai_runs(pipx_bin / "assembly")
 
 
 def test_install_via_pip_user(built_wheel: Path, tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_install_via_pip_user(built_wheel: Path, tmp_path: Path) -> None:
     }
     run = subprocess.run([_sh(), str(INSTALL_SH)], env=env, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
-    _assert_aai_runs(userbase / "bin" / "aai")
+    _assert_aai_runs(userbase / "bin" / "assembly")
 
 
 def test_install_via_uv_tool(built_wheel: Path, tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_install_via_uv_tool(built_wheel: Path, tmp_path: Path) -> None:
         pytest.skip("PyPI unreachable; skipping real-install smoke test (offline)")
 
     # Hermetic uv tool dirs so the install never touches the developer's real
-    # toolchain; UV_TOOL_BIN_DIR is where uv links the `aai` entrypoint.
+    # toolchain; UV_TOOL_BIN_DIR is where uv links the `assembly` entrypoint.
     bindir = tmp_path / "uv_bin"
     env = {
         **os.environ,
@@ -145,4 +145,4 @@ def test_install_via_uv_tool(built_wheel: Path, tmp_path: Path) -> None:
         text=True,
     )
     assert run.returncode == 0, run.stderr
-    _assert_aai_runs(bindir / "aai")
+    _assert_aai_runs(bindir / "assembly")

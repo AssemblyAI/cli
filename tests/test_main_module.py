@@ -59,7 +59,7 @@ def test_python_dash_m_entrypoint_runs():
         text=True,
     )
     assert result.returncode == 0
-    assert "aai" in result.stdout
+    assert "assembly" in result.stdout
 
 
 def test_python_dash_m_version():

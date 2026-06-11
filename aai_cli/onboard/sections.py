@@ -49,7 +49,7 @@ def auth(prompter: Prompter, ctx: WizardContext) -> SectionResult:
         # can produce. Stop here with the actionable next step instead of hanging.
         prompter.note(
             "No API key found, and this is a non-interactive session — "
-            "browser sign-in can't complete here. Run `aai login` in a terminal, "
+            "browser sign-in can't complete here. Run `assembly login` in a terminal, "
             "or set ASSEMBLYAI_API_KEY."
         )
         return SectionResult.FAILED
@@ -114,7 +114,7 @@ def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     if choice == "skip":
         return SectionResult.SKIPPED
     if not prompter.confirm(f"Scaffold the '{choice}' app now?", default=True):
-        prompter.note(f"You can run `aai init {choice}` whenever you're ready.")
+        prompter.note(f"You can run `assembly init {choice}` whenever you're ready.")
         return SectionResult.SKIPPED
     # launch=False: never block the wizard on a running dev server.
     try:
@@ -153,7 +153,7 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
 
 def next_steps(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     prompter.section("You're set up")
-    output.console.print(output.hint("Transcribe a file:  aai transcribe <file>"))
-    output.console.print(output.hint("Stream live audio:  aai stream"))
-    output.console.print(output.hint("Build an app:       aai init"))
+    output.console.print(output.hint("Transcribe a file:  assembly transcribe <file>"))
+    output.console.print(output.hint("Stream live audio:  assembly stream"))
+    output.console.print(output.hint("Build an app:       assembly init"))
     return SectionResult.DONE

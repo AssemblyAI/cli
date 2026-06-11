@@ -28,7 +28,7 @@ from openai import OpenAI  # the LLM Gateway is OpenAI-compatible
 from api import settings
 
 aai.settings.api_key = settings.API_KEY
-# Target the same AssemblyAI environment the key was minted for. `aai init` writes
+# Target the same AssemblyAI environment the key was minted for. `assembly init` writes
 # this for you; leave it unset to use the production default.
 if settings.ASSEMBLYAI_BASE_URL:
     aai.settings.base_url = settings.ASSEMBLYAI_BASE_URL

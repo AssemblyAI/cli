@@ -28,7 +28,7 @@ def iter_piped_stdin_lines() -> Iterator[str]:
     """Yield non-blank, stripped lines piped on stdin, live, as each one arrives.
 
     Unlike ``piped_stdin_text`` (which reads to EOF), this consumes the pipe
-    incrementally so a long-running upstream like ``aai stream -o text`` can drive
+    incrementally so a long-running upstream like ``assembly stream -o text`` can drive
     a downstream command turn by turn. Yields nothing when stdin is a terminal, so
     a ``--follow`` consumer used interactively returns instead of blocking forever.
     """
@@ -44,8 +44,8 @@ def iter_piped_stdin_lines() -> Iterator[str]:
 def piped_stdin_text() -> str | None:
     """Return text piped on stdin, or None when stdin is a terminal or empty.
 
-    Lets commands accept input from a pipe (e.g. ``cat notes.txt | aai llm ...`` or
-    ``aai transcribe x.mp3 -o text | aai llm "summarize"``) without blocking when run
+    Lets commands accept input from a pipe (e.g. ``cat notes.txt | assembly llm ...`` or
+    ``assembly transcribe x.mp3 -o text | assembly llm "summarize"``) without blocking when run
     interactively.
     """
     stream = sys.stdin
@@ -58,7 +58,7 @@ def piped_stdin_text() -> str | None:
 def read_binary_stdin() -> bytes:
     """Read all bytes piped on stdin, for a ``-`` audio source.
 
-    Used by ``cat call.wav | aai transcribe -`` and ``ffmpeg … | aai transcribe -``.
+    Used by ``cat call.wav | assembly transcribe -`` and ``ffmpeg … | assembly transcribe -``.
     """
     buffer = getattr(sys.stdin, "buffer", None)
     if buffer is None:  # e.g. a text-only stub in tests

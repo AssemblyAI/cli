@@ -129,7 +129,7 @@ def test_unauthorized_error_raises_not_authenticated_exit_4():
         s.dispatch({"type": "session.error", "code": "UNAUTHORIZED", "message": "bad key"})
     assert excinfo.value.exit_code == 4
     assert "bad key" in str(excinfo.value)  # the server message wins over code/fallback
-    assert excinfo.value.suggestion is not None and "aai login" in excinfo.value.suggestion
+    assert excinfo.value.suggestion is not None and "assembly login" in excinfo.value.suggestion
     # A presented-and-refused key: auto-login must not retry over a bad env key.
     assert excinfo.value.rejected_key is True
 

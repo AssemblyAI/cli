@@ -57,7 +57,7 @@ def _playback_error(exc: Exception) -> CLIError:
         f"Could not play audio: {exc}",
         error_type="audio_output_error",
         exit_code=1,
-        suggestion="Check your output device and run 'aai doctor', or use --out to save a WAV.",
+        suggestion="Check your output device and run 'assembly doctor', or use --out to save a WAV.",
     )
 
 

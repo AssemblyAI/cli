@@ -12,7 +12,7 @@ Usage::
     ASSEMBLYAI_API_KEY=<key> uv run python scripts/record_fixtures.py
 
 The API key is read from the environment; the AMS session (JWT) is read from the OS
-keyring of whoever ran ``aai login`` (profile ``default``). Neither is ever written to
+keyring of whoever ran ``assembly login`` (profile ``default``). Neither is ever written to
 a fixture. Re-run it to refresh the fixtures after an API shape change.
 """
 
@@ -122,7 +122,7 @@ def main() -> int:
     session = config.get_session(PROFILE)
     account_id = config.get_account_id(PROFILE)
     if session is None or account_id is None:
-        _err(f"No AMS session for profile {PROFILE!r}; run 'aai login' first.")
+        _err(f"No AMS session for profile {PROFILE!r}; run 'assembly login' first.")
         return 1
     jwt = session["jwt"]
     scrub = _build_scrubber([api_key, jwt, session.get("token", "")])

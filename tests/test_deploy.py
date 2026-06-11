@@ -281,14 +281,14 @@ def test_deploy_help_lists_flags(flag: str) -> None:
 def test_deploy_outside_project_errors_like_dev(
     in_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Same guard as `aai dev`/`aai share`: outside a scaffolded project, say
-    # "run `aai init`" — not "install the Vercel CLI".
+    # Same guard as `assembly dev`/`assembly share`: outside a scaffolded project, say
+    # "run `assembly init`" — not "install the Vercel CLI".
     in_project.unlink()
     calls = _stub(monkeypatch, available=("vercel",))
     result = runner.invoke(app, ["deploy", "--yes"])
     assert result.exit_code == 1
     assert "No Procfile here (expected ./Procfile)" in result.output
-    assert "aai init" in result.output
+    assert "assembly init" in result.output
     assert _cmds(calls) == []  # never deployed
 
 
@@ -296,7 +296,7 @@ def test_deploy_procfile_guard_runs_before_cli_check(
     in_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # With neither a Procfile nor the Vercel CLI, the missing-project error must win:
-    # the actionable next step is `aai init`, not installing a deploy CLI.
+    # the actionable next step is `assembly init`, not installing a deploy CLI.
     in_project.unlink()
     _stub(monkeypatch, available=())
     result = runner.invoke(app, ["deploy", "--yes"])

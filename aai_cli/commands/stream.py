@@ -55,7 +55,7 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
                 [("system", system, system.sample_rate), ("you", mic, mic.sample_rate)]
             )
     elif opts.from_stdin:
-        # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | aai stream -`).
+        # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | assembly stream -`).
         stdin_src = StdinSource(sample_rate=opts.sample_rate or TARGET_RATE)
         session.run(stdin_src, stdin_src.sample_rate)
     elif opts.source and youtube.is_downloadable_url(opts.source):
@@ -81,19 +81,19 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Stream from your microphone", "aai stream"),
-            ("Stream a file or URL in real time", "aai stream recording.wav"),
-            ("Stream the hosted sample", "aai stream --sample"),
-            ("Label speakers in the live transcript", "aai stream --speaker-labels"),
+            ("Stream from your microphone", "assembly stream"),
+            ("Stream a file or URL in real time", "assembly stream recording.wav"),
+            ("Stream the hosted sample", "assembly stream --sample"),
+            ("Label speakers in the live transcript", "assembly stream --speaker-labels"),
             (
                 "Boost domain terms with keyterm prompts",
-                'aai stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
+                'assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
             ),
             (
                 "Summarize action items live as you talk",
-                'aai stream --llm "summarize action items"',
+                'assembly stream --llm "summarize action items"',
             ),
-            ("Print equivalent Python instead of running", "aai stream --show-code"),
+            ("Print equivalent Python instead of running", "assembly stream --show-code"),
         ]
     ),
 )
@@ -341,11 +341,11 @@ def stream(
     """Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
 
     Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
-    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | aai stream -.
+    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | assembly stream -.
 
     --prompt biases the speech model. --llm runs a prompt over the live transcript
     in-process, refreshing the answer on every finalized turn; for a separate step
-    instead, pipe the text out with -o text | aai llm -f "…".
+    instead, pipe the text out with -o text | assembly llm -f "…".
     """
 
     def body(state: AppState, json_mode: bool) -> None:

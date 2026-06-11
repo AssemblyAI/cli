@@ -17,7 +17,7 @@ def test_scaffold_env_is_owner_only_readable(tmp_path):
 
 
 def test_scaffold_tightens_existing_env_on_overwrite(tmp_path):
-    # `aai init --force` re-scaffolds over an existing project; a stale, loosely
+    # `assembly init --force` re-scaffolds over an existing project; a stale, loosely
     # permissioned .env must be tightened to 0600 rather than left as-is.
     target = tmp_path / "app"
     target.mkdir()
@@ -34,7 +34,7 @@ def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     assert (target / "api" / "index.py").exists()
     assert (target / "static" / "index.html").exists()
     # vercel.json ships in the scaffold: it pins the FastAPI framework preset so the
-    # `aai deploy` -> `vercel deploy` path doesn't auto-detect the "services" framework.
+    # `assembly deploy` -> `vercel deploy` path doesn't auto-detect the "services" framework.
     assert (target / "vercel.json").exists()
     # dotfile templates are renamed to their dotted names
     assert (target / ".gitignore").exists()
@@ -114,7 +114,7 @@ def test_scaffold_registered_but_missing_files_raises(tmp_path, monkeypatch):
 
 
 def test_scaffold_creates_nested_target_parents(tmp_path):
-    # `aai init <tmpl> a/b/app` targets a path whose parents don't exist yet; scaffold
+    # `assembly init <tmpl> a/b/app` targets a path whose parents don't exist yet; scaffold
     # must create the whole chain (target.mkdir parents=True).
     target = tmp_path / "a" / "b" / "app"  # a/ and b/ do not exist
     scaffold.scaffold("audio-transcription", target, api_key="k")

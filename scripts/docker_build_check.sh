@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build each `aai init` template's Docker image to prove the shipped Dockerfile works
+# Build each `assembly init` template's Docker image to prove the shipped Dockerfile works
 # end to end: scaffold the template (which renames `dockerignore` -> `.dockerignore`
 # and writes a placeholder `.env`), then `docker build` the result. This catches a
 # broken Dockerfile, an uninstallable requirement, or a bad COPY layout — none of which
@@ -31,7 +31,7 @@ trap cleanup EXIT
 for t in "${templates[@]}"; do
   app="$workdir/$t"
   echo "==> scaffolding $t"
-  uv run aai init "$t" "$app" --no-install >/dev/null
+  uv run assembly init "$t" "$app" --no-install >/dev/null
   echo "==> docker build $t"
   docker build --quiet -t "aai-template-${t}:dockercheck" "$app"
 done

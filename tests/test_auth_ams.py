@@ -47,7 +47,7 @@ def test_auth_4xx_raises_not_authenticated(monkeypatch, status):
     with pytest.raises(NotAuthenticated) as exc:
         ams.discover("bad")
     # A rejected AMS session now carries an actionable next step.
-    assert exc.value.suggestion is not None and "aai login" in exc.value.suggestion
+    assert exc.value.suggestion is not None and "assembly login" in exc.value.suggestion
 
 
 def test_500_raises_api_error_with_detail(monkeypatch):

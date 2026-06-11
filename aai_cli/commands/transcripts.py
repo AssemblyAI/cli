@@ -14,10 +14,10 @@ app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=Tru
 @app.command(
     epilog=examples_epilog(
         [
-            ("Fetch a transcript's text by id", "aai transcripts get 5551234-abcd"),
-            ("Speaker-labeled turns", "aai transcripts get 5551234-abcd -o utterances"),
-            ("Save SRT subtitles", "aai transcripts get 5551234-abcd -o srt > captions.srt"),
-            ("Get the raw JSON", "aai transcripts get 5551234-abcd --json"),
+            ("Fetch a transcript's text by id", "assembly transcripts get 5551234-abcd"),
+            ("Speaker-labeled turns", "assembly transcripts get 5551234-abcd -o utterances"),
+            ("Save SRT subtitles", "assembly transcripts get 5551234-abcd -o srt > captions.srt"),
+            ("Get the raw JSON", "assembly transcripts get 5551234-abcd --json"),
         ]
     )
 )
@@ -47,7 +47,7 @@ def get(
             output.emit_text(client.select_transcript_field(transcript, output_field))
             return
         if json_mode:
-            # The full SDK payload, identical to `aai transcribe … --json`, so the
+            # The full SDK payload, identical to `assembly transcribe … --json`, so the
             # same `jq` works whether the transcript is fetched fresh or re-fetched.
             output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
         else:
@@ -64,13 +64,13 @@ def get(
     name="list",
     epilog=examples_epilog(
         [
-            ("List your recent transcripts", "aai transcripts list"),
-            ("Show more at once", "aai transcripts list --limit 50"),
-            ("Grab the latest transcript id", "aai transcripts list --json | jq -r '.[0].id'"),
+            ("List your recent transcripts", "assembly transcripts list"),
+            ("Show more at once", "assembly transcripts list --limit 50"),
+            ("Grab the latest transcript id", "assembly transcripts list --json | jq -r '.[0].id'"),
             (
                 "Summarize your latest transcript",
-                'aai llm "summarize" --transcript-id '
-                "$(aai transcripts list --json | jq -r '.[0].id')",
+                'assembly llm "summarize" --transcript-id '
+                "$(assembly transcripts list --json | jq -r '.[0].id')",
             ),
         ]
     ),

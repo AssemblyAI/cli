@@ -1,6 +1,6 @@
 ---
 name: plan-feature
-description: Plan a new aai CLI feature the way this repo does — drive the superpowers planning skill, then persist the spec + plan into docs/superpowers/ under this repo's naming and verification conventions. Use before building anything non-trivial.
+description: Plan a new assembly CLI feature the way this repo does — drive the superpowers planning skill, then persist the spec + plan into docs/superpowers/ under this repo's naming and verification conventions. Use before building anything non-trivial.
 disable-model-invocation: true
 argument-hint: "<short feature description>"
 ---

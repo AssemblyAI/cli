@@ -132,7 +132,7 @@ def test_human_close_commits_open_partial():
 
 
 def test_human_notice_goes_to_stderr_not_stdout():
-    # Human (default) mode is also piped sometimes (`aai agent | head`); the notice
+    # Human (default) mode is also piped sometimes (`assembly agent | head`); the notice
     # must land on stderr in every non-JSON mode so stdout carries only transcript.
     out, err = io.StringIO(), io.StringIO()
     console = theme.make_console(file=out, force_terminal=True, width=80)

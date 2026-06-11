@@ -63,7 +63,7 @@ def test_template_ships_no_real_key():
 
 
 def test_base_url_env_is_applied(monkeypatch, mocker):
-    # aai init writes ASSEMBLYAI_BASE_URL so a sandbox key targets the sandbox host.
+    # assembly init writes ASSEMBLYAI_BASE_URL so a sandbox key targets the sandbox host.
     monkeypatch.setenv("ASSEMBLYAI_BASE_URL", "https://api.sb.example")
     _app, fake, _api = _load_app(monkeypatch, mocker)
     assert fake.settings.base_url == "https://api.sb.example"

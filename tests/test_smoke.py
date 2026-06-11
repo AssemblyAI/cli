@@ -12,7 +12,7 @@ def test_help_runs():
 
 
 def test_version_flag_prints_and_exits():
-    # `aai --version` / `-V` is the reflex every CLI answers; the eager callback prints
+    # `assembly --version` / `-V` is the reflex every CLI answers; the eager callback prints
     # the version and exits before any command runs.
     from aai_cli import __version__
 
@@ -65,7 +65,7 @@ def test_shell_completion_is_available(monkeypatch):
     monkeypatch.setattr(typer.completion, "_get_shell_name", lambda: "zsh")
     result = runner.invoke(app, ["--show-completion"])
     assert result.exit_code == 0
-    assert "_aai_completion" in result.output  # the emitted zsh completion script
+    assert "_assembly_completion" in result.output  # the emitted zsh completion script
 
 
 def test_global_flags_parse():
@@ -86,7 +86,7 @@ def test_help_lists_commands_in_workflow_order():
     cmd = get_command(app)
     # Typer (>=0.13) vendors its own click; the root command is a TyperGroup.
     assert isinstance(cmd, TyperGroup)
-    ctx = cmd.make_context("aai", [], resilient_parsing=True)
+    ctx = cmd.make_context("assembly", [], resilient_parsing=True)
     names = cmd.list_commands(ctx)  # the order shown under --help
     # Grouped into Rich help panels (see help_panels.py): Quick Start, Build an App,
     # Run AssemblyAI, Setup & Tools, History, then Account.

@@ -28,7 +28,7 @@ class Check(TypedDict):
 
 class DoctorResult(TypedDict):
     ok: bool
-    # Which profile/environment the checks ran against. `aai doctor` always fills
+    # Which profile/environment the checks ran against. `assembly doctor` always fills
     # these in; the onboarding wizard reuses `render` for a partial check without
     # them, so they stay optional.
     profile: NotRequired[str]
@@ -80,7 +80,7 @@ def _check_api_key(profile: str) -> Check:
         key = config.resolve_api_key(profile=profile)
     except NotAuthenticated:
         if not config.keyring_usable():
-            # On a box with no keyring, `aai login` can't persist a key either, so
+            # On a box with no keyring, `assembly login` can't persist a key either, so
             # point at the env var that actually works here instead of a dead end.
             return _check(
                 "api-key",
@@ -93,7 +93,7 @@ def _check_api_key(profile: str) -> Check:
             "api-key",
             "fail",
             "No API key found.",
-            fix="Run 'aai login' (or set ASSEMBLYAI_API_KEY).",
+            fix="Run 'assembly login' (or set ASSEMBLYAI_API_KEY).",
             affects=["everything"],
         )
     # validate_key doubles as the connectivity probe: it makes one cheap authed call,
@@ -115,7 +115,7 @@ def _check_api_key(profile: str) -> Check:
         "api-key",
         "fail",
         "API key was rejected (HTTP 401).",
-        fix="Run 'aai login' with a valid key.",
+        fix="Run 'assembly login' with a valid key.",
         affects=["everything"],
     )
 
@@ -196,7 +196,7 @@ def _check_coding_agent() -> Check:
         return _check(
             "coding-agent",
             "ok",
-            "claude and npx found; run 'aai setup install' to wire up the docs MCP + skills.",
+            "claude and npx found; run 'assembly setup install' to wire up the docs MCP + skills.",
         )
     return _check(
         "coding-agent",
@@ -204,9 +204,9 @@ def _check_coding_agent() -> Check:
         f"not found: {', '.join(missing)}.",
         fix=(
             "Install Claude Code (https://claude.com/claude-code) and Node.js, "
-            "then run 'aai setup install'."
+            "then run 'assembly setup install'."
         ),
-        affects=["aai setup install"],
+        affects=["assembly setup install"],
     )
 
 
@@ -227,11 +227,11 @@ def render(data: DoctorResult) -> str:
             lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
     if data["ok"]:
         lines.append("  " + output.success("Everything looks good."))
-        # Only the real `aai doctor` carries profile context; the onboarding wizard
+        # Only the real `assembly doctor` carries profile context; the onboarding wizard
         # reuses render() for a partial check and has its own next-steps, so don't
         # tack a "try transcribe" hint onto that one.
         if data.get("profile") is not None:
-            lines.append("  " + output.hint("Try it: aai transcribe --sample"))
+            lines.append("  " + output.hint("Try it: assembly transcribe --sample"))
     else:
         failed = sum(1 for c in checks if c["status"] == "fail")
         noun = "problem" if failed == 1 else "problems"
@@ -243,8 +243,8 @@ def render(data: DoctorResult) -> str:
     rich_help_panel=help_panels.SETUP,
     epilog=examples_epilog(
         [
-            ("Check your environment is ready", "aai doctor"),
-            ("Output results as JSON", "aai doctor --json"),
+            ("Check your environment is ready", "assembly doctor"),
+            ("Output results as JSON", "assembly doctor --json"),
         ]
     ),
 )

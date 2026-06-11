@@ -125,7 +125,7 @@ def test_dev_command_does_not_mutate_caller_argv():
 
 
 def test_dev_command_explicit_host_passes_through():
-    # `aai dev --host 0.0.0.0` is the deliberate opt-in to LAN exposure.
+    # `assembly dev --host 0.0.0.0` is the deliberate opt-in to LAN exposure.
     cmd = devserver.dev_command(Path("/proj"), list(_PROCFILE_WEB), use_uv=True, host=WILDCARD_HOST)
     assert cmd[cmd.index("--host") + 1] == WILDCARD_HOST
 

@@ -14,7 +14,7 @@ class FollowRenderer:
     human watches one evolving summary. When piped or run by an agent (json_mode),
     each refresh is emitted as one NDJSON object so it stays machine-readable.
 
-    Shared by `aai llm --follow` (turns piped on stdin) and `aai stream --llm`
+    Shared by `assembly llm --follow` (turns piped on stdin) and `assembly stream --llm`
     (turns produced live by the streaming session).
     """
 
@@ -26,7 +26,7 @@ class FollowRenderer:
     def __enter__(self) -> FollowRenderer:
         if not self.json_mode:
             # screen=True draws into the terminal's alternate buffer (like less/htop).
-            # In the `aai stream -o text | aai llm -f` pipeline two processes share one
+            # In the `assembly stream -o text | assembly llm -f` pipeline two processes share one
             # TTY: stream writes status to stderr and the Ctrl-C "^C" echoes into our
             # region, desyncing Rich's relative-cursor teardown and duplicating the top
             # border. The alt buffer is isolated and restored verbatim on exit, so that

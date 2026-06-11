@@ -51,7 +51,7 @@ def test_dev_boots_procfile_command_with_reload(tmp_path, monkeypatch):
 
 
 def test_dev_binds_loopback_not_procfile_wildcard(tmp_path, monkeypatch):
-    # The Procfile says 0.0.0.0 (right for deploy targets); `aai dev` must rewrite it
+    # The Procfile says 0.0.0.0 (right for deploy targets); `assembly dev` must rewrite it
     # so the dev server (with the real key in .env) never listens on the whole network —
     # and the printed http://localhost URL then matches the actual bind.
     monkeypatch.chdir(tmp_path)
@@ -133,7 +133,7 @@ def test_dev_missing_procfile_errors(tmp_path, monkeypatch):
     captured = _stub_runner(monkeypatch)
     result = runner.invoke(app, ["dev"])
     assert result.exit_code == 1
-    assert "aai init" in result.output
+    assert "assembly init" in result.output
     assert captured == {}  # never launched
 
 

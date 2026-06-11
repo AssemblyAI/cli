@@ -1,4 +1,4 @@
-"""`aai transcribe` flag handling: flag-to-config mapping and flag validation.
+"""`assembly transcribe` flag handling: flag-to-config mapping and flag validation.
 
 Output rendering, LLM transforms, sources, and --show-code tests live in
 test_transcribe.py.

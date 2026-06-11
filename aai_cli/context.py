@@ -43,7 +43,7 @@ class AppState:
 
         These endpoints authenticate with the browser-login session, not the API
         key. Raises NotAuthenticated when the active profile has no stored session
-        (e.g. it was set up with `aai login --api-key`, or the session expired).
+        (e.g. it was set up with `assembly login --api-key`, or the session expired).
         """
         from aai_cli.errors import NotAuthenticated
 
@@ -52,7 +52,7 @@ class AppState:
         account_id = config.get_account_id(profile)
         if session is None or account_id is None:
             raise NotAuthenticated(
-                "These commands need a browser login. Run 'aai login' (without --api-key)."
+                "These commands need a browser login. Run 'assembly login' (without --api-key)."
             )
         return account_id, session["jwt"]
 
@@ -78,7 +78,7 @@ class AppState:
         return (
             f"Using {source} {selected}, but profile '{profile}' was set up for "
             f"{profile_env}; its stored key may be rejected by {selected}. "
-            f"{fix}, or run 'aai login' for {selected}."
+            f"{fix}, or run 'assembly login' for {selected}."
         )
 
 
@@ -118,7 +118,7 @@ def _persist_browser_login(state: AppState) -> None:
 def _login_persistence_error(exc: object) -> APIError:
     return APIError(
         f"Signed in, but could not save the credentials locally: {exc}",
-        suggestion="Run 'aai login' again, or check your keyring/config permissions.",
+        suggestion="Run 'assembly login' again, or check your keyring/config permissions.",
     )
 
 
@@ -140,7 +140,7 @@ def _interactive_session() -> bool:
 def _should_auto_login(err: NotAuthenticated) -> bool:
     # CI/pipelines/agents have no human to finish a browser sign-in; starting one
     # would bind a loopback port and block for up to two minutes. Surface the
-    # original NotAuthenticated (with its 'aai login' / ASSEMBLYAI_API_KEY
+    # original NotAuthenticated (with its 'assembly login' / ASSEMBLYAI_API_KEY
     # suggestion) instead.
     if not _interactive_session():
         return False

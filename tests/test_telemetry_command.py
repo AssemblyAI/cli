@@ -1,4 +1,4 @@
-"""Tests for `aai telemetry status/enable/disable` and the run_command integration."""
+"""Tests for `assembly telemetry status/enable/disable` and the run_command integration."""
 
 import json
 
@@ -60,7 +60,7 @@ def test_status_human_disabled(monkeypatch):
     assert result.exit_code == 0
     assert "Telemetry is disabled." in result.output
     assert "Consent: granted. Intake token configured: no." in result.output
-    assert "aai telemetry disable" in result.output
+    assert "assembly telemetry disable" in result.output
 
 
 def test_status_human_enabled(monkeypatch):
@@ -113,19 +113,19 @@ def test_command_run_is_tracked_with_full_command_path(monkeypatch):
     result = runner.invoke(app, ["telemetry", "status", "--json"])
     assert result.exit_code == 0
     (event,) = captured
-    assert event["command"] == "aai telemetry status"
+    assert event["command"] == "assembly telemetry status"
     assert event["outcome"] == "success"
     assert event["exit_code"] == 0
 
 
 def test_failed_command_is_tracked_with_error_type(monkeypatch):
-    # No stored session and a non-interactive runner: `aai balance` fails with
+    # No stored session and a non-interactive runner: `assembly balance` fails with
     # NotAuthenticated before any network call, and telemetry records that class.
     captured = _capture_events(monkeypatch)
     result = runner.invoke(app, ["balance", "--json"])
     assert result.exit_code == 4
     (event,) = captured
-    assert event["command"] == "aai balance"
+    assert event["command"] == "assembly balance"
     assert event["outcome"] == "not_authenticated"
     assert event["exit_code"] == 4
 

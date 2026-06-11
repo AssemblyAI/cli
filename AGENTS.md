@@ -10,7 +10,7 @@ This project uses [uv](https://docs.astral.sh/uv/). **Run every Python tool thro
 
 ```sh
 uv sync                      # create/refresh the venv (the dev group installs by default)
-uv run aai --help            # run the CLI from the locked environment
+uv run assembly --help            # run the CLI from the locked environment
 ./scripts/check.sh           # the full gate CI runs (scripts/check.sh is the source of truth)
 ```
 
@@ -90,14 +90,14 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
   (`next(o for o in objs if "env" in o)`). A monkeypatched fake must also mirror the real
   signature — when a helper gains a kwarg (e.g. `output.status(…, quiet=…)`), doubles that
   patch it must accept it or the call `TypeError`s.
-- **`--json` / `-j` is a per-command flag, not a root flag**: `aai --json transcribe …` fails
-  with "No such option"; it's `aai transcribe … --json`. (The root callback still sniffs the
+- **`--json` / `-j` is a per-command flag, not a root flag**: `assembly --json transcribe …` fails
+  with "No such option"; it's `assembly transcribe … --json`. (The root callback still sniffs the
   whole token list via `_command_line_requests_json`, so a callback-level failure like a bad
   `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
 
 ### Manual QA / running the CLI in sandboxed sessions
 
-Lessons that cost time in agent sessions — read before exercising `uv run aai` by hand:
+Lessons that cost time in agent sessions — read before exercising `uv run assembly` by hand:
 
 - **Probe network reachability first.** Remote/sandboxed environments often allowlist
   PyPI but block `api.assemblyai.com` / `streaming.assemblyai.com` / `llm-gateway.assemblyai.com`
@@ -110,8 +110,8 @@ Lessons that cost time in agent sessions — read before exercising `uv run aai`
   through that shared file — set `XDG_CONFIG_HOME=$(mktemp -d)` per run instead.
 - **Write scratch output to `/tmp`, never the repo root.** Redirects like `cmd > out.txt`
   in the repo show up as untracked files and trip commit hooks/gates.
-- **Headless boxes have no mic/speakers/browser.** `aai stream`/`aai agent` mic paths and
-  `aai login`'s browser flow can't complete; wrap exploratory runs in `timeout 30 …` so a
+- **Headless boxes have no mic/speakers/browser.** `assembly stream`/`assembly agent` mic paths and
+  `assembly login`'s browser flow can't complete; wrap exploratory runs in `timeout 30 …` so a
   blocking path can't wedge the session. For pytest, `--timeout N` (pytest-timeout, in the
   dev group) does the same per-test.
 
@@ -129,7 +129,7 @@ these live in the default suite. Three moving parts:
   (it hits the network) and is *not* mypy/pyright-checked (only ruff covers `scripts/`).
   Refresh after an API shape change: `ASSEMBLYAI_API_KEY=… uv run python scripts/record_fixtures.py`.
   The key comes from the env; the AMS session JWT + `account_id` from the keyring/`config.toml`
-  of whoever ran `aai login` (profile `default`) — neither is ever written to a fixture.
+  of whoever ran `assembly login` (profile `default`) — neither is ever written to a fixture.
 - **`tests/replay_fixtures.py`** — rebuilds the boundary objects from JSON. A transcript is a
   real `aai.Transcript` via `Transcript.from_response`; an LLM response is rebuilt with
   `ChatCompletion.model_construct` (**not** `model_validate`) because the gateway returns
@@ -143,13 +143,13 @@ the return value comes from a recorded payload instead of a hand-built mock.
 
 ## Naming & packaging gotchas
 
-- The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `aai` (`[project.scripts] aai = "aai_cli.main:run"`).
-- `aai init` templates live in `aai_cli/init/templates/` and are **committed**, including renamed dotfiles (`gitignore` → `.gitignore`, `env.example`). The wheel force-includes them via `[tool.hatch.build.targets.wheel] artifacts`, excluding `__pycache__/*.pyc`. Editing templates needs care — see the parametrized contract tests (`tests/test_init_template_*.py`).
+- The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `assembly` (`[project.scripts] assembly = "aai_cli.main:run"`).
+- `assembly init` templates live in `aai_cli/init/templates/` and are **committed**, including renamed dotfiles (`gitignore` → `.gitignore`, `env.example`). The wheel force-includes them via `[tool.hatch.build.targets.wheel] artifacts`, excluding `__pycache__/*.pyc`. Editing templates needs care — see the parametrized contract tests (`tests/test_init_template_*.py`).
 - `audioop` left the stdlib in 3.13; `audioop-lts` backfills it (conditional dependency). Supported Pythons: 3.12–3.13.
 
 ## Architecture
 
-A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app, and controls `aai --help` ordering via `_COMMAND_ORDER` + a custom `_OrderedGroup`. `run()` is the entry point and swallows `BrokenPipeError` (closed downstream pipe → exit 0).
+A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app, and controls `assembly --help` ordering via `_COMMAND_ORDER` + a custom `_OrderedGroup`. `run()` is the entry point and swallows `BrokenPipeError` (closed downstream pipe → exit 0).
 
 ### Command layer
 
@@ -167,12 +167,12 @@ Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `ag
 
 - **`streaming/`** + `client.stream_audio` — v3 realtime API. Event callbacks run on the SDK reader thread and guard against `BrokenPipeError` (`stdio.silence_stdout()`) so a closed pipe never dumps a thread traceback.
 - **`agent/`** — full-duplex voice agent (mic in, TTS out via `voices.py`).
-- **`tts/`** + `commands/speak.py` — `aai speak` synthesizes text to speech over the sandbox streaming-TTS WebSocket (`streaming-tts.sandbox000.…`). **Sandbox-only:** `session.is_available()` is false in production (empty `Environment.streaming_tts_host`), so the command exits 2 with a `--sandbox` hint. `session.synthesize` drives a Begin→Generate→Flush→Audio→Terminate protocol with an injectable `connect` for hermetic tests (mirrors `agent/session.py`); `audio.py` plays the PCM (default) or writes a WAV (`--out`).
+- **`tts/`** + `commands/speak.py` — `assembly speak` synthesizes text to speech over the sandbox streaming-TTS WebSocket (`streaming-tts.sandbox000.…`). **Sandbox-only:** `session.is_available()` is false in production (empty `Environment.streaming_tts_host`), so the command exits 2 with a `--sandbox` hint. `session.synthesize` drives a Begin→Generate→Flush→Audio→Terminate protocol with an injectable `connect` for hermetic tests (mirrors `agent/session.py`); `audio.py` plays the PCM (default) or writes a WAV (`--out`).
 - **`code_gen/`** — backs `--show-code` on `transcribe`/`stream`/`agent`: builds a ready-to-run Python SDK script from exactly the flags passed (no API key needed; generated code reads `ASSEMBLYAI_API_KEY`).
-- **`auth/`** — browser-assisted `aai login` via AMS + **Stytch B2B OAuth discovery** (`discovery.py`, `flow.py`, `loopback.py`, `ams.py`). Not Stytch Connected Apps.
+- **`auth/`** — browser-assisted `assembly login` via AMS + **Stytch B2B OAuth discovery** (`discovery.py`, `flow.py`, `loopback.py`, `ams.py`). Not Stytch Connected Apps.
 - **`init/`** — scaffolds a self-contained FastAPI + HTML starter (`audio-transcription`/`live-captions`/`voice-agent` templates), optionally installs deps and opens the browser; writes the key to a git-ignored `.env`.
-- **`telemetry.py`** — anonymous, opt-out usage telemetry (Supabase-CLI model): `context.run_command` wraps each command body in `telemetry.track(ctx.command_path)`, which dispatches one allow-listed event (command path, outcome/exit code, duration, version/OS — never args, paths, or account data) to the Datadog logs intake via a **detached flusher subprocess**, so commands never wait on telemetry. `SHIPPED_CLIENT_TOKEN` is a committed write-only Datadog *client* token (`pub…`, embeddable by design — never an API key; `AAI_TELEMETRY_CLIENT_TOKEN` overrides). The test suite blanks it via an autouse conftest fixture so no test ever spawns a real flusher. Opt-out: `AAI_TELEMETRY_DISABLED=1` / `DO_NOT_TRACK=1` / `aai telemetry disable` (persisted as `telemetry_enabled` in config.toml, alongside the random `device_id`). Send-side failures are swallowed (`OSError`/`CLIError`) — telemetry must never break a command.
-- **`commands/setup.py`** — `aai setup install/status/remove` wires a coding agent up to AssemblyAI by installing three artifacts: the `assemblyai-docs` docs MCP (via `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled `aai-cli` skill (copied out of the wheel, no network). Missing `claude`/`npx` is reported and skipped, not an error.
+- **`telemetry.py`** — anonymous, opt-out usage telemetry (Supabase-CLI model): `context.run_command` wraps each command body in `telemetry.track(ctx.command_path)`, which dispatches one allow-listed event (command path, outcome/exit code, duration, version/OS — never args, paths, or account data) to the Datadog logs intake via a **detached flusher subprocess** (the hidden `assembly telemetry flush`), so commands never wait on telemetry. `SHIPPED_CLIENT_TOKEN` is a committed write-only Datadog *client* token (`pub…`, embeddable by design — never an API key; `AAI_TELEMETRY_CLIENT_TOKEN` overrides). The test suite blanks it via an autouse conftest fixture so no test ever spawns a real flusher. Opt-out: `AAI_TELEMETRY_DISABLED=1` / `DO_NOT_TRACK=1` / `assembly telemetry disable` (persisted as `telemetry_enabled` in config.toml, alongside the random `device_id`). Send-side failures are swallowed (`OSError`/`CLIError`) — telemetry must never break a command.
+- **`commands/setup.py`** — `assembly setup install/status/remove` wires a coding agent up to AssemblyAI by installing three artifacts: the `assemblyai-docs` docs MCP (via `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled `aai-cli` skill (copied out of the wheel, no network). Missing `claude`/`npx` is reported and skipped, not an error.
 
 ## Conventions
 

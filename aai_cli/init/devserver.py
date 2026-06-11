@@ -23,7 +23,7 @@ def install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
 
 # Local dev binds the loopback interface only. The template Procfile says
 # `--host 0.0.0.0` — correct for the deploy targets (Railway/Fly route traffic into
-# the container) but wrong for `aai dev`/`aai share`: the .env beside it holds a real
+# the container) but wrong for `assembly dev`/`assembly share`: the .env beside it holds a real
 # API key, so the dev server must not listen on every interface of the machine.
 LOCAL_HOST = "127.0.0.1"
 
