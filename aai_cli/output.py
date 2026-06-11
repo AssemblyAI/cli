@@ -205,21 +205,13 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
             error_console.print(f"[aai.muted]Suggestion:[/aai.muted] {escape(err.suggestion)}")
 
 
-# The `assembly` wordmark for the bare-command welcome screen: a compact two-row
-# half-block letterform, tinted to the brand accent (see theme.BRAND). Interior
-# spaces are load-bearing (they separate the glyphs); trailing spaces are not, so
-# they're dropped to survive whitespace-trimming tooling.
-_BANNER = """\
-▄▀█ █▀ █▀ █▀▀ █▀▄▀█ █▄▄ █   █▄█
-█▀█ ▄█ ▄█ ██▄ █ ▀ █ █▄█ █▄▄  █"""
-
 # A one-line header: emoji + product + version, then the product tagline.
 _TAGLINE = "AssemblyAI from your terminal"
 
 
 def print_banner() -> None:
-    """Print the welcome header — a version + tagline line, then the `assembly` wordmark in
-    the brand accent (the bare-command welcome screen)."""
+    """Print the welcome header — a single emoji + product + version + tagline line
+    in the brand accent (the bare-command welcome screen)."""
     # highlight=False so Rich's repr-highlighter doesn't recolor the version digits or
     # the quoted tagline — the line stays a single muted tone behind the brand label.
     console.print(
@@ -227,8 +219,6 @@ def print_banner() -> None:
         f"[aai.muted]{__version__} — {_TAGLINE}[/aai.muted]",
         highlight=False,  # pragma: no mutate (purely cosmetic: toggles Rich repr coloring, not text)
     )
-    console.print()
-    console.print(Text(_BANNER, style="aai.brand"))
 
 
 def print_code(code: str, *, language: str = "python") -> None:
