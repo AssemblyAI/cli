@@ -111,10 +111,10 @@ jobs:
 
       # `brew style` is the RuboCop-based formula linter and runs fully offline, so
       # it lints idioms (resource/depends_on ordering, on_linux scoping) on every PR.
-      # A real `brew install` + `brew test` build runs in the `formula-install` job
-      # below (it repoints the formula at a branch-source tarball with a computed
-      # sha256, sidestepping the placeholder that stays until the v0.1.0 tag is cut).
-      # The stricter `brew audit --strict --online` still belongs in a release job.
+      # A real `brew install --build-bottle` of the formula runs in release.yml when
+      # a tag is cut; doing it per-PR was dropped — the from-source macOS build
+      # (rust + cryptography) took too long for PR feedback. The stricter
+      # `brew audit --strict --online` still belongs in a release job.
       - name: Lint the formula
         run: brew style ./Formula/assembly.rb
 
@@ -189,55 +189,3 @@ jobs:
           python -m pip install -e . pip-audit
           # Append `--ignore-vuln <ID>` to accept an unfixable transitive advisory.
           python -m pip_audit
-
-  formula-install:
-    # Real `brew install` of the Homebrew formula, built from THIS branch's source.
-    # macOS only: that's where the README points brew users first, and where the
-    # macOS keyring backend (no on_linux jeepney/secretstorage) actually runs.
-    name: brew install (real, macOS)
-    runs-on: macos-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false  # no job pushes; don't leave the token in .git/config
-      - uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1
-
-      # The committed formula's stable `url` points at a not-yet-cut release tag
-      # with a placeholder sha256, so a vanilla install can't build the branch.
-      # Repoint it at a source tarball of THIS checkout (the merge commit CI runs
-      # on) with the real checksum, so `brew install` compiles the branch through
-      # the formula's own resource list — the part most likely to drift from
-      # pyproject/uv.lock. count=1 keeps every resource url/sha256 untouched.
-      - name: Pin the formula to the branch source
-        run: |
-          set -euo pipefail
-          version="$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
-          tarball="$RUNNER_TEMP/aai-${version}.tar.gz"
-          # Mirror a GitHub archive: a single top-level dir brew strips on extract.
-          git archive --format=tar.gz --prefix="aai-${version}/" -o "$tarball" HEAD
-          sha="$(shasum -a 256 "$tarball" | awk '{print $1}')"
-          python3 - "Formula/assembly.rb" "$tarball" "$sha" <<'PY'
-          import re, sys, pathlib
-          formula, tarball, sha = sys.argv[1], sys.argv[2], sys.argv[3]
-          p = pathlib.Path(formula)
-          src = p.read_text()
-          src = re.sub(r'url ".*?"', f'url "file://{tarball}"', src, count=1)
-          src = re.sub(r"sha256 .*", f'sha256 "{sha}"', src, count=1)
-          p.write_text(src)
-          PY
-          grep -nE '^  (url|sha256) ' Formula/assembly.rb | head -2
-
-      # Newer Homebrew refuses formulae outside a tap, so install through a
-      # throwaway local tap holding the pinned formula (--no-git avoids needing a
-      # git identity on the runner). --build-from-source compiles the full resource
-      # list (rust + cryptography native builds); `brew test` then runs the
-      # formula's own `test do` block, asserting `assembly --version`.
-      - name: brew install + test
-        run: |
-          set -euo pipefail
-          brew tap-new --no-git assembly/local
-          cp Formula/assembly.rb "$(brew --repository assembly/local)/Formula/assembly.rb"
-          brew install --build-from-source --formula assembly/local/assembly
-          assembly --version
-          brew test assembly/local/assembly
