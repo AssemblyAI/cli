@@ -149,22 +149,21 @@ def test_bare_aai_with_key_shows_help_no_offer(monkeypatch: pytest.MonkeyPatch) 
     assert "Usage" in result.output or "Commands" in result.output
 
 
-def test_bare_aai_prints_wordmark_banner(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The welcome screen leads with the `assembly` wordmark; its block glyphs are present.
+def test_bare_aai_prints_welcome_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The welcome screen leads with the version + tagline header line.
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     result = CliRunner().invoke(app, [])
     assert result.exit_code == 0, result.output
-    assert "▄▀█ █▀ █▀ █▀▀ █▀▄▀█ █▄▄ █   █▄█" in result.output
-    assert "█▀█ ▄█ ▄█ ██▄ █ ▀ █ █▄█ █▄▄  █" in result.output
+    assert "AssemblyAI from your terminal" in result.output
 
 
 def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> None:
-    # `--quiet` drops the decorative banner but still prints help. A mutant that
-    # ignores `quiet` (always banners) would leave the wordmark in the output.
+    # `--quiet` drops the decorative header but still prints help. A mutant that
+    # ignores `quiet` (always banners) would leave the tagline in the output.
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     result = CliRunner().invoke(app, ["--quiet"])
     assert result.exit_code == 0, result.output
-    assert "▄▀█ █▀ █▀" not in result.output
+    assert "AssemblyAI from your terminal" not in result.output
     assert "Usage" in result.output or "Commands" in result.output
 
 
