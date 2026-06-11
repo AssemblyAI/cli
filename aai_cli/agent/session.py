@@ -155,9 +155,12 @@ class VoiceAgentSession:
         code = event.get("code", "")
         message = event.get("message") or code or "Voice agent error."
         if code in _AUTH_ERROR_CODES:
+            # rejected_key: a credential was presented and the server refused it, so
+            # auto-login must not retry when the key came from ASSEMBLYAI_API_KEY.
             raise NotAuthenticated(
                 f"Voice agent rejected the connection: {message}",
                 suggestion="Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY.",
+                rejected_key=True,
             )
         raise APIError(f"Voice agent error ({code}): {message}")
 
