@@ -116,7 +116,9 @@ def _render(current: str, latest: str) -> None:
         Text.assemble("Update available  ", (current, "aai.muted"), " → ", (latest, "aai.success")),
         action,
     )
-    output.error_console.print(Panel(body, border_style="aai.muted", padding=(1, 3), expand=False))
+    # Cosmetic panel styling (padding/expand) — not worth pinning behaviorally.
+    panel = Panel(body, border_style="aai.muted", padding=(1, 3), expand=False)  # pragma: no mutate
+    output.error_console.print(panel)
 
 
 def maybe_notify(*, json_mode: bool) -> None:

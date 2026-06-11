@@ -69,11 +69,14 @@ def _fake_response(payload: dict[str, object]) -> types.SimpleNamespace:
 def test_fetch_and_cache_writes_latest(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
 
-    captured: dict[str, object] = {}
+    # Untyped capture dict (mirrors the pattern in tests/test_telemetry.py).
+    captured = {}
 
     def fake_get(url, **kwargs):
         captured["url"] = url
         captured["headers"] = kwargs.get("headers", {})
+        captured["timeout"] = kwargs.get("timeout")
+        captured["follow_redirects"] = kwargs.get("follow_redirects")
         return _fake_response({"tag_name": "v0.4.0"})
 
     monkeypatch.setattr(httpx2, "get", fake_get)
@@ -85,6 +88,23 @@ def test_fetch_and_cache_writes_latest(tmp_path, monkeypatch):
     assert last_check is not None
     assert captured["url"] == update_check._RELEASES_URL
     assert "User-Agent" in captured["headers"]
+    assert captured["timeout"] == 5.0  # the configured fetch timeout flows through
+    assert captured["follow_redirects"] is True  # GitHub's latest-release URL redirects
+
+
+def test_check_interval_is_24_hours():
+    assert update_check._CHECK_INTERVAL_SECONDS == 86400
+
+
+def test_fetch_and_cache_empty_tag_leaves_version_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    # An empty tag_name is present but unusable: it must NOT be cached as a version.
+    monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({"tag_name": ""}))
+
+    update_check.fetch_and_cache()
+
+    _, latest = config.get_update_cache()
+    assert latest is None
 
 
 def test_fetch_and_cache_swallows_errors_but_records_check(tmp_path, monkeypatch):
@@ -102,11 +122,13 @@ def test_fetch_and_cache_swallows_errors_but_records_check(tmp_path, monkeypatch
     assert last_check is not None  # but the attempt is recorded
 
 
-def _tty_console() -> Console:
+def _tty_console() -> tuple[Console, io.StringIO]:
     # A theme-aware console (so aai.* styles resolve, like the real error_console)
     # that reports as a terminal, with color env pinned (see the
     # rich-color-tests-need-empty-environ project memory) so output is stable.
-    return theme.make_console(file=io.StringIO(), force_terminal=True, width=80, _environ={})
+    # Returns the buffer too: Console.file is typed IO[str] (no .getvalue()).
+    buf = io.StringIO()
+    return theme.make_console(file=buf, force_terminal=True, width=80, _environ={}), buf
 
 
 def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
@@ -115,14 +137,14 @@ def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     monkeypatch.setattr(sys, "executable", "/opt/homebrew/Cellar/assembly/9/libexec/bin/python")
 
-    con = _tty_console()
+    con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
 
     update_check.maybe_notify(json_mode=False)
 
-    out = con.file.getvalue()
+    out = buf.getvalue()
     assert "Update available" in out
     assert "9.9.9" in out
     assert "brew upgrade assembly" in out  # detected command, not a generic hint
@@ -131,56 +153,57 @@ def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
 def test_maybe_notify_silent_under_json(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
-    con = _tty_console()
+    con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
 
     update_check.maybe_notify(json_mode=True)
 
-    assert con.file.getvalue() == ""  # JSON mode prints nothing
+    assert buf.getvalue() == ""  # JSON mode prints nothing
 
 
 def test_maybe_notify_silent_when_not_a_tty(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
-    con = theme.make_console(file=io.StringIO(), force_terminal=False, _environ={})  # not a tty
+    buf = io.StringIO()
+    con = theme.make_console(file=buf, force_terminal=False, _environ={})  # not a tty
     monkeypatch.setattr(output, "error_console", con)
 
     update_check.maybe_notify(json_mode=False)
 
-    assert con.file.getvalue() == ""
+    assert buf.getvalue() == ""
 
 
 def test_maybe_notify_silent_in_ci_and_when_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
-    con = _tty_console()
+    con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
 
     monkeypatch.setenv("CI", "1")
     update_check.maybe_notify(json_mode=False)
-    assert con.file.getvalue() == ""
+    assert buf.getvalue() == ""
 
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setenv(update_check.ENV_DISABLED, "1")
     update_check.maybe_notify(json_mode=False)
-    assert con.file.getvalue() == ""
+    assert buf.getvalue() == ""
 
 
 def test_maybe_notify_no_box_when_cache_not_newer(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version=__version__)  # equal
-    con = _tty_console()
+    con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
 
     update_check.maybe_notify(json_mode=False)
-    assert "Update available" not in con.file.getvalue()
+    assert "Update available" not in buf.getvalue()
 
 
 def test_maybe_notify_spawns_refresh_only_when_stale(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
-    con = _tty_console()
+    con, _buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
@@ -202,7 +225,8 @@ def test_maybe_notify_spawns_refresh_only_when_stale(tmp_path, monkeypatch):
 
 
 def test_spawn_refresh_is_detached(monkeypatch):
-    calls: dict[str, object] = {}
+    # Untyped capture dict (mirrors the pattern in tests/test_telemetry.py).
+    calls = {}
 
     def fake_popen(args, **kwargs):
         calls["args"] = args
@@ -216,3 +240,95 @@ def test_spawn_refresh_is_detached(monkeypatch):
     assert calls["args"][3] == "_update-check"
     assert calls["kwargs"]["start_new_session"] is True
     assert calls["kwargs"]["env"][update_check.ENV_DISABLED] == "1"  # child can't re-spawn
+
+
+def test_notice_appears_after_a_real_command(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from aai_cli.main import app
+
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    monkeypatch.setattr(sys, "executable", "/opt/homebrew/Cellar/assembly/9/libexec/bin/python")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+    # is_terminal is a read-only property, so swap in a tty-reporting console and
+    # read its buffer (CliRunner doesn't capture our substituted stderr console).
+    con, buf = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+
+    # `telemetry status` is a simple, side-effect-free command that runs through
+    # run_command — exercising the maybe_notify hook end to end.
+    result = CliRunner().invoke(app, ["telemetry", "status"])
+    assert result.exit_code == 0
+    assert "Update available" in buf.getvalue()
+
+
+def test_no_notice_under_json(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from aai_cli.main import app
+
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    con, buf = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+
+    result = CliRunner().invoke(app, ["telemetry", "status", "--json"])
+    assert result.exit_code == 0
+    assert "Update available" not in buf.getvalue()
+
+
+def test_maybe_notify_generic_hint_when_install_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    monkeypatch.setattr(sys, "executable", "/usr/bin/python3")  # unknown -> no command
+    con, buf = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+
+    update_check.maybe_notify(json_mode=False)
+
+    out = buf.getvalue()
+    assert "Update available" in out
+    assert "github.com/AssemblyAI/cli#installation" in out  # docs hint, not a command
+    assert "brew upgrade" not in out
+
+
+def test_fetch_and_cache_no_tag_leaves_version_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({}))  # no tag_name
+
+    update_check.fetch_and_cache()
+
+    last_check, latest = config.get_update_cache()
+    assert latest is None
+    assert last_check is not None
+
+
+def test_fetch_and_cache_swallows_cache_write_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({"tag_name": "v0.4.0"}))
+
+    def boom(**kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(config, "set_update_cache", boom)
+
+    update_check.fetch_and_cache()  # the cache-write failure must be swallowed
+
+
+def test_maybe_notify_swallows_config_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    con, _buf = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+
+    def boom() -> tuple[float | None, str | None]:
+        raise OSError("config unreadable")
+
+    monkeypatch.setattr(config, "get_update_cache", boom)
+
+    update_check.maybe_notify(json_mode=False)  # a config read failure must be swallowed

@@ -1,4 +1,23 @@
 # serializer version: 1
+# name: test_command_help_matches_snapshot[_update-check]
+  '''
+  
+   Usage: assembly _update-check [OPTIONS]
+  
+   Internal: refresh the cached latest version (spawned detached). Hidden.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Internal plumbing, spawned by the CLI itself
+   $ assembly _update-check
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[agent]
   '''
   
