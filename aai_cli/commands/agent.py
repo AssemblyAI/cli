@@ -66,6 +66,12 @@ def _open_audio(
     return duplex.mic, duplex.player
 
 
+def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
+    """--list-voices body, routed through run_command so --json yields a
+    machine-readable array instead of the human list; needs no auth."""
+    output.emit(VOICES, lambda _voices: format_voice_list(), json_mode=json_mode)
+
+
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
@@ -129,8 +135,8 @@ def agent(
     """
 
     if list_voices:
-        typer.echo(format_voice_list())
-        raise typer.Exit(code=0)
+        run_command(ctx, _emit_voice_list, json=json_out)
+        return
 
     def body(state: AppState, json_mode: bool) -> None:
         validate_output_flags(json_mode=json_mode, output_field=output_field)

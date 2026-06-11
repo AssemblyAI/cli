@@ -12,7 +12,7 @@ import typer
 from aai_cli import config, environments, output
 from aai_cli.auth import run_login_flow
 from aai_cli.environments import Environment
-from aai_cli.errors import REJECTED_KEY_MESSAGE, APIError, CLIError, NotAuthenticated
+from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
 @dataclass
@@ -137,10 +137,7 @@ def _interactive_session() -> bool:
     return sys.stdin.isatty() and sys.stderr.isatty() and not output.is_agentic()
 
 
-def _should_auto_login(ctx: typer.Context, err: NotAuthenticated) -> bool:
-    command_name = ctx.command.name if ctx.command else None
-    if command_name in {"login", "logout"}:
-        return False
+def _should_auto_login(err: NotAuthenticated) -> bool:
     # CI/pipelines/agents have no human to finish a browser sign-in; starting one
     # would bind a loopback port and block for up to two minutes. Surface the
     # original NotAuthenticated (with its 'aai login' / ASSEMBLYAI_API_KEY
@@ -148,8 +145,10 @@ def _should_auto_login(ctx: typer.Context, err: NotAuthenticated) -> bool:
     if not _interactive_session():
         return False
     # An invalid ASSEMBLYAI_API_KEY would still take precedence after browser login,
-    # so retrying cannot fix that case.
-    return not (os.environ.get(config.ENV_API_KEY) and err.message == REJECTED_KEY_MESSAGE)
+    # so retrying cannot fix that case. `rejected_key` is the structured marker set
+    # by auth_failure(); auth-owning commands (login/logout) opt out at their
+    # run_command call site with auto_login=False instead of being name-matched here.
+    return not (os.environ.get(config.ENV_API_KEY) and err.rejected_key)
 
 
 def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
@@ -191,7 +190,7 @@ def run_command(
     try:
         fn(state, json_mode)
     except NotAuthenticated as err:
-        if not auto_login or not _should_auto_login(ctx, err):
+        if not auto_login or not _should_auto_login(err):
             output.emit_error(err, json_mode=json_mode)
             raise typer.Exit(code=err.exit_code) from None
         _auto_login_and_exit(state, json_mode=json_mode)

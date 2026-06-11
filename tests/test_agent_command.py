@@ -3,6 +3,7 @@ import json
 from typer.testing import CliRunner
 
 from aai_cli import config
+from aai_cli.agent.voices import VOICES, format_voice_list
 from aai_cli.auth.flow import LoginResult
 from aai_cli.main import app
 
@@ -36,7 +37,21 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
     result = runner.invoke(app, ["agent", "--list-voices"])
     assert result.exit_code == 0
     assert "ivy" in result.output
+    # Human mode prints the bare list, not a JSON array.
+    assert result.output.strip() == format_voice_list()
     assert called["ran"] is False
+
+
+def test_list_voices_json_emits_machine_readable_array(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.commands.agent.run_session",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not connect")),
+    )
+    result = runner.invoke(app, ["agent", "--list-voices", "--json"])
+    assert result.exit_code == 0
+    voices = json.loads(result.output)
+    assert voices == VOICES  # the whole list, as a machine-readable array
+    assert "ivy" in voices
 
 
 def test_agent_unauthenticated_runs_login(monkeypatch):

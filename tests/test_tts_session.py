@@ -167,6 +167,30 @@ def test_synthesize_raises_on_missing_begin():
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
 
 
+def test_synthesize_maps_audio_frame_without_payload_to_api_error():
+    # A malformed Audio frame (no "audio" key) must surface as a clean APIError
+    # naming the defect, not a bare KeyError read as "TTS session failed: 'audio'".
+    ws = FakeWS(
+        [
+            json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
+            json.dumps({"type": "Audio", "is_final": True}),
+        ]
+    )
+    with pytest.raises(APIError, match="without an audio payload"):
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
+def test_synthesize_maps_undecodable_audio_frame_to_api_error():
+    ws = FakeWS(
+        [
+            json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
+            json.dumps({"type": "Audio", "audio": "!!!", "is_final": True}),
+        ]
+    )
+    with pytest.raises(APIError, match="not valid base64"):
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
 def test_synthesize_maps_error_frame_to_api_error():
     ws = FakeWS(
         [

@@ -285,3 +285,19 @@ def test_send_audio_loop_waits_on_ready_event_with_bounded_timeout():
     s.ready = True
     _send_audio_loop(_RecordingWS(), s, [b"\x01\x02"])
     assert seen["timeout"] == 10
+
+
+def test_send_audio_loop_fails_loudly_when_ready_times_out():
+    # A server that never sends session.ready must fail the run, not silently
+    # consume (and drop) the finite file source frame by frame.
+    class _NeverReadyEvent:
+        def wait(self, timeout=None):
+            return False
+
+    s = _session(exit_after_reply=True, ready_event=_NeverReadyEvent())
+    s.ready = True  # even an open gate must not be reached past a timed-out wait
+    ws = _RecordingWS()
+    with pytest.raises(APIError) as exc:
+        _send_audio_loop(ws, s, [b"\x01\x02"])
+    assert "ready" in exc.value.message
+    assert ws.sent == []  # no audio was consumed or sent

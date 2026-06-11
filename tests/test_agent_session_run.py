@@ -9,8 +9,9 @@ import types
 
 import pytest
 
-from aai_cli.agent.session import _WEBSOCKETS_LOGGERS, AgentRunConfig, run_session
+from aai_cli.agent.session import AgentRunConfig, run_session
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.ws import WEBSOCKETS_LOGGERS
 
 
 class FakeRenderer:
@@ -281,7 +282,7 @@ class _CleanWS:
 def test_run_session_silences_websockets_loggers():
     # websockets' sync reader thread logs teardown errors (EOFError tracebacks) via
     # its own loggers; run_session must mute them so they never hit the user's stderr.
-    loggers = [logging.getLogger(name) for name in _WEBSOCKETS_LOGGERS]
+    loggers = [logging.getLogger(name) for name in WEBSOCKETS_LOGGERS]
     previous = [lg.level for lg in loggers]
     try:
         for lg in loggers:
@@ -298,8 +299,8 @@ def test_run_session_silences_websockets_loggers():
 def test_websockets_logger_names_cover_the_sync_client():
     # The sync client logs through "websockets.client"; pin that the silenced set
     # covers it (and the parent, for any future child loggers).
-    assert "websockets.client" in _WEBSOCKETS_LOGGERS
-    assert "websockets" in _WEBSOCKETS_LOGGERS
+    assert "websockets.client" in WEBSOCKETS_LOGGERS
+    assert "websockets" in WEBSOCKETS_LOGGERS
 
 
 def test_run_session_non_auth_failure_stays_api_error():

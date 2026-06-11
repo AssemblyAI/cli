@@ -42,6 +42,12 @@ def _validate_follow_args(
     return prompt
 
 
+def _emit_model_list(_state: AppState, json_mode: bool) -> None:
+    """--list-models body, routed through run_command so --json yields a
+    machine-readable array instead of the human list; needs no auth."""
+    output.emit(list(gateway.KNOWN_MODELS), "\n".join, json_mode=json_mode)
+
+
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
@@ -100,8 +106,8 @@ def llm(
     """
 
     if list_models:
-        typer.echo("\n".join(gateway.KNOWN_MODELS))
-        raise typer.Exit(code=0)
+        run_command(ctx, _emit_model_list, json=json_out)
+        return
 
     def follow_body(state: AppState, json_mode: bool) -> None:
         prompt_text = _validate_follow_args(prompt, output_field, transcript_id)

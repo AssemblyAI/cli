@@ -3,14 +3,14 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
-import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from aai_cli import environments
-from aai_cli.errors import APIError, CLIError, NotAuthenticated, auth_failure, is_auth_failure
+from aai_cli import ws as wsutil
+from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
 
 def ws_url() -> str:
@@ -33,8 +33,8 @@ DEFAULT_GREETING = "Hey, what's on your mind?"
 # NotAuthenticated code every other rejected-credential path across the CLI uses.
 _AUTH_ERROR_CODES = {"UNAUTHORIZED", "FORBIDDEN"}
 
-# A pre-upgrade HTTP 403 on the WebSocket handshake (see _is_rejected_key).
-_HTTP_FORBIDDEN = 403
+# How long a file-driven run waits for the server's session.ready before giving up.
+_READY_TIMEOUT_SECONDS = 10
 
 # The websocket connection, the `connect` factory, and the renderer/player/mic I/O
 # objects come from libraries/modules with no usable type stubs. Alias that untyped
@@ -181,8 +181,16 @@ def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> No
     """Forward mic PCM as input.audio while the session gate allows it."""
     # File-driven runs wait for session.ready before consuming the source, so a
     # finite clip isn't partly drained (and dropped) before the server accepts it.
-    if session.ready_event is not None:
-        session.ready_event.wait(timeout=10)
+    # A server that never becomes ready fails the run loudly: continuing would
+    # silently discard the start of the clip frame by frame.
+    if session.ready_event is not None and not session.ready_event.wait(
+        timeout=_READY_TIMEOUT_SECONDS
+    ):
+        raise APIError(
+            f"Voice agent session was not ready after {_READY_TIMEOUT_SECONDS}s; "
+            "no audio was sent.",
+            suggestion="Try again; if it persists, check https://status.assemblyai.com.",
+        )
     for chunk in mic:
         if not session.should_send_audio():
             continue  # half-duplex: drop frames while the agent is speaking
@@ -193,54 +201,12 @@ def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> No
             return
 
 
-# The sync websockets client logs through these; both are silenced for the session
-# (the parent covers any future child logger, the client logger is the one that fires).
-_WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
-
-
-def _silence_websockets_logging() -> None:
-    """Keep websockets' internal logging off the user's stderr for the session.
-
-    The sync client's background reader thread logs unhandled teardown errors (e.g.
-    ``EOFError: stream ended``) as "unexpected internal error" + traceback through the
-    ``websockets.client`` logger, which would land on stderr right next to our clean
-    CLIError. Those internals are never user-actionable from the CLI, so raise the
-    loggers above every level they emit at. Idempotent: re-setting the level is a no-op.
-    """
-    for name in _WEBSOCKETS_LOGGERS:
-        logging.getLogger(name).setLevel(logging.CRITICAL)
-
-
-def _is_rejected_key(exc: Exception) -> bool:
-    """Is this connect/session failure auth-shaped (the key itself was rejected)?
-
-    Mirrors how `stream` classifies handshake failures: a plain HTTP 403 on the
-    WebSocket upgrade stays an API error there ("Streaming error: WebSocket handshake
-    rejected (HTTP 403)"), so it must not become "Your API key was rejected" here —
-    403 also covers non-credential blocks (WAF, region, plan). Only 401, the Voice
-    Agent's 1008 policy-violation close, or an explicitly auth-worded message
-    (`is_auth_failure`'s text hints) count as a rejected key.
-    """
-    status = getattr(getattr(exc, "response", None), "status_code", None)
-    if status == _HTTP_FORBIDDEN:
-        return False
-    return is_auth_failure(exc)
-
-
-def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
-    """Map a connect/session exception to the right CLIError: a rejected key becomes
-    auth_failure(), anything else becomes APIError(f"{message}: {exc}")."""
-    if _is_rejected_key(exc):
-        return auth_failure()
-    return APIError(f"{message}: {exc}")
-
-
 def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
     """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
     try:
         return connect(ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
-        raise _auth_or_api_error(exc, "Could not connect to the voice agent") from exc
+        raise wsutil.auth_or_api_error(exc, "Could not connect to the voice agent") from exc
 
 
 def _session_update_message(config: AgentRunConfig) -> str:
@@ -281,7 +247,7 @@ def run_session(
     the agent's first reply to the spoken input and the capture thread waits for
     session.ready before streaming the source.
     """
-    _silence_websockets_logging()
+    wsutil.silence_websockets_logging()
     if connect is None:
         from websockets.sync.client import connect
 
@@ -324,7 +290,7 @@ def run_session(
     except Exception as exc:
         if capture_error:
             raise capture_error[0] from exc  # a mic-open failure is the real cause
-        raise _auth_or_api_error(exc, "Voice agent session failed") from exc
+        raise wsutil.auth_or_api_error(exc, "Voice agent session failed") from exc
     finally:
         with contextlib.suppress(Exception):
             ws.close()
