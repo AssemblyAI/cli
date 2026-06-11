@@ -70,7 +70,7 @@ jobs:
           p = pathlib.Path("Formula/assembly.rb")
           src = p.read_text()
           src = re.sub(r'url ".*?"', f'url "{url}"', src, count=1)
-          src = re.sub(r'sha256 "[0-9a-f]*"', f'sha256 "{sha}"', src, count=1)
+          src = re.sub(r"sha256 .*", f'sha256 "{sha}"', src, count=1)
           p.write_text(src)
           PY
           grep -nE '^  (url|sha256) ' Formula/assembly.rb | head -2
@@ -86,6 +86,13 @@ jobs:
           brew install --build-bottle --formula assembly/local/assembly
           brew bottle --json --no-rebuild --root-url="$ROOT_URL" assembly/local/assembly
           for f in assembly--*.bottle.tar.gz; do mv "$f" "${f/--/-}"; done
+          shopt -s nullglob
+          tarballs=( assembly-*.bottle.tar.gz )
+          shopt -u nullglob
+          if [[ ${#tarballs[@]} -ne 1 ]]; then
+            echo "Expected exactly one bottle tarball, found ${#tarballs[@]}: ${tarballs[*]:-none}" >&2
+            exit 1
+          fi
           brew bottle --merge --write --no-commit assembly--*.bottle.json
           cp "$tap_formula" Formula/assembly.rb
           echo "--- finalized formula head ---"
@@ -125,7 +132,10 @@ jobs:
           TAG: ${{ needs.bottle.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" --title "$TAG" --generate-notes artifacts/assembly-*.bottle.tar.gz
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" artifacts/assembly-*.bottle.tar.gz --clobber
 
       - name: Open the formula PR
         env:
@@ -138,10 +148,12 @@ jobs:
           cp artifacts/Formula/assembly.rb Formula/assembly.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
+          git checkout -B "$branch"
           git add Formula/assembly.rb
           git commit -m "Bottle ${TAG}: pin url + sha256, add arm64_sonoma bottle"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "Bottle ${TAG}" \
-            --body "Automated by release.yml: pins the formula to the ${TAG} source tarball and adds the arm64_sonoma bottle block. Merge with the admin override (a GITHUB_TOKEN PR does not trigger CI, so the required check will not report). The diff is formula-only."
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          if ! gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr create --base main --head "$branch" \
+              --title "Bottle ${TAG}" \
+              --body "Automated by release.yml: pins the formula to the ${TAG} source tarball and adds the arm64_sonoma bottle block. Merge with the admin override (a GITHUB_TOKEN PR does not trigger CI, so the required check will not report). The diff is formula-only."
+          fi
