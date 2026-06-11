@@ -131,7 +131,15 @@ def _render(payload: dict[str, object]) -> RenderableType:
             ),
             (
                 "Pick a subset/split and more rows",
-                "assembly eval mozilla-foundation/common_voice_17_0 --subset en --limit 50",
+                "assembly eval openslr/librispeech_asr --subset clean --limit 50",
+            ),
+            (
+                "Evaluate non-English audio",
+                "assembly eval PolyAI/minds14 --subset fr-FR --language-code fr",
+            ),
+            (
+                "DER on a Hugging Face diarization set",
+                "assembly eval diarizers-community/simsamu --speaker-labels",
             ),
         ]
     ),
@@ -176,10 +184,21 @@ def evaluate(
 ) -> None:
     """Transcribe an evaluation dataset and score WER against its reference texts.
 
-    Handy for picking a model: run once per --speech-model and compare. Datasets
-    come from the Hugging Face Hub (gated ones need HF_TOKEN) or a local .csv/.jsonl
-    manifest. --speaker-labels also scores diarization (DER) against reference
-    speaker turns.
+    Each row's audio is transcribed, then scored against the row's reference
+    text; both are normalized first (lowercased, punctuation stripped) so style
+    differences don't count as errors, and the summary pools total errors over
+    total reference words. Handy for picking a model: run once per
+    --speech-model and compare. --speaker-labels also diarizes and scores DER
+    against reference speaker turns.
+
+    Datasets come from the Hugging Face Hub (any public dataset its viewer
+    serves with audio + reference columns; gated ones need HF_TOKEN) or a local
+    .csv/.jsonl manifest with audio + text columns. Hub sets to try:
+    openslr/librispeech_asr (read English; subsets clean/other),
+    MLCommons/peoples_speech (real-world US English; subset clean),
+    distil-whisper/meanwhile (long-form English), PolyAI/minds14 (banking
+    calls in 14 locales; subsets like fr-FR), and diarizers-community/simsamu
+    (French dispatch calls with speaker turns, for --speaker-labels).
     """
 
     def body(state: AppState, json_mode: bool) -> None:
