@@ -938,6 +938,14 @@
   │                                                     spellings.               │
   │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms.      │
   │ --audio-end                   INTEGER               End offset in ms.        │
+  │ --download-sections           TEXT                  For a YouTube/podcast    │
+  │                                                     URL, download only part  │
+  │                                                     of the source (yt-dlp    │
+  │                                                     "--download-sections"    │
+  │                                                     syntax, e.g.             │
+  │                                                     "*0:00-5:00" for the     │
+  │                                                     first five minutes;      │
+  │                                                     repeatable).             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
   │ --webhook-url                TEXT        Webhook URL for completion.         │

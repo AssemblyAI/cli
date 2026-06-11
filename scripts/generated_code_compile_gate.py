@@ -62,6 +62,16 @@ def main() -> int:
                 "--show-code",
             ),
         ),
+        (
+            "transcribe-youtube-download-sections",
+            (
+                "transcribe",
+                "https://youtu.be/dtp6b76pMak",
+                "--download-sections",
+                "*0:00-5:00",
+                "--show-code",
+            ),
+        ),
         ("stream-basic", ("stream", "--show-code")),
         (
             "stream-config-llm",

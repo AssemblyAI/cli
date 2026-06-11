@@ -284,7 +284,10 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, 
     _auth()
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
-    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr(
+        "aai_cli.transcribe_exec.youtube.download_audio",
+        lambda url, d, *, download_sections=None: fake,
+    )
     tx = mocker.patch(
         "aai_cli.commands.transcribe.client.transcribe",
         autospec=True,
@@ -295,13 +298,41 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, 
     assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
 
 
+def test_transcribe_youtube_url_forwards_download_sections(monkeypatch, mocker, tmp_path):
+    # --download-sections must reach youtube.download_audio so only that slice is fetched.
+    _auth()
+    fake = tmp_path / "vid.m4a"
+    fake.write_bytes(b"x")
+    seen: dict[str, object] = {}
+
+    def _capture(url, d, *, download_sections=None):
+        seen["sections"] = download_sections
+        return fake
+
+    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", _capture)
+    mocker.patch(
+        "aai_cli.commands.transcribe.client.transcribe",
+        autospec=True,
+        return_value=_fake_transcript(mocker),
+    )
+    result = runner.invoke(
+        app,
+        ["transcribe", "https://youtu.be/abc", "--download-sections", "*0:00-5:00", "--json"],
+    )
+    assert result.exit_code == 0
+    assert seen["sections"] == ["*0:00-5:00"]
+
+
 def test_transcribe_podcast_page_url_downloads_then_transcribes(monkeypatch, mocker, tmp_path):
     # A podcast episode page (claimed by a dedicated yt-dlp extractor) routes through
     # the same download-first path as YouTube.
     _auth()
     fake = tmp_path / "episode.m4a"
     fake.write_bytes(b"x")
-    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr(
+        "aai_cli.transcribe_exec.youtube.download_audio",
+        lambda url, d, *, download_sections=None: fake,
+    )
     tx = mocker.patch(
         "aai_cli.commands.transcribe.client.transcribe",
         autospec=True,
@@ -317,7 +348,7 @@ def test_transcribe_direct_audio_url_passes_through_without_download(monkeypatch
     # The API fetches direct audio URLs itself; no yt-dlp download must happen.
     _auth()
 
-    def _no_download(url, d):
+    def _no_download(url, d, *, download_sections=None):
         raise AssertionError("direct audio URLs must not be downloaded")
 
     monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", _no_download)
@@ -347,6 +378,21 @@ def test_transcribe_show_code_prints_without_transcribing(monkeypatch):
     # --sample resolves to the hosted sample URL (not the no-source placeholder).
     assert "wildfires" in result.output
     assert "your-audio-file.mp3" not in result.output
+
+
+def test_transcribe_show_code_includes_download_sections(monkeypatch):
+    # --show-code reflects --download-sections in the generated yt-dlp download block.
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    result = runner.invoke(
+        app,
+        ["transcribe", "https://youtu.be/abc", "--download-sections", "*0:00-5:00", "--show-code"],
+    )
+    assert result.exit_code == 0
+    assert "download_range_func([], [(0.0, 300.0)], False)" in result.output
+    assert '"force_keyframes_at_cuts": True,' in result.output
 
 
 def test_transcribe_show_code_without_source_uses_placeholder(monkeypatch):
