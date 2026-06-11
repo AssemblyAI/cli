@@ -3,36 +3,65 @@
 **Date:** 2026-06-11
 **Status:** Approved design
 
+## Goal
+
+Make the CLI **simple to install and upgrade for as many Mac developers as
+possible, while keeping CI infrastructure as simple as possible.**
+
+On macOS, Homebrew is how developers install and upgrade CLIs, so the primary
+lever is shipping a **prebuilt Homebrew bottle**: `brew install assembly` /
+`brew upgrade assembly` with no version, no URL, and — crucially — no
+compile-from-source. Everything else in this design is subordinate to that goal,
+and anything that adds CI surface without serving it has been cut.
+
 ## Summary
 
 Add a tag-triggered GitHub Actions workflow (`release.yml`) that, on a pushed
-`vX.Y.Z` tag, builds the release artifacts and finalizes the Homebrew formula so
-`brew install assembly` downloads a **prebuilt bottle** instead of compiling the
+`vX.Y.Z` tag, builds an **arm64 macOS bottle**, publishes it to the tag's GitHub
+Release, and finalizes the Homebrew formula (`url` + `sha256` + `bottle do` block)
+so `brew install assembly` downloads the bottle instead of compiling the
 Rust-backed dependencies from source.
 
-The whole motivation: the formula vendors source distributions (sdists), so a
-from-source `brew install` drags in `rust` → `llvm` → `z3` / `libgit2` / a second
+Motivation: the formula vendors source distributions (sdists), so a from-source
+`brew install` drags in `rust` → `llvm` → `z3` / `libgit2` / a second
 `python@3.14` purely to compile `pydantic-core`, `jiter`, and `cryptography`. A
 bottle is a tarball of the already-built Cellar tree — installing it needs none of
-that toolchain. The pip/pipx/uv paths are unaffected (they already pull prebuilt
-dependency wheels from PyPI and never invoke Rust), so this is a Homebrew-only fix.
-The same workflow also builds the Python wheel + sdist and attaches them to the
-GitHub Release, giving the pip/pipx paths version-pinned install targets.
+that toolchain, and a second Python disappears from the dependency graph.
+
+This change also **removes the `install.sh` one-liner** and its supporting tests /
+CI, simplifying the install story to two paths: Homebrew (primary) and pipx/uv
+(fallback).
 
 ### Scope decisions (locked during brainstorming)
 
-- **Full release pipeline**, not just a bottle step — one tag push produces the
-  GitHub Release, the Python artifacts, the bottle, and the finalized formula.
 - **arm64 macOS bottle only.** macOS is where `brew install` is the recommended
-  path; Apple Silicon is the dominant Mac base. Intel Mac and all of Linux fall
-  back to the existing from-source build (still works), and Linux users are
-  steered to pipx/uv by the README anyway. Easy to add `x86_64_linux` later.
-- **Bottles hosted on GitHub Releases** (a `root_url` on the release download
-  path), not ghcr.io — simplest for a single self-tap on a public repo, no extra
-  auth.
+  path and Apple Silicon is the dominant Mac base. Intel Macs and Linux are served
+  by the pipx/uv fallback (below), which is actually *faster* for them than a brew
+  source build. `x86_64_linux` / Intel-Mac (`ventura`) bottles are additive later.
+- **Bottle hosted on GitHub Releases** (a `root_url` on the release download path),
+  not ghcr.io — simplest for a single self-tap on a public repo, no extra auth.
 - **No special token.** The workflow uses only the built-in `GITHUB_TOKEN`; the
   finalized-formula change lands via a PR a maintainer merges by hand (see
   "Committing the formula back to main").
+- **No release wheels / no PyPI artifacts / no moving `stable` tag / no PEP 503
+  index.** These were considered and cut: they add CI surface for a non-Mac-primary
+  audience. pipx/uv stay on the native `git+https` install, which costs nothing to
+  support and needs no release artifacts.
+- **`install.sh` removed.** One fewer install path and its dedicated tests + CI,
+  and `brew` is a strictly better Mac story than `curl | sh`.
+
+### Install paths after this change
+
+| Path | Role | New CI cost |
+|---|---|---|
+| Homebrew bottle (arm64) | **Primary** — `brew install` / `brew upgrade` | the `release.yml` pipeline |
+| pipx / uv (`git+https`) | Fallback — Intel Mac, Linux, non-brew users | ~zero (README line; natively supported) |
+| ~~`install.sh` one-liner~~ | **removed** | — |
+
+The pipx/uv fallback is the *fast* path for the platforms the arm64 bottle does not
+cover: `pipx`/`uv` pull prebuilt dependency wheels from PyPI, so they never invoke
+Rust. Keeping them maximizes Mac coverage (arm64 → bottle, Intel → pipx) at no CI
+cost.
 
 ## Background: the ordering problem
 
@@ -55,23 +84,15 @@ workflow computes all three after the tag push and writes them back in one commi
 
 `release.yml` triggers on `push:` with `tags: ["v*"]`.
 
-A release is two manual steps; everything else is automated:
+A release is two manual steps, plus one click at the end:
 
 1. Bump the version in `pyproject.toml` to `X.Y.Z` via a normal PR (regular CI).
 2. Push the tag `vX.Y.Z` on `main`.
+3. Merge the formula PR the workflow opens (admin override merge — see below).
 
-Then one manual click at the end: merge the formula PR the workflow opens
-(see below).
+## Architecture — two jobs
 
-## Architecture — three jobs
-
-### Job 1 · `pypi-artifacts` (ubuntu-latest)
-
-`python -m build` → `dist/*.whl` + `dist/*.tar.gz`. Upload as a workflow artifact.
-This is the pip/pipx version-pinning payoff (installable, pinned release assets
-rather than only `git+https://…@main`).
-
-### Job 2 · `bottle` (macos-14)
+### Job 1 · `bottle` (macos-14)
 
 Pinned to the **oldest supported arm64 macOS on purpose**: Homebrew uses the
 newest bottle whose macOS tag is ≤ the running OS, so a bottle built on Sonoma
@@ -101,17 +122,19 @@ Steps:
    `assembly-X.Y.Z.arm64_sonoma.bottle.tar.gz`.
 6. Upload the renamed tarball **and** the `*.bottle.json` as artifacts.
 
-### Job 3 · `publish` (ubuntu-latest, `needs: [pypi-artifacts, bottle]`)
+### Job 2 · `publish` (ubuntu-latest, `needs: [bottle]`)
 
-1. Download both jobs' artifacts.
+1. Download the bottle artifacts.
 2. **Merge the bottle block into the formula:** `brew bottle --merge --write
    --no-commit <bottle>.json`, run against the same patched formula (url + real
    sha256). The formula now carries `url`, the real `sha256`, and a `bottle do`
-   block with `root_url` + the `arm64_sonoma` checksum.
+   block with `root_url` + the `arm64_sonoma` checksum. (Re-derive the source
+   sha256 the same way as Job 1, or pass it through as a job output, so `publish`
+   writes the identical `url` + `sha256`.)
 3. **Create the release:** `gh release create vX.Y.Z` (or `gh release upload` if
-   it already exists) attaching the wheel, sdist, and the renamed bottle tarball.
-   The bottle must live at `<root_url>/<bottle-filename>`, which is exactly the
-   release download path, so the `root_url` and the upload target agree.
+   it already exists) attaching the renamed bottle tarball. The bottle must live at
+   `<root_url>/<bottle-filename>`, which is exactly the release download path, so
+   the `root_url` and the upload target agree. (No wheel/sdist — out of scope.)
 4. **Open the formula PR** (see below).
 
 ## Committing the formula back to `main`
@@ -126,7 +149,7 @@ GitHub anti-recursion rule: **a PR opened by `GITHUB_TOKEN` does not trigger oth
 workflows**, so `ci.yml`'s `pull_request` jobs never run on it, the required check
 never reports, and auto-merge would hang forever.
 
-**Chosen approach (no special token):** Job 3 opens a PR from a
+**Chosen approach (no special token):** Job 2 opens a PR from a
 `release/vX.Y.Z-formula` branch using the built-in `GITHUB_TOKEN`
 (`permissions: contents: write, pull-requests: write`). Because that PR's checks
 don't auto-run, a **maintainer merges it manually** using the repo-admin "merge
@@ -138,6 +161,40 @@ Explicitly rejected alternative: a fine-grained PAT or GitHub App in the
 branch-protection bypass list. It enables full hands-off auto-merge but introduces
 a privileged stored secret and punches a hole in branch protection — not worth it
 for a release cadence that already has two manual steps.
+
+## Removing `install.sh` and its support
+
+Delete the one-liner installer and everything that exists only to support it. The
+plan must locate the exact references (a repo grep for `install.sh` /
+`install_script` is the starting point); the known footprint is:
+
+- **`install.sh`** — the script itself.
+- **`tests/test_install_sh.py`** and **`tests/test_install_script_smoke.py`** —
+  dedicated tests. The `install_script` real-install smoke also exercises pipx /
+  uv-tool installs via a `-k "pipx or uv_tool"` filter; since pipx/uv are now a
+  documented `git+https` fallback (natively supported, not a release artifact),
+  drop these real-network smoke tests too — they're CI cost for a path that needs
+  no artifact. (Confirm during plan-writing by reading both files.)
+- **`pyproject.toml`** — the `install_script` marker registration and its mention
+  in `addopts`'s `-m "not …"` exclusion.
+- **`tests/conftest.py`** — the `install_script` entry in the socket-granting
+  `pytest_collection_modifyitems` hook and any marker registration.
+- **`.github/workflows/ci.yml`** — the `install-smoke` job (it runs only
+  `-m install_script`); remove the whole job.
+- **`README.md`** — the "One-liner" section (`curl … | sh`). The pipx/uv section
+  stays (it's the fallback).
+- **`AGENTS.md`** (== `CLAUDE.md`) — the `install_script` marker docs.
+- **`scripts/check.sh`**, **`scripts/mutation_gate.py`** — any `install_script`
+  handling.
+- **`.claude/skills/check/SKILL.md`**, **`.claude/skills/release-prep/SKILL.md`** —
+  doc references.
+
+Leave the dated historical specs/plans under `docs/superpowers/` untouched — they
+are append-only records, not live config.
+
+After removal, `scripts/check.sh` must still print `All checks passed.` —
+`vulture`/`deptry`/`ruff` will catch any orphaned import or now-dead helper left
+behind by the deletions.
 
 ## Conventions to follow (match existing `ci.yml`)
 
@@ -165,10 +222,13 @@ layered:
   resource list installs and `assembly --version` works.
 - **Workflow lint:** `release.yml` must pass `actionlint` + `zizmor`, which
   `check.sh` already runs over `.github/workflows/`.
+- **Full suite stays green after the `install.sh` removal** — `./scripts/check.sh`
+  prints `All checks passed.` with the deleted tests/markers gone and no orphaned
+  references (vulture/deptry/ruff enforce this).
 - **First real release is the integration test.** Cutting `v0.1.0` exercises the
   end-to-end path; a follow-up `brew install assembly` on a clean arm64 Mac
-  confirms the bottle is selected (no `rust`/`llvm` pulled). This is a manual
-  post-merge verification step, documented in the release runbook.
+  confirms the bottle is selected (no `rust`/`llvm` pulled). Documented in the
+  release runbook.
 - **Optional dry-run hook:** support `workflow_dispatch` on `release.yml` so the
   build-bottle path can be run against an existing tag without re-tagging, for
   debugging, gated so it never publishes/commits.
@@ -185,7 +245,8 @@ layered:
 ## Out of scope
 
 - Linux (`x86_64_linux`) and Intel-Mac (`ventura`) bottles — additive later.
-- Publishing to PyPI (the `assemblyai-cli` name is squatted; release assets live
-  on GitHub Releases instead).
+- Release wheels / sdist artifacts, a moving `stable` tag, and a PEP 503 index —
+  cut as CI surface for a non-Mac-primary audience; pipx/uv use `git+https`.
+- Publishing to PyPI (the `assemblyai-cli` name is squatted).
 - ghcr.io / OCI bottle hosting.
 - Automating the version bump itself (stays a human PR).
