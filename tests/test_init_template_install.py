@@ -69,7 +69,7 @@ def test_template_installs_and_app_imports(template_dir: Path, tmp_path: Path) -
 
     # Import api.index with ONLY its declared deps present — no key needed, the
     # module reads ASSEMBLYAI_API_KEY at import but defaults to "". A clean exit
-    # proves the app boots from exactly what `aai init` ships to the user.
+    # proves the app boots from exactly what `assembly init` ships to the user.
     boot = tmp_path / "boot.py"
     boot.write_text(
         "import importlib, sys\n"

@@ -1,4 +1,4 @@
-"""`aai transcribe` behavior: output rendering, LLM transforms, sources, --show-code.
+"""`assembly transcribe` behavior: output rendering, LLM transforms, sources, --show-code.
 
 Flag-to-config mapping and flag validation live in test_transcribe_flags.py.
 """

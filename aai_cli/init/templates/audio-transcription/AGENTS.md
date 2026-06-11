@@ -3,7 +3,7 @@
 This is a buildless FastAPI + static HTML starter. Run it with:
 
 ```sh
-aai dev
+assembly dev
 ```
 
 ## Map

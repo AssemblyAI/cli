@@ -118,7 +118,7 @@ def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[byt
 class MicrophoneSource:
     """Iterable of PCM16 chunks captured at the microphone's native rate.
 
-    Shared by `aai stream` (mic input) and `aai agent` (captured speech). The
+    Shared by `assembly stream` (mic input) and `assembly agent` (captured speech). The
     device is opened at its own sample rate to avoid forcing an unsupported one;
     with `target_rate` set (the voice agent needs 24 kHz) the captured audio is
     resampled to it, otherwise frames are yielded at the capture rate, which

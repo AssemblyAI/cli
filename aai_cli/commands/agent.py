@@ -58,7 +58,7 @@ def _open_audio(
     # streams on a device, which silently kills capture.
     duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
     # notice() self-suppresses in JSON mode and routes to stderr otherwise, so a
-    # piped `aai agent | …` never reads this advisory as transcript data.
+    # piped `assembly agent | …` never reads this advisory as transcript data.
     renderer.notice(
         "Use headphones — the mic stays open while the agent speaks, "
         "so speakers would let it hear itself.\n"
@@ -76,11 +76,14 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Start a live voice conversation", "aai agent"),
-            ("Pick a voice and opening line", 'aai agent --voice james --greeting "Hi there"'),
-            ("Give the agent a persona", 'aai agent --system-prompt "You are a terse pirate."'),
-            ("See available voices", "aai agent --list-voices"),
-            ("Print equivalent Python instead of running", "aai agent --show-code"),
+            ("Start a live voice conversation", "assembly agent"),
+            ("Pick a voice and opening line", 'assembly agent --voice james --greeting "Hi there"'),
+            (
+                "Give the agent a persona",
+                'assembly agent --system-prompt "You are a terse pirate."',
+            ),
+            ("See available voices", "assembly agent --list-voices"),
+            ("Print equivalent Python instead of running", "assembly agent --show-code"),
         ]
     ),
 )
@@ -131,7 +134,7 @@ def agent(
     the agent instead of the microphone; the session then ends after the agent's reply.
 
     This only runs a conversation in the terminal — it writes no code. To build
-    a voice agent app, run 'aai init voice-agent' instead.
+    a voice agent app, run 'assembly init voice-agent' instead.
     """
 
     if list_voices:
@@ -144,7 +147,7 @@ def agent(
         if voice not in VOICES:
             raise UsageError(
                 f"Unknown voice {voice!r}.",
-                suggestion="Run 'aai agent --list-voices' to see the options.",
+                suggestion="Run 'assembly agent --list-voices' to see the options.",
             )
         system_prompt_text = _resolve_system_prompt(system_prompt, system_prompt_file)
 

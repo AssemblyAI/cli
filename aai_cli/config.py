@@ -225,9 +225,9 @@ def keyring_usable() -> bool:
     """True when the OS keyring backend can be read.
 
     Headless boxes (containers, CI, bare SSH) often have no keyring backend, so
-    ``keyring`` raises on every access. ``aai doctor`` uses this to tell a user with
+    ``keyring`` raises on every access. ``assembly doctor`` uses this to tell a user with
     no key that the *backend* is the problem — and to recommend ASSEMBLYAI_API_KEY —
-    rather than pointing at `aai login`, whose browser flow also can't persist there.
+    rather than pointing at `assembly login`, whose browser flow also can't persist there.
     """
     try:
         keyring.get_password(KEYRING_SERVICE, "__probe__")
@@ -373,7 +373,7 @@ def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = No
 def resolve_api_key_optional(*, profile: str | None = None) -> str | None:
     """The same key chain as ``resolve_api_key`` (env -> keyring), but ``None`` instead
     of raising when no key is configured — for callers that work without one
-    (``aai init`` scaffolding, the onboarding wizard's signed-in check)."""
+    (``assembly init`` scaffolding, the onboarding wizard's signed-in check)."""
     try:
         return resolve_api_key(profile=profile)
     except NotAuthenticated:

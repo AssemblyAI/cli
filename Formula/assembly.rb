@@ -1,4 +1,4 @@
-class Aai < Formula
+class Assembly < Formula
   include Language::Python::Virtualenv
 
   desc "Command-line interface for AssemblyAI"
@@ -10,7 +10,7 @@ class Aai < Formula
 
   depends_on "pkgconf" => :build      # cffi / cryptography native builds
   depends_on "rust" => :build         # pydantic-core, jiter, cryptography
-  depends_on "cloudflared"           # public quick-tunnel for `aai share`
+  depends_on "cloudflared"           # public quick-tunnel for `assembly share`
   depends_on "ffmpeg"                # decode non-WAV/URL audio (transcribe/stream)
   depends_on "openssl@3"             # cryptography linkage
   depends_on "portaudio"             # sounddevice (audio capture)
@@ -264,6 +264,6 @@ class Aai < Formula
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/aai --version")
+    assert_match version.to_s, shell_output("#{bin}/assembly --version")
   end
 end

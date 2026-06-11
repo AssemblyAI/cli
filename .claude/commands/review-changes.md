@@ -1,5 +1,5 @@
 ---
-description: Review the current changes with the code-review skill plus the aai CLI's specialized reviewers (security + template contract), scoped to what actually changed.
+description: Review the current changes with the code-review skill plus the assembly CLI's specialized reviewers (security + template contract), scoped to what actually changed.
 argument-hint: "[git ref to diff against, default: HEAD]"
 allowed-tools: Bash(git diff *), Bash(git status *), Bash(git log *), Task, Skill
 ---

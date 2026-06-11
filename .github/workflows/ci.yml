@@ -116,7 +116,7 @@ jobs:
       # sha256, sidestepping the placeholder that stays until the v0.1.0 tag is cut).
       # The stricter `brew audit --strict --online` still belongs in a release job.
       - name: Lint the formula
-        run: brew style ./Formula/aai.rb
+        run: brew style ./Formula/assembly.rb
 
   pre-commit:
     name: pre-commit
@@ -211,7 +211,7 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # `aai --version` imports the package, which pulls in sounddevice (needs
+      # `assembly --version` imports the package, which pulls in sounddevice (needs
       # PortAudio) and ffmpeg-backed sources. Match the other jobs' system deps.
       - name: System deps (Linux)
         if: runner.os == 'Linux'
@@ -259,7 +259,7 @@ jobs:
           # Mirror a GitHub archive: a single top-level dir brew strips on extract.
           git archive --format=tar.gz --prefix="aai-${version}/" -o "$tarball" HEAD
           sha="$(shasum -a 256 "$tarball" | awk '{print $1}')"
-          python3 - "Formula/aai.rb" "$tarball" "$sha" <<'PY'
+          python3 - "Formula/assembly.rb" "$tarball" "$sha" <<'PY'
           import re, sys, pathlib
           formula, tarball, sha = sys.argv[1], sys.argv[2], sys.argv[3]
           p = pathlib.Path(formula)
@@ -268,18 +268,18 @@ jobs:
           src = re.sub(r"sha256 .*", f'sha256 "{sha}"', src, count=1)
           p.write_text(src)
           PY
-          grep -nE '^  (url|sha256) ' Formula/aai.rb | head -2
+          grep -nE '^  (url|sha256) ' Formula/assembly.rb | head -2
 
       # Newer Homebrew refuses formulae outside a tap, so install through a
       # throwaway local tap holding the pinned formula (--no-git avoids needing a
       # git identity on the runner). --build-from-source compiles the full resource
       # list (rust + cryptography native builds); `brew test` then runs the
-      # formula's own `test do` block, asserting `aai --version`.
+      # formula's own `test do` block, asserting `assembly --version`.
       - name: brew install + test
         run: |
           set -euo pipefail
-          brew tap-new --no-git aai/local
-          cp Formula/aai.rb "$(brew --repository aai/local)/Formula/aai.rb"
-          brew install --build-from-source --formula aai/local/aai
-          aai --version
-          brew test aai/local/aai
+          brew tap-new --no-git assembly/local
+          cp Formula/assembly.rb "$(brew --repository assembly/local)/Formula/assembly.rb"
+          brew install --build-from-source --formula assembly/local/assembly
+          assembly --version
+          brew test assembly/local/assembly

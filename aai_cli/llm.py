@@ -18,7 +18,7 @@ DEFAULT_MAX_TOKENS = 1000
 # is supplied. Must be exactly "{{ transcript }}" (spaces included).
 TRANSCRIPT_TAG = "{{ transcript }}"
 
-# A curated subset for `aai llm --list-models` and help text. The gateway is the
+# A curated subset for `assembly llm --list-models` and help text. The gateway is the
 # source of truth for what's actually accepted, so we don't validate against this.
 KNOWN_MODELS = (
     "claude-opus-4-7",
@@ -101,7 +101,7 @@ def complete(
     except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
         # The gateway returns 401/403 for both an invalid key and a plan
         # entitlement block ("no access to LLM Gateway"), so surface its actual
-        # message rather than a generic "run aai login" that misleads unpaid
+        # message rather than a generic "run assembly login" that misleads unpaid
         # accounts (the key is fine; the feature requires a paid plan).
         raise APIError(
             f"LLM Gateway access denied: {exc}",

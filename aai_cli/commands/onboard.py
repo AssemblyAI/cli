@@ -28,7 +28,7 @@ def build_prompter(*, non_interactive: bool = False) -> Prompter:
     rich_help_panel=help_panels.QUICK_START,
     epilog=examples_epilog(
         [
-            ("Run the guided setup", "aai onboard"),
+            ("Run the guided setup", "assembly onboard"),
         ]
     ),
 )

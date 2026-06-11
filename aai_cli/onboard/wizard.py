@@ -17,7 +17,7 @@ def run_onboarding(prompter: Prompter, ctx: WizardContext) -> int:
         sections.welcome(prompter, ctx)
         if sections.auth(prompter, ctx) is SectionResult.FAILED:
             # The auth section already printed the specific next step (browser retry,
-            # or — non-interactively — `aai login`/ASSEMBLYAI_API_KEY), so keep this
+            # or — non-interactively — `assembly login`/ASSEMBLYAI_API_KEY), so keep this
             # terminal line neutral rather than implying a re-run always fixes it.
             output.error_console.print(output.fail("Sign-in didn't complete."))
             return NotAuthenticated().exit_code
@@ -27,7 +27,9 @@ def run_onboarding(prompter: Prompter, ctx: WizardContext) -> int:
         sections.claude_code(prompter, ctx)
         sections.next_steps(prompter, ctx)
     except WizardCancelled:
-        output.error_console.print(output.hint("Setup cancelled. Run `aai onboard` to resume."))
+        output.error_console.print(
+            output.hint("Setup cancelled. Run `assembly onboard` to resume.")
+        )
         return 130
     else:
         return 0

@@ -3,11 +3,11 @@
 Commands for scaffolding projects, validating the environment, and setting up
 your coding agent (docs MCP + skills) for AssemblyAI.
 
-## `aai init [TEMPLATE] [DIRECTORY]` — scaffold a starter app
+## `assembly init [TEMPLATE] [DIRECTORY]` — scaffold a starter app
 
 **This is how you build a new app.** When the goal is to create an
 application or project — including a voice-agent app — start here, not with the
-`aai agent` / `aai transcribe` / `aai stream` run commands (those just *run* a
+`assembly agent` / `assembly transcribe` / `assembly stream` run commands (those just *run* a
 one-off action in the terminal and produce no code).
 
 Picks a template, scaffolds it into a directory, optionally installs
@@ -15,8 +15,8 @@ dependencies, starts the local server, and opens the browser. Available
 templates: `audio-transcription`, `live-captions`, `voice-agent`. The API key
 is written to a git-ignored `.env` file in the scaffolded directory.
 
-To build a **voice agent app**, use `aai init voice-agent` (a full
-FastAPI + browser starter) — `aai agent` only runs a live mic conversation and
+To build a **voice agent app**, use `assembly init voice-agent` (a full
+FastAPI + browser starter) — `assembly agent` only runs a live mic conversation and
 writes no code.
 
 Key options:
@@ -31,12 +31,12 @@ Key options:
 Examples:
 
 ```bash
-aai init
-aai init audio-transcription my-app
-aai init audio-transcription --here
+assembly init
+assembly init audio-transcription my-app
+assembly init audio-transcription --here
 ```
 
-## `aai doctor` — environment health check
+## `assembly doctor` — environment health check
 
 Verifies that your environment is ready to use AssemblyAI (checks credentials,
 network reachability, and runtime dependencies).
@@ -48,10 +48,10 @@ Key options:
 Examples:
 
 ```bash
-aai doctor
+assembly doctor
 ```
 
-## `aai setup` — set up your coding agent for AssemblyAI
+## `assembly setup` — set up your coding agent for AssemblyAI
 
 Sub-app that wires three things into your coding agent: the `assemblyai-docs`
 MCP server (via `claude mcp add`), the `assemblyai` skill (downloaded with
@@ -60,7 +60,7 @@ package and copied in directly, no network needed). Missing `claude` or `npx`
 is reported and skipped, not treated as an error; the bundled `aai-cli` skill
 installs regardless.
 
-### `aai setup install`
+### `assembly setup install`
 
 Install the docs MCP server and both skills into your coding agent.
 
@@ -74,11 +74,11 @@ Key options:
 Examples:
 
 ```bash
-aai setup install
-aai setup install --scope project
+assembly setup install
+assembly setup install --scope project
 ```
 
-### `aai setup status`
+### `assembly setup status`
 
 Show whether the MCP server and both skills are currently set up.
 
@@ -89,10 +89,10 @@ Key options:
 Examples:
 
 ```bash
-aai setup status
+assembly setup status
 ```
 
-### `aai setup remove`
+### `assembly setup remove`
 
 Remove the MCP server and both skills from your coding agent.
 
@@ -105,15 +105,15 @@ Key options:
 Examples:
 
 ```bash
-aai setup remove
+assembly setup remove
 ```
 
-## `aai --version` — show CLI version
+## `assembly --version` — show CLI version
 
-Prints the installed `aai` version string and exits.
+Prints the installed `assembly` version string and exits.
 
 Examples:
 
 ```bash
-aai --version
+assembly --version
 ```

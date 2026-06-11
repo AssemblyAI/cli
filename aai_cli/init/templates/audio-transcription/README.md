@@ -7,10 +7,10 @@ highlights. Built with FastAPI + static HTML/CSS/JS. There is no frontend build 
 ## Run locally
 
 ```sh
-aai dev   # installs deps if needed, starts the server, opens http://localhost:3000
+assembly dev   # installs deps if needed, starts the server, opens http://localhost:3000
 ```
 
-`ASSEMBLYAI_API_KEY` is read from `.env` (already created for you if you ran `aai init`).
+`ASSEMBLYAI_API_KEY` is read from `.env` (already created for you if you ran `assembly init`).
 
 ## Deploy to Vercel
 
@@ -33,7 +33,7 @@ uvicorn api.index:app --host 0.0.0.0 --port $PORT
 
 On Render, create a **Web Service** connected to your Git repo — it installs
 `requirements.txt` and starts via the `Procfile`. (There's no local-directory
-deploy; `aai deploy` covers Vercel/Railway/Fly.)
+deploy; `assembly deploy` covers Vercel/Railway/Fly.)
 
 ## Ideas to extend
 

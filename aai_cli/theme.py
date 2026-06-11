@@ -88,7 +88,7 @@ class PipeSafeConsole(Console):
     """A Console honoring the CLI's closed-pipe contract.
 
     Rich's default ``on_broken_pipe`` redirects stdout to devnull and raises
-    ``SystemExit(1)``, so ``aai … | head`` would report failure. Re-raise the
+    ``SystemExit(1)``, so ``assembly … | head`` would report failure. Re-raise the
     ``BrokenPipeError`` instead so the entry point (``main.run``) can treat a closed
     downstream pipe as success.
     """

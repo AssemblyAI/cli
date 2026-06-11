@@ -63,10 +63,10 @@ def test_init_logged_out_installs_but_skips_launch_with_hint(tmp_path, monkeypat
     result = runner.invoke(app, ["init", TEMPLATE, "app"])  # no --no-install, logged out
     assert result.exit_code == 0, result.output
     assert launched["v"] is False
-    assert "aai login" in result.output
+    assert "assembly login" in result.output
     # Deps installed but no key -> a launch-skipped row with the manual run command
     # (pins `not no_install and api_key is None`).
-    assert "aai dev" in result.output
+    assert "assembly dev" in result.output
 
 
 def test_init_logged_out_install_emits_launch_skipped_step_json(tmp_path, monkeypatch):
@@ -103,7 +103,7 @@ def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):
     assert "your_assemblyai_api_key_here" in env
     # --no-install means no deps were installed, so there's no launch-skipped row even
     # without a key (pins the `not no_install` half of the launch guard).
-    assert "aai dev" not in result.output
+    assert "assembly dev" not in result.output
 
 
 def test_init_unknown_template_errors(tmp_path, monkeypatch):
@@ -127,7 +127,7 @@ def test_init_force_overwrites(tmp_path, monkeypatch):
 
 
 def test_init_no_template_non_interactive_errors(tmp_path, monkeypatch):
-    # CliRunner has no TTY, so the picker can't run; bare `aai init` must error helpfully.
+    # CliRunner has no TTY, so the picker can't run; bare `assembly init` must error helpfully.
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["init"])
     assert result.exit_code != 0

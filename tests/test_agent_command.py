@@ -313,7 +313,7 @@ def test_agent_json_with_text_output_is_usage_error():
 
 
 def test_agent_headphones_notice_routes_to_stderr(monkeypatch):
-    # `aai agent | head` must not eat the advisory as transcript data: in the
+    # `assembly agent | head` must not eat the advisory as transcript data: in the
     # default human mode the notice goes to stderr, stdout stays transcript-only.
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
@@ -338,7 +338,7 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
 
 
 def test_agent_output_text_emits_plain_transcript(monkeypatch):
-    # `-o text` -> plain you:/agent: lines on stdout (pipe into aai llm).
+    # `-o text` -> plain you:/agent: lines on stdout (pipe into assembly llm).
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
 

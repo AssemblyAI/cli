@@ -54,7 +54,7 @@ ERROR_CASES = {
     "rejected_key": auth_failure(),
     "usage_with_suggestion": UsageError(
         "Unknown voice 'nope'.",
-        suggestion="Run 'aai agent --list-voices' to see the options.",
+        suggestion="Run 'assembly agent --list-voices' to see the options.",
     ),
 }
 

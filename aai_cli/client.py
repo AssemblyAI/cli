@@ -234,7 +234,7 @@ def validate_transcript_id(transcript_id: str) -> str:
     if not _TRANSCRIPT_ID_RE.match(transcript_id):
         raise UsageError(
             f"{transcript_id!r} doesn't look like a transcript id.",
-            suggestion="Ids are letters/digits/dashes; find them with 'aai transcripts list'.",
+            suggestion="Ids are letters/digits/dashes; find them with 'assembly transcripts list'.",
         )
     return transcript_id
 
@@ -264,7 +264,7 @@ def stream_audio(
 
     def _guard(cb: Callable[[Any], Any]) -> _StreamHandler:
         # Event callbacks run on the SDK's reader thread. If the downstream pipe is
-        # gone (e.g. a Ctrl-C'd `| aai llm`, or `| head`), writing a turn raises
+        # gone (e.g. a Ctrl-C'd `| assembly llm`, or `| head`), writing a turn raises
         # BrokenPipeError there with no handler -> an ugly thread traceback. Swallow
         # it and point stdout at /dev/null so the interpreter's exit-flush can't
         # re-raise either; the main thread still stops via Ctrl-C / source EOF.

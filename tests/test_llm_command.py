@@ -311,7 +311,7 @@ def test_llm_follow_requires_piped_stdin(monkeypatch):
 
 
 def test_llm_follow_empty_stdin_exits_2(monkeypatch):
-    # `aai llm -f "…" </dev/null` must not exit 0 silently: an empty pipe means the
+    # `assembly llm -f "…" </dev/null` must not exit 0 silently: an empty pipe means the
     # prompt never ran, which is a usage error, not a success.
     _auth()
     calls = []

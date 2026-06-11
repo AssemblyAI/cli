@@ -1,12 +1,12 @@
 ---
 name: release-prep
-description: Prepare an aai CLI release — bump the version, run the full gate, build and validate the wheel/sdist, and smoke-test the real install. Use when cutting a new release.
+description: Prepare an assembly CLI release — bump the version, run the full gate, build and validate the wheel/sdist, and smoke-test the real install. Use when cutting a new release.
 disable-model-invocation: true
 ---
 
 # release-prep
 
-Drive an `aai` release to a verified, publishable state. Stop and report at the first failure — never push or publish on a red check.
+Drive an `assembly` release to a verified, publishable state. Stop and report at the first failure — never push or publish on a red check.
 
 ## 1. Version bump
 
@@ -27,7 +27,7 @@ Must end with `All checks passed.` (ruff, mypy, markdownlint, shellcheck, pytest
 uv run pytest -q -m install_script
 ```
 
-This builds the wheel and runs `install.sh` for real (pipx + pip --user), asserting `aai` runs. Needs network + uv/pipx.
+This builds the wheel and runs `install.sh` for real (pipx + pip --user), asserting `assembly` runs. Needs network + uv/pipx.
 
 ## 4. Build + metadata validation
 

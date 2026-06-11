@@ -74,7 +74,7 @@ def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
     assert result.exit_code == 4
     assert "starting browser login" not in result.output
     assert "You're not signed in." in result.output
-    assert "aai login" in result.output
+    assert "assembly login" in result.output
     assert "ASSEMBLYAI_API_KEY" in result.output
 
 
@@ -91,7 +91,7 @@ def test_run_command_not_interactive_json_keeps_clean_error_shape(monkeypatch):
     assert result.exit_code == 4
     payload = json.loads(result.output)  # the only output line is machine-readable
     assert payload["error"]["type"] == "not_authenticated"
-    assert "aai login" in payload["error"]["suggestion"]
+    assert "assembly login" in payload["error"]["suggestion"]
     assert "ASSEMBLYAI_API_KEY" in payload["error"]["suggestion"]
 
 

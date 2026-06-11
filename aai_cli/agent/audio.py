@@ -25,7 +25,7 @@ def _output_default_rate(device: int | None = None) -> int:
 class NullPlayer:
     """A player look-alike that discards audio instead of opening a speaker.
 
-    Used by file-driven agent runs (`aai agent <file>`), which only need the
+    Used by file-driven agent runs (`assembly agent <file>`), which only need the
     transcript events: there is no human listening, and headless/CI hosts have
     no output device for `sounddevice` to open.
     """
@@ -67,7 +67,7 @@ def _default_duplex_stream(*, rate: int, blocksize: int, callback: Any, device: 
             f"Could not open the audio device: {exc}",
             error_type="audio_output_error",
             exit_code=1,
-            suggestion="Check your microphone/output device, then run 'aai doctor'.",
+            suggestion="Check your microphone/output device, then run 'assembly doctor'.",
         ) from exc
     return stream
 
@@ -177,7 +177,7 @@ class DuplexAudio:
                         "The audio device stopped producing input.",
                         error_type="audio_input_error",
                         exit_code=1,
-                        suggestion="Check your microphone/output device, then run 'aai doctor'.",
+                        suggestion="Check your microphone/output device, then run 'assembly doctor'.",
                     ) from None
                 continue
             if chunk is None:
@@ -231,4 +231,4 @@ class _DuplexMic:
 
 
 # Microphone capture (MicrophoneSource) lives in aai_cli.microphone and is
-# shared with `aai stream`; the agent's live mic+speaker run through DuplexAudio.
+# shared with `assembly stream`; the agent's live mic+speaker run through DuplexAudio.

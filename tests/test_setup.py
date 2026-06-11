@@ -240,7 +240,7 @@ def test_setup_help_install_summary_is_a_complete_sentence():
 
 
 def test_setup_no_subcommand_lists_commands():
-    # Bare `aai setup` should show its commands instead of "Missing command".
+    # Bare `assembly setup` should show its commands instead of "Missing command".
     result = runner.invoke(app, ["setup"])
     assert "install" in result.output
     assert "status" in result.output

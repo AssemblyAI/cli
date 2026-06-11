@@ -90,6 +90,6 @@ class NonInteractivePrompter:
         if default is None:
             raise UsageError(
                 f"'{title}' needs a value, but this is a non-interactive session.",
-                suggestion="Re-run `aai onboard` in an interactive terminal.",
+                suggestion="Re-run `assembly onboard` in an interactive terminal.",
             )
         return default

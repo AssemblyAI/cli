@@ -2,7 +2,7 @@
 
 Both sessions classify connect/session failures the same way and silence the same
 library loggers; keeping that here means a change to either behavior lands in
-`aai agent` and `aai speak` together instead of drifting apart.
+`assembly agent` and `assembly speak` together instead of drifting apart.
 """
 
 from __future__ import annotations

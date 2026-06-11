@@ -1,6 +1,6 @@
 ---
 name: check
-description: Run the full local verification gate for the aai CLI (the same checks CI runs). Use before pushing or opening a PR.
+description: Run the full local verification gate for the assembly CLI (the same checks CI runs). Use before pushing or opening a PR.
 disable-model-invocation: true
 ---
 

@@ -1,4 +1,4 @@
-"""`aai stream` source/streaming behavior and --show-code tests.
+"""`assembly stream` source/streaming behavior and --show-code tests.
 
 Flag-to-params mapping and conflicting-flag validation live in
 test_stream_command_flags.py.
@@ -452,7 +452,7 @@ def test_stream_system_audio_parallel_worker_error_surfaces(monkeypatch):
 
 
 def test_stream_output_text_emits_plain_finalized_turns(monkeypatch):
-    # `-o text` -> only finalized transcripts as plain stdout lines (pipe into aai llm).
+    # `-o text` -> only finalized transcripts as plain stdout lines (pipe into assembly llm).
     config.set_api_key("default", "sk_live")
 
     def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):

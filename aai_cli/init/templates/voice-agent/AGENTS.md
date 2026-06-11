@@ -3,7 +3,7 @@
 This is a buildless FastAPI + browser voice-agent starter. Run it with:
 
 ```sh
-aai dev
+assembly dev
 ```
 
 ## Map

@@ -45,7 +45,7 @@ def test_doctor_no_api_key_fails(healthy):
 
 
 def test_doctor_no_keyring_recommends_env_var(healthy, monkeypatch):
-    # On a box with no usable keyring, `aai login` can't persist a key either, so the
+    # On a box with no usable keyring, `assembly login` can't persist a key either, so the
     # fix must point at ASSEMBLYAI_API_KEY rather than a dead-end browser login.
     config.clear_api_key("default")
     monkeypatch.setattr("aai_cli.commands.doctor.config.keyring_usable", lambda: False)
@@ -61,7 +61,7 @@ def test_doctor_success_suggests_trying_transcribe(healthy, monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
-    assert "aai transcribe --sample" in result.output
+    assert "assembly transcribe --sample" in result.output
 
 
 def test_doctor_rejected_key_fails(healthy, monkeypatch):
@@ -226,7 +226,7 @@ def test_render_ok_payload_shows_ready() -> None:
     text = doctor.render(payload)
     assert "python" in text
     assert "Everything looks good." in text
-    assert "aai transcribe --sample" in text  # the next-step hint (profile present)
+    assert "assembly transcribe --sample" in text  # the next-step hint (profile present)
 
 
 def test_render_reports_profile_and_environment_line() -> None:
@@ -257,7 +257,7 @@ def test_render_omits_profile_line_for_partial_payloads() -> None:
     assert "environment:" not in text
     # The wizard reuses render() and has its own next-steps, so the "try transcribe"
     # hint must NOT appear on a profile-less partial payload.
-    assert "aai transcribe --sample" not in text
+    assert "assembly transcribe --sample" not in text
 
 
 def test_doctor_human_output_shows_profile_and_environment(healthy, monkeypatch):
@@ -279,11 +279,11 @@ def test_render_problem_payload_shows_fix_and_problem_banner() -> None:
                 "status": "fail",
                 "affects": ["everything"],
                 "detail": "No API key found.",
-                "fix": "Run 'aai login'.",
+                "fix": "Run 'assembly login'.",
             }
         ],
     }
     text = doctor.render(payload)
     assert "fix:" in text
-    assert "Run 'aai login'." in text
+    assert "Run 'assembly login'." in text
     assert "1 problem found" in text
