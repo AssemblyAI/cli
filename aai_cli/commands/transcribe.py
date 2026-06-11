@@ -66,6 +66,7 @@ def _validate_speakers_expected(merged: dict[str, object]) -> None:
             ("Transcribe a local file", "aai transcribe call.mp3"),
             ("Try it with the hosted sample", "aai transcribe --sample"),
             ("Transcribe a YouTube video", "aai transcribe https://youtu.be/dtp6b76pMak"),
+            ("Transcribe a podcast episode page", 'aai transcribe "https://podcasts.apple.com/…"'),
             ("Label who said what", "aai transcribe call.mp3 --speaker-labels"),
             ("Redact PII for compliance", "aai transcribe call.mp3 --redact-pii"),
             ("Summarize a recording", "aai transcribe call.mp3 --summarization"),
@@ -75,7 +76,7 @@ def _validate_speakers_expected(merged: dict[str, object]) -> None:
 )
 def transcribe(
     ctx: typer.Context,
-    source: str | None = typer.Argument(None, help="Audio file path, public URL, or YouTube URL."),
+    source: str | None = typer.Argument(None, help="Audio file, URL, or YouTube/podcast URL."),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # model & language
     speech_model: aai.SpeechModel | None = typer.Option(
@@ -357,12 +358,12 @@ def transcribe(
         help="Print the equivalent Python SDK code and exit (does not transcribe).",
     ),
 ) -> None:
-    """Transcribe an audio file, URL, or YouTube link.
+    """Transcribe an audio file, URL, or YouTube/podcast link.
 
     Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
 
-    Save with --out FILE, or pipe one field with -o text. A YouTube URL is downloaded
-    first, then transcribed.
+    Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
+    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
 
     Curated flags cover common features; --config KEY=VALUE and --config-file reach
     every other field. Analysis (summary, chapters, ...) renders in human mode.

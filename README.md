@@ -89,7 +89,7 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | --- | --- |
 | `aai login` / `logout` / `whoami` | Manage the stored API key. |
 | `aai doctor` | Check your environment (API key, network, ffmpeg, microphone, agent tooling). |
-| `aai transcribe <file\|url>` | Transcribe a file, URL, or YouTube URL (`--sample`, `--llm`, `--show-code`). |
+| `aai transcribe <file\|url>` | Transcribe a file, URL, or YouTube/podcast page URL (`--sample`, `--llm`, `--show-code`). |
 | `aai transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `aai stream [file]` | Real-time transcription from a file or the microphone. |
 | `aai agent` | *Run* a live two-way voice conversation (to **build** a voice agent app, use `aai init voice-agent`). |

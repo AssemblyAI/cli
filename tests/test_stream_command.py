@@ -284,6 +284,30 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
     assert seen["src"] == str(fake)
 
 
+def test_stream_podcast_page_url_downloads_then_streams(monkeypatch, tmp_path):
+    import wave
+
+    config.set_api_key("default", "sk_live")
+    fake = tmp_path / "episode.wav"
+    with wave.open(str(fake), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x01" * 100)
+    monkeypatch.setattr("aai_cli.commands.stream.youtube.download_audio", lambda url, d: fake)
+    seen = {}
+
+    def fake_stream(api_key, source, *, params, **kwargs):
+        seen["source_type"] = type(source).__name__
+        seen["src"] = getattr(source, "source", None)
+
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream)
+    result = runner.invoke(app, ["stream", "https://www.spreaker.com/episode/12345"])
+    assert result.exit_code == 0
+    assert seen["source_type"] == "FileSource"  # streamed the downloaded local file
+    assert seen["src"] == str(fake)
+
+
 def test_stream_show_code_prints_without_streaming(monkeypatch):
     # Print-only: emits the mic-streaming script, never opens audio or streams, no auth.
     called = []
@@ -359,10 +383,14 @@ def test_stream_show_code_file_with_mic_flags_rejected():
     assert "--sample-rate" in result.output
 
 
-def test_stream_show_code_rejects_youtube_sources():
-    result = runner.invoke(app, ["stream", "https://youtu.be/abc", "--show-code"])
-    assert result.exit_code == 2
-    assert "YouTube" in result.output
+def test_stream_show_code_rejects_downloaded_sources():
+    # YouTube and podcast-page URLs both route through the download path, which the
+    # generated streaming script doesn't model yet.
+    for url in ("https://youtu.be/abc", "https://www.spreaker.com/episode/12345"):
+        result = runner.invoke(app, ["stream", url, "--show-code"])
+        assert result.exit_code == 2
+        assert "downloaded sources" in result.output
+        assert "YouTube" in result.output
 
 
 def test_stream_show_code_ignores_json_flag(monkeypatch):

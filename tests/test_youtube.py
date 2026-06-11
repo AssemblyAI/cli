@@ -19,6 +19,37 @@ def test_is_youtube_url_variants():
     assert not youtube.is_youtube_url("")
 
 
+def test_is_downloadable_url_matches_media_pages():
+    # YouTube by shape; podcast pages because a dedicated yt-dlp extractor claims them.
+    assert youtube.is_downloadable_url("https://youtu.be/abc123")
+    assert youtube.is_downloadable_url(
+        "https://podcasts.apple.com/us/podcast/some-show/id1535809341?i=1000123456789"
+    )
+    assert youtube.is_downloadable_url("https://www.spreaker.com/episode/12345")
+    assert youtube.is_downloadable_url("http://www.spreaker.com/episode/12345")
+    assert youtube.is_downloadable_url("  https://www.spreaker.com/episode/12345  ")
+
+
+def test_is_downloadable_url_passes_direct_and_local_sources_through():
+    # Direct audio URLs and unknown pages match only yt-dlp's catch-all Generic
+    # extractor — the API fetches those itself, so they must not route to a download.
+    assert not youtube.is_downloadable_url("https://example.com/episode.mp3")
+    assert not youtube.is_downloadable_url("https://example.com/blog/post")
+    assert not youtube.is_downloadable_url("/local/file.wav")
+    assert not youtube.is_downloadable_url("podcasts.apple.com/no-scheme")
+    assert not youtube.is_downloadable_url(None)
+    assert not youtube.is_downloadable_url("")
+
+
+def test_is_downloadable_url_without_ytdlp_still_matches_youtube(monkeypatch):
+    # With yt-dlp unimportable, YouTube still matches by URL shape (so download_audio
+    # can raise its install hint); extractor-matched hosts degrade to API pass-through.
+    monkeypatch.setitem(sys.modules, "yt_dlp", None)  # force ImportError
+    monkeypatch.setitem(sys.modules, "yt_dlp.extractor", None)
+    assert youtube.is_downloadable_url("https://youtu.be/abc123")
+    assert not youtube.is_downloadable_url("https://www.spreaker.com/episode/12345")
+
+
 def _fake_ytdlp(monkeypatch, ydl_cls):
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
 

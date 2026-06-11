@@ -4,9 +4,10 @@ Four commands. All accept `--json` (auto-enabled when piped) and `-o/--output`
 to print a single field. `transcribe`, `stream`, and `agent` accept
 `--show-code` to print equivalent Python SDK code without calling the API.
 
-## `aai transcribe [SOURCE]` — file / URL / YouTube
+## `aai transcribe [SOURCE]` — file / URL / YouTube / podcast page
 
-`SOURCE` is a local file path, public URL, or YouTube URL (downloaded first).
+`SOURCE` is a local file path, public URL, or a media-page URL yt-dlp can extract
+(YouTube, Apple Podcasts, Spreaker, SoundCloud, …) — those are downloaded first.
 Use `--sample` for the hosted `wildfires.mp3`. Analysis results (summary,
 chapters, sentiment, …) render automatically in human mode.
 
@@ -38,7 +39,7 @@ aai transcribe call.mp3 --show-code
 
 ## `aai stream [SOURCE]` — live real-time transcription
 
-Omit `SOURCE` to use the microphone; pass a file/URL/YouTube to stream that, or
+Omit `SOURCE` to use the microphone; pass a file/URL/media page to stream that, or
 `--sample`. macOS can capture system audio with `--system-audio` (mic + system)
 or `--system-audio-only`.
 

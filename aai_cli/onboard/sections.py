@@ -64,7 +64,7 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     prompter.section("Your first transcription")
     api_key = config.resolve_api_key(profile=ctx.profile)
     source = prompter.text(
-        "Audio file path or YouTube URL (or press Enter to transcribe a sample clip)",
+        "Audio file path or YouTube/podcast URL (or press Enter to transcribe a sample clip)",
         default="",
     ).strip()
     label = source or "the sample clip"
