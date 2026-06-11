@@ -264,39 +264,36 @@
   │                         [required]                                           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --split                   TEXT                      Hugging Face split to    │
-  │                                                     score (default: test).   │
-  │ --subset                  TEXT                      Hugging Face             │
-  │                                                     config/subset name (e.g. │
-  │                                                     a language).             │
-  │ --limit                   INTEGER RANGE             Rows to evaluate         │
-  │                           [1<=x<=100]               (1-100).                 │
-  │                                                     [default: 10]            │
-  │ --audio-column            TEXT                      Audio column name        │
-  │                                                     (default: auto-detect).  │
-  │ --text-column             TEXT                      Reference text column    │
-  │                                                     name (default:           │
-  │                                                     auto-detect).            │
-  │ --speech-model            [universal-3-pro|univers  Speech model to          │
-  │                           al-2|slam-1|universal|be  evaluate.                │
-  │                           st|nano]                                           │
-  │ --language-code           TEXT                      Force a language (e.g.   │
-  │                                                     en_us).                  │
-  │ --speaker-labels                                    Diarize and also score   │
-  │                                                     DER against the          │
-  │                                                     dataset's reference      │
-  │                                                     speaker turns            │
-  │                                                     (speakers/timestamps_st… │
-  │                                                     columns, in seconds).    │
-  │ --collar                  FLOAT RANGE [x>=0.0]      DER forgiveness          │
-  │                                                     (seconds) around each    │
-  │                                                     reference turn boundary. │
-  │                                                     [default: 1.0]           │
-  │ --json            -j                                Output the rows and      │
-  │                                                     summary as one JSON      │
-  │                                                     object.                  │
-  │ --help                                              Show this message and    │
-  │                                                     exit.                    │
+  │ --split                   TEXT                     Hugging Face split to     │
+  │                                                    score (default: test).    │
+  │ --subset                  TEXT                     Hugging Face              │
+  │                                                    config/subset name (e.g.  │
+  │                                                    a language).              │
+  │ --limit                   INTEGER RANGE            Rows to evaluate (1-100). │
+  │                           [1<=x<=100]              [default: 10]             │
+  │ --audio-column            TEXT                     Audio column name         │
+  │                                                    (default: auto-detect).   │
+  │ --text-column             TEXT                     Reference text column     │
+  │                                                    name (default:            │
+  │                                                    auto-detect).             │
+  │ --speech-model            [universal-3-pro|univer  Speech model to evaluate. │
+  │                           sal-2]                                             │
+  │ --language-code           TEXT                     Force a language (e.g.    │
+  │                                                    en_us).                   │
+  │ --speaker-labels                                   Diarize and also score    │
+  │                                                    DER against the dataset's │
+  │                                                    reference speaker turns   │
+  │                                                    (speakers/timestamps_sta… │
+  │                                                    columns, in seconds).     │
+  │ --collar                  FLOAT RANGE [x>=0.0]     DER forgiveness (seconds) │
+  │                                                    around each reference     │
+  │                                                    turn boundary.            │
+  │                                                    [default: 1.0]            │
+  │ --json            -j                               Output the rows and       │
+  │                                                    summary as one JSON       │
+  │                                                    object.                   │
+  │ --help                                             Show this message and     │
+  │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

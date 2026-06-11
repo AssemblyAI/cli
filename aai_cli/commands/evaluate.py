@@ -23,44 +23,11 @@ app = typer.Typer()
 
 
 class EvalSpeechModel(StrEnum):
-    """Every speech model the SDK can request, current generation first.
-
-    The SDK's own ``SpeechModel`` enum stops at the legacy generation; the current
-    models are requested through its newer ``speech_models`` list parameter, so the
-    CLI choices are the union of both.
-    """
+    """The current-generation models, requested via the SDK's ``speech_models``
+    list parameter (its legacy ``SpeechModel`` enum predates them)."""
 
     universal_3_pro = "universal-3-pro"
     universal_2 = "universal-2"
-    slam_1 = "slam-1"
-    universal = "universal"
-    best = "best"
-    nano = "nano"
-
-
-def _transcription_config(
-    speech_model: EvalSpeechModel | None, *, language_code: str | None, speaker_labels: bool
-) -> aai.TranscriptionConfig:
-    """Route the model choice through the SDK parameter that accepts it.
-
-    Legacy models go through ``speech_model`` (the SDK enum); current-generation
-    models only exist as ``speech_models`` list values.
-    """
-    legacy = {model.value for model in aai.SpeechModel}
-    return aai.TranscriptionConfig(
-        speech_model=(
-            aai.SpeechModel(speech_model.value)
-            if speech_model is not None and speech_model.value in legacy
-            else None
-        ),
-        speech_models=(
-            [speech_model.value]
-            if speech_model is not None and speech_model.value not in legacy
-            else None
-        ),
-        language_code=language_code,
-        speaker_labels=speaker_labels or None,
-    )
 
 
 def _pct(value: object) -> str:
@@ -254,8 +221,10 @@ def evaluate(
             with_speakers=speaker_labels,
         )
         api_key = config.resolve_api_key(profile=state.profile)
-        transcription_config = _transcription_config(
-            speech_model, language_code=language_code, speaker_labels=speaker_labels
+        transcription_config = aai.TranscriptionConfig(
+            speech_models=[speech_model.value] if speech_model else None,
+            language_code=language_code,
+            speaker_labels=speaker_labels or None,
         )
         results: list[_ItemResult] = []
         for index, item in enumerate(data.items, start=1):
