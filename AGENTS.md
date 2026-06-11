@@ -98,6 +98,13 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
 
 Lessons that cost time in agent sessions — read before exercising `uv run assembly` by hand:
 
+- **Web/remote containers are fully provisioned at session start**
+  (`.claude/hooks/session-start.sh`): system deps, `markdownlint`/`prettier`, and the Go
+  gate binaries (`actionlint`, `gitleaks`) are installed at CI's pinned versions, so
+  `./scripts/check.sh` enforces the same gates CI does — a gate that "self-skips locally"
+  should *not* be skipping in a web session. If one is, read `/tmp/session-start.log` to
+  see what failed to provision. Keep the hook's stdout terse (one line per step) — it is
+  injected into the agent's context every session.
 - **Probe network reachability first.** Remote/sandboxed environments often allowlist
   PyPI but block `api.assemblyai.com` / `streaming.assemblyai.com` / `llm-gateway.assemblyai.com`
   (`curl -s https://api.assemblyai.com/v2/transcript -H "authorization: $ASSEMBLYAI_API_KEY"`
