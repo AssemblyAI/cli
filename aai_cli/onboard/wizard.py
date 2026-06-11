@@ -26,6 +26,8 @@ def run_onboarding(prompter: Prompter, ctx: WizardContext) -> int:
         sections.build_path(prompter, ctx)
         sections.claude_code(prompter, ctx)
         sections.next_steps(prompter, ctx)
+        # Last on purpose: the dev server blocks until Ctrl-C.
+        sections.launch_app(prompter, ctx)
     except WizardCancelled:
         output.error_console.print(
             output.hint("Setup cancelled. Run `assembly onboard` to resume.")
