@@ -1,0 +1,60 @@
+name: Slack notify (merges to main)
+
+# Post a message to #assembly-cli whenever commits land on main (PR merges and
+# direct pushes alike). PRs merge via squash/merge commits, so `push` on main is
+# the one event that covers every way code reaches the branch.
+on:
+  push:
+    branches: [main]
+
+# The job only talks to Slack; it never touches the repo or the GitHub API, so
+# it needs no token scopes at all.
+permissions: {}
+
+jobs:
+  notify:
+    name: post to #assembly-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout and no third-party action (matching the repo's no-new-action
+      # posture): build the payload with jq and POST it to a Slack incoming
+      # webhook. The webhook URL is bound to #assembly-cli when it's created in
+      # Slack, so the channel never appears here.
+      #
+      # Everything event-derived is passed through `env`, never interpolated
+      # into the script body — commit messages and actor names are
+      # attacker-controlled text, and `${{ }}` inside `run:` is a shell
+      # injection vector (zizmor's template-injection audit).
+      - name: Post merge notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_SHA: ${{ github.sha }}
+          PUSHER: ${{ github.actor }}
+          COMPARE_URL: ${{ github.event.compare }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret is not set; skipping Slack notification."
+            exit 0
+          fi
+          # Squash merges put the PR title on the first line ("Title (#123)"),
+          # so the subject line alone reads well in Slack.
+          subject="$(printf '%s\n' "$COMMIT_MESSAGE" | head -n 1)"
+          short_sha="$(printf '%.7s' "$COMMIT_SHA")"
+          payload="$(jq -n \
+            --arg subject "$subject" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg short_sha "$short_sha" \
+            --arg pusher "$PUSHER" \
+            --arg compare_url "$COMPARE_URL" \
+            --arg repo "$REPO" \
+            '{
+              text: ":rocket: \($repo): merged to main — \("<" + $commit_url + "|" + $subject + ">") (`\($short_sha)`) by \($pusher) — <\($compare_url)|diff>",
+              unfurl_links: false
+            }')"
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL"
