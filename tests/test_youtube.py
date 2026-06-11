@@ -1,3 +1,4 @@
+import importlib
 import re
 import sys
 import types
@@ -52,6 +53,11 @@ def test_is_downloadable_url_without_ytdlp_still_matches_youtube(monkeypatch):
 
 
 def _fake_ytdlp(monkeypatch, ydl_cls):
+    # Cache the real yt_dlp.utils in sys.modules first: the fake parent below is not
+    # a package, so the `--download-sections` path's `from yt_dlp.utils import ...`
+    # would otherwise only resolve when an *earlier* test happened to import the real
+    # thing -- an order-dependent flake under pytest-randomly.
+    importlib.import_module("yt_dlp.utils")
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
 
 
