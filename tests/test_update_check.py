@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import io
 import sys
+import time
 import types
 
 import httpx2
 import pytest
+from rich.console import Console
 
-from aai_cli import config, update_check
+from aai_cli import __version__, config, output, theme, update_check
 
 
 def test_update_cache_roundtrips(tmp_path, monkeypatch):
@@ -97,3 +100,119 @@ def test_fetch_and_cache_swallows_errors_but_records_check(tmp_path, monkeypatch
     last_check, latest = config.get_update_cache()
     assert latest is None  # unknown after a failed fetch
     assert last_check is not None  # but the attempt is recorded
+
+
+def _tty_console() -> Console:
+    # A theme-aware console (so aai.* styles resolve, like the real error_console)
+    # that reports as a terminal, with color env pinned (see the
+    # rich-color-tests-need-empty-environ project memory) so output is stable.
+    return theme.make_console(file=io.StringIO(), force_terminal=True, width=80, _environ={})
+
+
+def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    # Cache says a newer version exists, checked just now (so no spawn).
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    monkeypatch.setattr(sys, "executable", "/opt/homebrew/Cellar/assembly/9/libexec/bin/python")
+
+    con = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+
+    update_check.maybe_notify(json_mode=False)
+
+    out = con.file.getvalue()
+    assert "Update available" in out
+    assert "9.9.9" in out
+    assert "brew upgrade assembly" in out  # detected command, not a generic hint
+
+
+def test_maybe_notify_silent_under_json(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    con = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+
+    update_check.maybe_notify(json_mode=True)
+
+    assert con.file.getvalue() == ""  # JSON mode prints nothing
+
+
+def test_maybe_notify_silent_when_not_a_tty(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    con = theme.make_console(file=io.StringIO(), force_terminal=False, _environ={})  # not a tty
+    monkeypatch.setattr(output, "error_console", con)
+
+    update_check.maybe_notify(json_mode=False)
+
+    assert con.file.getvalue() == ""
+
+
+def test_maybe_notify_silent_in_ci_and_when_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
+    con = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+
+    monkeypatch.setenv("CI", "1")
+    update_check.maybe_notify(json_mode=False)
+    assert con.file.getvalue() == ""
+
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv(update_check.ENV_DISABLED, "1")
+    update_check.maybe_notify(json_mode=False)
+    assert con.file.getvalue() == ""
+
+
+def test_maybe_notify_no_box_when_cache_not_newer(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    config.set_update_cache(last_check=time.time(), latest_version=__version__)  # equal
+    con = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+
+    update_check.maybe_notify(json_mode=False)
+    assert "Update available" not in con.file.getvalue()
+
+
+def test_maybe_notify_spawns_refresh_only_when_stale(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    con = _tty_console()
+    monkeypatch.setattr(output, "error_console", con)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv(update_check.ENV_DISABLED, raising=False)
+
+    spawned: list[bool] = []
+    monkeypatch.setattr(update_check, "spawn_refresh", lambda: spawned.append(True))
+
+    # Fresh check -> no spawn.
+    config.set_update_cache(last_check=time.time(), latest_version=None)
+    update_check.maybe_notify(json_mode=False)
+    assert spawned == []
+
+    # Stale check (>24h ago) -> spawn.
+    config.set_update_cache(
+        last_check=time.time() - update_check._CHECK_INTERVAL_SECONDS - 1, latest_version=None
+    )
+    update_check.maybe_notify(json_mode=False)
+    assert spawned == [True]
+
+
+def test_spawn_refresh_is_detached(monkeypatch):
+    calls: dict[str, object] = {}
+
+    def fake_popen(args, **kwargs):
+        calls["args"] = args
+        calls["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(update_check.subprocess, "Popen", fake_popen)
+    update_check.spawn_refresh()
+
+    assert calls["args"][:3] == [sys.executable, "-m", "aai_cli"]
+    assert calls["args"][3] == "_update-check"
+    assert calls["kwargs"]["start_new_session"] is True
+    assert calls["kwargs"]["env"][update_check.ENV_DISABLED] == "1"  # child can't re-spawn
