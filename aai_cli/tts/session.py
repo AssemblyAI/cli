@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import contextlib
 import json
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlencode
 
 from aai_cli import environments
-from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
+from aai_cli import ws as wsutil
+from aai_cli.errors import APIError, CLIError
 from aai_cli.tts import audio
 
 
@@ -26,14 +27,6 @@ class _WebSocket(Protocol):
 # The connect factory: returns a fresh _WebSocket. websockets' real sync client
 # matches structurally; tests inject a fake with the same surface.
 _Connect = Callable[..., _WebSocket]
-
-# A pre-upgrade HTTP 403 on the WebSocket handshake is NOT a rejected key (it also
-# covers WAF/region/plan blocks) — mirrors how agent/stream classify handshakes.
-_HTTP_FORBIDDEN = 403
-
-# websockets' sync client logs teardown errors through these; silence them so an
-# internal "stream ended" traceback never lands on stderr next to our clean error.
-_WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
 
 # The streaming-TTS server synthesizes at 24 kHz unless a sample_rate is requested,
 # and echoes the resolved value back in the Begin frame's configuration. Audio frames
@@ -86,26 +79,24 @@ def ws_url(params: dict[str, str]) -> str:
     return f"{base}?{urlencode(params)}" if params else base
 
 
-def _silence_websockets_logging() -> None:
-    """Keep websockets' internal teardown logging off the user's stderr."""
-    for name in _WEBSOCKETS_LOGGERS:
-        logging.getLogger(name).setLevel(logging.CRITICAL)
+def _pcm_duration_seconds(pcm: bytes | bytearray, sample_rate: int) -> float:
+    """Seconds of audio in 16-bit mono PCM: two bytes per sample."""
+    return len(pcm) / 2 / sample_rate
 
 
-def _is_rejected_key(exc: Exception) -> bool:
-    """Auth-shaped failure (the key was rejected) vs a generic block. A plain HTTP
-    403 on the upgrade is NOT a rejected key (WAF/region/plan also 403)."""
-    status = getattr(getattr(exc, "response", None), "status_code", None)
-    if status == _HTTP_FORBIDDEN:
-        return False
-    return is_auth_failure(exc)
-
-
-def _auth_or_api_error(exc: Exception, message: str) -> CLIError:
-    """A rejected key becomes auth_failure(); anything else becomes an APIError."""
-    if _is_rejected_key(exc):
-        return auth_failure()
-    return APIError(f"{message}: {exc}")
+def _decode_audio_frame(msg: dict[str, object]) -> bytes:
+    """The PCM payload of an Audio frame, with a malformed frame (missing or
+    undecodable ``audio``) mapped to an APIError that names the defect — not a
+    bare KeyError/binascii.Error that surfaces as a cryptic "TTS session failed"."""
+    encoded = msg.get("audio")
+    if not isinstance(encoded, str):
+        raise APIError("TTS service sent an Audio frame without an audio payload.")
+    try:
+        # validate=True: junk characters must fail loudly, not be silently dropped
+        # (the default discards them, corrupting the PCM byte stream).
+        return base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise APIError(f"TTS service sent an Audio frame that is not valid base64: {exc}") from exc
 
 
 def _default_connect(
@@ -126,7 +117,7 @@ def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
             max_size=None,
         )
     except Exception as exc:
-        raise _auth_or_api_error(exc, "Could not connect to the TTS service") from exc
+        raise wsutil.auth_or_api_error(exc, "Could not connect to the TTS service") from exc
 
 
 def _run_protocol(
@@ -146,7 +137,7 @@ def _run_protocol(
         msg = json.loads(ws.recv())
         mtype = msg.get("type")
         if mtype == "Audio":
-            pcm.extend(base64.b64decode(msg["audio"]))
+            pcm.extend(_decode_audio_frame(msg))
             if msg.get("is_final"):
                 break
         elif mtype == "Error":
@@ -159,8 +150,7 @@ def _run_protocol(
     with contextlib.suppress(Exception):
         ws.send(json.dumps({"type": "Terminate"}))
 
-    duration = len(pcm) / 2 / sample_rate
-    return SpeakResult(bytes(pcm), sample_rate, duration)
+    return SpeakResult(bytes(pcm), sample_rate, _pcm_duration_seconds(pcm, sample_rate))
 
 
 def synthesize(
@@ -175,7 +165,7 @@ def synthesize(
     ``connect`` defaults to websockets' synchronous client; injectable for tests.
     Connect/session failures map to a clean CLIError (a rejected key -> exit 4).
     """
-    _silence_websockets_logging()
+    wsutil.silence_websockets_logging()
     if connect is None:
         connect = _default_connect
 
@@ -185,7 +175,7 @@ def synthesize(
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:
-        raise _auth_or_api_error(exc, "TTS session failed") from exc
+        raise wsutil.auth_or_api_error(exc, "TTS session failed") from exc
     finally:
         with contextlib.suppress(Exception):
             ws.close()
@@ -215,5 +205,4 @@ def synthesize_dialogue(
             pcm.extend(audio.silence(result.sample_rate, _INTER_TURN_SILENCE_SECONDS))
         pcm.extend(result.pcm)
         sample_rate_out = result.sample_rate
-    duration = len(pcm) / 2 / sample_rate_out
-    return SpeakResult(bytes(pcm), sample_rate_out, duration)
+    return SpeakResult(bytes(pcm), sample_rate_out, _pcm_duration_seconds(pcm, sample_rate_out))

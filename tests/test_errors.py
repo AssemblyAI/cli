@@ -6,6 +6,7 @@ def test_not_authenticated_defaults():
     assert err.exit_code == 4
     assert err.error_type == "not_authenticated"
     assert err.message == "You're not signed in."
+    assert err.rejected_key is False  # "no credential" is not a key rejection
     assert err.suggestion == (
         "Run 'aai onboard' for guided setup, 'aai login' if you have an account, "
         "or set ASSEMBLYAI_API_KEY."
@@ -58,6 +59,8 @@ def test_auth_failure_splits_message_and_suggestion():
     assert err.message == "Your API key was rejected."
     assert "aai login" in (err.suggestion or "")
     assert "ASSEMBLYAI_API_KEY" in (err.suggestion or "")
+    # The structured marker auto-login keys off (instead of matching message text).
+    assert err.rejected_key is True
 
 
 def test_is_auth_failure_matches_credential_signals():

@@ -61,10 +61,14 @@ class NotAuthenticated(CLIError):
             "Run 'aai onboard' for guided setup, 'aai login' if you have an account, "
             "or set ASSEMBLYAI_API_KEY."
         ),
+        rejected_key: bool = False,
     ) -> None:
         super().__init__(
             message, error_type="not_authenticated", exit_code=4, suggestion=suggestion
         )
+        # Structured marker for "a key was presented and the server rejected it" (vs
+        # "no credential at all"), so callers like auto-login don't match message text.
+        self.rejected_key = rejected_key
 
 
 class APIError(CLIError):
@@ -142,4 +146,6 @@ def is_auth_failure(exc: object) -> bool:
 
 def auth_failure() -> NotAuthenticated:
     """A NotAuthenticated for the 'key present but rejected by the server' case."""
-    return NotAuthenticated(REJECTED_KEY_MESSAGE, suggestion=REJECTED_KEY_SUGGESTION)
+    return NotAuthenticated(
+        REJECTED_KEY_MESSAGE, suggestion=REJECTED_KEY_SUGGESTION, rejected_key=True
+    )

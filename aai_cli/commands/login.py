@@ -83,7 +83,9 @@ def login(
             json_mode=json_mode,
         )
 
-    run_command(ctx, body, json=json_out)
+    # auto_login=False: this command owns sign-in; an auth failure here (e.g. the
+    # browser flow timing out) must surface, not trigger a second login attempt.
+    run_command(ctx, body, json=json_out, auto_login=False)
 
 
 @app.command(
@@ -114,7 +116,8 @@ def logout(
             json_mode=json_mode,
         )
 
-    run_command(ctx, body, json=json_out)
+    # auto_login=False: signing out while signed out must not start a sign-in.
+    run_command(ctx, body, json=json_out, auto_login=False)
 
 
 @app.command(

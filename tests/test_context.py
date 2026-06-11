@@ -227,30 +227,6 @@ def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
     assert result.exit_code == 4
 
 
-def test_run_command_never_auto_logs_in_login_command(monkeypatch):
-    _force_interactive(monkeypatch)
-    monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("login command must not auto-login")),
-    )
-
-    app = typer.Typer()
-
-    @app.callback()
-    def cb(ctx: typer.Context):
-        ctx.obj = AppState()
-
-    @app.command(name="login")
-    def login_cmd(ctx: typer.Context):
-        def body(state, json_mode):
-            raise NotAuthenticated()
-
-        run_command(ctx, body)
-
-    result = runner.invoke(app, ["login"])
-    assert result.exit_code == 4
-
-
 def test_run_command_runs_body_on_success():
     seen = {}
 
@@ -372,7 +348,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
     monkeypatch.setattr("aai_cli.context.run_login_flow", fake_login)
 
     def body(state, json_mode):
-        raise NotAuthenticated()  # message != REJECTED_KEY_MESSAGE
+        raise NotAuthenticated()  # rejected_key is False: not a key rejection
 
     result = runner.invoke(_make_app(body), ["go"])
     assert ran["login"] == 1  # auto-login was attempted despite the env key

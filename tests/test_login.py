@@ -384,3 +384,40 @@ def test_whoami_honors_env_api_key(monkeypatch, mocker):
     data = json.loads(result.output)
     assert data["reachable"] is True
     assert "sk_env_1234567890" not in result.output  # still masked
+
+
+def test_login_failure_never_auto_logs_in_again(monkeypatch):
+    # The login command owns sign-in (auto_login=False): a NotAuthenticated from its
+    # own browser flow must surface as exit 4, not trigger run_command's auto-login
+    # retry — even in an interactive session.
+    from aai_cli.errors import NotAuthenticated
+
+    calls = {"n": 0}
+
+    def timed_out():
+        calls["n"] += 1
+        raise NotAuthenticated("Login timed out waiting for the browser.")
+
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.context.run_login_flow", timed_out)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 4
+    assert calls["n"] == 1  # the command's own attempt only; no auto-login retry
+
+
+def test_logout_never_auto_logs_in(monkeypatch):
+    # Signing out must never start a sign-in flow (auto_login=False), even if the
+    # body surfaces a NotAuthenticated and the session is interactive.
+    from aai_cli.errors import NotAuthenticated
+
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda: (_ for _ in ()).throw(AssertionError("logout must never start a login")),
+    )
+    monkeypatch.setattr(
+        "aai_cli.commands.login.config.clear_api_key",
+        lambda _profile: (_ for _ in ()).throw(NotAuthenticated()),
+    )
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 4

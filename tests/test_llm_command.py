@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from aai_cli import config
 from aai_cli.auth.flow import LoginResult
+from aai_cli.llm import KNOWN_MODELS
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -44,7 +45,20 @@ def test_llm_list_models_exits_without_network(monkeypatch):
     result = runner.invoke(app, ["llm", "--list-models"])
     assert result.exit_code == 0
     assert "claude-sonnet-4-6" in result.output
+    # Human mode prints the bare newline-joined list, not a JSON array.
+    assert result.output.strip() == "\n".join(KNOWN_MODELS)
     assert called["ran"] is False
+
+
+def test_llm_list_models_json_emits_machine_readable_array(monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.gateway.complete",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call the gateway")),
+    )
+    result = runner.invoke(app, ["llm", "--list-models", "--json"])
+    assert result.exit_code == 0
+    models = json.loads(result.output)
+    assert models == list(KNOWN_MODELS)  # the whole list, as a machine-readable array
 
 
 def test_llm_sends_prompt_and_prints_output(monkeypatch):
