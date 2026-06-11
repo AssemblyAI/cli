@@ -21,9 +21,13 @@ DEFAULT_LANGUAGE = "English"
 
 
 def _read_text(text: str | None) -> str:
-    """The text to speak: the argument if non-blank, else stdin when piped."""
+    """The text to speak: the non-blank argument, or piped stdin when the argument
+    is omitted entirely. A *blank* argument (e.g. "") is a usage error, never a
+    silent fall-through to stdin — so `aai speak "$MSG"` with an empty MSG fails
+    fast instead of consuming whatever happens to be on the pipe."""
     if text is not None and text.strip():
         return text
+    # `text is None` (argument omitted), not merely blank: see the docstring rationale.
     if text is None and not sys.stdin.isatty():
         piped = sys.stdin.read().strip()
         if piped:
