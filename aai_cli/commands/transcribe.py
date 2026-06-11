@@ -15,6 +15,7 @@ from aai_cli import (
     llm,
     options,
     output,
+    transcribe_batch,
     transcribe_exec,
 )
 
@@ -32,6 +33,8 @@ app = typer.Typer()
     epilog=examples_epilog(
         [
             ("Transcribe a local file", "assembly transcribe call.mp3"),
+            ("Batch-transcribe a folder", "assembly transcribe ./recordings"),
+            ("Batch-transcribe a glob", 'assembly transcribe "calls/*.mp3"'),
             ("Try it with the hosted sample", "assembly transcribe --sample"),
             ("Transcribe a YouTube video", "assembly transcribe https://youtu.be/dtp6b76pMak"),
             ("Transcribe a podcast page", 'assembly transcribe "https://podcasts.apple.com/…"'),
@@ -44,8 +47,14 @@ app = typer.Typer()
 )
 def transcribe(
     ctx: typer.Context,
-    source: str | None = typer.Argument(None, help="Audio file, URL, or YouTube/podcast URL."),
+    source: str | None = typer.Argument(
+        None, help="Audio file, URL, YouTube/podcast URL, or a directory/glob (batch mode)."
+    ),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
+    # batch mode
+    from_stdin: bool = options.batch_from_stdin_option(),
+    concurrency: int = options.batch_concurrency_option(),
+    force: bool = options.batch_force_option(),
     # model & language
     speech_model: aai.SpeechModel | None = typer.Option(
         None,
@@ -334,12 +343,16 @@ def transcribe(
         help="Print the equivalent Python SDK code and exit (does not transcribe).",
     ),
 ) -> None:
-    """Transcribe an audio file, URL, or YouTube/podcast link.
+    """Transcribe an audio file, URL, or YouTube/podcast link — or a whole batch.
 
     Quickest start: assembly transcribe call.mp3 (or --sample for the hosted demo).
 
     Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
     URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
+
+    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
+    transcribe many sources concurrently. Each source gets a .aai.json sidecar
+    with the full result, and a re-run skips sources already transcribed.
 
     Curated flags cover common features; --config KEY=VALUE and --config-file reach
     every other field. Analysis (summary, chapters, ...) renders in human mode.
@@ -402,6 +415,22 @@ def transcribe(
         )
 
         transcribe_exec.validate_speakers_expected(merged)
+
+        sources = transcribe_batch.expand_sources(source, from_stdin=from_stdin, sample=sample)
+        if sources is not None:
+            transcribe_batch.reject_single_source_flags(
+                out=out, output_field=output_field, llm_prompt=llm_prompt, show_code=show_code
+            )
+            transcribe_batch.run_batch(
+                config.resolve_api_key(profile=state.profile),
+                sources,
+                transcription_config=config_builder.construct_transcription_config(merged),
+                concurrency=concurrency,
+                force=force,
+                json_mode=json_mode,
+                quiet=state.quiet,
+            )
+            return
 
         if show_code:
             # Print-only: build the equivalent script and exit without transcribing or

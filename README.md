@@ -42,6 +42,7 @@ Requires Python 3.12+. On Linux, install PortAudio once for microphone support (
 ## 📋 Key Features
 
 - **Transcription**: `assembly transcribe` handles files, URLs, and YouTube/podcast pages, with flags for speaker labels, PII redaction, summarization, sentiment, chapters, and more.
+- **Batch transcription**: point `assembly transcribe` at a directory or glob (or pipe paths with `--from-stdin`) to transcribe everything concurrently, with sidecar files that make re-runs resumable.
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal (use headphones).
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
@@ -98,6 +99,10 @@ assembly transcribe video.mp4 -o srt
 
 # Speaker labels + summary, as JSON
 assembly transcribe call.mp3 --speaker-labels --summarization --json
+
+# Batch: a whole directory or glob, resumable on re-run
+assembly transcribe ./recordings
+find . -name "*.wav" | assembly transcribe --from-stdin
 
 # Pipe audio in, pipe text out
 ffmpeg -i talk.mp4 -f wav - | assembly transcribe -

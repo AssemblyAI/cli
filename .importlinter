@@ -28,6 +28,8 @@ source_modules =
     aai_cli.streaming
     aai_cli.telemetry
     aai_cli.theme
+    aai_cli.transcribe_batch
+    aai_cli.transcribe_exec
     aai_cli.transcribe_render
     aai_cli.ws
     aai_cli.youtube

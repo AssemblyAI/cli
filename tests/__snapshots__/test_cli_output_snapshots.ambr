@@ -933,7 +933,7 @@
   
    Usage: assembly transcribe [OPTIONS] [SOURCE]
   
-   Transcribe an audio file, URL, or YouTube/podcast link.
+   Transcribe an audio file, URL, or YouTube/podcast link — or a whole batch.
   
    Quickest start: assembly transcribe call.mp3 (or --sample for the hosted
    demo).
@@ -941,12 +941,17 @@
    Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
+   Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
+   transcribe many sources concurrently. Each source gets a .aai.json sidecar
+   with the full result, and a re-run skips sources already transcribed.
+  
    Curated flags cover common features; --config KEY=VALUE and --config-file
    reach
    every other field. Analysis (summary, chapters, ...) renders in human mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, or YouTube/podcast URL.             │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, or a           │
+  │                         directory/glob (batch mode).                         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                         Use the hosted              │
@@ -967,6 +972,18 @@
   │                                                  SDK code and exit (does not │
   │                                                  transcribe).                │
   │ --help                                           Show this message and exit. │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Batch ──────────────────────────────────────────────────────────────────────╮
+  │ --from-stdin                               Batch mode: read audio paths/URLs │
+  │                                            from stdin, one per line          │
+  │                                            (composes with find/ls/yt-dlp     │
+  │                                            output).                          │
+  │ --concurrency        INTEGER RANGE [x>=1]  How many sources to transcribe at │
+  │                                            once in batch mode.               │
+  │                                            [default: 4]                      │
+  │ --force                                    Batch mode: re-transcribe sources │
+  │                                            whose sidecar already records a   │
+  │                                            completed run.                    │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
@@ -1069,6 +1086,10 @@
    Examples
    Transcribe a local file
    $ assembly transcribe call.mp3
+   Batch-transcribe a folder
+   $ assembly transcribe ./recordings
+   Batch-transcribe a glob
+   $ assembly transcribe "calls/*.mp3"
    Try it with the hosted sample
    $ assembly transcribe --sample
    Transcribe a YouTube video
