@@ -30,6 +30,7 @@ git push origin vX.Y.Z
 ```
 
 The push triggers `.github/workflows/release.yml`, which:
+
 1. Builds the arm64 macOS bottle (`arm64_sonoma`).
 2. Creates the `vX.Y.Z` GitHub Release with the bottle attached.
 3. Opens a `release/vX.Y.Z-formula` PR pinning the formula to the tag's source and adding the `bottle do` block.
