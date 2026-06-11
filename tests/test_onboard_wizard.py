@@ -36,6 +36,15 @@ def test_auth_failure_stops_the_wizard(ctx: WizardContext, monkeypatch: pytest.M
 
 
 def test_happy_path_runs_all_sections(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    ran: list[str] = []
+
+    def _record(name: str):
+        def _section(p: object, c: object) -> SectionResult:
+            ran.append(name)
+            return SectionResult.DONE
+
+        return _section
+
     for name in (
         "welcome",
         "auth",
@@ -44,9 +53,22 @@ def test_happy_path_runs_all_sections(ctx: WizardContext, monkeypatch: pytest.Mo
         "build_path",
         "claude_code",
         "next_steps",
+        "launch_app",
     ):
-        monkeypatch.setattr(sections, name, lambda p, c: SectionResult.DONE)
+        monkeypatch.setattr(sections, name, _record(name))
     assert wizard.run_onboarding(NonInteractivePrompter(), ctx) == 0
+    # launch_app must run, and run last: its dev server blocks until Ctrl-C, so any
+    # section ordered after it would never execute.
+    assert ran == [
+        "welcome",
+        "auth",
+        "first_request",
+        "environment",
+        "build_path",
+        "claude_code",
+        "next_steps",
+        "launch_app",
+    ]
 
 
 def test_cancel_returns_130(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -67,15 +67,15 @@ def test_resolve_audio_source_rejects_directory(tmp_path):
 
 
 def test_transcribe_directory_source_fails_before_credentials(mocker, tmp_path):
-    # No key configured: a directory must read as "not a file", never trigger a login
-    # (or an upload attempt).
+    # No key configured: a directory is batch mode, and an empty one must read as
+    # "no audio files", never trigger a login (or an upload attempt).
     tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", str(tmp_path)])
     assert result.exit_code == 2
     # Rich may wrap the long tmp path mid-token (even inside a word), so compare with
     # all whitespace removed — matching the pattern in test_share.py.
     packed = "".join(result.output.split())
-    assert "".join(f"Not a file: {tmp_path}".split()) in packed
+    assert "".join(f"No audio files found under {tmp_path}".split()) in packed
     assert "starting browser login" not in result.output
     tx.assert_not_called()
 

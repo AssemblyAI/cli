@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 import assemblyai as aai
 import typer
@@ -12,6 +13,7 @@ from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import CLIError
+from aai_cli.init import runner
 from aai_cli.onboard.prompter import Prompter
 
 
@@ -26,6 +28,9 @@ class WizardContext:
     state: AppState
     profile: str
     json_mode: bool
+    # Set by build_path when a template is scaffolded; launch_app (the wizard's last
+    # section) reads it to start the dev server once the other sections are done.
+    scaffolded: Path | None = None
 
 
 def _has_key(profile: str) -> bool:
@@ -116,9 +121,10 @@ def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     if not prompter.confirm(f"Scaffold the '{choice}' app now?", default=True):
         prompter.note(f"You can run `assembly init {choice}` whenever you're ready.")
         return SectionResult.SKIPPED
-    # launch=False: never block the wizard on a running dev server.
+    # launch=False: the dev server blocks until Ctrl-C, so launching here would stop
+    # the remaining sections from running. launch_app starts it once the wizard is done.
     try:
-        init_cmd.run_init(
+        ctx.scaffolded = init_cmd.run_init(
             ctx.state,
             template=choice,
             directory=None,
@@ -156,4 +162,34 @@ def next_steps(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     output.console.print(output.hint("Transcribe a file:  assembly transcribe <file>"))
     output.console.print(output.hint("Stream live audio:  assembly stream"))
     output.console.print(output.hint("Build an app:       assembly init"))
+    return SectionResult.DONE
+
+
+def launch_app(prompter: Prompter, ctx: WizardContext) -> SectionResult:
+    """Start the dev server for the app build_path scaffolded, like `assembly init` does.
+
+    Must run as the wizard's final section: the server blocks until Ctrl-C, so any
+    section after it would never run.
+    """
+    if ctx.scaffolded is None:
+        return SectionResult.SKIPPED
+    run_hint = f"cd {ctx.scaffolded} && assembly dev"
+    if not prompter.interactive:
+        prompter.note(f"Launch your app with `{run_hint}`.")
+        return SectionResult.SKIPPED
+    prompter.section("Launch your app")
+    if not prompter.confirm("Start the dev server and open the browser now?", default=True):
+        prompter.note(f"Launch it any time with `{run_hint}`.")
+        return SectionResult.SKIPPED
+    try:
+        init_cmd.launch_app(
+            ctx.scaffolded,
+            port=3000,
+            use_uv=runner.has_uv(),
+            no_open=False,
+            json_mode=ctx.json_mode,
+        )
+    except (CLIError, typer.Exit):
+        output.error_console.print(output.fail(f"The dev server didn't start. Try `{run_hint}`."))
+        return SectionResult.FAILED
     return SectionResult.DONE
