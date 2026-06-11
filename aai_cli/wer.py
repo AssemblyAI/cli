@@ -4,26 +4,36 @@ A thin shim over :mod:`jiwer` — the de-facto standard WER implementation — s
 the alignment math is never re-derived here. Texts are normalized the way ASR
 benchmarks conventionally are (lowercase, punctuation stripped, whitespace
 collapsed) so a transcript isn't penalized for casing or punctuation style.
-No SDK, no Rich: the command layer owns all rendering.
+jiwer is imported lazily inside the scoring functions (mirroring ``der.py``'s
+lazy pyannote import) so this module stays import-cheap for the command layer —
+an install that's missing the eval scoring stack must still run every other
+command. No SDK, no Rich: the command layer owns all rendering.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import jiwer
 from pydantic import TypeAdapter
 
-# The normalization applied to both reference and hypothesis before alignment.
-_TRANSFORM = jiwer.Compose(
-    [
-        jiwer.ToLowerCase(),
-        jiwer.RemovePunctuation(),
-        jiwer.RemoveMultipleSpaces(),
-        jiwer.Strip(),
-        jiwer.ReduceToListOfListOfWords(),
-    ]
-)
+if TYPE_CHECKING:
+    import jiwer
+
+
+def _transform() -> jiwer.Compose:
+    """The normalization applied to both reference and hypothesis before alignment."""
+    import jiwer
+
+    return jiwer.Compose(
+        [
+            jiwer.ToLowerCase(),
+            jiwer.RemovePunctuation(),
+            jiwer.RemoveMultipleSpaces(),
+            jiwer.Strip(),
+            jiwer.ReduceToListOfListOfWords(),
+        ]
+    )
 
 
 # jiwer's transform output is only partially typed; validate the shape instead
@@ -37,7 +47,7 @@ def normalize_words(text: str) -> list[str]:
     Exposed so the dataset loader can reject a reference that normalizes to
     nothing (e.g. punctuation-only) with the same rule the scorer uses.
     """
-    return _SENTENCES.validate_python(_TRANSFORM(text))[0]
+    return _SENTENCES.validate_python(_transform()(text))[0]
 
 
 @dataclass(frozen=True)
@@ -59,11 +69,14 @@ def score(reference: str, hypothesis: str) -> Score:
     dataset loader rejects empty-reference rows), so ``Score.wer`` is always
     well-defined.
     """
+    import jiwer
+
+    transform = _transform()
     out = jiwer.process_words(
         reference,
         hypothesis,
-        reference_transform=_TRANSFORM,
-        hypothesis_transform=_TRANSFORM,
+        reference_transform=transform,
+        hypothesis_transform=transform,
     )
     return Score(
         errors=out.substitutions + out.deletions + out.insertions,

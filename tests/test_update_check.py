@@ -52,8 +52,9 @@ def test_is_newer(latest, current, expected):
     [
         ("/opt/homebrew/Cellar/assembly/0.1.0/libexec/bin/python", "brew upgrade assembly"),
         ("/usr/local/Cellar/assembly/0.1.0/libexec/bin/python", "brew upgrade assembly"),
-        ("/Users/x/.local/pipx/venvs/aai-cli/bin/python", "pipx upgrade assembly"),
-        ("/Users/x/.local/share/uv/tools/aai-cli/bin/python", "uv tool upgrade assembly"),
+        # pipx/uv upgrade by *distribution* name (aai-cli), not the console command.
+        ("/Users/x/.local/pipx/venvs/aai-cli/bin/python", "pipx upgrade aai-cli"),
+        ("/Users/x/.local/share/uv/tools/aai-cli/bin/python", "uv tool upgrade aai-cli"),
         ("/usr/bin/python3", ""),  # unknown -> generic (empty)
     ],
 )
