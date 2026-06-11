@@ -25,11 +25,12 @@ Must end with `All checks passed.` (ruff, mypy, markdownlint, shellcheck, pytest
 ## 3. Tag to trigger the bottle pipeline
 
 ```sh
-git tag vX.Y.Z
-git push origin vX.Y.Z
+./scripts/cut_release.sh
 ```
 
-The push triggers `.github/workflows/release.yml`, which:
+This derives the version from `pyproject.toml`, verifies the tree is clean, on `main`, and in sync with origin, then tags `vX.Y.Z` and pushes it. (`--dry-run` verifies without tagging; `--yes` skips the confirmation prompt.)
+
+The pushed tag triggers `.github/workflows/release.yml`, which:
 
 1. Builds the arm64 macOS bottle (`arm64_sonoma`).
 2. Creates the `vX.Y.Z` GitHub Release with the bottle attached.
