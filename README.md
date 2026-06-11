@@ -82,7 +82,7 @@ Your key is written to a git-ignored `.env` (never sent to the browser). Use `--
 | --- | --- |
 | `assembly login` / `logout` / `whoami` | Manage the stored API key. |
 | `assembly doctor` | Check your environment (API key, network, ffmpeg, microphone, agent tooling). |
-| `assembly transcribe <file\|url>` | Transcribe a file, URL, or YouTube/podcast page URL (`--sample`, `--llm`, `--show-code`). |
+| `assembly transcribe <file\|url>` | Transcribe a file, URL, or YouTube/podcast page URL (`--sample`, `--llm`, `--show-code`) — or a directory/glob/stdin list as a resumable batch. |
 | `assembly transcripts list` / `get <id>` | Browse and fetch past transcripts. |
 | `assembly stream [file]` | Real-time transcription from a file or the microphone. |
 | `assembly agent` | *Run* a live two-way voice conversation (to **build** a voice agent app, use `assembly init voice-agent`). |
@@ -224,6 +224,19 @@ done
 ```
 
 A Ctrl-C in a pipe hits both sides; to stop just the producer and let the consumer finish, signal the producer (`timeout -s INT 30s assembly stream …`) or end on a natural pause (`assembly stream --inactivity-timeout 5`).
+
+## Batch transcription
+
+Point `assembly transcribe` at a directory or glob — or pipe a list of paths/URLs with `--from-stdin` — and it transcribes everything concurrently behind a live progress table:
+
+```sh
+assembly transcribe ./recordings                 # every audio file under the directory
+assembly transcribe "calls/*.mp3"                # glob (quote it so your shell doesn't expand it)
+find . -name "*.wav" | assembly transcribe --from-stdin   # composes with find/ls/yt-dlp
+assembly transcribe ./recordings --concurrency 8 # default is 4 at a time
+```
+
+Each source gets a `<name>.aai.json` sidecar with the full transcript payload. The sidecar is also the resume marker: a re-run skips any source whose sidecar records a completed transcription of the same bytes (hash-checked for local files), so retrying a partly-failed batch only pays for what's missing. `--force` re-transcribes everything. Under `--json`, batch mode emits one NDJSON record per source as it finishes (`{source, status, id, sidecar}`, or `{source, status, error}` on failure); the exit code is `1` if any source failed.
 
 ## API Key & Security
 
