@@ -97,6 +97,14 @@ def test_enable_and_disable_human(monkeypatch):
     assert "Telemetry enabled." in result.output
 
 
+def test_flush_is_hidden_plumbing():
+    # `flush` exists for dispatch() to spawn, but users shouldn't be steered to it.
+    result = runner.invoke(app, ["telemetry", "--help"])
+    assert result.exit_code == 0
+    assert "status" in result.output
+    assert "flush" not in result.output
+
+
 # --- run_command integration -------------------------------------------------
 
 

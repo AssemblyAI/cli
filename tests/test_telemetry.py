@@ -147,21 +147,23 @@ def test_dispatch_spawns_detached_flusher(monkeypatch):
     monkeypatch.setenv(telemetry.ENV_CLIENT_TOKEN, "pub_test")
     telemetry.dispatch({"command": "aai doctor"})
 
-    assert calls["argv"][0] == sys.executable
-    assert calls["argv"][1] == "-c"
-    assert calls["argv"][2] == "from aai_cli import telemetry; telemetry.flush_argv()"
-    payload = json.loads(calls["argv"][3])
+    # The child is the CLI's own (hidden) `telemetry flush` subcommand — explicit
+    # plumbing, not an inline -c snippet.
+    assert calls["argv"][:5] == [sys.executable, "-m", "aai_cli", "telemetry", "flush"]
+    payload = json.loads(calls["argv"][5])
     assert payload == {
         "url": "https://browser-intake-datadoghq.com/api/v2/logs",
         "token": "pub_test",
         "event": {"command": "aai doctor"},
     }
-    # Detached with stdio discarded: the flusher can never block or pollute the command.
-    assert calls["kwargs"] == {
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "start_new_session": True,
-    }
+    # Detached with stdio discarded: the flusher can never block or pollute the
+    # command. Telemetry is disabled in the child so a flush never spawns a flusher.
+    kwargs = calls["kwargs"]
+    assert kwargs["stdout"] is subprocess.DEVNULL
+    assert kwargs["stderr"] is subprocess.DEVNULL
+    assert kwargs["start_new_session"] is True
+    assert kwargs["env"]["AAI_TELEMETRY_DISABLED"] == "1"
+    assert sorted(kwargs) == ["env", "start_new_session", "stderr", "stdout"]
 
 
 # --- flusher ------------------------------------------------------------------
@@ -204,11 +206,17 @@ def test_flush_payload_posts_to_intake(monkeypatch):
     }
 
 
-def test_flush_argv_reads_payload_from_argv(monkeypatch):
+def test_flush_command_delivers_payload(monkeypatch):
+    # The hidden `aai telemetry flush` subcommand is what dispatch() spawns; drive it
+    # through the real CLI so the spawned argv is known to be invocable end to end.
+    from typer.testing import CliRunner
+
+    from aai_cli.main import app
+
     seen = []
     monkeypatch.setattr(telemetry, "flush_payload", seen.append)
-    monkeypatch.setattr(sys, "argv", ["-c", '{"the": "payload"}'])
-    telemetry.flush_argv()
+    result = CliRunner().invoke(app, ["telemetry", "flush", '{"the": "payload"}'])
+    assert result.exit_code == 0
     assert seen == ['{"the": "payload"}']
 
 

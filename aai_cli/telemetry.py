@@ -101,27 +101,24 @@ def build_event(
     }
 
 
-# Runs `flush_argv` in a detached child so the user's command never waits on the
-# network. The payload travels via argv (the Vercel CLI hands its flusher the
-# serialized request the same way); it carries only the event + the write-only
-# public token, so argv visibility is acceptable.
-_FLUSH_SNIPPET = "from aai_cli import telemetry; telemetry.flush_argv()"
-
-
 def dispatch(event: Mapping[str, object]) -> None:
-    """Hand one event to a detached flusher process and return immediately."""
+    """Hand one event to a detached `aai telemetry flush` process; return immediately.
+
+    The child is the CLI's own (hidden) ``telemetry flush`` subcommand — an explicit,
+    reviewable entry point, the same shape as the Vercel CLI's ``telemetry flush``.
+    The payload travels via argv and carries only the event + the write-only public
+    token, so argv visibility is acceptable. Detaching (own session, stdio discarded)
+    is what keeps the user's command from ever waiting on the network; the child's
+    env disables telemetry so a flush can never spawn another flusher.
+    """
     payload = json.dumps({"url": intake_url(), "token": client_token(), "event": event})
     subprocess.Popen(
-        [sys.executable, "-c", _FLUSH_SNIPPET, payload],
+        [sys.executable, "-m", "aai_cli", "telemetry", "flush", payload],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env={**os.environ, ENV_DISABLED: "1"},
     )
-
-
-def flush_argv() -> None:
-    """Flusher-process entry point (see ``_FLUSH_SNIPPET``): post the argv payload."""
-    flush_payload(sys.argv[1])
 
 
 def flush_payload(raw: str) -> None:
@@ -130,7 +127,8 @@ def flush_payload(raw: str) -> None:
     The token rides both as the ``DD-API-KEY`` header (the v2 logs API form) and
     the ``dd-api-key`` query param (the browser-intake form the client-token
     endpoints expect), so either intake host accepts it. Runs in the detached
-    flusher with stdio discarded, so failures need no handling here.
+    flusher (`aai telemetry flush`) with stdio discarded, so failures need no
+    handling here.
     """
     import httpx2 as httpx
 

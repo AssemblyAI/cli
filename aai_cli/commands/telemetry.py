@@ -83,6 +83,25 @@ def enable(
 
 
 @app.command(
+    hidden=True,
+    epilog=examples_epilog(
+        [("Internal plumbing, spawned by the CLI itself", "aai telemetry flush '<payload-json>'")]
+    ),
+)
+def flush(
+    payload: str = typer.Argument(..., help="Serialized telemetry payload (internal)."),
+) -> None:
+    """Deliver one serialized telemetry event to the intake (internal).
+
+    This is the detached flusher `telemetry.dispatch` spawns so user commands never
+    wait on the network — an explicit, reviewable entry point rather than inline
+    code. Hidden from help; runs with stdio discarded, so it neither needs nor
+    produces output.
+    """
+    telemetry.flush_payload(payload)
+
+
+@app.command(
     epilog=examples_epilog([("Opt out of telemetry", "aai telemetry disable")]),
 )
 def disable(

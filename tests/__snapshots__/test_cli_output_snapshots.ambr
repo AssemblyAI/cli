@@ -872,6 +872,34 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[telemetry_flush]
+  '''
+  
+   Usage: aai telemetry flush [OPTIONS] PAYLOAD
+  
+   Deliver one serialized telemetry event to the intake (internal).
+  
+   This is the detached flusher `telemetry.dispatch` spawns so user commands
+   never
+   wait on the network — an explicit, reviewable entry point rather than inline
+   code. Hidden from help; runs with stdio discarded, so it neither needs nor
+   produces output.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    payload      TEXT  Serialized telemetry payload (internal). [required]  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Internal plumbing, spawned by the CLI itself
+   $ aai telemetry flush '<payload-json>'
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[telemetry_status]
   '''
   
