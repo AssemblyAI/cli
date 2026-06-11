@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -8,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from aai_cli import choices, options, output
+from aai_cli import choices, coding_agent, options, output
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.steps import Step, render_steps
@@ -23,32 +22,20 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-MCP_NAME = "assemblyai-docs"
 MCP_URL = "https://mcp.assemblyai.com/docs"
 SKILL_REPO = "AssemblyAI/assemblyai-skill"
 _STEPS_HEADING = "AssemblyAI coding-agent setup:"
 
-
-def _run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
-    # stdin=DEVNULL so a child that would otherwise prompt (npx's "Ok to proceed?",
-    # a `claude` confirmation) gets EOF and fails fast instead of hanging forever on
-    # input the user can't see (its stdout is captured). timeout is a final backstop.
-    try:
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            check=False,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=124,
-            stdout="",
-            stderr=f"timed out after {timeout:.0f}s: {' '.join(cmd)}",
-        )
+# The subprocess wrapper, artifact names, and presence probes are shared with
+# `assembly doctor` (command modules are independent), so they live in
+# aai_cli.coding_agent; the names below keep this module's call sites stable.
+MCP_NAME = coding_agent.MCP_NAME
+_run = coding_agent.run
+_mcp_present = coding_agent.mcp_present
+_skill_dir = coding_agent.skill_dir
+_skill_installed = coding_agent.skill_installed
+_cli_skill_dir = coding_agent.cli_skill_dir
+_cli_skill_installed = coding_agent.cli_skill_installed
 
 
 def _proc_detail(proc: subprocess.CompletedProcess[str]) -> str:
@@ -56,19 +43,7 @@ def _proc_detail(proc: subprocess.CompletedProcess[str]) -> str:
     return (proc.stderr or proc.stdout).strip()
 
 
-def _skills_root() -> Path:
-    # Honor CLAUDE_CONFIG_DIR so install/status/remove agree with the agent's actual
-    # config root rather than assuming ~/.claude.
-    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
-    root = Path(config_dir) if config_dir else Path.home() / ".claude"
-    return root / "skills"
-
-
 # --- docs MCP (registered via the `claude` CLI) ------------------------------
-
-
-def _mcp_present() -> bool:
-    return _run(["claude", "mcp", "get", MCP_NAME]).returncode == 0
 
 
 def install_mcp(scope: str, force: bool) -> Step:
@@ -130,14 +105,6 @@ def _remove_mcp(scope: str | None) -> Step:
 _SKILL_ADD = ["npx", "-y", "skills", "add", SKILL_REPO, "--global", "--yes"]
 _SKILL_REMOVE = ["npx", "-y", "skills", "remove", "assemblyai", "--global"]
 _SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
-
-
-def _skill_dir() -> Path:
-    return _skills_root() / "assemblyai"
-
-
-def _skill_installed() -> bool:
-    return (_skill_dir() / "SKILL.md").exists()
 
 
 def install_skill(force: bool) -> Step:
@@ -204,23 +171,13 @@ def _remove_skill() -> Step:
 
 # --- aai-cli skill (bundled in this package, copied into the agent) -----------
 
-_CLI_SKILL_NAME = "aai-cli"
-
-
-def _cli_skill_dir() -> Path:
-    return _skills_root() / _CLI_SKILL_NAME
-
-
-def _cli_skill_installed() -> bool:
-    return (_cli_skill_dir() / "SKILL.md").exists()
-
 
 def _bundled_cli_skill() -> Traversable:
     # Ships inside the wheel (force-included via [tool.hatch.build.targets.wheel]
     # artifacts). skills/ has no __init__.py, so navigate from the aai_cli package.
     from importlib import resources
 
-    return resources.files("aai_cli") / "skills" / _CLI_SKILL_NAME
+    return resources.files("aai_cli") / "skills" / coding_agent.CLI_SKILL_NAME
 
 
 def _copy_tree(node: Traversable, dest: Path) -> None:
