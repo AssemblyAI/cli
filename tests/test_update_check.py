@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sys
+import types
 
+import httpx2
 import pytest
 
 from aai_cli import config, update_check
@@ -55,3 +57,43 @@ def test_is_newer(latest, current, expected):
 def test_detect_upgrade_command(exe, expected, monkeypatch):
     monkeypatch.setattr(sys, "executable", exe)
     assert update_check.detect_upgrade_command() == expected
+
+
+def _fake_response(payload: dict[str, object]) -> types.SimpleNamespace:
+    return types.SimpleNamespace(json=lambda: payload, raise_for_status=lambda: None)
+
+
+def test_fetch_and_cache_writes_latest(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers", {})
+        return _fake_response({"tag_name": "v0.4.0"})
+
+    monkeypatch.setattr(httpx2, "get", fake_get)
+
+    update_check.fetch_and_cache()
+
+    last_check, latest = config.get_update_cache()
+    assert latest == "0.4.0"  # 'v' stripped
+    assert last_check is not None
+    assert captured["url"] == update_check._RELEASES_URL
+    assert "User-Agent" in captured["headers"]
+
+
+def test_fetch_and_cache_swallows_errors_but_records_check(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+
+    def boom(url, **kwargs):
+        raise httpx2.HTTPError("network down")
+
+    monkeypatch.setattr(httpx2, "get", boom)
+
+    update_check.fetch_and_cache()  # must not raise
+
+    last_check, latest = config.get_update_cache()
+    assert latest is None  # unknown after a failed fetch
+    assert last_check is not None  # but the attempt is recorded

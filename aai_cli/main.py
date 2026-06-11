@@ -332,6 +332,14 @@ app.add_typer(telemetry.app, name="telemetry", rich_help_panel=help_panels.SETUP
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 
 
+@app.command(name="_update-check", hidden=True)
+def _update_check() -> None:
+    """Internal: refresh the cached latest version (spawned detached). Hidden."""
+    from aai_cli import update_check
+
+    update_check.fetch_and_cache()
+
+
 def run() -> None:
     """Console-script entry point: run the app, exiting cleanly on a closed pipe.
 
