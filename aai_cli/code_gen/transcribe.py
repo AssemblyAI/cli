@@ -26,6 +26,7 @@ def render(
     *,
     llm_gateway: dict[str, object] | None = None,
     output: str | None = None,
+    download_sections: list[str] | None = None,
 ) -> str:
     """Generate a runnable transcribe script reproducing this CLI invocation.
 
@@ -37,32 +38,82 @@ def render(
     When `output` (a ``-o/--output`` field name) is given, the script prints that one
     field instead — and, as in the real command, it takes precedence over the LLM chain
     and the analysis sections.
+
+    When `download_sections` (yt-dlp ``--download-sections`` specs) is given for a
+    downloadable URL, the generated yt-dlp call fetches only those parts of the source.
     """
     if output is not None:
         llm_gateway = None  # `-o` returns before the chain runs in the real command
     needs_download = youtube.is_downloadable_url(source)
+    # Sections only apply to the download path; ignore them for a local file.
+    sections = list(download_sections) if (needs_download and download_sections) else []
+    ranges_expr, needs_re = _download_ranges(sections)
     parts = (
-        _header_block(llm_gateway, output, needs_download=needs_download)
-        + _transcribe_block(merged, source, needs_download=needs_download)
+        _header_block(
+            llm_gateway,
+            output,
+            needs_download=needs_download,
+            needs_re=needs_re,
+            has_sections=ranges_expr is not None,
+        )
+        + _transcribe_block(merged, source, needs_download=needs_download, ranges_expr=ranges_expr)
         + _result_block(merged, llm_gateway, output)
     )
     parts.append("")
     return "\n".join(parts)
 
 
+def _render_seconds(value: float) -> str:
+    """A Python literal for a section bound (``inf`` has no bare literal form)."""
+    if value == float("inf"):
+        return "float('inf')"
+    if value == float("-inf"):
+        return "float('-inf')"
+    return repr(value)
+
+
+def _download_ranges(sections: list[str]) -> tuple[str | None, bool]:
+    """Render a ``download_range_func(...)`` expression for `sections`.
+
+    Returns ``(expression_or_None, needs_re_import)`` — ``None`` when there are no
+    sections, and the flag is true when a chapter-regex spec means the generated
+    script needs ``import re``.
+    """
+    if not sections:
+        return None, False
+    chapters, ranges, from_url = youtube.parse_download_sections(sections)
+    chapters_src = "[" + ", ".join(f"re.compile({c!r})" for c in chapters) + "]"
+    ranges_src = (
+        "[" + ", ".join(f"({_render_seconds(s)}, {_render_seconds(e)})" for s, e in ranges) + "]"
+    )
+    return f"download_range_func({chapters_src}, {ranges_src}, {from_url})", bool(chapters)
+
+
 def _header_block(
-    llm_gateway: dict[str, object] | None, output: str | None, *, needs_download: bool
+    llm_gateway: dict[str, object] | None,
+    output: str | None,
+    *,
+    needs_download: bool,
+    needs_re: bool,
+    has_sections: bool,
 ) -> list[str]:
     """Imports plus the api-key (and non-default environment) settings lines."""
     stdlib_imports = ["import os"]
     if needs_download:
         # The download path fetches audio to a temp dir before uploading.
-        stdlib_imports += ["import tempfile"]
+        stdlib_imports.append("import tempfile")
+    if needs_re:
+        # Chapter-regex sections compile to re.compile(...) in the generated script.
+        stdlib_imports.append("import re")
     if output == "json":
-        stdlib_imports.insert(0, "import json")
+        stdlib_imports.append("import json")
+    stdlib_imports.sort()
     imports = ["import assemblyai as aai"]
     if needs_download:
         imports.append("import yt_dlp")
+    if has_sections:
+        # --download-sections builds yt-dlp's download_ranges via this helper.
+        imports.append("from yt_dlp.utils import download_range_func")
     if llm_gateway:
         imports.append("from openai import OpenAI")
     parts = [
@@ -81,7 +132,24 @@ def _header_block(
     return parts
 
 
-def _transcribe_block(merged: dict[str, object], source: str, *, needs_download: bool) -> list[str]:
+def _ydl_options_lines(ranges_expr: str | None) -> list[str]:
+    """The yt-dlp options dict for the download — one line, or multi-line when sections
+    add a ``download_ranges``/``force_keyframes_at_cuts`` pair."""
+    if ranges_expr is None:
+        return ['        {"format": "bestaudio/best", "outtmpl": f"{_tmp}/%(id)s.%(ext)s"}']
+    return [
+        "        {",
+        '            "format": "bestaudio/best",',
+        '            "outtmpl": f"{_tmp}/%(id)s.%(ext)s",',
+        f'            "download_ranges": {ranges_expr},',
+        '            "force_keyframes_at_cuts": True,',
+        "        }",
+    ]
+
+
+def _transcribe_block(
+    merged: dict[str, object], source: str, *, needs_download: bool, ranges_expr: str | None
+) -> list[str]:
     """The transcriber setup, optional config, the transcribe call, and error check."""
     parts = ["", "transcriber = aai.Transcriber()"]
     config_arg = ""
@@ -97,7 +165,7 @@ def _transcribe_block(merged: dict[str, object], source: str, *, needs_download:
             "# AssemblyAI can't fetch this page URL itself; download the audio first.",
             "with tempfile.TemporaryDirectory() as _tmp:",
             "    with yt_dlp.YoutubeDL(",
-            '        {"format": "bestaudio/best", "outtmpl": f"{_tmp}/%(id)s.%(ext)s"}',
+            *_ydl_options_lines(ranges_expr),
             "    ) as _ydl:",
             f"        _info = _ydl.extract_info({source!r}, download=True)",
             "        _audio = _ydl.prepare_filename(_info)",

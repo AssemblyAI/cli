@@ -10,12 +10,23 @@ import logging
 import re
 from pathlib import Path
 
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, UsageError
 
 # youtube.com/watch, youtu.be/<id>, music.youtube.com, shorts, with or without scheme.
 _YOUTUBE_RE = re.compile(
     r"^(https?://)?(www\.|m\.|music\.)?(youtube\.com/|youtu\.be/)",
     re.IGNORECASE,
+)
+
+# yt-dlp's own --download-sections timestamp grammar (verbatim): an optional signed
+# start, a "-" separator, and an optional signed end. Both sides may be omitted
+# (defaulting to 0 / inf); a leading "-" negates a bound (offset from the end).
+_SECTION_RANGE_RE = re.compile(
+    r"""(?x)(?:
+        (?P<start_sign>-?)(?P<start>[^-]+)
+    )?\s*-\s*(?:
+        (?P<end_sign>-?)(?P<end>[^-]+)
+    )?"""
 )
 
 # yt-dlp's default logger prints its own "ERROR: …" line straight to stderr before the
@@ -61,11 +72,69 @@ def _ytdlp_extractor_claims(url: str) -> bool:
     return any(ie.suitable(url) and ie.ie_key() != "Generic" for ie in gen_extractor_classes())
 
 
-def download_audio(url: str, dest_dir: Path) -> Path:
+def _section_timestamp(value: str, sign: str | None) -> float:
+    """Seconds for one side of a ``--download-sections`` range; a "-" sign negates it."""
+    from yt_dlp.utils import parse_duration
+
+    seconds = float("inf") if value in ("inf", "infinite") else parse_duration(value)
+    # parse_duration returns None for an unparseable timestamp, but yt-dlp leaves it
+    # untyped and pyright over-narrows the inferred return to ``float``.
+    if seconds is None:  # pyright: ignore[reportUnnecessaryComparison]
+        raise UsageError(
+            f'Invalid --download-sections time "{value}".',
+            suggestion='Use the form "*start-end", e.g. "*0:00-5:00".',
+        )
+    return -seconds if sign else seconds
+
+
+def _section_range(text: str) -> tuple[float, float]:
+    """Parse one ``*``-stripped ``start-end`` range into (start, end) seconds."""
+    match = _SECTION_RANGE_RE.fullmatch(text) if text != "-" else None
+    if match is None:
+        raise UsageError(
+            f'Invalid --download-sections time range "{text}".',
+            suggestion='Use the form "*start-end", e.g. "*0:00-5:00".',
+        )
+    start = _section_timestamp(match.group("start") or "0", match.group("start_sign"))
+    end = _section_timestamp(match.group("end") or "inf", match.group("end_sign"))
+    if end == float("-inf"):
+        raise UsageError('"-inf" is not a valid --download-sections end.')
+    return start, end
+
+
+def parse_download_sections(
+    sections: list[str],
+) -> tuple[list[str], list[tuple[float, float]], bool]:
+    """Split yt-dlp ``--download-sections`` specs into (chapter regexes, ranges, from-url).
+
+    Mirrors yt-dlp's own grammar: ``*from-url`` keeps the source's own chapter range, a
+    ``*``-prefixed spec is one or more comma-separated ``start-end`` timestamp ranges, and
+    anything else is a chapter-title regex. Raises ``UsageError`` on a malformed spec.
+    """
+    chapters: list[str] = []
+    ranges: list[tuple[float, float]] = []
+    from_url = False
+    for spec in sections:
+        if spec == "*from-url":
+            from_url = True
+        elif spec.startswith("*"):
+            ranges.extend(_section_range(chunk.strip()) for chunk in spec[1:].split(","))
+        else:
+            try:
+                re.compile(spec)
+            except re.error as err:
+                raise UsageError(f'Invalid --download-sections regex "{spec}": {err}.') from err
+            chapters.append(spec)
+    return chapters, ranges, from_url
+
+
+def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | None = None) -> Path:
     """Download the best audio track of `url` into `dest_dir` and return its path.
 
     Uses yt-dlp; the resulting container (m4a/webm/…) is decodable by ffmpeg
-    (streaming) and uploadable for transcription.
+    (streaming) and uploadable for transcription. `download_sections` accepts yt-dlp's
+    ``--download-sections`` specs (e.g. ``*0:00-5:00`` for the first five minutes), each
+    fetching only that part of the source.
     """
     try:
         import yt_dlp
@@ -77,7 +146,7 @@ def download_audio(url: str, dest_dir: Path) -> Path:
             suggestion="Install it: pip install yt-dlp",
         ) from exc
 
-    options = {
+    options: dict[str, object] = {
         "format": "bestaudio/best",
         "outtmpl": str(dest_dir / "%(id)s.%(ext)s"),
         "quiet": True,
@@ -85,6 +154,19 @@ def download_audio(url: str, dest_dir: Path) -> Path:
         "noprogress": True,
         "logger": _YTDLP_LOGGER,
     }
+    if download_sections:
+        from yt_dlp.utils import download_range_func
+
+        chapters, ranges, from_url = parse_download_sections(download_sections)
+        # yt-dlp types ``ranges`` as int tuples, but its own code (and ours) uses float
+        # seconds; the dict value is loosely typed for YoutubeDL either way.
+        options["download_ranges"] = download_range_func(
+            [re.compile(chapter) for chapter in chapters],
+            ranges,  # pyright: ignore[reportArgumentType]
+            from_url,
+        )
+        # Cut at exact timestamps rather than the nearest keyframe (yt-dlp's default).
+        options["force_keyframes_at_cuts"] = True
     try:
         # yt-dlp types `params` as a private `_Params` TypedDict, but a plain options
         # dict is the documented public API; pyright can't reconcile the two.

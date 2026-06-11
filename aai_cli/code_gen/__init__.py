@@ -33,9 +33,12 @@ def transcribe(
     source: str,
     *,
     llm_gateway: dict[str, object] | None = None,
+    download_sections: list[str] | None = None,
 ) -> str:
     """Generate runnable Python that reproduces this transcribe invocation."""
-    return _transcribe.render(merged, source, llm_gateway=llm_gateway)
+    return _transcribe.render(
+        merged, source, llm_gateway=llm_gateway, download_sections=download_sections
+    )
 
 
 def stream(
