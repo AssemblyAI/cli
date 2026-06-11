@@ -118,17 +118,17 @@ else
   echo "   prettier not found; skipping (CI runs it)"
 fi
 
-echo "==> shellcheck (install.sh)"
-# Static-lint the public install script and this gate script. CI's ubuntu runner ships shellcheck;
+echo "==> shellcheck"
+# Static-lint this gate script. CI's ubuntu runner ships shellcheck;
 # locally it's skipped with a notice if not installed.
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck install.sh scripts/check.sh scripts/docker_build_check.sh
+  shellcheck scripts/check.sh scripts/docker_build_check.sh
 else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi
 
 echo "==> actionlint (GitHub Actions workflow lint)"
-# Static-lint the CI workflows the same way shellcheck covers install.sh: catches
+# Static-lint the CI workflows the same way shellcheck covers shell scripts: catches
 # bad expressions, undefined needs/matrix refs, and shell bugs inside `run:` blocks.
 # Go binary (no PyPI wheel), so it self-skips locally and CI installs it (see ci.yml).
 if command -v actionlint >/dev/null 2>&1; then
@@ -168,17 +168,15 @@ uv run python scripts/template_contract_gate.py
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
-# a live API key. Exclude install (real per-template dep install, slow + network)
-# and install_script (builds a wheel and runs install.sh for real; slow, needs
-# network + uv/pipx). All are uncounted by coverage. Run them with:
+# a live API key. Exclude install (real per-template dep install, slow + network).
+# All are uncounted by coverage. Run them with:
 #   uv run pytest -m e2e
 #   uv run pytest -m install
-#   uv run pytest -m install_script
 # -n auto parallelizes across CPUs (pytest-xdist); pytest-cov combines per-worker
 # data, and the per-test --cov-context=test contexts the mutation gate below relies
 # on survive that combine. The suite is order-independent (pytest-randomly), so
 # splitting it across workers is safe.
-uv run pytest -q --strict-config --strict-markers -n auto -m "not e2e and not install and not install_script" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+uv run pytest -q --strict-config --strict-markers -n auto -m "not e2e and not install" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and
@@ -221,9 +219,9 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   # Test-suite escape hatches, same net-new-only policy: a skip/xfail is how an agent
   # makes a red test go away instead of fixing it, and time.sleep() is the classic
   # source of flakiness (use events/polling). The legitimate existing skips guard the
-  # env-gated marker suites (e2e/install/install_script) and live on origin/main, so
-  # they aren't added diff lines and don't trip this; a genuinely-needed new one must
-  # update this gate deliberately. Scoped to tests/ — production sleeps are fine.
+  # env-gated marker suites (e2e/install) and live on origin/main, so they aren't
+  # added diff lines and don't trip this; a genuinely-needed new one must update this
+  # gate deliberately. Scoped to tests/ — production sleeps are fine.
   test_shortcuts="$(git diff -U0 origin/main -- tests \
     | rg '^\+.*(pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\()' || true)"
   if [[ -n "$test_shortcuts" ]]; then

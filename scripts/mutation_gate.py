@@ -29,7 +29,7 @@ import coverage
 
 _PKG = "aai_cli"
 _TEMPLATES = "aai_cli/init/templates"
-_DEFAULT_MARKERS = "not e2e and not install and not install_script"
+_DEFAULT_MARKERS = "not e2e and not install"
 _TEST_TIMEOUT = 120  # seconds; a mutant that hangs (e.g. a flipped loop guard) counts killed
 _SUPPRESS = "pragma: no mutate"
 

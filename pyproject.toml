@@ -124,11 +124,11 @@ testpaths = ["tests"]
 # that bind a loopback server (OAuth callback, dev server, tunnel) opt back in with
 # `@pytest.mark.allow_hosts([...])`. The e2e/install suites drive the CLI as a
 # subprocess, whose sockets this in-process patch never sees, so they're unaffected.
-# -m: a bare `pytest` runs the same suite check.sh gates — the e2e/install/
-# install_script marker suites are slow, need network/credentials, and fail
-# confusingly in sandboxes otherwise. An explicit command-line -m (e.g.
-# `pytest -m e2e`) overrides this one, so the opt-in runs keep working.
-addopts = "--disable-socket --allow-unix-socket -m 'not e2e and not install and not install_script'"
+# -m: a bare `pytest` runs the same suite check.sh gates — the e2e/install
+# marker suites are slow, need network/credentials, and fail confusingly in
+# sandboxes otherwise. An explicit command-line -m (e.g. `pytest -m e2e`)
+# overrides this one, so the opt-in runs keep working.
+addopts = "--disable-socket --allow-unix-socket -m 'not e2e and not install'"
 # Treat warnings as errors so a deprecation or resource leak introduced in a change
 # fails the build instead of scrolling past. Listed-later filters take precedence, so
 # the targeted ignores below override the blanket `error`.
@@ -137,7 +137,6 @@ filterwarnings = [
 ]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY; skip otherwise)",
-    "install_script: real install of a locally-built wheel via install.sh (pipx / pip --user) and `uv tool install`; asserts `assembly` runs (slow; needs network + uv/pipx; skip otherwise)",
     "install: install each init template's requirements.txt into a clean venv and import it (slow; needs network + uv; skip otherwise)",
 ]
 

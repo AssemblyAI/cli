@@ -15,7 +15,7 @@ REAL_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 # opt out of the suite-wide --disable-socket; every other test stays blocked, so an
 # unmocked call in the unit suite still fails loudly. Tests that only bind a loopback
 # server use the tighter `@pytest.mark.allow_hosts(["127.0.0.1"])` instead.
-_NETWORK_MARKERS = ("e2e", "install", "install_script")
+_NETWORK_MARKERS = ("e2e", "install")
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

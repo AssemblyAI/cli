@@ -49,14 +49,6 @@ uv tool install "git+https://github.com/AssemblyAI/cli.git"
 
 Requires Python 3.12+. Microphone and speaker support (for `stream` and `agent`) is included by default via [`sounddevice`](https://python-sounddevice.readthedocs.io) — its macOS and Windows wheels bundle PortAudio. On Linux, install the runtime once: `sudo apt-get install libportaudio2`. You'll also want [`ffmpeg`](https://ffmpeg.org) on `PATH` to decode non-WAV/URL audio.
 
-### One-liner
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
-```
-
-Prefers [`pipx`](https://pipx.pypa.io), falling back to `pip --user`.
-
 ## Quick Start
 
 ```sh
