@@ -35,7 +35,7 @@ brew trust assemblyai/cli
 brew install assembly
 ```
 
-`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. Upgrade with `brew upgrade assembly`; remove with `brew uninstall assembly`.
+`brew install` pulls in `ffmpeg` and `portaudio` for you, so `transcribe`, `stream`, and `agent` work out of the box. Releases ship a prebuilt arm64 bottle, so `brew install`/`brew upgrade assembly` is a fast binary install (no compiler toolchain); Intel Macs build from source or can use the pipx/uv path below. Remove with `brew uninstall assembly`.
 
 ### pipx / uv
 
