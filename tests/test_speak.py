@@ -195,6 +195,18 @@ def test_dialogue_json_reports_speaker_voice_map(fake_dialogue):
     assert payload["audio_duration_seconds"] == 1.235
 
 
+def test_dialogue_json_out_path_is_reported(fake_dialogue, monkeypatch, tmp_path):
+    # With --out, the multi JSON reports the file path (not null) — pins the
+    # `str(out) if out is not None else None` branch in _emit_multi.
+    monkeypatch.setattr("aai_cli.commands.speak.audio.write_wav", lambda *a, **k: None)
+    out = tmp_path / "dialogue.wav"
+    text = "Speaker A: One.\nSpeaker B: Two."
+    result = runner.invoke(app, ["--sandbox", "speak", "--out", str(out), "--json"], input=text)
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout.strip())
+    assert payload["out"] == str(out)
+
+
 def test_empty_speaker_labels_raises_usage_error():
     # Speaker-labeled input with no spoken text: detected as labeled, parses to zero
     # segments, and raises the usage error before any synthesis.

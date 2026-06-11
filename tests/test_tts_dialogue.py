@@ -19,6 +19,13 @@ def test_plain_prose_is_not_labeled():
     assert dialogue.looks_like_speaker_labeled("") is False
 
 
+def test_segment_is_immutable():
+    seg = dialogue.Segment("A", "hi")
+    attr = "text"  # a variable (not a constant) keeps ruff's B010 from rewriting setattr
+    with pytest.raises(AttributeError):  # frozen=True -> assignment is blocked
+        setattr(seg, attr, "changed")
+
+
 def test_parse_single_line_turns():
     segs = dialogue.parse_segments("Speaker A: Hello.\nSpeaker B: Hi there.")
     assert [(s.speaker_id, s.text) for s in segs] == [("A", "Hello."), ("B", "Hi there.")]

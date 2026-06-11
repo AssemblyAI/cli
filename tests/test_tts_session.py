@@ -311,9 +311,9 @@ def test_synthesize_dialogue_uses_server_sample_rate():
 
 
 def test_synthesize_dialogue_empty_segments_returns_silent_default():
-    # No segments -> no audio at the default rate, and no crash (the connect factory
-    # is never invoked because the loop body never runs).
-    result = session.synthesize_dialogue("k", [], connect=lambda *a, **k: None)
+    # No segments -> no audio at the default rate, and no crash. connect is omitted
+    # entirely: the loop body never runs, so no connection is ever attempted.
+    result = session.synthesize_dialogue("k", [])
     assert result.pcm == b""
     assert result.sample_rate == 24000
     assert result.audio_duration_seconds == 0.0
