@@ -160,6 +160,13 @@ trap - EXIT
 echo "==> init template contract/import gate"
 uv run python scripts/template_contract_gate.py
 
+echo "==> startup import gate (CLI cold-start must not grow new third-party imports)"
+# Pins the set of third-party modules `import aai_cli.main` pulls in (what every
+# `aai` invocation pays before first output). Deterministic, unlike a wall-clock
+# budget. The baseline in the script is a ratchet: new startup imports fail; making
+# one lazy lets the baseline shrink.
+uv run python scripts/startup_import_gate.py
+
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
 # a live API key. Exclude install (real per-template dep install, slow + network)
