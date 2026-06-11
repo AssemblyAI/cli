@@ -104,6 +104,7 @@ def test_help_lists_commands_in_workflow_order():
         "agent",
         "speak",
         "llm",
+        "eval",
         # Setup & Tools
         "doctor",
         "setup",

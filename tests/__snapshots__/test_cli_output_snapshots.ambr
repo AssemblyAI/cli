@@ -216,6 +216,73 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[eval]
+  '''
+  
+   Usage: assembly eval [OPTIONS] DATASET
+  
+   Transcribe an evaluation dataset and score WER against its reference texts.
+  
+   Handy for picking a model: run once per --speech-model and compare. Datasets
+   come from the Hugging Face Hub (gated ones need HF_TOKEN) or a local
+   .csv/.jsonl
+   manifest. --speaker-labels also scores diarization (DER) against reference
+   speaker turns.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    dataset      TEXT  Hugging Face dataset id, or a local .csv/.jsonl      │
+  │                         manifest with audio + text columns.                  │
+  │                         [required]                                           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --split                   TEXT                      Hugging Face split to    │
+  │                                                     score (default: test).   │
+  │ --subset                  TEXT                      Hugging Face             │
+  │                                                     config/subset name (e.g. │
+  │                                                     a language).             │
+  │ --limit                   INTEGER RANGE             Rows to evaluate         │
+  │                           [1<=x<=100]               (1-100).                 │
+  │                                                     [default: 10]            │
+  │ --audio-column            TEXT                      Audio column name        │
+  │                                                     (default: auto-detect).  │
+  │ --text-column             TEXT                      Reference text column    │
+  │                                                     name (default:           │
+  │                                                     auto-detect).            │
+  │ --speech-model            [best|nano|slam-1|univer  Speech model to          │
+  │                           sal]                      evaluate.                │
+  │ --language-code           TEXT                      Force a language (e.g.   │
+  │                                                     en_us).                  │
+  │ --speaker-labels                                    Diarize and also score   │
+  │                                                     DER against the          │
+  │                                                     dataset's reference      │
+  │                                                     speaker turns            │
+  │                                                     (speakers/timestamps_st… │
+  │                                                     columns, in seconds).    │
+  │ --collar                  FLOAT RANGE [x>=0.0]      DER forgiveness          │
+  │                                                     (seconds) around each    │
+  │                                                     reference turn boundary. │
+  │                                                     [default: 1.0]           │
+  │ --json            -j                                Output the rows and      │
+  │                                                     summary as one JSON      │
+  │                                                     object.                  │
+  │ --help                                              Show this message and    │
+  │                                                     exit.                    │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Score a model on 10 rows of an HF dataset
+   $ assembly eval distil-whisper/meanwhile
+   Compare models on your own audio
+   $ assembly eval calls.csv --speech-model universal
+   Score diarization too (WER + DER)
+   $ assembly eval agent-calls.jsonl --speaker-labels
+   Pick a subset/split and more rows
+   $ assembly eval mozilla-foundation/common_voice_17_0 --subset en --limit 50
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[init]
   '''
   
