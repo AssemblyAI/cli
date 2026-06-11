@@ -704,9 +704,9 @@
    instead, pipe the text out with -o text | aai llm -f "…".
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file path, URL, or YouTube URL to stream. Use  │
-  │                         - for raw PCM16/mono/16k on stdin. Omit to use the   │
-  │                         microphone.                                          │
+  │   source      [SOURCE]  Audio file path, URL, or YouTube/podcast page URL to │
+  │                         stream. Use - for raw PCM16/mono/16k on stdin. Omit  │
+  │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                          Stream the hosted wildfires.mp3 sample.    │
@@ -837,20 +837,19 @@
   
    Usage: aai transcribe [OPTIONS] [SOURCE]
   
-   Transcribe an audio file, URL, or YouTube link.
+   Transcribe an audio file, URL, or YouTube/podcast link.
   
    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
   
-   Save with --out FILE, or pipe one field with -o text. A YouTube URL is
-   downloaded
-   first, then transcribed.
+   Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
+   URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
    Curated flags cover common features; --config KEY=VALUE and --config-file
    reach
    every other field. Analysis (summary, chapters, ...) renders in human mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file path, public URL, or YouTube URL.         │
+  │   source      [SOURCE]  Audio file, URL, or YouTube/podcast URL.             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                         Use the hosted              │
@@ -969,6 +968,8 @@
    $ aai transcribe --sample
    Transcribe a YouTube video
    $ aai transcribe https://youtu.be/dtp6b76pMak
+   Transcribe a podcast episode page
+   $ aai transcribe "https://podcasts.apple.com/…"
    Label who said what
    $ aai transcribe call.mp3 --speaker-labels
    Redact PII for compliance

@@ -40,10 +40,10 @@ def render(
     """
     if output is not None:
         llm_gateway = None  # `-o` returns before the chain runs in the real command
-    is_youtube = youtube.is_youtube_url(source)
+    needs_download = youtube.is_downloadable_url(source)
     parts = (
-        _header_block(llm_gateway, output, is_youtube=is_youtube)
-        + _transcribe_block(merged, source, is_youtube=is_youtube)
+        _header_block(llm_gateway, output, needs_download=needs_download)
+        + _transcribe_block(merged, source, needs_download=needs_download)
         + _result_block(merged, llm_gateway, output)
     )
     parts.append("")
@@ -51,17 +51,17 @@ def render(
 
 
 def _header_block(
-    llm_gateway: dict[str, object] | None, output: str | None, *, is_youtube: bool
+    llm_gateway: dict[str, object] | None, output: str | None, *, needs_download: bool
 ) -> list[str]:
     """Imports plus the api-key (and non-default environment) settings lines."""
     stdlib_imports = ["import os"]
-    if is_youtube:
-        # The YouTube path downloads audio to a temp dir before uploading.
+    if needs_download:
+        # The download path fetches audio to a temp dir before uploading.
         stdlib_imports += ["import tempfile"]
     if output == "json":
         stdlib_imports.insert(0, "import json")
     imports = ["import assemblyai as aai"]
-    if is_youtube:
+    if needs_download:
         imports.append("import yt_dlp")
     if llm_gateway:
         imports.append("from openai import OpenAI")
@@ -81,7 +81,7 @@ def _header_block(
     return parts
 
 
-def _transcribe_block(merged: dict[str, object], source: str, *, is_youtube: bool) -> list[str]:
+def _transcribe_block(merged: dict[str, object], source: str, *, needs_download: bool) -> list[str]:
     """The transcriber setup, optional config, the transcribe call, and error check."""
     parts = ["", "transcriber = aai.Transcriber()"]
     config_arg = ""
@@ -89,12 +89,12 @@ def _transcribe_block(merged: dict[str, object], source: str, *, is_youtube: boo
         kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=4))
         parts += ["", f"config = aai.TranscriptionConfig(\n{kwargs}\n)"]
         config_arg = ", config=config"
-    if is_youtube:
-        # AssemblyAI can't read a YouTube watch URL itself, so download the audio
-        # with yt-dlp into a temp dir and upload the local file — what the CLI does.
+    if needs_download:
+        # AssemblyAI can't read a YouTube/podcast page URL itself, so download the
+        # audio with yt-dlp into a temp dir and upload the local file — what the CLI does.
         parts += [
             "",
-            "# AssemblyAI can't fetch a YouTube URL itself; download the audio first.",
+            "# AssemblyAI can't fetch this page URL itself; download the audio first.",
             "with tempfile.TemporaryDirectory() as _tmp:",
             "    with yt_dlp.YoutubeDL(",
             '        {"format": "bestaudio/best", "outtmpl": f"{_tmp}/%(id)s.%(ext)s"}',

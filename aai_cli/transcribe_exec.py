@@ -69,8 +69,8 @@ def run_transcription(
             return client.transcribe(api_key, str(local), config=transcription_config)
 
     audio = client.resolve_audio_source(source, sample=sample)
-    if youtube.is_youtube_url(audio):
-        # Fetch first; AssemblyAI can't read a YouTube watch URL itself.
+    if youtube.is_downloadable_url(audio):
+        # Fetch first; AssemblyAI can't read a YouTube/podcast page URL itself.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
             local = youtube.download_audio(audio, Path(td))
             return client.transcribe(api_key, str(local), config=transcription_config)

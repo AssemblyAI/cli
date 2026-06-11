@@ -118,6 +118,18 @@ def test_transcribe_render_youtube_downloads_before_upload():
     assert 'transcribe("https://www.youtube.com' not in code
 
 
+def test_transcribe_render_podcast_page_downloads_before_upload():
+    # Podcast episode pages (extractor-matched, like YouTube) generate the same
+    # download-first script; the page URL never reaches transcribe().
+    url = "https://podcasts.apple.com/us/podcast/some-show/id1535809341?i=1000123456789"
+    code = code_gen.transcribe({}, source=url)
+    ast.parse(code)
+    assert "import yt_dlp" in code
+    assert f"extract_info({url!r}, download=True)" in code
+    assert "transcriber.transcribe(_audio)" in code
+    assert "transcribe('https://podcasts.apple.com" not in code
+
+
 def test_transcribe_render_youtube_passes_config_to_local_upload():
     # With a config object the download still wraps the upload, and config flows through.
     code = code_gen.transcribe({"speaker_labels": True}, source="https://youtu.be/abc123")

@@ -58,7 +58,7 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
         # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | aai stream -`).
         stdin_src = StdinSource(sample_rate=opts.sample_rate or TARGET_RATE)
         session.run(stdin_src, stdin_src.sample_rate)
-    elif opts.source and youtube.is_youtube_url(opts.source):
+    elif opts.source and youtube.is_downloadable_url(opts.source):
         # Fetch the audio first, then stream the local file in real time.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
             local = youtube.download_audio(opts.source, Path(td))
@@ -101,8 +101,8 @@ def stream(
     ctx: typer.Context,
     source: str | None = typer.Argument(
         None,
-        help="Audio file path, URL, or YouTube URL to stream. Use - for raw PCM16/mono/16k "
-        "on stdin. Omit to use the microphone.",
+        help="Audio file path, URL, or YouTube/podcast page URL to stream. Use - for raw "
+        "PCM16/mono/16k on stdin. Omit to use the microphone.",
     ),
     sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample."),
     # audio capture
@@ -395,9 +395,9 @@ def stream(
             validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
             if opts.from_system_audio:
                 raise UsageError("--show-code does not support macOS system audio capture yet.")
-            if opts.source and youtube.is_youtube_url(opts.source):
+            if opts.source and youtube.is_downloadable_url(opts.source):
                 raise UsageError(
-                    "--show-code does not support YouTube sources yet.",
+                    "--show-code does not support downloaded sources (YouTube, podcast pages) yet.",
                     suggestion="Download the audio first (e.g. yt-dlp) and pass the local file.",
                 )
             code_source: str | None = None

@@ -1,3 +1,9 @@
+"""Downloading audio from media-page URLs (YouTube, podcast pages, …) via yt-dlp.
+
+The AssemblyAI API fetches direct audio URLs itself; this module handles the URLs it
+can't — HTML pages whose audio yt-dlp knows how to extract.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +31,34 @@ def is_youtube_url(source: str | None) -> bool:
     if not source:
         return False
     return bool(_YOUTUBE_RE.match(source.strip()))
+
+
+def is_downloadable_url(source: str | None) -> bool:
+    """True if `source` is a media-page URL whose audio must be downloaded first.
+
+    YouTube is matched by shape alone — no yt-dlp import needed, so a missing yt-dlp
+    still routes to ``download_audio``'s install hint. Other http(s) URLs match when
+    a dedicated yt-dlp extractor claims them (Apple Podcasts, Spreaker, SoundCloud,
+    …). Direct audio URLs and unknown pages match only yt-dlp's catch-all ``Generic``
+    extractor, which is excluded: those pass through untouched for the API to fetch.
+    """
+    if is_youtube_url(source):
+        return True
+    url = (source or "").strip()
+    if not url.startswith(("http://", "https://")):
+        # Local paths (and other non-URL sources) never need a download; skipping the
+        # extractor sweep also avoids importing yt-dlp on the common local-file path.
+        return False
+    return _ytdlp_extractor_claims(url)
+
+
+def _ytdlp_extractor_claims(url: str) -> bool:
+    """True if a dedicated (non-``Generic``) yt-dlp extractor matches `url`."""
+    try:
+        from yt_dlp.extractor import gen_extractor_classes
+    except ImportError:
+        return False
+    return any(ie.suitable(url) and ie.ie_key() != "Generic" for ie in gen_extractor_classes())
 
 
 def download_audio(url: str, dest_dir: Path) -> Path:

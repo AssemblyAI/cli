@@ -34,6 +34,7 @@ class _ScriptedPrompter:
         self._confirm = confirm
         self._text = text
         self.confirm_defaults: list[bool] = []
+        self.text_titles: list[str] = []
 
     def section(self, title: str) -> None:
         pass
@@ -51,6 +52,7 @@ class _ScriptedPrompter:
         return self._select
 
     def text(self, title: str, *, default: str | None = None) -> str:
+        self.text_titles.append(title)
         return self._text
 
 
@@ -118,10 +120,13 @@ def test_first_request_uses_custom_source(
     monkeypatch.setattr(transcribe_exec, "run_transcription", _fake)
     monkeypatch.setattr(transcribe_render, "render_transcript_result", lambda *a, **k: None)
     status_messages = _capture_status(monkeypatch)
-    assert sections.first_request(_ScriptedPrompter(text="meeting.mp3"), ctx) is SectionResult.DONE
+    prompter = _ScriptedPrompter(text="meeting.mp3")
+    assert sections.first_request(prompter, ctx) is SectionResult.DONE
     assert seen["source"] == "meeting.mp3"
     assert seen["sample"] is False
     assert status_messages == ["Transcribing meeting.mp3…"]
+    # The prompt advertises every accepted source kind, including podcast pages.
+    assert any("YouTube/podcast URL" in t for t in prompter.text_titles)
 
 
 def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:

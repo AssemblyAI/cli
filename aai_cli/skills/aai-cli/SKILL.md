@@ -1,6 +1,6 @@
 ---
 name: aai-cli
-description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold a starter app (init); diagnose setup (doctor); and set up your coding agent's AssemblyAI docs MCP + skills (setup). Use whenever an agent is invoking the `aai` command.
+description: Use the AssemblyAI CLI (`aai`) from the command line — transcribe audio/video files, URLs, and YouTube/podcast links; stream live real-time transcription from a mic/file/system audio; run full-duplex voice agents; query the LLM Gateway over transcripts; browse transcript and streaming-session history; sign in and manage account balance, usage, rate limits, API keys, and audit logs; scaffold a starter app (init); diagnose setup (doctor); and set up your coding agent's AssemblyAI docs MCP + skills (setup). Use whenever an agent is invoking the `aai` command.
 ---
 
 # AssemblyAI CLI (`aai`)
@@ -72,8 +72,8 @@ agent," reach for `aai init voice-agent`, not `aai agent`.
 
 - **Build/scaffold an app (transcription, live captions, or a voice agent app)**
   → `aai init` — see `references/setup.md`
-- **Transcribe a file/URL/YouTube, stream live audio, run a live voice agent, or
-  query the LLM Gateway** → `references/transcription.md`
+- **Transcribe a file/URL/YouTube/podcast page, stream live audio, run a live
+  voice agent, or query the LLM Gateway** → `references/transcription.md`
 - **Browse past transcripts or streaming sessions** → `references/history.md`
 - **Sign in/out, identity, balance, usage, rate limits, API keys, audit log** →
   `references/account.md`
