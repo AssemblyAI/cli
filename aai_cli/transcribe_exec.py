@@ -1,4 +1,4 @@
-"""Transcription execution and non-Rich output shaping for the ``transcribe`` command.
+"""Transcription execution and result delivery for the ``transcribe`` command.
 
 Kept out of ``commands/transcribe.py`` so the command stays a thin option surface, and
 so ``run_transcription`` lives in a core module that ``onboard`` can import directly
@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import assemblyai as aai
+from rich.markup import escape
 
-from aai_cli import choices, client, stdio, youtube
+from aai_cli import choices, client, llm, output, stdio, transcribe_render, youtube
 from aai_cli.errors import UsageError
 
 # The PII policy strings the SDK accepts, validated client-side so a typo'd
@@ -44,6 +45,15 @@ def validate_speakers_expected(merged: dict[str, object]) -> None:
         raise UsageError(
             "--speakers-expected only applies when diarization is enabled.",
             suggestion="Add --speaker-labels.",
+        )
+
+
+def validate_out_with_llm(out: Path | None, llm_prompts: list[str] | None) -> None:
+    if out is not None and llm_prompts:
+        # --out captures the transcript itself; an LLM transform is a separate step.
+        raise UsageError(
+            "--out can't be combined with --llm.",
+            suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
         )
 
 
@@ -105,3 +115,61 @@ def run_transcription(
             local = youtube.download_audio(audio, Path(td), download_sections=download_sections)
             return client.transcribe(api_key, str(local), config=transcription_config)
     return client.transcribe(api_key, audio, config=transcription_config)
+
+
+class TransformOptions(NamedTuple):
+    """The ``--llm`` chain options: the prompts plus the gateway model settings."""
+
+    prompts: list[str]
+    model: str
+    max_tokens: int
+
+
+def deliver_result(
+    transcript: aai.Transcript,
+    *,
+    api_key: str,
+    out: Path | None,
+    output_field: choices.TranscriptOutput | None,
+    transform: TransformOptions,
+    json_mode: bool,
+    quiet: bool,
+) -> None:
+    """Route the finished transcript: ``--out`` file, single ``-o`` field, ``--llm``
+    transform chain, or the default JSON/human render — first match wins."""
+    if out is not None:
+        # Write a clean file artifact and confirm on stderr; stdout stays empty.
+        if ".." in out.parts:  # reject path-traversal segments in --out
+            raise UsageError(f"--out path can't contain '..': {out}")
+        out.write_text(out_payload(transcript, output_field, json_mode=json_mode) + "\n")
+        if not quiet:
+            output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
+        return
+
+    if output_field is not None:
+        # Raw single-field output for pipelines (overrides --json and analysis render).
+        output.emit_text(client.select_transcript_field(transcript, output_field))
+        return
+
+    if transform.prompts:
+        # Chain the prompts: the first runs over the transcript (injected server-side
+        # via transcript_id); each subsequent prompt runs over the prior response.
+        steps = llm.run_chain_steps(
+            api_key,
+            transform.prompts,
+            transcript_id=transcript.id,
+            model=transform.model,
+            max_tokens=transform.max_tokens,
+        )
+        output.emit(
+            client.transcript_summary(transcript)
+            | {"transform": {"model": transform.model, "steps": steps}},
+            render_transform_steps,
+            json_mode=json_mode,
+        )
+        return
+
+    if json_mode:
+        output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
+    else:
+        transcribe_render.render_transcript_result(transcript, output.console)
