@@ -1,3 +1,4 @@
+import importlib
 import re
 import sys
 import types
@@ -52,6 +53,12 @@ def test_is_downloadable_url_without_ytdlp_still_matches_youtube(monkeypatch):
 
 
 def _fake_ytdlp(monkeypatch, ydl_cls):
+    # Cache the real yt_dlp.utils submodule first: _section_timestamp lazily does
+    # `from yt_dlp.utils import parse_duration`, and once the parent is replaced by a
+    # SimpleNamespace (not a package) that import can only resolve through sys.modules.
+    # Without this, the test would depend on whether an earlier (randomly ordered)
+    # test had already imported the real yt-dlp.
+    importlib.import_module("yt_dlp.utils")
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
 
 
