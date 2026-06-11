@@ -14,8 +14,10 @@ source_modules =
     aai_cli.config
     aai_cli.config_builder
     aai_cli.context
+    aai_cli.der
     aai_cli.environments
     aai_cli.errors
+    aai_cli.eval_data
     aai_cli.follow
     aai_cli.help_panels
     aai_cli.help_text
@@ -32,6 +34,7 @@ source_modules =
     aai_cli.transcribe_batch
     aai_cli.transcribe_exec
     aai_cli.transcribe_render
+    aai_cli.wer
     aai_cli.ws
     aai_cli.youtube
 forbidden_modules =
@@ -47,6 +50,7 @@ modules =
     aai_cli.commands.deploy
     aai_cli.commands.dev
     aai_cli.commands.doctor
+    aai_cli.commands.evaluate
     aai_cli.commands.init
     aai_cli.commands.keys
     aai_cli.commands.llm
@@ -66,9 +70,12 @@ source_modules =
     aai_cli.client
     aai_cli.config
     aai_cli.config_builder
+    aai_cli.der
     aai_cli.environments
     aai_cli.errors
+    aai_cli.eval_data
     aai_cli.llm
     aai_cli.telemetry
+    aai_cli.wer
 forbidden_modules =
     rich
