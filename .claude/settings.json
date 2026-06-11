@@ -30,6 +30,9 @@
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
+      "Bash(git grep *)",
       "Bash(git branch *)",
       "Bash(git add *)",
       "Bash(git commit *)",
@@ -39,6 +42,9 @@
       "Bash(git worktree *)",
       "Bash(gh pr view *)",
       "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(timeout 30 uv run assembly *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
       "mcp__assemblyai-docs__search_docs",
@@ -73,7 +79,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh",
+            "timeout": 600
           }
         ]
       }

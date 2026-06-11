@@ -49,10 +49,13 @@ jobs:
       - name: System deps (PortAudio + ffmpeg)
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
 
-      # check.sh lints Markdown and template JS/CSS via Node CLIs; pin to the
-      # versions used locally. The runner ships Node, so a global npm install suffices.
+      # check.sh lints Markdown and template JS/CSS via Node CLIs; versions are
+      # pinned in scripts/gate_tool_pins.sh (shared with the web session-start
+      # hook). The runner ships Node, so a global npm install suffices.
       - name: Node lint CLIs
-        run: npm install -g markdownlint-cli@0.45.0 prettier@3.8.3
+        run: |
+          source scripts/gate_tool_pins.sh
+          npm install -g "markdownlint-cli@${MARKDOWNLINT_VERSION}" "prettier@${PRETTIER_VERSION}"
 
       # check.sh runs every tool through `uv run` / `uv build` for a locked,
       # reproducible env, so only uv must be on PATH (installed from PyPI to match
@@ -63,12 +66,14 @@ jobs:
 
       # actionlint and gitleaks are Go binaries (no PyPI wheel), so check.sh self-skips
       # them locally like shellcheck. Build them here with the runner's preinstalled Go,
-      # pinned to a release tag, and put GOPATH/bin on PATH so check.sh enforces them.
+      # pinned via scripts/gate_tool_pins.sh (shared with the web session-start hook),
+      # and put GOPATH/bin on PATH so check.sh enforces them.
       # (gitleaks v8's Go module path is still github.com/zricethezav/gitleaks/v8.)
       - name: Workflow + secret scanners (actionlint, gitleaks)
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-          go install github.com/zricethezav/gitleaks/v8@v8.21.2
+          source scripts/gate_tool_pins.sh
+          go install "$ACTIONLINT_MODULE"
+          go install "$GITLEAKS_MODULE"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Lint, typecheck, test
