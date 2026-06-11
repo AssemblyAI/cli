@@ -8,7 +8,7 @@ from typing import NotRequired, Protocol, TypedDict
 import typer
 from rich.markup import escape
 
-from aai_cli import client, config, environments, help_panels, options, output, theme
+from aai_cli import client, coding_agent, config, environments, help_panels, options, output, theme
 from aai_cli.context import AppState, resolve_profile, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
@@ -193,10 +193,18 @@ def check_audio() -> Check:
 def _check_coding_agent() -> Check:
     missing = [tool for tool in ("claude", "npx") if shutil.which(tool) is None]
     if not missing:
+        # Tools are present, so report what `assembly setup install` actually
+        # installed rather than always suggesting it.
+        not_installed = coding_agent.missing_components()
+        if not not_installed:
+            return _check(
+                "coding-agent", "ok", "claude and npx found; docs MCP + skills installed."
+            )
         return _check(
             "coding-agent",
             "ok",
-            "claude and npx found; run 'assembly setup install' to wire up the docs MCP + skills.",
+            "claude and npx found; run 'assembly setup install' to add: "
+            f"{', '.join(not_installed)}.",
         )
     return _check(
         "coding-agent",

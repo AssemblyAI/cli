@@ -21,6 +21,9 @@ def healthy(monkeypatch):
     monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", lambda _key: True)
     monkeypatch.setattr("aai_cli.commands.doctor.shutil.which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr("aai_cli.commands.doctor._probe_input_devices", lambda: 2)
+    # The MCP probe shells out to `claude mcp get`; keep the suite hermetic and
+    # report the full setup (docs MCP + both skills) as installed.
+    monkeypatch.setattr("aai_cli.commands.doctor.coding_agent.missing_components", list)
 
 
 def _checks(result):
@@ -111,6 +114,29 @@ def test_doctor_no_microphone_warns(healthy, monkeypatch):
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 0
     assert _checks(result)["audio"]["status"] == "warn"
+
+
+def test_doctor_coding_agent_fully_set_up_does_not_suggest_install(healthy):
+    # Regression: with the docs MCP + skills already installed, doctor must say so
+    # instead of telling the user to run a setup that's already done.
+    result = runner.invoke(app, ["doctor", "--json"])
+    agent_check = _checks(result)["coding-agent"]
+    assert agent_check["status"] == "ok"
+    assert agent_check["detail"] == "claude and npx found; docs MCP + skills installed."
+
+
+def test_doctor_coding_agent_not_set_up_names_whats_missing(healthy, monkeypatch):
+    monkeypatch.setattr(
+        "aai_cli.commands.doctor.coding_agent.missing_components",
+        lambda: ["docs MCP", "aai-cli skill"],
+    )
+    result = runner.invoke(app, ["doctor", "--json"])
+    assert result.exit_code == 0  # an un-run setup never blocks
+    agent_check = _checks(result)["coding-agent"]
+    assert agent_check["status"] == "ok"
+    assert agent_check["detail"] == (
+        "claude and npx found; run 'assembly setup install' to add: docs MCP, aai-cli skill."
+    )
 
 
 def test_doctor_coding_agent_missing_warns(healthy, monkeypatch):

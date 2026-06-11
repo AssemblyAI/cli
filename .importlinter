@@ -10,6 +10,7 @@ source_modules =
     aai_cli.auth
     aai_cli.client
     aai_cli.code_gen
+    aai_cli.coding_agent
     aai_cli.config
     aai_cli.config_builder
     aai_cli.context
