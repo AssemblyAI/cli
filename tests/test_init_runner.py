@@ -25,8 +25,13 @@ def test_venv_python_path_per_platform(monkeypatch):
 
 
 def test_env_setup_commands_uv():
+    # --allow-existing keeps re-running setup idempotent: `assembly init` creates .venv,
+    # and `assembly dev` in that project must reuse it, not fail on "already exists".
     cmds = runner.env_setup_commands(Path("/proj"), use_uv=True)
-    assert cmds == [["uv", "venv"], ["uv", "pip", "install", "-r", "requirements.txt"]]
+    assert cmds == [
+        ["uv", "venv", "--allow-existing"],
+        ["uv", "pip", "install", "-r", "requirements.txt"],
+    ]
 
 
 def test_env_setup_commands_venv():
