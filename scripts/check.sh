@@ -103,6 +103,12 @@ fi
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
+echo "==> json validity (all tracked + staged *.json)"
+# Parse every JSON file so a malformed dashboard / vercel.json / fixture fails here
+# instead of silently downstream (a bad dashboard just won't import). Validity only —
+# recorded tests/fixtures/api/*.json are snapshots and must not be reformatted.
+uv run python scripts/json_lint.py
+
 echo "==> prettier (init template JS/CSS)"
 # CI's runner has prettier on PATH; locally it's skipped with a notice if not
 # installed, matching how shellcheck/swiftlint self-skip above.
