@@ -9,6 +9,7 @@ builtin; the command itself registers as ``eval``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 import assemblyai as aai
 import typer
@@ -19,6 +20,47 @@ from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+
+class EvalSpeechModel(StrEnum):
+    """Every speech model the SDK can request, current generation first.
+
+    The SDK's own ``SpeechModel`` enum stops at the legacy generation; the current
+    models are requested through its newer ``speech_models`` list parameter, so the
+    CLI choices are the union of both.
+    """
+
+    universal_3_pro = "universal-3-pro"
+    universal_2 = "universal-2"
+    slam_1 = "slam-1"
+    universal = "universal"
+    best = "best"
+    nano = "nano"
+
+
+def _transcription_config(
+    speech_model: EvalSpeechModel | None, *, language_code: str | None, speaker_labels: bool
+) -> aai.TranscriptionConfig:
+    """Route the model choice through the SDK parameter that accepts it.
+
+    Legacy models go through ``speech_model`` (the SDK enum); current-generation
+    models only exist as ``speech_models`` list values.
+    """
+    legacy = {model.value for model in aai.SpeechModel}
+    return aai.TranscriptionConfig(
+        speech_model=(
+            aai.SpeechModel(speech_model.value)
+            if speech_model is not None and speech_model.value in legacy
+            else None
+        ),
+        speech_models=(
+            [speech_model.value]
+            if speech_model is not None and speech_model.value not in legacy
+            else None
+        ),
+        language_code=language_code,
+        speaker_labels=speaker_labels or None,
+    )
 
 
 def _pct(value: object) -> str:
@@ -62,7 +104,7 @@ def _score_item(
 
 
 def _payload(
-    label: str, speech_model: aai.SpeechModel | None, results: list[_ItemResult]
+    label: str, speech_model: EvalSpeechModel | None, results: list[_ItemResult]
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "dataset": label,
@@ -123,7 +165,7 @@ def _render(payload: dict[str, object]) -> RenderableType:
             ("Score a model on 10 rows of an HF dataset", "assembly eval distil-whisper/meanwhile"),
             (
                 "Compare models on your own audio",
-                "assembly eval calls.csv --speech-model universal",
+                "assembly eval calls.csv --speech-model universal-3-pro",
             ),
             (
                 "Score diarization too (WER + DER)",
@@ -163,7 +205,7 @@ def evaluate(
     text_column: str | None = typer.Option(
         None, "--text-column", help="Reference text column name (default: auto-detect)."
     ),
-    speech_model: aai.SpeechModel | None = typer.Option(
+    speech_model: EvalSpeechModel | None = typer.Option(
         None, "--speech-model", help="Speech model to evaluate."
     ),
     language_code: str | None = typer.Option(
@@ -212,10 +254,8 @@ def evaluate(
             with_speakers=speaker_labels,
         )
         api_key = config.resolve_api_key(profile=state.profile)
-        transcription_config = aai.TranscriptionConfig(
-            speech_model=speech_model,
-            language_code=language_code,
-            speaker_labels=speaker_labels or None,
+        transcription_config = _transcription_config(
+            speech_model, language_code=language_code, speaker_labels=speaker_labels
         )
         results: list[_ItemResult] = []
         for index, item in enumerate(data.items, start=1):

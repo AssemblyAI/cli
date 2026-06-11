@@ -132,7 +132,31 @@ def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker):
     assert _payload_of(result)["speech_model"] == "universal"
     tx_config = tx.call_args.kwargs["config"]
     assert tx_config.speech_model == aai.SpeechModel.universal
+    assert tx_config.speech_models is None  # legacy models ride the enum parameter only
     assert tx_config.speaker_labels is None  # not requested -> omitted, not False
+
+
+@pytest.mark.parametrize("model", ["universal-3-pro", "universal-2"])
+def test_current_models_ride_the_speech_models_list(tmp_path, mocker, model):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model, "--json"])
+    assert result.exit_code == 0
+    assert _payload_of(result)["speech_model"] == model
+    tx_config = tx.call_args.kwargs["config"]
+    assert tx_config.speech_models == [model]
+    assert tx_config.speech_model is None  # not in the SDK enum -> enum parameter omitted
+
+
+def test_no_speech_model_leaves_both_model_parameters_unset(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
+    tx_config = tx.call_args.kwargs["config"]
+    assert tx_config.speech_model is None
+    assert tx_config.speech_models is None
 
 
 def test_speech_model_named_in_human_header(tmp_path, mocker):

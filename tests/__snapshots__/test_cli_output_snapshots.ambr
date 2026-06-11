@@ -277,8 +277,9 @@
   │ --text-column             TEXT                      Reference text column    │
   │                                                     name (default:           │
   │                                                     auto-detect).            │
-  │ --speech-model            [best|nano|slam-1|univer  Speech model to          │
-  │                           sal]                      evaluate.                │
+  │ --speech-model            [universal-3-pro|univers  Speech model to          │
+  │                           al-2|slam-1|universal|be  evaluate.                │
+  │                           st|nano]                                           │
   │ --language-code           TEXT                      Force a language (e.g.   │
   │                                                     en_us).                  │
   │ --speaker-labels                                    Diarize and also score   │
@@ -302,7 +303,7 @@
    Score a model on 10 rows of an HF dataset
    $ assembly eval distil-whisper/meanwhile
    Compare models on your own audio
-   $ assembly eval calls.csv --speech-model universal
+   $ assembly eval calls.csv --speech-model universal-3-pro
    Score diarization too (WER + DER)
    $ assembly eval agent-calls.jsonl --speaker-labels
    Pick a subset/split and more rows
