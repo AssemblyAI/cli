@@ -49,7 +49,7 @@ def login(
             # obtained, so account self-service commands won't work for this profile.
             if not client.validate_key(api_key):
                 raise APIError(
-                    "That API key was rejected (HTTP 401).",
+                    "That API key was rejected (HTTP 401/403).",
                     suggestion="Check the key and retry.",
                 )
             config.set_api_key(profile, api_key)

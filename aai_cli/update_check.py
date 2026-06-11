@@ -44,10 +44,12 @@ def detect_upgrade_command() -> str:
     exe = (sys.executable or "").lower()
     if "/cellar/" in exe or "/homebrew/" in exe or exe.startswith("/usr/local/"):
         return "brew upgrade assembly"
+    # pipx/uv track installs by *distribution* name (aai-cli), not the console
+    # command (assembly) — "pipx upgrade assembly" fails with "not installed".
     if "pipx" in exe:
-        return "pipx upgrade assembly"
+        return "pipx upgrade aai-cli"
     if "/uv/tools/" in exe:
-        return "uv tool upgrade assembly"
+        return "uv tool upgrade aai-cli"
     return ""
 
 
