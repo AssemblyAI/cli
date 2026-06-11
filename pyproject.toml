@@ -25,7 +25,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "typer>=0.26.7",  # >=0.13 vendors its own click (typer._click); we no longer import click
+    "typer>=0.26.7", # >=0.13 vendors its own click (typer._click); we no longer import click
     "assemblyai>=0.64.4",
     "rich>=15.0.0",
     "keyring>=25.7.0",
@@ -43,8 +43,17 @@ dependencies = [
     "openai>=2.41.0",
     "yt-dlp>=2026.3.17",
     "questionary>=2.0.1",
+    # Version compare for the update notifier. Conservative floor so safe-chain's
+    # minimum-package-age check doesn't reject resolution; packaging already arrives
+    # transitively, so the lock pins the same release.
+    "packaging>=24.0",
     # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
     "audioop-lts>=0.2; python_version >= '3.13'",
+    # `assembly eval` scoring: jiwer for WER, pyannote.metrics for DER — the de-facto
+    # standard implementations of each. pyannote drags numpy/scipy/pandas, so der.py
+    # imports it lazily to keep CLI startup fast.
+    "jiwer>=4.0",
+    "pyannote-metrics>=4.0",
 ]
 
 [project.urls]

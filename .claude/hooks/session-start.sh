@@ -102,7 +102,8 @@ fi
 # 4. Git history — web containers start from a shallow clone, where origin/main
 #    can exist with NO merge base to the session branch; check.sh's diff-scoped
 #    tail gates (diff-cover/mutation) then crash with "fatal: ... no merge base"
-#    instead of self-skipping. Unshallow up front so they just work.
+#    instead of self-skipping, and the branch auto-update below can't merge.
+#    Unshallow up front so both just work.
 if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
   if git fetch --unshallow origin main >>"$LOG" 2>&1; then
     log "unshallowed clone (merge base with origin/main available for diff gates)"
@@ -113,7 +114,42 @@ else
   log "clone already has full history"
 fi
 
-# 5. Python environment — materialize the locked dev env so the first `uv run`
+# 5. Keep the session branch current. Resumed web containers hold a clone frozen
+#    at creation time, so two things can go stale: the branch's own remote tip
+#    (pushes from another session/machine) and origin/main (which the diff-scoped
+#    gates — diff-cover, mutation — compare against). Fast-forward to the remote
+#    tip if it advanced, then merge origin/main if behind (the same semantics as
+#    GitHub's "Update branch" button). Never force anything: a dirty tree skips
+#    the update and a conflicting merge is aborted with a note, leaving the
+#    resolution to the session.
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+if [ "$branch" != "HEAD" ] && [ "$branch" != "main" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    log "working tree is dirty; skipping branch auto-update"
+  elif git fetch origin main "$branch" 2>/dev/null || git fetch origin main 2>/dev/null; then
+    if git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
+      if git merge-base --is-ancestor "HEAD" "origin/$branch" && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$branch")" ]; then
+        git merge --ff-only "origin/$branch" >>"$LOG" 2>&1
+        log "fast-forwarded $branch to its remote tip"
+      fi
+    fi
+    behind=$(git rev-list --count "HEAD..origin/main" 2>/dev/null || echo 0)
+    if [ "$behind" -gt 0 ]; then
+      if git merge --no-edit origin/main >>"$LOG" 2>&1; then
+        log "merged origin/main into $branch (was $behind commit(s) behind)"
+      else
+        git merge --abort 2>/dev/null || true
+        log "WARNING: origin/main conflicts with $branch; left unmerged — resolve with 'git merge origin/main'"
+      fi
+    else
+      log "$branch is up to date with origin/main"
+    fi
+  else
+    log "could not fetch origin; skipping branch auto-update"
+  fi
+fi
+
+# 6. Python environment — materialize the locked dev env so the first `uv run`
 #    doesn't pay the full sync cost mid-task. `uv` syncs the default dev group.
 if uv sync >>"$LOG" 2>&1; then
   log "uv environment synced (locked dev group)"

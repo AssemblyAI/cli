@@ -125,7 +125,8 @@ if command -v shellcheck >/dev/null 2>&1; then
   # -x + --source-path=. let it follow the hook's `. scripts/gate_tool_pins.sh`
   # (paths resolve from the repo root, where this script always runs).
   shellcheck -x --source-path=. scripts/check.sh scripts/docker_build_check.sh \
-    scripts/cut_release.sh scripts/gate_tool_pins.sh .claude/hooks/session-start.sh
+    scripts/cut_release.sh scripts/bump_minor.sh scripts/gate_tool_pins.sh \
+    .claude/hooks/session-start.sh
 else
   echo "   shellcheck not found; skipping (CI runs it)"
 fi

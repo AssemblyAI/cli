@@ -29,11 +29,15 @@ Homebrew pulls in `ffmpeg` and `portaudio`, so `transcribe`, `stream`, and `agen
 
 ### pipx / uv
 
-```sh
-# pipx
-pipx install "git+https://github.com/AssemblyAI/cli.git"
+With pipx:
 
-# uv
+```sh
+pipx install "git+https://github.com/AssemblyAI/cli.git"
+```
+
+Or with uv:
+
+```sh
 uv tool install "git+https://github.com/AssemblyAI/cli.git"
 ```
 
@@ -46,6 +50,7 @@ Requires Python 3.12+. On Linux, install PortAudio once for microphone support (
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal (use headphones).
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
+- **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset or a local `.csv`/`.jsonl` manifest and scores WER against its references (plus DER with `--speaker-labels`) — handy for picking a speech model.
 - **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`).
 - **Code generation**: add `--show-code` to `transcribe`/`stream`/`agent` to print the equivalent Python SDK script instead of running.
 - **Account self-service**: `assembly keys` / `balance` / `usage` / `limits` / `sessions` / `audit` via browser login.
@@ -72,43 +77,89 @@ Checked before the keyring, so nothing is written to disk — ideal for CI (set 
 
 ### Basic usage
 
+Guided setup: sign in, first transcription, start building:
+
 ```sh
-# Guided setup: sign in, first transcription, start building
 assembly onboard
+```
 
-# Transcribe the hosted sample, then your own audio
+Transcribe the hosted sample:
+
+```sh
 assembly transcribe --sample
+```
+
+Then your own audio:
+
+```sh
 assembly transcribe call.mp3
+```
 
-# Stream the microphone live (Ctrl-C to stop)
+Stream the microphone live (Ctrl-C to stop):
+
+```sh
 assembly stream
+```
 
-# Talk to a voice agent
+Talk to a voice agent:
+
+```sh
 assembly agent
+```
 
-# Scaffold a starter app
+Scaffold a starter app:
+
+```sh
 assembly init
 ```
 
 ### Quick examples
 
+Just the text:
+
 ```sh
-# Just the text, or captions
 assembly transcribe call.mp3 -o text
+```
+
+Or captions:
+
+```sh
 assembly transcribe video.mp4 -o srt
+```
 
-# Speaker labels + summary, as JSON
+Speaker labels + summary, as JSON:
+
+```sh
 assembly transcribe call.mp3 --speaker-labels --summarization --json
+```
 
-# Batch: a whole directory or glob, resumable on re-run
+Batch: a whole directory or glob, resumable on re-run:
+
+```sh
 assembly transcribe ./recordings
+```
+
+Or pipe paths in:
+
+```sh
 find . -name "*.wav" | assembly transcribe --from-stdin
+```
 
-# Pipe audio in, pipe text out
+Pipe audio in, pipe text out:
+
+```sh
 ffmpeg -i talk.mp4 -f wav - | assembly transcribe -
-git log --oneline -30 | assembly llm "write release notes grouped by feature/fix"
+```
 
-# Print the equivalent Python SDK script instead of running
+Prompt the LLM Gateway over any text:
+
+```sh
+git log --oneline -30 | assembly llm "write release notes grouped by feature/fix"
+```
+
+Print the equivalent Python SDK script instead of running:
+
+```sh
 assembly transcribe --sample --speaker-labels --show-code
 ```
 
@@ -123,10 +174,22 @@ assembly transcribe --sample --speaker-labels --show-code
 
 This project uses [uv](https://docs.astral.sh/uv/):
 
+Create/refresh the venv:
+
 ```sh
-uv sync               # create/refresh the venv
-uv run assembly --help     # run the CLI from the locked environment
-./scripts/check.sh    # the full gate CI runs
+uv sync
+```
+
+Run the CLI from the locked environment:
+
+```sh
+uv run assembly --help
+```
+
+Run the full gate CI runs:
+
+```sh
+./scripts/check.sh
 ```
 
 See [AGENTS.md](AGENTS.md) for development conventions and architecture notes.

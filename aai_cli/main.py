@@ -26,6 +26,7 @@ from aai_cli.commands import (
     deploy,
     dev,
     doctor,
+    evaluate,
     init,
     keys,
     llm,
@@ -64,6 +65,7 @@ _COMMAND_ORDER = (
     "agent",
     "speak",
     "llm",
+    "eval",
     # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
@@ -319,6 +321,7 @@ app.add_typer(audit.app)  # audit
 app.add_typer(agent.app)
 app.add_typer(speak.app)
 app.add_typer(llm.app)
+app.add_typer(evaluate.app)  # eval
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami
 app.add_typer(doctor.app)
@@ -330,6 +333,20 @@ app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(telemetry.app, name="telemetry", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
+
+
+@app.command(
+    name="_update-check",
+    hidden=True,
+    epilog=examples_epilog(
+        [("Internal plumbing, spawned by the CLI itself", "assembly _update-check")]
+    ),
+)
+def update_check_command() -> None:
+    """Internal: refresh the cached latest version (spawned detached). Hidden."""
+    from aai_cli import update_check
+
+    update_check.fetch_and_cache()
 
 
 def run() -> None:

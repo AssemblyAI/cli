@@ -1,0 +1,259 @@
+"""Local-manifest loading for `assembly eval` (`aai_cli.eval_data`).
+
+Runs against real temp files; the Hugging Face paths live in
+test_eval_data_hf.py.
+"""
+
+import dataclasses
+import json
+
+import pytest
+
+from aai_cli import der, eval_data
+from aai_cli.errors import CLIError, UsageError
+
+# ---------------------------------------------------------------- local manifests
+
+
+def _assign(obj, attribute, value):
+    setattr(obj, attribute, value)
+
+
+def test_loaded_dataset_and_items_are_immutable(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,hello\n", encoding="utf-8")
+    data = eval_data.load(str(manifest), limit=10)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _assign(data, "label", "x")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _assign(data.items[0], "reference", "x")
+
+
+def _write_audio(directory, *names):
+    for name in names:
+        (directory / name).write_bytes(b"fake-audio")
+
+
+def _write_jsonl(path, rows):
+    path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+
+def test_csv_manifest_loads_items(tmp_path):
+    _write_audio(tmp_path, "a.wav", "b.wav")
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text("audio,text\na.wav,hello there\nb.wav,goodbye now\n", encoding="utf-8")
+    data = eval_data.load(str(manifest), limit=10)
+    assert data.label == "manifest.csv"
+    assert [item.item_id for item in data.items] == ["a.wav", "b.wav"]
+    assert data.items[0].audio == str(tmp_path / "a.wav")
+    assert data.items[0].reference == "hello there"
+    assert data.items[0].turns is None
+
+
+def test_manifest_respects_limit(tmp_path):
+    _write_audio(tmp_path, "a.wav", "b.wav", "c.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,x\nb.wav,y\nc.wav,z\n", encoding="utf-8")
+    data = eval_data.load(str(manifest), limit=2)
+    assert [item.item_id for item in data.items] == ["a.wav", "b.wav"]
+
+
+def test_jsonl_manifest_with_url_audio_and_nemo_columns(tmp_path):
+    manifest = tmp_path / "m.jsonl"
+    _write_jsonl(
+        manifest,
+        [{"audio_filepath": "https://cdn.example/a.mp3", "transcript": "hello world"}],
+    )
+    data = eval_data.load(str(manifest), limit=10)
+    # URLs pass through untouched (no local-file check) and NeMo-style column
+    # names auto-detect.
+    assert data.items[0].audio == "https://cdn.example/a.mp3"
+    assert data.items[0].item_id == "a.mp3"
+    assert data.items[0].reference == "hello world"
+
+
+def test_jsonl_manifest_skips_blank_lines(tmp_path):
+    _write_audio(tmp_path, "a.wav", "b.wav")
+    manifest = tmp_path / "m.jsonl"
+    manifest.write_text(
+        '{"audio": "a.wav", "text": "x"}\n\n{"audio": "b.wav", "text": "y"}\n', encoding="utf-8"
+    )
+    assert len(eval_data.load(str(manifest), limit=10).items) == 2
+
+
+def test_manifest_missing_file_errors_before_any_network(tmp_path):
+    with pytest.raises(CLIError) as exc:
+        eval_data.load(str(tmp_path / "missing.csv"), limit=10)
+    assert exc.value.error_type == "file_not_found"
+    assert exc.value.exit_code == 2
+    assert "missing.csv" in exc.value.message
+
+
+def test_manifest_audio_file_missing_names_resolved_path(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\nnope.wav,hello\n", encoding="utf-8")
+    with pytest.raises(CLIError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert exc.value.error_type == "file_not_found"
+    assert exc.value.exit_code == 2
+    assert str(tmp_path / "nope.wav") in exc.value.message
+    assert exc.value.suggestion is not None and str(tmp_path) in exc.value.suggestion
+
+
+def test_manifest_row_without_audio_value_reports_row_number(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,hello\n,world\n", encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "row 2" in exc.value.message
+
+
+def test_manifest_with_no_recognized_text_column_suggests_flag(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,ref\na.wav,hello\n", encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    # The message names the conventional column (the first auto-detect candidate).
+    assert "Could not find a text column" in exc.value.message
+    assert "audio, ref" in exc.value.message
+    assert exc.value.suggestion is not None and "--text-column" in exc.value.suggestion
+
+
+def test_manifest_explicit_text_column_is_used(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,ref\na.wav,hello there\n", encoding="utf-8")
+    data = eval_data.load(str(manifest), text_column="ref", limit=10)
+    assert data.items[0].reference == "hello there"
+
+
+def test_manifest_explicit_text_column_missing_errors(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,hello\n", encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), text_column="ref", limit=10)
+    assert "'ref'" in exc.value.message
+
+
+def test_manifest_empty_reference_rejected(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,...\n", encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "empty reference" in exc.value.message
+
+
+def test_manifest_with_no_rows_errors(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\n", encoding="utf-8")
+    with pytest.raises(UsageError, match="no rows"):
+        eval_data.load(str(manifest), limit=10)
+
+
+def test_jsonl_invalid_json_line_reports_line_number(tmp_path):
+    manifest = tmp_path / "m.jsonl"
+    manifest.write_text('{"audio": "a.wav", "text": "x"}\nnot-json\n', encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "line 2" in exc.value.message
+
+
+def test_jsonl_non_object_line_rejected(tmp_path):
+    manifest = tmp_path / "m.jsonl"
+    manifest.write_text('["audio", "text"]\n', encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "line 1 is not a JSON object" in exc.value.message
+
+
+def test_split_and_subset_rejected_for_manifests(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("audio,text\na.wav,hello\n", encoding="utf-8")
+    with pytest.raises(UsageError, match="local manifests"):
+        eval_data.load(str(manifest), split="test", limit=10)
+    with pytest.raises(UsageError, match="local manifests"):
+        eval_data.load(str(manifest), subset="default", limit=10)
+
+
+# ------------------------------------------------- manifests with speaker turns
+
+
+def _speaker_row(audio, **extra):
+    return {
+        "audio": audio,
+        "speakers": ["alice", "bob"],
+        "timestamps_start": [0.0, 10.0],
+        "timestamps_end": [10.0, 20.0],
+        **extra,
+    }
+
+
+def test_speaker_manifest_loads_turns_without_text(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.jsonl"
+    _write_jsonl(manifest, [_speaker_row("a.wav")])
+    data = eval_data.load(str(manifest), limit=10, with_speakers=True)
+    assert data.items[0].reference is None
+    assert data.items[0].turns == [
+        der.Turn(speaker="alice", start=0.0, end=10.0),
+        der.Turn(speaker="bob", start=10.0, end=20.0),
+    ]
+
+
+def test_speaker_manifest_with_text_scores_both(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.jsonl"
+    _write_jsonl(manifest, [_speaker_row("a.wav", text="hello world")])
+    data = eval_data.load(str(manifest), limit=10, with_speakers=True)
+    assert data.items[0].reference == "hello world"
+    assert data.items[0].turns is not None
+
+
+def test_speaker_manifest_with_explicit_text_column(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.jsonl"
+    _write_jsonl(manifest, [_speaker_row("a.wav", ref="hello world")])
+    data = eval_data.load(str(manifest), text_column="ref", limit=10, with_speakers=True)
+    assert data.items[0].reference == "hello world"
+
+
+def test_speakers_requested_but_columns_missing(tmp_path):
+    manifest = tmp_path / "m.jsonl"
+    _write_jsonl(manifest, [{"audio": "a.wav", "text": "x", "speakers": ["a"]}])
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10, with_speakers=True)
+    assert "missing: timestamps_start, timestamps_end" in exc.value.message
+    assert exc.value.suggestion is not None and ".jsonl" in exc.value.suggestion
+
+
+def test_speaker_arrays_of_unequal_length_rejected(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.jsonl"
+    row = _speaker_row("a.wav")
+    row["timestamps_end"] = [10.0]
+    _write_jsonl(manifest, [row])
+    with pytest.raises(UsageError, match="equal-length"):
+        eval_data.load(str(manifest), limit=10, with_speakers=True)
+
+
+def test_empty_speaker_arrays_rejected(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.jsonl"
+    row = {"audio": "a.wav", "speakers": [], "timestamps_start": [], "timestamps_end": []}
+    _write_jsonl(manifest, [row])
+    with pytest.raises(UsageError, match="non-empty"):
+        eval_data.load(str(manifest), limit=10, with_speakers=True)
+
+
+def test_csv_cells_cannot_hold_speaker_arrays(tmp_path):
+    _write_audio(tmp_path, "a.wav")
+    manifest = tmp_path / "m.csv"
+    manifest.write_text(
+        'audio,speakers,timestamps_start,timestamps_end\na.wav,"[""alice""]","[0.0]","[10.0]"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(UsageError, match=r"equal-length|non-empty"):
+        eval_data.load(str(manifest), limit=10, with_speakers=True)
