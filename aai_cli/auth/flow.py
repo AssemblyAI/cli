@@ -80,7 +80,7 @@ def _parse[T](adapter: TypeAdapter[T], data: object) -> T:
         return adapter.validate_python(data)
     except ValidationError as exc:
         raise APIError(
-            "Login failed: the server returned an unexpected response. Run 'aai login' again."
+            "Login failed: the server returned an unexpected response. Run 'assembly login' again."
         ) from exc
 
 
@@ -119,7 +119,7 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     if not projects:
         raise APIError(
             "Your account has no project to create an API key in.",
-            suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
+            suggestion="Create a project in the AssemblyAI dashboard, then run 'assembly login' again.",
         )
     for entry in projects:
         for token in entry.tokens:
@@ -129,7 +129,7 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     if project is None:
         raise APIError(
             "Your account has no project to create an API key in.",
-            suggestion="Create a project in the AssemblyAI dashboard, then run 'aai login' again.",
+            suggestion="Create a project in the AssemblyAI dashboard, then run 'assembly login' again.",
         )
     created = ams.create_token(account_id, project.id, endpoints.CLI_TOKEN_NAME, session_jwt)
     return _parse(_CREATED_TOKEN, created).api_key
@@ -144,26 +144,26 @@ def run_login_flow() -> LoginResult:
     _open_browser(discovery.build_start_url())
     output.error_console.print(
         "[aai.muted]Waiting up to 2 minutes for you to finish signing in…[/aai.muted]\n"
-        "[aai.muted]No browser here? Run 'aai login --api-key <KEY>' instead.[/aai.muted]"
+        "[aai.muted]No browser here? Run 'assembly login --api-key <KEY>' instead.[/aai.muted]"
     )
     result = capture.wait()
 
     if result.error == "timeout":
         raise NotAuthenticated(
             "Login timed out waiting for the browser.",
-            suggestion="Run 'aai login' again, or use 'aai login --api-key <KEY>'.",
+            suggestion="Run 'assembly login' again, or use 'assembly login --api-key <KEY>'.",
         )
     if result.token_type != "discovery_oauth" or not result.token:  # noqa: S105
         raise APIError(
             "Login did not return a valid OAuth token.",
-            suggestion="Run 'aai login' again.",
+            suggestion="Run 'assembly login' again.",
         )
 
     disc = _parse(_DISCOVERY, ams.discover(result.token))
     if not disc.organizations:
         raise APIError(
             "Signed in, but this identity has no AssemblyAI account yet. "
-            f"Create one at {endpoints.signup_url()}, then run 'aai login' again."
+            f"Create one at {endpoints.signup_url()}, then run 'assembly login' again."
         )
     org = disc.organizations[0]
     if len(disc.organizations) > 1:

@@ -9,10 +9,10 @@ HTML/CSS/JS with no frontend build step.
 ## Run locally
 
 ```sh
-aai dev   # opens http://localhost:3000 (allow microphone access)
+assembly dev   # opens http://localhost:3000 (allow microphone access)
 ```
 
-`ASSEMBLYAI_API_KEY` is read from `.env` (created for you if you ran `aai init`).
+`ASSEMBLYAI_API_KEY` is read from `.env` (created for you if you ran `assembly init`).
 
 ## Deploy to Vercel
 
@@ -36,7 +36,7 @@ uvicorn api.index:app --host 0.0.0.0 --port $PORT
 
 On Render, create a **Web Service** connected to your Git repo — it installs
 `requirements.txt` and starts via the `Procfile`. (There's no local-directory
-deploy; `aai deploy` covers Vercel/Railway/Fly.)
+deploy; `assembly deploy` covers Vercel/Railway/Fly.)
 
 ## Ideas to extend
 

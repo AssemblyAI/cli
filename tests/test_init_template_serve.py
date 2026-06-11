@@ -1,4 +1,4 @@
-"""Boot each ``aai init`` template's FastAPI app in-process and drive every route.
+"""Boot each ``assembly init`` template's FastAPI app in-process and drive every route.
 
 The static contract gate (``scripts/template_contract_gate.py``) boots the real
 Procfile process and curls ``GET /`` — but only ``/``. The ``install`` test resolves
@@ -98,7 +98,7 @@ def test_serves_root_and_static_assets(template: str) -> None:
 
 
 def test_app_applies_custom_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    # `aai init` writes ASSEMBLYAI_BASE_URL when the key was minted for a non-prod
+    # `assembly init` writes ASSEMBLYAI_BASE_URL when the key was minted for a non-prod
     # environment; the app must point the SDK at it. isolate_env strips it by default,
     # so set it here to exercise the import-time branch that applies it.
     monkeypatch.setenv("ASSEMBLYAI_BASE_URL", "https://api.example.test")

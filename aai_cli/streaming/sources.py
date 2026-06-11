@@ -157,7 +157,7 @@ class StdinSource:
     """Streams raw PCM16 mono audio piped on stdin.
 
     Expects signed 16-bit little-endian mono PCM at ``sample_rate`` (default 16 kHz):
-    ``ffmpeg -i in.mp4 -f s16le -acodec pcm_s16le -ac 1 -ar 16000 - | aai stream -``.
+    ``ffmpeg -i in.mp4 -f s16le -acodec pcm_s16le -ac 1 -ar 16000 - | assembly stream -``.
     """
 
     def __init__(self, *, sample_rate: int = TARGET_RATE, stdin: Any = None) -> None:

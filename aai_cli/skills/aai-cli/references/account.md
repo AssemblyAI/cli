@@ -4,7 +4,7 @@ Commands for authentication and read-only account queries. Auth rules and
 environment precedence live in `SKILL.md`; the notes below are per-command.
 All commands accept `--json`.
 
-## `aai login` — authenticate
+## `assembly login` — authenticate
 
 Opens a browser OAuth flow and stores the resulting CLI API key in the OS
 keyring, bound to the active `--env`; pass `--api-key` to authenticate
@@ -18,11 +18,11 @@ Key options:
 Examples:
 
 ```bash
-aai login
-aai login --api-key sk_...
+assembly login
+assembly login --api-key sk_...
 ```
 
-## `aai logout` — clear stored credentials
+## `assembly logout` — clear stored credentials
 
 Removes stored credentials for the active profile from the OS keyring.
 
@@ -33,10 +33,10 @@ Key options:
 Examples:
 
 ```bash
-aai logout
+assembly logout
 ```
 
-## `aai whoami` — show active profile
+## `assembly whoami` — show active profile
 
 Reports the active profile name and whether its stored key is currently usable
 (i.e. validates against the active environment).
@@ -48,10 +48,10 @@ Key options:
 Examples:
 
 ```bash
-aai whoami
+assembly whoami
 ```
 
-## `aai balance` — account balance
+## `assembly balance` — account balance
 
 Read-only query that shows your remaining account balance.
 
@@ -62,10 +62,10 @@ Key options:
 Examples:
 
 ```bash
-aai balance
+assembly balance
 ```
 
-## `aai usage` — usage over a date range
+## `assembly usage` — usage over a date range
 
 Read-only query that shows API usage; defaults to the last 30 days.
 
@@ -80,11 +80,11 @@ Key options:
 Examples:
 
 ```bash
-aai usage
-aai usage --start 2026-05-01 --end 2026-06-01
+assembly usage
+assembly usage --start 2026-05-01 --end 2026-06-01
 ```
 
-## `aai limits` — rate limits
+## `assembly limits` — rate limits
 
 Read-only query that shows your account's rate limits per service.
 
@@ -95,15 +95,15 @@ Key options:
 Examples:
 
 ```bash
-aai limits
+assembly limits
 ```
 
-## `aai keys` — manage API keys
+## `assembly keys` — manage API keys
 
 Sub-app for listing, creating, and renaming AssemblyAI API keys; keys are shown
 masked in list output.
 
-### `aai keys list`
+### `assembly keys list`
 
 List all API keys across your projects (values masked).
 
@@ -114,11 +114,11 @@ Key options:
 Examples:
 
 ```bash
-aai keys list
-aai keys list --json
+assembly keys list
+assembly keys list --json
 ```
 
-### `aai keys create`
+### `assembly keys create`
 
 Create a new API key; the full key value is printed once — copy it immediately.
 
@@ -132,13 +132,13 @@ Key options:
 Examples:
 
 ```bash
-aai keys create --name ci-pipeline
-aai keys create --name prod --project 7
+assembly keys create --name ci-pipeline
+assembly keys create --name prod --project 7
 ```
 
-### `aai keys rename TOKEN_ID NEW_NAME`
+### `assembly keys rename TOKEN_ID NEW_NAME`
 
-Rename (relabel) an existing API key; use `aai keys list` to find the key id.
+Rename (relabel) an existing API key; use `assembly keys list` to find the key id.
 
 Key options:
 
@@ -147,10 +147,10 @@ Key options:
 Examples:
 
 ```bash
-aai keys rename 123 "prod"
+assembly keys rename 123 "prod"
 ```
 
-## `aai audit` — audit log
+## `assembly audit` — audit log
 
 Read-only query that lists recent audit-log entries for the account; login
 events are omitted by default.
@@ -166,7 +166,7 @@ Key options:
 Examples:
 
 ```bash
-aai audit --limit 20
-aai audit --include-logins
-aai audit --action token.create
+assembly audit --limit 20
+assembly audit --include-logins
+assembly audit --action token.create
 ```

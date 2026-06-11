@@ -63,14 +63,14 @@ def _validate_speakers_expected(merged: dict[str, object]) -> None:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Transcribe a local file", "aai transcribe call.mp3"),
-            ("Try it with the hosted sample", "aai transcribe --sample"),
-            ("Transcribe a YouTube video", "aai transcribe https://youtu.be/dtp6b76pMak"),
-            ("Transcribe a podcast episode page", 'aai transcribe "https://podcasts.apple.com/…"'),
-            ("Label who said what", "aai transcribe call.mp3 --speaker-labels"),
-            ("Redact PII for compliance", "aai transcribe call.mp3 --redact-pii"),
-            ("Summarize a recording", "aai transcribe call.mp3 --summarization"),
-            ("Ask about the transcript", 'aai transcribe call.mp3 --llm "List the action items"'),
+            ("Transcribe a local file", "assembly transcribe call.mp3"),
+            ("Try it with the hosted sample", "assembly transcribe --sample"),
+            ("Transcribe a YouTube video", "assembly transcribe https://youtu.be/dtp6b76pMak"),
+            ("Transcribe a podcast page", 'assembly transcribe "https://podcasts.apple.com/…"'),
+            ("Label who said what", "assembly transcribe call.mp3 --speaker-labels"),
+            ("Redact PII for compliance", "assembly transcribe call.mp3 --redact-pii"),
+            ("Summarize a recording", "assembly transcribe call.mp3 --summarization"),
+            ("Ask about the transcript", 'assembly transcribe call.mp3 --llm "List action items"'),
         ]
     ),
 )
@@ -360,7 +360,7 @@ def transcribe(
 ) -> None:
     """Transcribe an audio file, URL, or YouTube/podcast link.
 
-    Quickest start: aai transcribe call.mp3 (or --sample for the hosted demo).
+    Quickest start: assembly transcribe call.mp3 (or --sample for the hosted demo).
 
     Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
     URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
@@ -421,7 +421,7 @@ def transcribe(
             # --out captures the transcript itself; an LLM transform is a separate step.
             raise UsageError(
                 "--out can't be combined with --llm.",
-                suggestion='Pipe the transform instead, e.g. -o text | aai llm -f "…".',
+                suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
             )
 
         merged = config_builder.merge_transcribe_config(

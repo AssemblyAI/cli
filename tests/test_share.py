@@ -139,7 +139,7 @@ def test_share_missing_procfile_errors(tmp_path, monkeypatch):
     _stub(monkeypatch)
     result = runner.invoke(app, ["share"])
     assert result.exit_code == 1
-    assert "aai init" in result.output
+    assert "assembly init" in result.output
 
 
 def test_share_install_failure_exits(tmp_path, monkeypatch):

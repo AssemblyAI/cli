@@ -104,7 +104,7 @@ def test_usage_renders_table_human(monkeypatch, mocker):
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
     result = runner.invoke(app, ["usage"])
     assert result.exit_code == 0
-    # price (cents) is summed per window and shown as dollars, mirroring `aai balance`.
+    # price (cents) is summed per window and shown as dollars, mirroring `assembly balance`.
     assert "2026-05-01" in result.output and "$12.50" in result.output
 
 
@@ -256,7 +256,7 @@ def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
         ]
     }
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
-    # The primary flag name is --include-zero (matching --include-logins on `aai audit`).
+    # The primary flag name is --include-zero (matching --include-logins on `assembly audit`).
     result = runner.invoke(app, ["usage", "--include-zero"])
     assert result.exit_code == 0
     assert "2026-01-01" in result.output

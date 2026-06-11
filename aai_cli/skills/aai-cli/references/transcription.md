@@ -4,14 +4,14 @@ Four commands. All accept `--json` (auto-enabled when piped) and `-o/--output`
 to print a single field. `transcribe`, `stream`, and `agent` accept
 `--show-code` to print equivalent Python SDK code without calling the API.
 
-## `aai transcribe [SOURCE]` — file / URL / YouTube / podcast page
+## `assembly transcribe [SOURCE]` — file / URL / YouTube / podcast page
 
 `SOURCE` is a local file path, public URL, or a media-page URL yt-dlp can extract
 (YouTube, Apple Podcasts, Spreaker, SoundCloud, …) — those are downloaded first.
 Use `--sample` for the hosted `wildfires.mp3`. Analysis results (summary,
 chapters, sentiment, …) render automatically in human mode.
 
-High-value flags (run `aai transcribe --help` for the full set):
+High-value flags (run `assembly transcribe --help` for the full set):
 
 - Model/language: `--speech-model` (best, nano, slam-1, universal),
   `--language-code en_us`, `--language-detection`.
@@ -30,20 +30,20 @@ High-value flags (run `aai transcribe --help` for the full set):
 Examples:
 
 ```bash
-aai transcribe call.mp3
-aai transcribe --sample
-aai transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
-aai transcribe call.mp3 -o text
-aai transcribe call.mp3 --show-code
+assembly transcribe call.mp3
+assembly transcribe --sample
+assembly transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
+assembly transcribe call.mp3 -o text
+assembly transcribe call.mp3 --show-code
 ```
 
-## `aai stream [SOURCE]` — live real-time transcription
+## `assembly stream [SOURCE]` — live real-time transcription
 
 Omit `SOURCE` to use the microphone; pass a file/URL/media page to stream that, or
 `--sample`. macOS can capture system audio with `--system-audio` (mic + system)
 or `--system-audio-only`.
 
-High-value flags (run `aai stream --help` for the full set):
+High-value flags (run `assembly stream --help` for the full set):
 
 - Capture: `--device N`, `--sample-rate HZ`, `--encoding pcm_s16le|pcm_mulaw`.
 - Model/turns: `--speech-model` (default `u3-rt-pro`), `--format-turns`,
@@ -58,21 +58,21 @@ High-value flags (run `aai stream --help` for the full set):
 Examples:
 
 ```bash
-aai stream
-aai stream --system-audio
-aai stream --sample
-aai stream --llm "summarize action items"
-aai stream -o text                 # finalized turns as plain lines, pipe-friendly
+assembly stream
+assembly stream --system-audio
+assembly stream --sample
+assembly stream --llm "summarize action items"
+assembly stream -o text                 # finalized turns as plain lines, pipe-friendly
 ```
 
-## `aai agent [SOURCE]` — full-duplex voice agent
+## `assembly agent [SOURCE]` — full-duplex voice agent
 
 Two-way voice conversation (mic in, TTS out). Pass a file/URL or `--sample` to
 speak a recorded clip instead of the mic; the session then ends after the reply.
 
-> **`aai agent` only *runs* a live conversation in the terminal — it does not
+> **`assembly agent` only *runs* a live conversation in the terminal — it does not
 > create any code or project.** If the goal is to *build* a voice-agent app,
-> use `aai init` with the `voice-agent` template (see `setup.md`), not this
+> use `assembly init` with the `voice-agent` template (see `setup.md`), not this
 > command.
 
 High-value flags:
@@ -84,13 +84,13 @@ High-value flags:
 Examples:
 
 ```bash
-aai agent
-aai agent --voice james --greeting "Hi there"
-aai agent --list-voices
-aai agent --show-code
+assembly agent
+assembly agent --voice james --greeting "Hi there"
+assembly agent --list-voices
+assembly agent --show-code
 ```
 
-## `aai llm [PROMPT]` — LLM Gateway
+## `assembly llm [PROMPT]` — LLM Gateway
 
 Send a prompt to the LLM Gateway. With `--transcript-id ID` the transcript's
 text is injected server-side so you can ask questions about a past
@@ -107,8 +107,8 @@ High-value flags:
 Examples:
 
 ```bash
-aai llm "summarize" --transcript-id 5551234-abcd
-echo "meeting notes" | aai llm "turn into action items"
-aai stream -o text | aai llm -f "summarize action items as I talk"
-aai llm --list-models
+assembly llm "summarize" --transcript-id 5551234-abcd
+echo "meeting notes" | assembly llm "turn into action items"
+assembly stream -o text | assembly llm -f "summarize action items as I talk"
+assembly llm --list-models
 ```

@@ -76,7 +76,7 @@ class VoiceAgentSession:
         self.renderer = renderer
         self.player = player
         self.full_duplex = full_duplex
-        # File-driven runs (`aai agent <file>`) stop after the agent's first reply
+        # File-driven runs (`assembly agent <file>`) stop after the agent's first reply
         # to the spoken input, so the process exits instead of waiting forever.
         self.exit_after_reply = exit_after_reply
         self.ready_event = ready_event
@@ -159,7 +159,7 @@ class VoiceAgentSession:
             # auto-login must not retry when the key came from ASSEMBLYAI_API_KEY.
             raise NotAuthenticated(
                 f"Voice agent rejected the connection: {message}",
-                suggestion="Run 'aai login' with a valid key, or set ASSEMBLYAI_API_KEY.",
+                suggestion="Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY.",
                 rejected_key=True,
             )
         raise APIError(f"Voice agent error ({code}): {message}")

@@ -15,7 +15,7 @@ from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import procfile
 
-# Flattened single-command sub-typer (same pattern as `aai dev`).
+# Flattened single-command sub-typer (same pattern as `assembly dev`).
 app = typer.Typer()
 
 
@@ -112,8 +112,8 @@ def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
             "--prod is only supported for Vercel deploys.",
             suggestion=f"Drop --prod, or drop {target.flag} to deploy to Vercel.",
         )
-    # Same not-a-project guard as `aai dev`/`aai share`, checked before CLI presence
-    # so an empty directory says "run `aai init`", not "install the Vercel CLI".
+    # Same not-a-project guard as `assembly dev`/`assembly share`, checked before CLI presence
+    # so an empty directory says "run `assembly init`", not "install the Vercel CLI".
     procfile.require_procfile(Path.cwd())
     _require_cli(target)
     if not _confirmed(target, assume_yes=assume_yes):
@@ -130,10 +130,10 @@ def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
     rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
-            ("Deploy a preview to Vercel (asks first)", "aai deploy"),
-            ("Deploy to production on Vercel", "aai deploy --prod --yes"),
-            ("Deploy to Railway", "aai deploy --railway"),
-            ("Deploy to Fly.io", "aai deploy --fly"),
+            ("Deploy a preview to Vercel (asks first)", "assembly deploy"),
+            ("Deploy to production on Vercel", "assembly deploy --prod --yes"),
+            ("Deploy to Railway", "assembly deploy --railway"),
+            ("Deploy to Fly.io", "assembly deploy --fly"),
         ]
     ),
 )

@@ -34,15 +34,15 @@ def _session_rows(value: object) -> list[dict[str, object]]:
     name="list",
     epilog=examples_epilog(
         [
-            ("List recent streaming sessions", "aai sessions list"),
-            ("Find failed sessions", "aai sessions list --status error"),
+            ("List recent streaming sessions", "assembly sessions list"),
+            ("Find failed sessions", "assembly sessions list --status error"),
             (
                 "Inspect the most recent session",
-                "aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')",
+                "assembly sessions get $(assembly sessions list --json | jq -r '.[0].session_id')",
             ),
             (
                 "Total audio across recent sessions (seconds)",
-                "aai sessions list --json | jq '[.[].audio_duration_sec] | add'",
+                "assembly sessions list --json | jq '[.[].audio_duration_sec] | add'",
             ),
         ]
     ),
@@ -90,11 +90,11 @@ def list_(
 @app.command(
     epilog=examples_epilog(
         [
-            ("Show one session's details", "aai sessions get sess_5551234"),
-            ("Raw JSON for one session", "aai sessions get sess_5551234 --json"),
+            ("Show one session's details", "assembly sessions get sess_5551234"),
+            ("Raw JSON for one session", "assembly sessions get sess_5551234 --json"),
             (
                 "Drill into the latest session",
-                "aai sessions get $(aai sessions list --json | jq -r '.[0].session_id')",
+                "assembly sessions get $(assembly sessions list --json | jq -r '.[0].session_id')",
             ),
         ]
     )

@@ -14,7 +14,7 @@ from aai_cli.tts import audio, dialogue, session
 app = typer.Typer()
 
 # The streaming-TTS reference client defaults to the PocketTTS "jane" voice and
-# English, so the CLI sends the same and a bare `aai speak` works out of the box.
+# English, so the CLI sends the same and a bare `assembly speak` works out of the box.
 # Override either with --voice/--language.
 DEFAULT_VOICE = "jane"
 DEFAULT_LANGUAGE = "English"
@@ -23,7 +23,7 @@ DEFAULT_LANGUAGE = "English"
 def _read_text(text: str | None) -> str:
     """The text to speak: the non-blank argument, or piped stdin when the argument
     is omitted entirely. A *blank* argument (e.g. "") is a usage error, never a
-    silent fall-through to stdin — so `aai speak "$MSG"` with an empty MSG fails
+    silent fall-through to stdin — so `assembly speak "$MSG"` with an empty MSG fails
     fast instead of consuming whatever happens to be on the pipe."""
     if text is not None and text.strip():
         return text
@@ -34,7 +34,7 @@ def _read_text(text: str | None) -> str:
             return piped
     raise UsageError(
         "No text to speak.",
-        suggestion='Pass text as an argument: aai speak "Hello" — or pipe it via stdin.',
+        suggestion='Pass text as an argument: assembly speak "Hello" — or pipe it via stdin.',
     )
 
 
@@ -169,22 +169,22 @@ def _speak_dialogue(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Speak text aloud (sandbox only)", 'aai speak "Hello there, friend." --sandbox'),
+            ("Speak text aloud (sandbox only)", 'assembly speak "Hello there, friend." --sandbox'),
             (
                 "Pick a voice and language",
-                'aai speak "Bonjour" --voice jane --language French --sandbox',
+                'assembly speak "Bonjour" --voice jane --language French --sandbox',
             ),
             (
                 "Speak a diarized transcript, one voice per speaker",
-                "aai transcribe meeting.mp3 --speaker-labels | aai speak --sandbox",
+                "assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox",
             ),
             (
                 "Override a speaker's voice",
-                "… | aai speak --voice A=vera --voice B=paul --sandbox",
+                "… | assembly speak --voice A=vera --voice B=paul --sandbox",
             ),
             (
                 "Save to a WAV instead of playing",
-                'aai speak "Hello" --out /tmp/hello.wav --sandbox',
+                'assembly speak "Hello" --out /tmp/hello.wav --sandbox',
             ),
         ]
     ),
@@ -209,7 +209,7 @@ def speak(
     """Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
 
     Plays the audio through your speakers by default, or writes a WAV with --out.
-    Speaker-labeled input (from 'aai transcribe --speaker-labels') is detected
+    Speaker-labeled input (from 'assembly transcribe --speaker-labels') is detected
     automatically: the labels are stripped and each speaker gets a different
     voice. This feature only exists in the sandbox today — run it with --sandbox.
     """
@@ -217,7 +217,7 @@ def speak(
     def body(state: AppState, json_mode: bool) -> None:
         if not session.is_available():
             raise CLIError(
-                "aai speak is only available in the sandbox.",
+                "assembly speak is only available in the sandbox.",
                 error_type="unsupported_environment",
                 exit_code=2,
                 suggestion="Re-run with --sandbox (or --env sandbox000).",

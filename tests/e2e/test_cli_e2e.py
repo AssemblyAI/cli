@@ -1,4 +1,4 @@
-"""End-to-end tests that drive the real `aai` CLI against the live AssemblyAI API.
+"""End-to-end tests that drive the real `assembly` CLI against the live AssemblyAI API.
 
 Committed speech WAV fixtures are fed through the CLI as a subprocess so the
 binary, argument parsing, auth, audio decoding, and network path are all

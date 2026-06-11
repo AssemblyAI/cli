@@ -53,7 +53,7 @@ Repository = "https://github.com/AssemblyAI/cli"
 Issues = "https://github.com/AssemblyAI/cli/issues"
 
 [project.scripts]
-aai = "aai_cli.main:run"
+assembly = "aai_cli.main:run"
 
 # PEP 735 dependency group (not a [project] extra). uv installs this group by
 # default for `uv run`/`uv sync` (see [tool.uv] default-groups below), so the
@@ -137,7 +137,7 @@ filterwarnings = [
 ]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY; skip otherwise)",
-    "install_script: real install of a locally-built wheel via install.sh (pipx / pip --user) and `uv tool install`; asserts `aai` runs (slow; needs network + uv/pipx; skip otherwise)",
+    "install_script: real install of a locally-built wheel via install.sh (pipx / pip --user) and `uv tool install`; asserts `assembly` runs (slow; needs network + uv/pipx; skip otherwise)",
     "install: install each init template's requirements.txt into a clean venv and import it (slow; needs network + uv; skip otherwise)",
 ]
 

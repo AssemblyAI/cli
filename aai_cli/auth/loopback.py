@@ -109,7 +109,7 @@ def start_capture() -> CallbackCapture:
         raise APIError(
             f"Could not start the login callback server on "
             f"{endpoints.LOOPBACK_HOST}:{port} ({exc}). "
-            "Close whatever is using that port and run 'aai login' again."
+            "Close whatever is using that port and run 'assembly login' again."
         ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

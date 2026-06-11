@@ -45,7 +45,7 @@ def test_web_argv_raises_without_procfile(tmp_path):
     with pytest.raises(CLIError) as exc:
         procfile.web_argv(tmp_path, env={})
     assert exc.value.error_type == "usage_error"
-    assert "aai init" in str(exc.value)
+    assert "assembly init" in str(exc.value)
 
 
 def test_web_argv_raises_without_web_line(tmp_path):
@@ -71,4 +71,4 @@ def test_require_procfile_raises_the_standard_not_a_project_error(tmp_path):
     assert exc.value.error_type == "usage_error"
     assert exc.value.exit_code == 1
     assert "No Procfile here (expected ./Procfile)" in exc.value.message
-    assert "aai init" in exc.value.message
+    assert "assembly init" in exc.value.message

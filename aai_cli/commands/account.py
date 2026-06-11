@@ -105,8 +105,8 @@ app = typer.Typer(help="Account billing, usage, and limits.")
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Show your remaining balance", "aai balance"),
-            ("Get the raw cents for scripting", "aai balance --json | jq '.balance_in_cents'"),
+            ("Show your remaining balance", "assembly balance"),
+            ("Get the raw cents for scripting", "assembly balance --json | jq '.balance_in_cents'"),
         ]
     ),
 )
@@ -133,12 +133,12 @@ def balance(
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Usage over the last 30 days", "aai usage"),
-            ("A specific date range", "aai usage --start 2026-05-01 --end 2026-06-01"),
-            ("Break spend down by month", "aai usage --window month"),
+            ("Usage over the last 30 days", "assembly usage"),
+            ("A specific date range", "assembly usage --start 2026-05-01 --end 2026-06-01"),
+            ("Break spend down by month", "assembly usage --window month"),
             (
                 "Total spend in cents for scripting",
-                "aai usage --json | jq '[.usage_items[].line_items[].price] | add'",
+                "assembly usage --json | jq '[.usage_items[].line_items[].price] | add'",
             ),
         ]
     ),
@@ -154,7 +154,7 @@ def usage(
         False,
         "--include-zero",
         "--all",
-        help="Include zero-usage windows (matches --include-logins on `aai audit`).",
+        help="Include zero-usage windows (matches --include-logins on `assembly audit`).",
     ),
     json_out: bool = options.json_option(),
 ) -> None:
@@ -225,8 +225,8 @@ def usage(
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Show rate limits per service", "aai limits"),
-            ("As JSON for scripting", "aai limits --json"),
+            ("Show rate limits per service", "assembly limits"),
+            ("As JSON for scripting", "assembly limits --json"),
         ]
     ),
 )

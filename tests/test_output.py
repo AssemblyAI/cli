@@ -12,7 +12,7 @@ def test_resolve_json_true_only_when_explicit():
 
 def test_resolve_json_false_when_not_explicit_even_off_tty(monkeypatch):
     # Human text is the default everywhere — piped, in CI, or under an agent — so a
-    # plain-text pipeline (`aai transcribe x | grep word`) keeps getting text, not JSON.
+    # plain-text pipeline (`assembly transcribe x | grep word`) keeps getting text, not JSON.
     monkeypatch.setattr(output, "_stdout_is_tty", lambda: False)
     monkeypatch.setenv("CI", "true")
     monkeypatch.setenv("CLAUDECODE", "1")

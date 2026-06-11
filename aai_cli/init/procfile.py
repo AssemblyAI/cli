@@ -28,14 +28,14 @@ def _expand(token: str, env: Mapping[str, str]) -> str:
 def require_procfile(target: Path) -> Path:
     """The project's Procfile path, or the standard not-a-project usage error.
 
-    This is how `aai dev`/`aai share`/`aai deploy` all detect they aren't sitting
+    This is how `assembly dev`/`assembly share`/`assembly deploy` all detect they aren't sitting
     inside a scaffolded project, so they fail with the same message.
     """
     procfile = target / "Procfile"
     if not procfile.exists():
         raise CLIError(
             "No Procfile here (expected ./Procfile). cd into a project created by "
-            "`aai init`, or run `aai init` to scaffold one.",
+            "`assembly init`, or run `assembly init` to scaffold one.",
             error_type="usage_error",
             exit_code=1,
         )
@@ -46,7 +46,7 @@ def web_argv(target: Path, *, env: Mapping[str, str]) -> list[str]:
     """The template Procfile's `web:` process, as an expanded argv.
 
     Raises a usage `CLIError` when there's no Procfile or no `web:` line — that's how
-    `aai dev` detects it isn't sitting inside a scaffolded project.
+    `assembly dev` detects it isn't sitting inside a scaffolded project.
     """
     procfile = require_procfile(target)
     for line in procfile.read_text().splitlines():

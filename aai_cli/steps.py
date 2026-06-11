@@ -18,7 +18,7 @@ class Step(TypedDict):
 def render_steps(items: list[Step], *, heading: str) -> str:
     """Render steps as a themed heading followed by one status-styled line each.
 
-    Shared by the multi-step commands (`aai init`, `aai setup`); each passes its
+    Shared by the multi-step commands (`assembly init`, `assembly setup`); each passes its
     own heading.
     """
     lines: list[str] = []

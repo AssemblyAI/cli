@@ -16,8 +16,8 @@ app = typer.Typer()
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Log in with your browser", "aai login"),
-            ("Log in non-interactively (CI)", "aai login --api-key sk_..."),
+            ("Log in with your browser", "assembly login"),
+            ("Log in non-interactively (CI)", "assembly login --api-key sk_..."),
         ]
     ),
 )
@@ -40,7 +40,7 @@ def login(
             raise UsageError(
                 "--api-key was given an empty value.",
                 suggestion=(
-                    "Pass a real key: aai login --api-key <KEY> "
+                    "Pass a real key: assembly login --api-key <KEY> "
                     "(check that the shell variable you expanded is set)."
                 ),
             )
@@ -66,13 +66,15 @@ def login(
         def render(_d: object) -> str:
             lines = [
                 output.success(f"Signed in as {escape(profile)} ({escape(env)})."),
-                output.hint("Run `aai onboard` to finish setup, or `aai transcribe <file>`."),
+                output.hint(
+                    "Run `assembly onboard` to finish setup, or `assembly transcribe <file>`."
+                ),
             ]
             if api_key_only:
                 lines.append(
                     output.hint(
                         "Account commands (keys/balance/usage/limits/audit) need "
-                        "`aai login` without --api-key."
+                        "`assembly login` without --api-key."
                     )
                 )
             return "\n".join(lines)
@@ -92,7 +94,7 @@ def login(
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Clear stored credentials for the active profile", "aai logout"),
+            ("Clear stored credentials for the active profile", "assembly logout"),
         ]
     ),
 )
@@ -111,7 +113,7 @@ def logout(
             lambda _d: (
                 output.success(f"Signed out of {escape(profile)}.")
                 + "\n"
-                + output.hint("Run `aai login` to sign back in.")
+                + output.hint("Run `assembly login` to sign back in.")
             ),
             json_mode=json_mode,
         )
@@ -124,7 +126,7 @@ def logout(
     rich_help_panel=help_panels.ACCOUNT,
     epilog=examples_epilog(
         [
-            ("Show the active profile and whether its key works", "aai whoami"),
+            ("Show the active profile and whether its key works", "assembly whoami"),
         ]
     ),
 )

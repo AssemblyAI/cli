@@ -12,7 +12,7 @@ from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import devserver, procfile, runner
 
-# Flattened single-command sub-typer (same pattern as `aai init`): one
+# Flattened single-command sub-typer (same pattern as `assembly init`): one
 # @app.command() registered via app.add_typer(dev.app) with no name.
 app = typer.Typer()
 
@@ -55,10 +55,10 @@ def run_dev(*, port: int, host: str, no_install: bool, no_open: bool, json_mode:
     rich_help_panel=help_panels.BUILD,
     epilog=examples_epilog(
         [
-            ("Launch the app in the current directory", "aai dev"),
-            ("Use a specific port", "aai dev --port 8000"),
-            ("Launch without opening a browser", "aai dev --no-open"),
-            ("Skip the dependency install step", "aai dev --no-install"),
+            ("Launch the app in the current directory", "assembly dev"),
+            ("Use a specific port", "assembly dev --port 8000"),
+            ("Launch without opening a browser", "assembly dev --no-open"),
+            ("Skip the dependency install step", "assembly dev --no-install"),
         ]
     ),
 )
@@ -78,7 +78,7 @@ def dev(
 ) -> None:
     """Launch the dev server for the app in the current directory.
 
-    Run this from inside a project created by `aai init`. It installs dependencies
+    Run this from inside a project created by `assembly init`. It installs dependencies
     if needed, then starts the FastAPI server with live reload and opens the browser.
     """
 

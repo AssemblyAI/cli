@@ -14,7 +14,7 @@ app = typer.Typer()
 
 _FOLLOW_STDIN_MESSAGE = (
     "--follow needs transcript text piped on stdin, e.g. "
-    '`aai stream -o text | aai llm -f "summarize action items as I talk"`.'
+    '`assembly stream -o text | assembly llm -f "summarize action items as I talk"`.'
 )
 
 
@@ -54,21 +54,21 @@ def _emit_model_list(_state: AppState, json_mode: bool) -> None:
         [
             (
                 "Ask about a past transcript",
-                'aai llm "summarize the key decisions" --transcript-id 5551234-abcd',
+                'assembly llm "summarize the key decisions" --transcript-id 5551234-abcd',
             ),
-            ("Pipe any text in", 'echo "meeting notes" | aai llm "turn into action items"'),
+            ("Pipe any text in", 'echo "meeting notes" | assembly llm "turn into action items"'),
             (
                 "Pick a model and add a system prompt",
-                'aai llm "draft a follow-up email" --model claude-opus-4-7 --system "Be concise."',
+                'assembly llm "draft a follow-up email" --model claude-opus-4-7 --system "Be concise."',
             ),
-            ("See available models", "aai llm --list-models"),
+            ("See available models", "assembly llm --list-models"),
         ]
     ),
 )
 def llm(
     ctx: typer.Context,
     prompt: str | None = typer.Argument(None, help="The prompt to send to the model."),
-    # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | aai llm "summarize"`).
+    # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | assembly llm "summarize"`).
     model: str = typer.Option(
         gateway.DEFAULT_MODEL,
         "--model",
@@ -84,7 +84,7 @@ def llm(
         "--follow",
         "-f",
         help="Re-run the prompt over a growing transcript piped on stdin, refreshing "
-        "the answer in place on every finalized turn (e.g. aai stream -o text | aai "
+        "the answer in place on every finalized turn (e.g. assembly stream -o text | assembly "
         'llm -f "summarize action items as I talk"). Ctrl-C to stop.',
     ),
     output_field: choices.TextOrJson | None = typer.Option(
@@ -102,7 +102,7 @@ def llm(
     """Send a prompt to AssemblyAI's LLM Gateway and print the response.
 
     With --transcript-id the transcript's text is injected server-side, so you
-    can ask questions about a past transcription (e.g. aai llm "summarize" --transcript-id ID).
+    can ask questions about a past transcription (e.g. assembly llm "summarize" --transcript-id ID).
     """
 
     if list_models:
@@ -133,7 +133,7 @@ def llm(
             except KeyboardInterrupt:
                 interrupted = True
         if not transcript and not interrupted:
-            # An empty pipe (`aai llm -f "…" </dev/null`) would otherwise exit 0
+            # An empty pipe (`assembly llm -f "…" </dev/null`) would otherwise exit 0
             # silently, having asked nothing.
             raise UsageError(_FOLLOW_STDIN_MESSAGE)
 
@@ -160,7 +160,7 @@ def llm(
         )
         content = gateway.content_of(response)
         if output_field == "text":
-            # Just the answer, raw — so `… | aai llm -o text "…" | next` composes cleanly.
+            # Just the answer, raw — so `… | assembly llm -o text "…" | next` composes cleanly.
             output.emit_text(content)
             return
         output.emit(

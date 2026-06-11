@@ -31,8 +31,8 @@ def loopback_port() -> int:
     Resolved lazily — never at import — and validated, so a malformed override
     surfaces as a clean CLIError on the login path instead of the raw ``ValueError``
     a module-level ``int(...)`` would raise. This module sits on the CLI's import hot
-    path, so that ValueError would otherwise crash *every* ``aai`` command (even
-    ``--help``), not just ``aai login``.
+    path, so that ValueError would otherwise crash *every* ``assembly`` command (even
+    ``--help``), not just ``assembly login``.
     """
     raw = os.environ.get("AAI_AUTH_PORT")
     if raw is None:

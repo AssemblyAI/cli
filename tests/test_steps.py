@@ -6,7 +6,7 @@ def test_render_steps_includes_name_status_detail() -> None:
         {"name": "scaffold", "status": "created", "detail": "./my-app"},
         {"name": "install", "status": "skipped", "detail": "--no-install"},
     ]
-    out = steps.render_steps(data, heading="aai init:")
+    out = steps.render_steps(data, heading="assembly init:")
     assert "scaffold" in out
     assert "created" in out
     assert "./my-app" in out
@@ -16,6 +16,6 @@ def test_render_steps_includes_name_status_detail() -> None:
 
 def test_render_steps_uses_given_heading():
     out = steps.render_steps(
-        [{"name": "scaffold", "status": "created", "detail": "x"}], heading="aai init:"
+        [{"name": "scaffold", "status": "created", "detail": "x"}], heading="assembly init:"
     )
-    assert "aai init:" in out
+    assert "assembly init:" in out

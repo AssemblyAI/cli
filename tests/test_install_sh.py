@@ -113,7 +113,7 @@ def test_aai_spec_is_used_verbatim(tmp_path):
 def test_path_hint_when_aai_not_on_path(tmp_path):
     _python_shim(tmp_path)
     _pipx_shim(tmp_path)
-    result = _run(tmp_path)  # no `aai` shim → `command -v aai` fails
+    result = _run(tmp_path)  # no `assembly` shim → `command -v assembly` fails
     assert result.returncode == 0
     assert "isn't on your PATH yet" in result.stdout
 
@@ -121,6 +121,6 @@ def test_path_hint_when_aai_not_on_path(tmp_path):
 def test_next_steps_when_aai_present(tmp_path):
     _python_shim(tmp_path)
     _pipx_shim(tmp_path)
-    _shim(tmp_path / "aai", "exit 0\n")
+    _shim(tmp_path / "assembly", "exit 0\n")
     result = _run(tmp_path)
-    assert "Installed. Next: run 'aai onboard'" in result.stdout
+    assert "Installed. Next: run 'assembly onboard'" in result.stdout

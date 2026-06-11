@@ -103,7 +103,7 @@ def test_login_api_key_flag_does_not_persist_session(mocker):
 
 def test_login_api_key_flag_warns_account_commands_need_browser_login(mocker):
     # An --api-key login stores no browser session, so the user is told up front that
-    # account self-service commands need `aai login` without --api-key.
+    # account self-service commands need `assembly login` without --api-key.
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
     assert result.exit_code == 0
@@ -117,7 +117,7 @@ def test_login_browser_path_has_no_api_key_only_note(monkeypatch):
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert "Signed in as default" in result.output
-    assert "aai onboard" in result.output  # the shared next-step hint
+    assert "assembly onboard" in result.output  # the shared next-step hint
     assert "without --api-key" not in result.output
     assert config.get_session("default") is not None
 

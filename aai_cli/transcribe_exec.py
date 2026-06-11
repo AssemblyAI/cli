@@ -58,7 +58,7 @@ def run_transcription(
     transcription_config: aai.TranscriptionConfig,
 ) -> aai.Transcript:
     if source == "-":
-        # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | aai transcribe -`).
+        # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | assembly transcribe -`).
         # The SDK uploads a path, so buffer the bytes to a temp file first.
         data = stdio.read_binary_stdin()
         if not data:

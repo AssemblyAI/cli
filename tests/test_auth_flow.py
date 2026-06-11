@@ -166,7 +166,10 @@ def test_run_login_flow_timeout_raises_auth_typed_error(monkeypatch):
     assert exc.value.message == "Login timed out waiting for the browser."
     assert exc.value.error_type == "not_authenticated"  # auth-typed, not api_error
     assert exc.value.exit_code == 4
-    assert exc.value.suggestion == "Run 'aai login' again, or use 'aai login --api-key <KEY>'."
+    assert (
+        exc.value.suggestion
+        == "Run 'assembly login' again, or use 'assembly login --api-key <KEY>'."
+    )
 
 
 def test_find_or_create_reuses_token_with_token_name_field(monkeypatch):
@@ -408,4 +411,4 @@ def test_run_login_flow_prints_waiting_hint(monkeypatch, capsys):
     assert flow.run_login_flow().api_key == "sk_final"
     err = capsys.readouterr().err
     assert "Waiting up to 2 minutes" in err
-    assert "aai login --api-key" in err
+    assert "assembly login --api-key" in err

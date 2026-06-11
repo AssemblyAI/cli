@@ -1,4 +1,4 @@
-# gitleaks config for the aai CLI secret-scan gate (scripts/check.sh + CI).
+# gitleaks config for the assembly CLI secret-scan gate (scripts/check.sh + CI).
 #
 # Real credentials never live in this repo by design: the API key is stored only in
 # the OS keyring (see aai_cli/config.py, KEYRING_SERVICE), never in a dotfile or source

@@ -16,7 +16,7 @@ class AgentRenderer(BaseRenderer):
     """Renders Voice Agent events in one of three modes.
 
     - JSON: NDJSON events to stdout. - text: plain ``you:``/``agent:`` transcript
-    lines to stdout with status on stderr (so ``aai agent -o text | aai llm "…"``
+    lines to stdout with status on stderr (so ``assembly agent -o text | assembly llm "…"``
     pipes the conversation). - human (default): live Rich transcript.
 
     Audio payloads are never written; only text/state events are surfaced.
@@ -43,7 +43,7 @@ class AgentRenderer(BaseRenderer):
         """Print a human-facing notice: suppressed in JSON, to stderr otherwise.
 
         Stderr in *every* non-JSON mode (not just ``-o text``): the default human
-        mode is also piped sometimes (``aai agent | head``), and a notice on stdout
+        mode is also piped sometimes (``assembly agent | head``), and a notice on stdout
         would be consumed as transcript data there.
         """
         if self.json_mode:

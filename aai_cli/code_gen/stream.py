@@ -145,7 +145,7 @@ def stdin_chunks():
 
 _FILE_SETUP = """
 # Decode the source (any local file or http(s) URL ffmpeg can read) to PCM16 mono at
-# {rate} Hz and pace it at ~real time — the same pipeline `aai stream <file>` runs.
+# {rate} Hz and pace it at ~real time — the same pipeline `assembly stream <file>` runs.
 def file_chunks():
     chunk_bytes = {rate} * 2 // 10  # ~100 ms of 16-bit mono PCM
     ffmpeg = subprocess.Popen(
@@ -248,7 +248,7 @@ def render(
     ``source`` selects the audio input the script reads, mirroring the CLI run path:
     ``None`` captures the microphone, ``"-"`` reads raw PCM16 from stdin, and anything
     else is a file path or URL decoded to PCM through ffmpeg (the same pipeline a real
-    `aai stream <file>` run uses). With `llm`, the script transforms the live
+    `assembly stream <file>` run uses). With `llm`, the script transforms the live
     transcript through the LLM Gateway, refreshing a prompt chain on every finalized
     turn (the live sibling of `transcribe --llm`).
     """
