@@ -17,6 +17,35 @@ import assemblyai as aai
 from aai_cli import choices, client, stdio, youtube
 from aai_cli.errors import UsageError
 
+# The PII policy strings the SDK accepts, validated client-side so a typo'd
+# --redact-pii-policy fails before any upload — mirroring how an unknown --config
+# key is rejected with the valid field list.
+PII_POLICY_VALUES = frozenset(policy.value for policy in aai.PIIRedactionPolicy)
+
+
+def validate_pii_policies(policies: list[str] | None) -> None:
+    unknown = [p for p in policies or [] if p not in PII_POLICY_VALUES]
+    if unknown:
+        valid = ", ".join(sorted(PII_POLICY_VALUES))
+        raise UsageError(f"Unknown PII policy(s) {unknown}. Valid policies: {valid}.")
+
+
+def validate_language_flags(language_code: str | None, *, language_detection: bool | None) -> None:
+    if language_code and language_detection:
+        raise UsageError(
+            "--language-code and --language-detection can't be combined.",
+            suggestion="Force a language or auto-detect it, not both.",
+        )
+
+
+def validate_speakers_expected(merged: dict[str, object]) -> None:
+    # Checked on the merged dict so `--config speaker_labels=true` also counts.
+    if merged.get("speakers_expected") and not merged.get("speaker_labels"):
+        raise UsageError(
+            "--speakers-expected only applies when diarization is enabled.",
+            suggestion="Add --speaker-labels.",
+        )
+
 
 def render_transform_steps(d: dict[str, Any]) -> str:
     """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
@@ -56,6 +85,7 @@ def run_transcription(
     *,
     sample: bool,
     transcription_config: aai.TranscriptionConfig,
+    download_sections: list[str] | None = None,
 ) -> aai.Transcript:
     if source == "-":
         # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | assembly transcribe -`).
@@ -72,6 +102,6 @@ def run_transcription(
     if youtube.is_downloadable_url(audio):
         # Fetch first; AssemblyAI can't read a YouTube/podcast page URL itself.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(audio, Path(td))
+            local = youtube.download_audio(audio, Path(td), download_sections=download_sections)
             return client.transcribe(api_key, str(local), config=transcription_config)
     return client.transcribe(api_key, audio, config=transcription_config)

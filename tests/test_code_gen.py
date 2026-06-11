@@ -137,6 +137,42 @@ def test_transcribe_render_youtube_passes_config_to_local_upload():
     assert "transcriber.transcribe(_audio, config=config)" in code
 
 
+def test_transcribe_render_download_sections_timestamp_range():
+    # --download-sections renders yt-dlp's download_ranges; infinities have no bare
+    # literal form, so they render as float('inf')/float('-inf'). A timestamp-only spec
+    # needs no `import re`, and force_keyframes_at_cuts pins the cut to exact times.
+    code = code_gen.transcribe(
+        {},
+        source="https://youtu.be/abc123",
+        download_sections=["*0:00-5:00", "*10:00-inf", "*-inf-1:00"],
+    )
+    ast.parse(code)
+    assert "from yt_dlp.utils import download_range_func" in code
+    assert "(0.0, 300.0)" in code
+    assert "(600.0, float('inf'))" in code
+    assert "(float('-inf'), 60.0)" in code
+    assert '"force_keyframes_at_cuts": True,' in code
+    assert "import re" not in code
+
+
+def test_transcribe_render_download_sections_chapter_imports_re():
+    # A chapter-regex spec compiles to re.compile(...), so the script imports re.
+    code = code_gen.transcribe({}, source="https://youtu.be/abc123", download_sections=["intro"])
+    ast.parse(code)
+    assert "import re" in code
+    assert "download_range_func([re.compile('intro')], [], False)" in code
+
+
+def test_transcribe_render_download_sections_ignored_for_local_file():
+    # Sections only apply to the URL download path; a local source generates no yt-dlp code.
+    code = code_gen.transcribe({}, source="call.mp3", download_sections=["*0:00-5:00"])
+    ast.parse(code)
+    assert "download_range_func" not in code
+    assert "yt_dlp" not in code
+    # No sections in play means no chapter regexes, so no spurious `import re` either.
+    assert "import re" not in code
+
+
 def test_transcribe_render_plain_url_is_not_downloaded():
     # A non-YouTube http(s) URL is uploaded straight through — no yt-dlp scaffolding.
     code = code_gen.transcribe({}, source="https://assembly.ai/wildfires.mp3")

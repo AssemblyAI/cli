@@ -29,35 +29,6 @@ from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
-# The PII policy strings the SDK accepts, validated client-side so a typo'd
-# --redact-pii-policy fails before any upload — mirroring how an unknown --config
-# key is rejected with the valid field list.
-_PII_POLICY_VALUES = frozenset(policy.value for policy in aai.PIIRedactionPolicy)
-
-
-def _validate_pii_policies(policies: list[str] | None) -> None:
-    unknown = [p for p in policies or [] if p not in _PII_POLICY_VALUES]
-    if unknown:
-        valid = ", ".join(sorted(_PII_POLICY_VALUES))
-        raise UsageError(f"Unknown PII policy(s) {unknown}. Valid policies: {valid}.")
-
-
-def _validate_language_flags(language_code: str | None, language_detection: bool | None) -> None:
-    if language_code and language_detection:
-        raise UsageError(
-            "--language-code and --language-detection can't be combined.",
-            suggestion="Force a language or auto-detect it, not both.",
-        )
-
-
-def _validate_speakers_expected(merged: dict[str, object]) -> None:
-    # Checked on the merged dict so `--config speaker_labels=true` also counts.
-    if merged.get("speakers_expected") and not merged.get("speaker_labels"):
-        raise UsageError(
-            "--speakers-expected only applies when diarization is enabled.",
-            suggestion="Add --speaker-labels.",
-        )
-
 
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
@@ -278,6 +249,14 @@ def transcribe(
     audio_end: int | None = typer.Option(
         None, "--audio-end", help="End offset in ms.", rich_help_panel=help_panels.OPT_CUSTOMIZATION
     ),
+    download_sections: list[str] | None = typer.Option(
+        None,
+        "--download-sections",
+        help="For a YouTube/podcast URL, download only part of the source (yt-dlp "
+        '"--download-sections" syntax, e.g. "*0:00-5:00" for the first five minutes; '
+        "repeatable).",
+        rich_help_panel=help_panels.OPT_CUSTOMIZATION,
+    ),
     # webhooks
     webhook_url: str | None = typer.Option(
         None,
@@ -370,9 +349,11 @@ def transcribe(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
-        _validate_language_flags(language_code, language_detection)
+        transcribe_exec.validate_language_flags(
+            language_code, language_detection=language_detection
+        )
         pii_policies = config_builder.split_csv(redact_pii_policy)
-        _validate_pii_policies(pii_policies)
+        transcribe_exec.validate_pii_policies(pii_policies)
         flags: dict[str, object] = {
             "speech_model": config_builder.enum_value(speech_model),
             "language_code": language_code,
@@ -428,7 +409,7 @@ def transcribe(
             flags=flags, overrides=config_kv, config_file=config_file
         )
 
-        _validate_speakers_expected(merged)
+        transcribe_exec.validate_speakers_expected(merged)
 
         if show_code:
             # Print-only: build the equivalent script and exit without transcribing or
@@ -441,7 +422,13 @@ def transcribe(
             )
             gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
             output.print_code(
-                render_transcribe_code(merged, audio, llm_gateway=gateway, output=output_field)
+                render_transcribe_code(
+                    merged,
+                    audio,
+                    llm_gateway=gateway,
+                    output=output_field,
+                    download_sections=list(download_sections or []),
+                )
             )
             return
 
@@ -453,7 +440,11 @@ def transcribe(
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
             transcript = transcribe_exec.run_transcription(
-                api_key, source, sample=sample, transcription_config=tc
+                api_key,
+                source,
+                sample=sample,
+                transcription_config=tc,
+                download_sections=list(download_sections or []),
             )
 
         if out is not None:

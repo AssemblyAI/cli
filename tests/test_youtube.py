@@ -1,10 +1,11 @@
+import re
 import sys
 import types
 
 import pytest
 
 from aai_cli import youtube
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, UsageError
 
 
 def test_is_youtube_url_variants():
@@ -244,3 +245,111 @@ def test_missing_ytdlp_suggests_install(tmp_path, monkeypatch):
         youtube.download_audio("https://youtu.be/x", tmp_path)
     assert "yt-dlp" in exc.value.message
     assert "pip install yt-dlp" in (exc.value.suggestion or "")
+
+
+def test_parse_download_sections_timestamp_ranges():
+    # A "*"-prefixed spec is one or more comma-separated start-end timestamp ranges;
+    # an omitted/`inf` end means "to the end", and a leading "-" negates a bound.
+    assert youtube.parse_download_sections(["*0:00-5:00"]) == ([], [(0.0, 300.0)], False)
+    assert youtube.parse_download_sections(["*10:00-inf"]) == ([], [(600.0, float("inf"))], False)
+    assert youtube.parse_download_sections(["*1:30-"]) == ([], [(90.0, float("inf"))], False)
+    # Comma-separated ranges in one spec, tolerating whitespace around each token.
+    assert youtube.parse_download_sections(["*0:30-1:00, 2:00-3:00"]) == (
+        [],
+        [(30.0, 60.0), (120.0, 180.0)],
+        False,
+    )
+    # "infinite" is accepted as an alias for "inf".
+    assert youtube.parse_download_sections(["*0:00-infinite"]) == ([], [(0.0, float("inf"))], False)
+    # A leading "-" on a bound negates it (offset from the end) — distinguishes the sign
+    # branch from a no-op.
+    assert youtube.parse_download_sections(["*-5:00-10:00"]) == ([], [(-300.0, 600.0)], False)
+
+
+def test_parse_download_sections_chapters_and_from_url():
+    # A non-"*" spec is a chapter-title regex; "*from-url" keeps the source's own range.
+    assert youtube.parse_download_sections(["intro"]) == (["intro"], [], False)
+    assert youtube.parse_download_sections(["*from-url"]) == ([], [], True)
+    # Specs combine: a chapter regex plus a timestamp range plus from-url.
+    assert youtube.parse_download_sections(["intro", "*0:00-1:00", "*from-url"]) == (
+        ["intro"],
+        [(0.0, 60.0)],
+        True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("spec", "needle"),
+    [
+        ("*abc-def", 'time "abc"'),  # unparseable timestamp
+        ("*5:00", 'time range "5:00"'),  # missing the "-" separator
+        ("*-", 'time range "-"'),  # a lone "-" is not a range
+        ("*1:00--inf", "-inf"),  # "-inf" is not a valid end
+        ("(", "regex"),  # malformed chapter regex
+    ],
+)
+def test_parse_download_sections_rejects_malformed(spec, needle):
+    with pytest.raises(UsageError) as exc:
+        youtube.parse_download_sections([spec])
+    assert needle in exc.value.message
+    assert exc.value.exit_code == 2
+
+
+def test_download_audio_with_sections_sets_download_ranges(tmp_path, monkeypatch):
+    # --download-sections must reach yt-dlp as download_ranges + force_keyframes_at_cuts
+    # (exact cuts, not the nearest keyframe).
+    captured = {}
+
+    class FakeYDL:
+        def __init__(self, opts):
+            captured["opts"] = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            (tmp_path / "x.m4a").write_bytes(b"audio")
+            return {"id": "x", "ext": "m4a"}
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "x.m4a")
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    youtube.download_audio(
+        "https://youtu.be/x", tmp_path, download_sections=["*0:00-5:00", "intro"]
+    )
+    download_ranges = captured["opts"]["download_ranges"]
+    assert download_ranges.ranges == [(0.0, 300.0)]
+    # Chapter-regex specs are compiled before reaching yt-dlp.
+    assert download_ranges.chapters == [re.compile("intro")]
+    assert captured["opts"]["force_keyframes_at_cuts"] is True
+
+
+def test_download_audio_without_sections_omits_download_ranges(tmp_path, monkeypatch):
+    # The default path must not set download_ranges (downloads the whole track).
+    captured = {}
+
+    class FakeYDL:
+        def __init__(self, opts):
+            captured["opts"] = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            (tmp_path / "x.m4a").write_bytes(b"audio")
+            return {"id": "x", "ext": "m4a"}
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "x.m4a")
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    youtube.download_audio("https://youtu.be/x", tmp_path)
+    assert "download_ranges" not in captured["opts"]
+    assert "force_keyframes_at_cuts" not in captured["opts"]
