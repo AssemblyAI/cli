@@ -87,7 +87,9 @@ def test_help_lists_commands_in_workflow_order():
     # Typer (>=0.13) vendors its own click; the root command is a TyperGroup.
     assert isinstance(cmd, TyperGroup)
     ctx = cmd.make_context("assembly", [], resilient_parsing=True)
-    names = cmd.list_commands(ctx)  # the order shown under --help
+    # The order shown under --help; hidden internal commands (e.g. _update-check,
+    # the detached update-check refresh) aren't displayed, so exclude them.
+    names = [n for n in cmd.list_commands(ctx) if not cmd.commands[n].hidden]
     # Grouped into Rich help panels (see help_panels.py): Quick Start, Build an App,
     # Run AssemblyAI, Setup & Tools, History, then Account.
     assert names == [

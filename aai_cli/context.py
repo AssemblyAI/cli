@@ -9,7 +9,7 @@ from typing import NoReturn
 import keyring.errors
 import typer
 
-from aai_cli import config, environments, output, telemetry
+from aai_cli import config, environments, output, telemetry, update_check
 from aai_cli.auth import run_login_flow
 from aai_cli.environments import Environment
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
@@ -192,6 +192,7 @@ def run_command(
         # before it's folded into a typer.Exit below.
         with telemetry.track(ctx.command_path):
             fn(state, json_mode)
+        update_check.maybe_notify(json_mode=json_mode)
     except NotAuthenticated as err:
         if not auto_login or not _should_auto_login(err):
             output.emit_error(err, json_mode=json_mode)
