@@ -27,7 +27,7 @@ from contextlib import contextmanager
 
 import typer
 
-from aai_cli import __version__, config
+from aai_cli import __version__, argscan, config
 from aai_cli.errors import CLIError
 
 ENV_DISABLED = "AAI_TELEMETRY_DISABLED"
@@ -104,15 +104,9 @@ def _notice_suppressed(raw_args: list[str]) -> bool:
 
     The one-time disclosure is human-facing chrome: it must not decorate a
     ``--quiet`` run nor pollute the machine-readable stderr a ``--json`` (or
-    ``-o json``) pipeline relies on. Mirrors ``main._command_line_requests_json``
-    (telemetry can't import main without a cycle) plus the quiet flags.
+    ``-o json``) pipeline relies on.
     """
-    for index, token in enumerate(raw_args):
-        if token in ("--quiet", "-q", "--json", "-j", "--output=json", "-ojson"):
-            return True
-        if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
-            return True
-    return False
+    return any(token in ("--quiet", "-q") for token in raw_args) or argscan.requests_json(raw_args)
 
 
 def _maybe_emit_first_run_notice() -> None:

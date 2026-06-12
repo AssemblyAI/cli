@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from aai_cli import choices, client, code_gen, config, help_panels, options, output
+from aai_cli import choices, client, code_gen, help_panels, options, output
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent.session import (
@@ -182,7 +182,7 @@ def agent(
             # Existence-check the clip before credentials, so a typo'd path reads as
             # "file not found" instead of triggering a login.
             client.resolve_audio_source(source, sample=sample)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
 
         renderer = AgentRenderer(
             json_mode=json_mode,

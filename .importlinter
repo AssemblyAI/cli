@@ -7,6 +7,7 @@ name = Core modules do not import command modules
 type = forbidden
 source_modules =
     aai_cli.agent
+    aai_cli.argscan
     aai_cli.auth
     aai_cli.client
     aai_cli.code_gen
@@ -67,6 +68,7 @@ modules =
 name = Library layers do not depend on Rich rendering
 type = forbidden
 source_modules =
+    aai_cli.argscan
     aai_cli.client
     aai_cli.config
     aai_cli.config_builder

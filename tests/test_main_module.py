@@ -4,10 +4,11 @@ import sys
 import pytest
 
 import aai_cli.main as main_mod
+from aai_cli import argscan
 
 
 def test_command_line_requests_json_recognizes_every_form():
-    f = main_mod._command_line_requests_json
+    f = argscan.requests_json
     assert f(["whoami", "--json"])
     assert f(["transcribe", "a.mp3", "-o", "json"])
     assert f(["transcribe", "a.mp3", "--output", "json"])
@@ -19,7 +20,7 @@ def test_command_line_requests_json_recognizes_every_form():
 
 
 def test_command_line_requests_json_false_for_text_and_bare():
-    f = main_mod._command_line_requests_json
+    f = argscan.requests_json
     assert not f(["transcribe", "a.mp3", "-o", "text"])
     assert not f(["transcribe", "a.mp3"])
     assert not f([])

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, config, environments, help_panels, output, stdio, theme
+from aai_cli import __version__, argscan, environments, help_panels, output, stdio, theme
 from aai_cli.commands import (
     account,
     agent,
@@ -102,7 +102,7 @@ class _OrderedGroup(TyperGroup):
     def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:
         # Stash the full token list before anything is parsed, so the root callback can
         # tell whether the (not-yet-parsed) subcommand opted into JSON — see
-        # `_command_line_requests_json`. Recorded here because Click clears the pending
+        # `argscan.requests_json`. Recorded here because Click clears the pending
         # args off the context before the group callback runs.
         ctx.meta[_RAW_ARGS_META_KEY] = list(args)
         return super().parse_args(ctx, args)
@@ -202,7 +202,7 @@ def _click_error_requests_json(err: ClickException) -> bool:
         raw_args: list[str] = ctx.meta[_RAW_ARGS_META_KEY]
     else:
         raw_args = sys.argv[1:]
-    return _command_line_requests_json(raw_args)
+    return argscan.requests_json(raw_args)
 
 
 def _format_click_error_fixed(self: ClickException) -> None:
@@ -265,7 +265,7 @@ def _version_callback(value: bool) -> None:
 
 def _profile_has_key(state: AppState) -> bool:
     try:
-        config.resolve_api_key(profile=state.profile)
+        state.resolve_api_key()
     except NotAuthenticated:
         return False
     return True
@@ -276,25 +276,13 @@ def _interactive_session() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+# The root callback runs before the subcommand parses its own ``--json``, so a failure
+# raised there (e.g. a bad ``--env``) would otherwise always render human text — leaving a
+# ``… --json`` pipeline without the uniform ``{"error": …}`` shape it relies on. The group
+# stashes the raw token list in ``ctx.meta`` (see ``_OrderedGroup.parse_args``) before the
+# callback runs, so sniffing it with ``argscan.requests_json`` lets every failure class
+# honor the request.
 _RAW_ARGS_META_KEY = "aai_raw_args"
-
-
-def _command_line_requests_json(raw_args: list[str]) -> bool:
-    """Whether the token list opts into JSON (``--json``, ``-o json``, ``--output json``,
-    or their glued forms).
-
-    The root callback runs before the subcommand parses its own ``--json``, so a failure
-    raised here (e.g. a bad ``--env``) would otherwise always render human text — leaving a
-    ``… --json`` pipeline without the uniform ``{"error": …}`` shape it relies on. The group
-    stashes the raw token list in ``ctx.meta`` (see ``_OrderedGroup.parse_args``) before the
-    callback runs, so sniffing it lets every failure class honor the request.
-    """
-    for index, token in enumerate(raw_args):
-        if token in ("--json", "-j", "--output=json", "-ojson"):
-            return True
-        if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
-            return True
-    return False
 
 
 def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
@@ -367,7 +355,7 @@ def main(
     # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
     # invocation opted into JSON, and renders human text on stderr otherwise.
     raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
-    json_mode = output.resolve_json(explicit=_command_line_requests_json(raw_args))
+    json_mode = output.resolve_json(explicit=argscan.requests_json(raw_args))
     conflict_warning = _sandbox_conflict_warning(sandbox, env)
     if sandbox and env is None:
         env = "sandbox000"

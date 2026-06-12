@@ -10,7 +10,6 @@ from aai_cli import (
     choices,
     client,
     code_gen,
-    config,
     config_builder,
     help_panels,
     llm,
@@ -430,7 +429,7 @@ def stream(
         validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
         if opts.from_file and not opts.from_stdin:
             client.resolve_audio_source(opts.source, sample=opts.sample)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
 
         llm_prompts = list(llm_prompt or [])
         session = StreamSession(

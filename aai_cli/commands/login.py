@@ -162,7 +162,7 @@ def whoami(
         profile = resolve_profile(state)
         # The full env -> keyring chain (raises NotAuthenticated when empty), so a CI
         # box authenticated via ASSEMBLYAI_API_KEY can use whoami as a preflight check.
-        key = config.resolve_api_key(profile=state.profile)
+        key = state.resolve_api_key()
         masked = output.mask_secret(key)
         env = environments.active().name
         # A network failure must not suppress the local table: profile, env, masked
