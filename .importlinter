@@ -20,6 +20,7 @@ source_modules =
     aai_cli.context
     aai_cli.debuglog
     aai_cli.dictate_exec
+    aai_cli.dub_exec
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
@@ -65,6 +66,7 @@ modules =
     aai_cli.commands.dev
     aai_cli.commands.dictate
     aai_cli.commands.doctor
+    aai_cli.commands.dub
     aai_cli.commands.evaluate
     aai_cli.commands.init
     aai_cli.commands.keys
