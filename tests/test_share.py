@@ -100,12 +100,12 @@ def test_share_missing_cloudflared_errors_with_docs_url_on_linux(tmp_path, monke
 
 
 def test_cloudflared_install_hint_per_platform(monkeypatch):
-    from aai_cli.commands import share as share_cmd
+    from aai_cli.init import tunnel
 
     monkeypatch.setattr("sys.platform", "darwin")
-    assert share_cmd._cloudflared_install_hint() == "Install it: brew install cloudflared"
+    assert tunnel.install_hint() == "Install it: brew install cloudflared"
     monkeypatch.setattr("sys.platform", "linux")
-    assert share_cmd._cloudflared_install_hint() == (
+    assert tunnel.install_hint() == (
         "Install it: "
         "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
     )
