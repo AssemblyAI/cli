@@ -153,6 +153,7 @@ def test_help_lists_commands_in_workflow_order():
         # Run AssemblyAI
         "transcribe",
         "stream",
+        "dictate",
         "agent",
         "speak",
         "llm",

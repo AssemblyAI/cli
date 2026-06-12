@@ -19,6 +19,7 @@ source_modules =
     aai_cli.config_builder
     aai_cli.context
     aai_cli.debuglog
+    aai_cli.dictate_exec
     aai_cli.dub_exec
     aai_cli.environments
     aai_cli.errors
@@ -26,6 +27,7 @@ source_modules =
     aai_cli.follow
     aai_cli.help_panels
     aai_cli.help_text
+    aai_cli.hotkey
     aai_cli.init
     aai_cli.llm
     aai_cli.llm_exec
@@ -38,6 +40,7 @@ source_modules =
     aai_cli.stdio
     aai_cli.stream_exec
     aai_cli.streaming
+    aai_cli.sync_stt
     aai_cli.telemetry
     aai_cli.theme
     aai_cli.transcribe_batch
@@ -60,6 +63,7 @@ modules =
     aai_cli.commands.clip
     aai_cli.commands.deploy
     aai_cli.commands.dev
+    aai_cli.commands.dictate
     aai_cli.commands.doctor
     aai_cli.commands.dub
     aai_cli.commands.evaluate
@@ -89,7 +93,9 @@ source_modules =
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
+    aai_cli.hotkey
     aai_cli.llm
+    aai_cli.sync_stt
     aai_cli.telemetry
     aai_cli.wer
 forbidden_modules =

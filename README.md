@@ -47,6 +47,14 @@ assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speak
   | assembly --sandbox speak --out episode.wav
 ```
 
+**Cut the highlight reel from a speech** — `clip` downloads the audio, transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):
+
+```sh
+assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" \
+  --llm "the most quotable 20-40 seconds from each of the stories" \
+  --padding 0.5 --out-dir .
+```
+
 **Burn karaoke subtitles into a music video** — `-o srt` prints captions to stdout, and `--chars-per-caption` keeps the lines short so they flip with the vocals; ffmpeg renders them onto the video (`-f srt -i pipe:` muxes a toggleable soft-subtitle track instead, no re-encode):
 
 ```sh
@@ -131,7 +139,7 @@ uv tool install "git+https://github.com/AssemblyAI/cli.git"
 If your default interpreter is older than Python 3.12, add `--python python3.12` (pipx) or
 `--python 3.12` (uv) to the install command.
 
-Only the live-audio commands need anything extra: `stream` and `agent` use PortAudio for
+Only the live-audio commands need anything extra: `stream`, `dictate`, and `agent` use PortAudio for
 microphone capture (Debian/Ubuntu: `sudo apt-get install libportaudio2`; Fedora:
 `sudo dnf install portaudio`) and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream
 non-WAV audio. Plain `transcribe` uploads your file directly and needs neither.
@@ -179,9 +187,10 @@ assembly init                  # scaffold a starter app
 - **Transcription**: `assembly transcribe` handles files, URLs, and YouTube/podcast pages, with flags for speaker labels, PII redaction, summarization, sentiment, chapters, and more.
 - **Batch transcription**: point `assembly transcribe` at a directory or glob (or pipe paths with `--from-stdin`) to transcribe everything concurrently, with sidecar files that make re-runs resumable. Add `--llm "prompt"` to run an LLM prompt over each finished transcript, saved into the sidecars.
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
+- **Dictation**: `assembly dictate` is push-to-talk for your terminal — press Enter to record, Enter again to get the utterance back instantly from the Sync API (up to 120 s per utterance).
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
-- **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`).
+- **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`). Clip boundaries snap into nearby silence (ffmpeg `silencedetect`) so cuts don't land mid-word; `--no-snap` cuts at the exact selected times.
 - **Dubbing**: `assembly dub` re-voices an audio/video file in another language (`assembly --sandbox dub talk.mp4 --lang de`): diarized transcription, per-utterance LLM translation, streaming TTS per speaker, and an ffmpeg track-swap that leaves the video untouched. Sandbox-only today, like `speak`.
 - **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset (with built-in aliases for common benchmarks: `assembly eval tedlium`) or a local `.csv`/`.jsonl` manifest and scores WER against its references — handy for picking a speech model.
 - **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`); `assembly dev` runs it, `assembly share` exposes it on a public URL, and `assembly deploy` ships it to Vercel, Railway, or Fly.io.

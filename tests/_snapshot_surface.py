@@ -24,7 +24,18 @@ from tests._cli_tree import leaf_command_argvs
 HELP_GROUPS: dict[str, frozenset[str]] = {
     "build": frozenset({"onboard", "init", "dev", "share", "deploy"}),
     "run": frozenset(
-        {"transcribe", "stream", "agent", "speak", "llm", "clip", "dub", "eval", "webhooks"}
+        {
+            "transcribe",
+            "stream",
+            "dictate",
+            "agent",
+            "speak",
+            "llm",
+            "clip",
+            "dub",
+            "eval",
+            "webhooks",
+        }
     ),
     "tools": frozenset({"doctor", "setup", "telemetry", "_update-check"}),
     "history": frozenset({"transcripts", "sessions"}),

@@ -3,14 +3,16 @@
 Everything here turns user selectors into :class:`Segment` lists — parsing
 ``--range`` values, filtering diarized utterances for ``--speaker``/``--search``,
 rendering the timestamped listing an ``--llm`` model selects from, parsing the
-model's reply, and merging the combined selection. The orchestration (transcript
-fetch, LLM call, ffmpeg) lives in ``clip_exec``.
+model's reply, merging the combined selection, and snapping the merged
+boundaries into detected silence. The orchestration (transcript fetch, LLM
+call, ffmpeg — including the silencedetect pass) lives in ``clip_exec``.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 
 from aai_cli import jsonshape
@@ -86,6 +88,76 @@ def merge_segments(segments: list[Segment], padding: float) -> list[Segment]:
         else:
             merged.append(seg)
     return merged
+
+
+# One silencedetect log edge: "silence_start: 12.34" or "silence_end: 13.01".
+_SILENCE_EDGE = re.compile(r"silence_(start|end):\s*(-?\d+(?:\.\d+)?)")
+
+SNAP_REACH = 1.5  # how far (seconds) a boundary may move to reach silence
+SNAP_LEAD = 0.25  # silence kept next to the speech once a boundary snaps
+
+
+def parse_silences(detect_log: str) -> list[Segment]:
+    """The silence intervals in ffmpeg ``silencedetect`` output, in order.
+
+    A trailing ``silence_start`` with no matching end runs to end-of-file; a
+    small negative start (decoder priming samples) clamps to 0.
+    """
+    silences: list[Segment] = []
+    pending: float | None = None
+    for kind, value in _SILENCE_EDGE.findall(detect_log):
+        if kind == "start":
+            pending = max(0.0, float(value))
+        elif pending is not None:
+            silences.append(Segment(pending, float(value)))
+            pending = None
+    if pending is not None:
+        silences.append(Segment(pending, math.inf))
+    return silences
+
+
+def _snap_start(t: float, silences: list[Segment]) -> float:
+    """A clip start moved back into the silence just before its speech.
+
+    A start already inside silence stays put (it honors --padding exactly);
+    one that lands mid-speech moves into the last silence before it, to
+    ``SNAP_LEAD`` before the speech resumes — only ever widening the clip, so
+    selected content is never dropped. With no silence within ``SNAP_REACH``
+    (continuous speech) it stays where asked. ``silences`` must be sorted.
+    """
+    gap = next((s for s in reversed(silences) if s.start <= t), None)
+    if gap is None:
+        return t  # before the first silence ever begins
+    if t <= gap.end:
+        return t  # already in silence
+    if t - gap.end > SNAP_REACH:
+        return t  # continuous speech as far back as snapping may reach
+    return max(gap.start, gap.end - SNAP_LEAD)
+
+
+def _snap_end(t: float, silences: list[Segment]) -> float:
+    """A clip end moved forward into the next silence (mirror of _snap_start)."""
+    gap = next((s for s in silences if s.end >= t), None)
+    if gap is None:
+        return t  # after the last silence ends
+    if gap.start <= t:
+        return t  # already in silence
+    if gap.start - t > SNAP_REACH:
+        return t
+    return min(gap.end, gap.start + SNAP_LEAD)
+
+
+def snap_to_silences(segments: list[Segment], silences: list[Segment]) -> list[Segment]:
+    """Segments with any boundary that lands on speech moved into adjacent
+    silence, so cuts don't fall mid-word; re-coalesced afterwards since a
+    start moving back can reach the previous segment's (moved) end."""
+    if not silences:
+        return segments
+    ordered = sorted(silences, key=lambda s: s.start)
+    snapped = [
+        Segment(_snap_start(seg.start, ordered), _snap_end(seg.end, ordered)) for seg in segments
+    ]
+    return merge_segments(snapped, 0.0)
 
 
 def matching_utterances(

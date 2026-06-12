@@ -95,11 +95,20 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
   with "No such option"; it's `assembly transcribe … --json`. (The root callback still sniffs the
   whole token list via `argscan.requests_json`, so a callback-level failure like a bad
   `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
+- **Tests that touch global logging state must snapshot/restore it** — root handlers/level
+  and per-logger levels are process-global, so a leak only fails on some pytest-randomly
+  seeds (green locally, red in CI). Opt in to the shared `preserve_logging_state` conftest
+  fixture (it also resets the websockets wire loggers a silencer test may have clamped)
+  instead of hand-rolling the snapshot per module.
 
 ### Manual QA / running the CLI in sandboxed sessions
 
 Lessons that cost time in agent sessions — read before exercising `uv run assembly` by hand:
 
+- **Check for in-flight duplicates before starting a fix.** Sessions run concurrently:
+  before implementing a bug fix or small feature, scan open PRs and the last few
+  `origin/main` commits touching the same files (two sessions once shipped the identical
+  fix; the slower PR was closed as redundant). Seconds of checking beats a discarded PR.
 - **Web/remote containers are fully provisioned at session start**
   (`.claude/hooks/session-start.sh`): system deps, `markdownlint`/`prettier`, and the Go
   gate binaries (`actionlint`, `gitleaks`) are installed at CI's pinned versions, so
@@ -162,9 +171,9 @@ A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app,
 
 ### Command layer
 
-Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `agent`, `speak`, `llm`, `clip`, `transcripts`, `login` (login/logout/whoami), `doctor`, `init`, `dev`, `share`, `deploy`, `setup`, `onboard`, `account` (balance/usage/limits), `keys`, `sessions`, `audit`, `telemetry` (status/enable/disable), `webhooks` (listen)). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
+Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `dictate`, `agent`, `speak`, `llm`, `clip`, `transcripts`, `login` (login/logout/whoami), `doctor`, `init`, `dev`, `share`, `deploy`, `setup`, `onboard`, `account` (balance/usage/limits), `keys`, `sessions`, `audit`, `telemetry` (status/enable/disable), `webhooks` (listen)). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
 
-**Options/run split for flag-heavy commands** (gh-CLI style): the Typer function only parses argv into a frozen `<Cmd>Options` dataclass and hands it to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda adapter in `run_command(ctx, ..., json=...)`. The six run commands follow it — `aai_cli/stream_exec.py` (the reference implementation), `transcribe_exec.py`, `agent_exec.py`, `speak_exec.py`, `llm_exec.py`, `clip_exec.py`. Because the run path is a plain function of data, tests construct options directly (`dataclasses.replace` off a defaults instance, see `tests/test_stream_exec.py` and `tests/test_command_options_seam.py`) instead of round-tripping argv through `CliRunner` — which is also the cheap way to kill mutation-gate mutants on orchestration lines. Follow this for new or heavily-reworked commands with long bodies; small commands keep the inline `body()` closure — the dataclass is pure ceremony there.
+**Options/run split for flag-heavy commands** (gh-CLI style): the Typer function only parses argv into a frozen `<Cmd>Options` dataclass and hands it to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda adapter in `run_command(ctx, ..., json=...)`. The seven run commands follow it — `aai_cli/stream_exec.py` (the reference implementation), `transcribe_exec.py`, `agent_exec.py`, `speak_exec.py`, `llm_exec.py`, `clip_exec.py`, `dictate_exec.py`. Because the run path is a plain function of data, tests construct options directly (`dataclasses.replace` off a defaults instance, see `tests/test_stream_exec.py` and `tests/test_command_options_seam.py`) instead of round-tripping argv through `CliRunner` — which is also the cheap way to kill mutation-gate mutants on orchestration lines. Follow this for new or heavily-reworked commands with long bodies; small commands keep the inline `body()` closure — the dataclass is pure ceremony there.
 
 ### Cross-cutting state (resolution order matters)
 
@@ -178,6 +187,7 @@ Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `ag
 ### Feature subsystems
 
 - **`streaming/`** + `client.stream_audio` — v3 realtime API. Event callbacks run on the SDK reader thread and guard against `BrokenPipeError` (`stdio.silence_stdout()`) so a closed pipe never dumps a thread traceback.
+- **`sync_stt.py`** + **`hotkey.py`** + `commands/dictate.py` — `assembly dictate`: push-to-talk dictation over the **Sync STT API** (`Environment.sync_base`, one POST `/transcribe` per utterance with the required `X-AAI-Model: u3-sync-pro` header; 80 ms–120 s of PCM/WAV). `hotkey.TerminalKeys` scopes stdin into cbreak (Ctrl-C still signals) and reads single keypresses; `dictate_exec._record` polls it with a zero timeout between ~100 ms mic chunks. All three boundaries (keys, mic, HTTP) are injectable, so the suite never needs a real terminal — `tests/test_hotkey.py` drives a pty pair for the termios behavior.
 - **`agent/`** — full-duplex voice agent (mic in, TTS out via `voices.py`).
 - **`tts/`** + `commands/speak.py` — `assembly speak` synthesizes text to speech over the sandbox streaming-TTS WebSocket (`streaming-tts.sandbox000.…`). **Sandbox-only:** `session.is_available()` is false in production (empty `Environment.streaming_tts_host`), so the command exits 2 with a `--sandbox` hint. `session.synthesize` drives a Begin→Generate→Flush→Audio→Terminate protocol with an injectable `connect` for hermetic tests (mirrors `agent/session.py`); `audio.py` plays the PCM (default) or writes a WAV (`--out`).
 - **`code_gen/`** — backs `--show-code` on `transcribe`/`stream`/`agent`: builds a ready-to-run Python SDK script from exactly the flags passed (no API key needed; generated code reads `ASSEMBLYAI_API_KEY`).
