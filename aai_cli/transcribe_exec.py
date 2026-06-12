@@ -397,7 +397,6 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
         transcribe_batch.reject_single_source_flags(
             out=opts.out,
             output_field=opts.output_field,
-            llm_prompt=opts.llm_prompt,
             show_code=opts.show_code,
         )
         transcribe_batch.run_batch(
@@ -406,6 +405,9 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
             transcription_config=config_builder.construct_transcription_config(merged),
             concurrency=opts.concurrency,
             force=opts.force,
+            transform=TransformOptions(
+                prompts=list(opts.llm_prompt or []), model=opts.model, max_tokens=opts.max_tokens
+            ),
             json_mode=json_mode,
             quiet=state.quiet,
         )

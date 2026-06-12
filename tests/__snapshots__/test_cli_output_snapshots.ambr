@@ -1055,7 +1055,9 @@
   
    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
    transcribe many sources concurrently. Each source gets a .aai.json sidecar
-   with the full result, and a re-run skips sources already transcribed.
+   with the full result (including any --llm responses), and a re-run skips
+   sources already transcribed — with changed --llm prompts it replays just
+   the LLM step, never a second transcription.
   
    Curated flags cover common features; --config KEY=VALUE and --config-file
    reach every other field. Analysis (summary, chapters, ...) renders in human
@@ -1175,7 +1177,9 @@
   │                                                     repeatable).             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
-  │ --webhook-url                TEXT        Webhook URL for completion.         │
+  │ --webhook-url                TEXT        Webhook URL for completion (get a   │
+  │                                          dev URL with `assembly webhooks     │
+  │                                          listen`).                           │
   │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Translation ────────────────────────────────────────────────────────────────╮
@@ -1217,6 +1221,8 @@
    $ assembly transcribe call.mp3 --summarization
    Ask about the transcript
    $ assembly transcribe call.mp3 --llm "List action items"
+   Summarize a whole folder
+   $ assembly transcribe ./calls --llm "Summarize this call"
   
   
   
@@ -1309,6 +1315,55 @@
    $ assembly usage --window month
    Total spend in cents for scripting
    $ assembly usage --json | jq '[.usage_items[].line_items[].price] | add'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[webhooks_listen]
+  '''
+  
+   Usage: assembly webhooks listen [OPTIONS]
+  
+   Receive AssemblyAI webhooks on a public URL and watch them arrive.
+  
+   Opens a cloudflared quick tunnel to a local listener and prints the public
+   URL to pass as --webhook-url (or webhook_url in the API). Each delivery is
+   acknowledged with HTTP 200 and printed; --forward-to relays it to your app,
+   so you can build webhook handlers without deploying a public endpoint.
+  
+   Requires cloudflared unless --no-tunnel (macOS: `brew install cloudflared`;
+   other
+   platforms:
+   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+   downloads/).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port                INTEGER               Local listener port (the first   │
+  │                                             free port from here).            │
+  │                                             [default: 8989]                  │
+  │ --forward-to          TEXT                  Re-POST each delivery to this    │
+  │                                             URL (e.g. your local app).       │
+  │ --no-tunnel                                 Local-only: skip the cloudflared │
+  │                                             public URL.                      │
+  │ --max-events          INTEGER RANGE [x>=0]  Exit after this many deliveries  │
+  │                                             (0 = run until Ctrl-C).          │
+  │                                             [default: 0]                     │
+  │ --json        -j                            One NDJSON record per delivery.  │
+  │ --help                                      Show this message and exit.      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Listen on a public URL
+   $ assembly webhooks listen
+   Deliver a transcription to it
+   $ assembly transcribe call.mp3 --webhook-url https://….trycloudflare.com
+   Forward deliveries to your app
+   $ assembly webhooks listen --forward-to http://localhost:8000/webhook
+   Local-only sink (no tunnel)
+   $ assembly webhooks listen --no-tunnel
+   Stop after the first delivery
+   $ assembly webhooks listen --max-events 1
   
   
   

@@ -26,6 +26,7 @@ app = typer.Typer()
             ("Redact PII for compliance", "assembly transcribe call.mp3 --redact-pii"),
             ("Summarize a recording", "assembly transcribe call.mp3 --summarization"),
             ("Ask about the transcript", 'assembly transcribe call.mp3 --llm "List action items"'),
+            ("Summarize a whole folder", 'assembly transcribe ./calls --llm "Summarize this call"'),
         ]
     ),
 )
@@ -257,7 +258,7 @@ def transcribe(
     webhook_url: str | None = typer.Option(
         None,
         "--webhook-url",
-        help="Webhook URL for completion.",
+        help="Webhook URL for completion (get a dev URL with `assembly webhooks listen`).",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
     ),
     webhook_auth_header: str | None = typer.Option(
@@ -342,7 +343,9 @@ def transcribe(
 
     Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
     transcribe many sources concurrently. Each source gets a .aai.json sidecar
-    with the full result, and a re-run skips sources already transcribed.
+    with the full result (including any --llm responses), and a re-run skips
+    sources already transcribed — with changed --llm prompts it replays just
+    the LLM step, never a second transcription.
 
     Curated flags cover common features; --config KEY=VALUE and --config-file reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
