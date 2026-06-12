@@ -6,6 +6,7 @@ test_stream_show_code.py.
 """
 
 import json
+import re
 import time
 import types
 
@@ -334,7 +335,10 @@ def test_stream_sample_rate_must_be_positive():
     config.set_api_key("default", "sk_live")
     result = runner.invoke(app, ["stream", "--sample-rate", "0"])
     assert result.exit_code == 2
-    assert "--sample-rate" in result.output
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--sample-rate" in plain
 
 
 def test_stream_sample_rate_floor_accepts_one_for_stdin(monkeypatch):

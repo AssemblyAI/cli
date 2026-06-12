@@ -1,6 +1,7 @@
 """Tests for `assembly telemetry status/enable/disable` and the run_command integration."""
 
 import json
+import re
 
 from typer.testing import CliRunner
 
@@ -146,10 +147,13 @@ def test_flush_is_hidden_plumbing():
 def test_bare_telemetry_shows_help_not_missing_command():
     result = runner.invoke(app, ["telemetry"])
     assert result.exit_code == 2
-    assert "Missing command" not in result.output
-    assert "Usage: assembly telemetry" in result.output
-    assert "status" in result.output
-    assert "disable" in result.output
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "Missing command" not in plain
+    assert "Usage: assembly telemetry" in plain
+    assert "status" in plain
+    assert "disable" in plain
 
 
 # --- run_command integration -------------------------------------------------

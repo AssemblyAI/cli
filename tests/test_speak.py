@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from typer.testing import CliRunner
@@ -258,7 +259,10 @@ def test_speaker_mappings_warning_is_structured_in_json_mode(fake_synthesize, mo
 def test_sample_rate_must_be_positive():
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--sample-rate", "0"])
     assert result.exit_code == 2
-    assert "--sample-rate" in result.output
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--sample-rate" in plain
 
 
 def test_sample_rate_floor_accepts_one(fake_synthesize, monkeypatch):

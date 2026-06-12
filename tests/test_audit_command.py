@@ -1,4 +1,5 @@
 import json
+import re
 
 from typer.testing import CliRunner
 
@@ -193,7 +194,10 @@ def test_audit_rejects_nonpositive_limit(mocker):
     for bad in ("0", "-5"):
         result = runner.invoke(app, ["audit", "--limit", bad])
         assert result.exit_code == 2
-        assert "--limit" in result.output
+        # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+        # mid-message, so assert on the color-free render (see test_help_rendering.py).
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--limit" in plain
     list_logs.assert_not_called()
 
 

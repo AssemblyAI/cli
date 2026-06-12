@@ -1,4 +1,5 @@
 import json
+import re
 import types
 
 from typer.testing import CliRunner
@@ -169,7 +170,10 @@ def test_llm_max_tokens_must_be_at_least_one(monkeypatch):
     for bad in ("0", "-5"):
         result = runner.invoke(app, ["llm", "hi", "--max-tokens", bad])
         assert result.exit_code == 2
-        assert "max-tokens" in result.output.lower()
+        # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+        # mid-message, so assert on the color-free render (see test_help_rendering.py).
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "max-tokens" in plain.lower()
 
 
 def test_llm_transcript_id_warns_about_ignored_stdin(monkeypatch):
