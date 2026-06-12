@@ -17,6 +17,7 @@ class Assembly < Formula
   depends_on "rust" => :build         # pydantic-core, jiter, cryptography
   depends_on "cloudflared"           # public quick-tunnel for `assembly share`
   depends_on "ffmpeg"                # decode non-WAV/URL audio (transcribe/stream)
+  depends_on "libyaml"               # pyyaml native extension
   depends_on "openssl@3"             # cryptography linkage
   depends_on "portaudio"             # sounddevice (audio capture)
   depends_on "python@3.13"
