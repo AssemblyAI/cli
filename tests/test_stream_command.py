@@ -9,6 +9,7 @@ import json
 import time
 import types
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -307,6 +308,49 @@ def test_stream_podcast_page_url_downloads_then_streams(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert seen["source_type"] == "FileSource"  # streamed the downloaded local file
     assert seen["src"] == str(fake)
+
+
+def test_stream_downloadable_url_resolves_credentials_before_downloading(monkeypatch):
+    # Regression guard for ordering: with no usable credential the command must fail
+    # authentication *before* yt-dlp runs, so a signed-out user never downloads a
+    # whole video only to be told to log in (mirrors transcribe's source -> auth ->
+    # work ordering).
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: False)
+    downloads = []
+    monkeypatch.setattr(
+        "aai_cli.commands.stream.youtube.download_audio",
+        lambda url, dest: downloads.append(url),
+    )
+    monkeypatch.setattr(
+        "aai_cli.commands.stream.client.stream_audio",
+        lambda *a, **k: pytest.fail("must not stream without credentials"),
+    )
+    result = runner.invoke(app, ["stream", "https://youtu.be/abc"])
+    assert result.exit_code == 4  # not authenticated
+    assert downloads == []  # nothing was fetched before the credential check
+
+
+def test_stream_sample_rate_must_be_positive():
+    config.set_api_key("default", "sk_live")
+    result = runner.invoke(app, ["stream", "--sample-rate", "0"])
+    assert result.exit_code == 2
+    assert "--sample-rate" in result.output
+
+
+def test_stream_sample_rate_floor_accepts_one_for_stdin(monkeypatch):
+    # min=1 exactly — and --sample-rate also declares the rate of raw PCM piped on
+    # stdin (it is not mic-only), so the declared value must reach the session params.
+    config.set_api_key("default", "sk_live")
+    seen = {}
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        seen["rate"] = params.sample_rate
+        b"".join(source)  # drain the StdinSource
+
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    result = runner.invoke(app, ["stream", "-", "--sample-rate", "1"], input=b"\x00\x00")
+    assert result.exit_code == 0
+    assert seen["rate"] == 1
 
 
 def test_stream_reads_raw_pcm_from_stdin(monkeypatch):

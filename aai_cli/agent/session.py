@@ -11,6 +11,7 @@ from typing import Any
 from aai_cli import environments
 from aai_cli import ws as wsutil
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.streaming import diagnostics
 
 
 def ws_url() -> str:
@@ -205,11 +206,19 @@ def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> No
 
 
 def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
-    """Open the Voice Agent socket, mapping a connect failure to a clean CLIError."""
+    """Open the Voice Agent socket, mapping a connect failure to a clean CLIError.
+
+    A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
+    (whoami / environment / network); anything else keeps the wsutil mapping.
+    """
+    message = "Could not connect to the voice agent"
     try:
         return connect(ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
-        raise wsutil.auth_or_api_error(exc, "Could not connect to the voice agent") from exc
+        rejected = diagnostics.handshake_error(exc, message, host=environments.active().agents_host)
+        if rejected is not None:
+            raise rejected from exc
+        raise wsutil.auth_or_api_error(exc, message) from exc
 
 
 def _session_update_message(config: AgentRunConfig) -> str:

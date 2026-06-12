@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli.agent.voices import VOICES, complete_voice
+from aai_cli.agent.voices import VOICE_NAMES, complete_voice
 from aai_cli.llm import KNOWN_MODELS, complete_model
 from aai_cli.main import app
 
@@ -43,11 +43,11 @@ def test_complete_model_unknown_prefix_returns_nothing():
 
 
 def test_complete_voice_filters_by_prefix():
-    prefix = VOICES[0][:2]
+    prefix = VOICE_NAMES[0][:2]
     suggestions = complete_voice(prefix)
     assert suggestions
     assert all(v.startswith(prefix) for v in suggestions)
 
 
 def test_complete_voice_empty_prefix_returns_all():
-    assert complete_voice("") == VOICES
+    assert complete_voice("") == VOICE_NAMES

@@ -50,8 +50,10 @@ def test_list_voices_json_emits_machine_readable_array(monkeypatch):
     result = runner.invoke(app, ["agent", "--list-voices", "--json"])
     assert result.exit_code == 0
     voices = json.loads(result.output)
-    assert voices == VOICES  # the whole list, as a machine-readable array
-    assert "ivy" in voices
+    # The whole catalog, each entry carrying its name and language group.
+    assert voices == [{"name": v.name, "language": v.language} for v in VOICES]
+    assert {"name": "ivy", "language": "English"} in voices
+    assert {"name": "arjun", "language": "Multilingual"} in voices
 
 
 def test_agent_unauthenticated_runs_login(monkeypatch):

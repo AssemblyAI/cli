@@ -167,24 +167,25 @@ def _speak_dialogue(
 
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
+    # --sandbox is a root flag, so it must come before the subcommand in every example.
     epilog=examples_epilog(
         [
-            ("Speak text aloud (sandbox only)", 'assembly speak "Hello there, friend." --sandbox'),
+            ("Speak text aloud (sandbox only)", 'assembly --sandbox speak "Hello there, friend."'),
             (
                 "Pick a voice and language",
-                'assembly speak "Bonjour" --voice jane --language French --sandbox',
+                'assembly --sandbox speak "Bonjour" --voice jane --language French',
             ),
             (
                 "Speak a diarized transcript, one voice per speaker",
-                "assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox",
+                "assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak",
             ),
             (
                 "Override a speaker's voice",
-                "… | assembly speak --voice A=vera --voice B=paul --sandbox",
+                "… | assembly --sandbox speak --voice A=vera --voice B=paul",
             ),
             (
                 "Save to a WAV instead of playing",
-                'assembly speak "Hello" --out /tmp/hello.wav --sandbox',
+                'assembly --sandbox speak "Hello" --out /tmp/hello.wav',
             ),
         ]
     ),
@@ -195,11 +196,15 @@ def speak(
     voice: list[str] = typer.Option(
         [],
         "--voice",
-        help="Voice id, or SPEAKER=VOICE for diarized input (repeatable, e.g. --voice A=jane).",
+        help="Voice id (e.g. jane, michael, mary, paul, eve, george), or SPEAKER=VOICE "
+        "for diarized input (repeatable, e.g. --voice A=jane).",
     ),
     language: str = typer.Option(DEFAULT_LANGUAGE, "--language", help="Language of the text."),
     sample_rate: int | None = typer.Option(
-        None, "--sample-rate", help="Output sample rate in Hz. Server default if omitted."
+        None,
+        "--sample-rate",
+        help="Output sample rate in Hz (positive). Server default if omitted.",
+        min=1,
     ),
     out: Path | None = typer.Option(
         None, "--out", help="Write a WAV file instead of playing through the speakers."
@@ -208,10 +213,11 @@ def speak(
 ) -> None:
     """Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
 
-    Plays the audio through your speakers by default, or writes a WAV with --out.
-    Speaker-labeled input (from 'assembly transcribe --speaker-labels') is detected
-    automatically: the labels are stripped and each speaker gets a different
-    voice. This feature only exists in the sandbox today — run it with --sandbox.
+    Plays the audio through your speakers by default, or writes a WAV with
+    --out. Speaker-labeled input (from 'assembly transcribe
+    --speaker-labels') is detected automatically: the labels are stripped
+    and each speaker gets a different voice. This feature only exists in
+    the sandbox today — run it as 'assembly --sandbox speak'.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -220,7 +226,8 @@ def speak(
                 "assembly speak is only available in the sandbox.",
                 error_type="unsupported_environment",
                 exit_code=2,
-                suggestion="Re-run with --sandbox (or --env sandbox000).",
+                suggestion="Re-run as: assembly --sandbox speak … "
+                "(--sandbox goes before the command; or use --env sandbox000).",
             )
         spoken = _read_text(text)
         api_key = config.resolve_api_key(profile=state.profile)
@@ -238,6 +245,13 @@ def speak(
                 quiet=state.quiet,
             )
         else:
+            if overrides:
+                # Mirror the inverse warning in _speak_dialogue: never drop a
+                # requested voice mapping silently.
+                output.emit_warning(
+                    "Ignoring --voice SPEAKER=VOICE mappings; input has no speaker labels.",
+                    json_mode=json_mode,
+                )
             _speak_single(
                 api_key,
                 spoken,

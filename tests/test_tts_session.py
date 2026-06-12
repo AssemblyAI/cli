@@ -255,8 +255,31 @@ def test_synthesize_maps_forbidden_connect_to_api_error():
     def _connect(*_a, **_k):
         raise Forbidden("Unauthorized")  # 403 -> NOT a rejected key
 
-    with pytest.raises(APIError):
+    with pytest.raises(APIError) as exc:
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=_connect)
+    assert "Could not connect to the TTS service" in exc.value.message
+    # The rejected handshake carries the actionable next steps.
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
+    assert "--sandbox" in exc.value.suggestion
+
+
+def test_synthesize_handshake_401_is_not_authenticated_with_suggestion():
+    class Resp:
+        status_code = 401
+
+    class Rejected(Exception):
+        response = Resp()
+
+    def _connect(*_a, **_k):
+        raise Rejected("server rejected WebSocket connection: HTTP 401")
+
+    with pytest.raises(NotAuthenticated) as exc:
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=_connect)
+    assert exc.value.exit_code == 4
+    assert exc.value.rejected_key is True
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
 
 
 def test_synthesize_error_frame_without_details_says_unknown():

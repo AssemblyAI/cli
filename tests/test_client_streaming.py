@@ -160,6 +160,72 @@ def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
         client.stream_audio("sk_bad", [b"\x00"], params=_stream_params())
 
 
+def test_stream_audio_handshake_403_event_carries_suggestion(monkeypatch):
+    # The SDK reports a rejected handshake as an Error event (StreamingError with the
+    # HTTP status on .code); the CLI must add the actionable next steps, not stop at
+    # "Streaming error: WebSocket handshake rejected (HTTP 403)".
+    from assemblyai.streaming.v3 import StreamingError
+
+    class Handshake403Client(_FakeStreamingClient):
+        def stream(self, source):
+            from assemblyai.streaming.v3 import StreamingEvents
+
+            self.handlers[StreamingEvents.Error](
+                self, StreamingError("WebSocket handshake rejected (HTTP 403)", code=403)
+            )
+
+    monkeypatch.setattr(client, "StreamingClient", Handshake403Client)
+    with pytest.raises(APIError) as exc:
+        client.stream_audio("sk", [b"\x00"], params=_stream_params())
+    assert exc.value.message == "Streaming error: WebSocket handshake rejected (HTTP 403)"
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
+    assert "--sandbox" in exc.value.suggestion
+    # The suggestion names the active environment's streaming host (production here).
+    assert "streaming.assemblyai.com" in exc.value.suggestion
+
+
+def test_stream_audio_handshake_401_event_is_not_authenticated_with_suggestion(monkeypatch):
+    from assemblyai.streaming.v3 import StreamingError
+
+    from aai_cli.errors import NotAuthenticated
+
+    class Handshake401Client(_FakeStreamingClient):
+        def stream(self, source):
+            from assemblyai.streaming.v3 import StreamingEvents
+
+            self.handlers[StreamingEvents.Error](
+                self, StreamingError("WebSocket handshake rejected (HTTP 401)", code=401)
+            )
+
+    monkeypatch.setattr(client, "StreamingClient", Handshake401Client)
+    with pytest.raises(NotAuthenticated) as exc:
+        client.stream_audio("sk_bad", [b"\x00"], params=_stream_params())
+    assert exc.value.exit_code == 4
+    assert exc.value.rejected_key is True
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
+
+
+def test_stream_audio_silences_sdk_and_websockets_loggers(monkeypatch):
+    # The streaming setup must raise the library loggers above ERROR so a reader-thread
+    # failure can't dump a duplicate log line or raw traceback next to the CLIError.
+    import logging
+
+    names = ("assemblyai.streaming", "websockets", "websockets.client")
+    previous = {name: logging.getLogger(name).level for name in names}
+    for name in names:
+        logging.getLogger(name).setLevel(logging.NOTSET)
+    try:
+        monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
+        client.stream_audio("sk", [b"\x00"], params=_stream_params(), on_turn=lambda e: None)
+        for name in names:
+            assert logging.getLogger(name).level == logging.CRITICAL, name
+    finally:
+        for name, level in previous.items():
+            logging.getLogger(name).setLevel(level)
+
+
 def test_stream_audio_mid_stream_error_becomes_apierror(monkeypatch):
     class StreamFails(_FakeStreamingClient):
         def stream(self, source):

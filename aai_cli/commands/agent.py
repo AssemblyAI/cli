@@ -15,7 +15,13 @@ from aai_cli.agent.session import (
     AgentRunConfig,
     run_session,
 )
-from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_voice_list
+from aai_cli.agent.voices import (
+    DEFAULT_VOICE,
+    VOICE_NAMES,
+    VOICES,
+    complete_voice,
+    format_voice_list,
+)
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
@@ -69,7 +75,8 @@ def _open_audio(
 def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
     """--list-voices body, routed through run_command so --json yields a
     machine-readable array instead of the human list; needs no auth."""
-    output.emit(VOICES, lambda _voices: format_voice_list(), json_mode=json_mode)
+    payload = [{"name": voice.name, "language": voice.language} for voice in VOICES]
+    output.emit(payload, lambda _voices: format_voice_list(), json_mode=json_mode)
 
 
 @app.command(
@@ -129,12 +136,13 @@ def agent(
 ) -> None:
     """Have a live two-way voice conversation with an AssemblyAI voice agent.
 
-    Use headphones: the mic stays open while the agent speaks, so on speakers it would
-    hear itself and loop. Pass an audio file/URL (or --sample) to speak a recorded clip to
-    the agent instead of the microphone; the session then ends after the agent's reply.
+    Use headphones: the mic stays open while the agent speaks, so on
+    speakers it would hear itself and loop. Pass an audio file/URL (or
+    --sample) to speak a recorded clip to the agent instead of the
+    microphone; the session then ends after the agent's reply.
 
-    This only runs a conversation in the terminal — it writes no code. To build
-    a voice agent app, run 'assembly init voice-agent' instead.
+    This only runs a conversation in the terminal — it writes no code. To
+    build a voice agent app, run 'assembly init voice-agent' instead.
     """
 
     if list_voices:
@@ -144,7 +152,7 @@ def agent(
     def body(state: AppState, json_mode: bool) -> None:
         validate_output_flags(json_mode=json_mode, output_field=output_field)
         text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
-        if voice not in VOICES:
+        if voice not in VOICE_NAMES:
             raise UsageError(
                 f"Unknown voice {voice!r}.",
                 suggestion="Run 'assembly agent --list-voices' to see the options.",

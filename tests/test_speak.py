@@ -36,7 +36,11 @@ def test_production_env_is_rejected_with_sandbox_hint():
     result = runner.invoke(app, ["speak", "Hello"])  # default = production
     assert result.exit_code == 2
     assert "only available in the sandbox" in result.output
-    assert "--sandbox" in result.output
+    # The suggestion spells out the exact corrected invocation: --sandbox is a root
+    # flag, so it must go before the command, not after it.
+    assert "Re-run as: assembly --sandbox speak" in result.output
+    # Rich wraps the suggestion at 80 columns, so compare whitespace-normalized.
+    assert "before the command" in " ".join(result.output.split())
 
 
 def test_plays_audio_by_default(monkeypatch, fake_synthesize):
@@ -223,3 +227,43 @@ def test_unlabeled_text_still_uses_single_voice_path(fake_synthesize, monkeypatc
     assert result.exit_code == 0
     assert fake_synthesize["cfg"].voice == "mary"
     assert fake_synthesize["cfg"].text == "Just prose."
+    # No SPEAKER=VOICE mappings were given, so no "Ignoring" warning fires.
+    assert "Ignoring" not in result.stderr
+
+
+def test_speaker_mappings_on_unlabeled_input_warn_not_silently_drop(fake_synthesize, monkeypatch):
+    # The mirror of the bare-voice-in-dialogue note: SPEAKER=VOICE mappings can't
+    # apply to plain prose, and the user is told instead of the flag vanishing.
+    monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(app, ["--sandbox", "speak", "Just prose.", "--voice", "A=vera"])
+    assert result.exit_code == 0
+    assert "Ignoring --voice SPEAKER=VOICE mappings" in result.stderr
+    assert "no speaker labels" in result.stderr
+    # Synthesis still ran with the default voice (the mapping never applies).
+    assert fake_synthesize["cfg"].voice == "jane"
+
+
+def test_speaker_mappings_warning_is_structured_in_json_mode(fake_synthesize, monkeypatch):
+    monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(
+        app, ["--sandbox", "speak", "Just prose.", "--voice", "A=vera", "--json"]
+    )
+    assert result.exit_code == 0
+    # In --json mode the warning is its own {"warning": …} object on stderr, never
+    # a bare human line that would corrupt a machine-readable stream.
+    warning = next(json.loads(line) for line in result.stderr.splitlines() if line.startswith("{"))
+    assert "no speaker labels" in warning["warning"]
+
+
+def test_sample_rate_must_be_positive():
+    result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--sample-rate", "0"])
+    assert result.exit_code == 2
+    assert "--sample-rate" in result.output
+
+
+def test_sample_rate_floor_accepts_one(fake_synthesize, monkeypatch):
+    # min=1 exactly: 1 Hz is degenerate but valid (the server enforces its own floor).
+    monkeypatch.setattr("aai_cli.commands.speak.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--sample-rate", "1"])
+    assert result.exit_code == 0
+    assert fake_synthesize["cfg"].sample_rate == 1

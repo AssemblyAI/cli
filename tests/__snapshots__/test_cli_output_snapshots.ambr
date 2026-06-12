@@ -25,15 +25,13 @@
   
    Have a live two-way voice conversation with an AssemblyAI voice agent.
   
-   Use headphones: the mic stays open while the agent speaks, so on speakers it
-   would
-   hear itself and loop. Pass an audio file/URL (or --sample) to speak a recorded
-   clip to
-   the agent instead of the microphone; the session then ends after the agent's
-   reply.
+   Use headphones: the mic stays open while the agent speaks, so on
+   speakers it would hear itself and loop. Pass an audio file/URL (or
+   --sample) to speak a recorded clip to the agent instead of the
+   microphone; the session then ends after the agent's reply.
   
-   This only runs a conversation in the terminal — it writes no code. To build
-   a voice agent app, run 'assembly init voice-agent' instead.
+   This only runs a conversation in the terminal — it writes no code. To
+   build a voice agent app, run 'assembly init voice-agent' instead.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
@@ -766,39 +764,44 @@
   
    Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
   
-   Plays the audio through your speakers by default, or writes a WAV with --out.
-   Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
-   detected
-   automatically: the labels are stripped and each speaker gets a different
-   voice. This feature only exists in the sandbox today — run it with --sandbox.
+   Plays the audio through your speakers by default, or writes a WAV with
+   --out. Speaker-labeled input (from 'assembly transcribe
+   --speaker-labels') is detected automatically: the labels are stripped
+   and each speaker gets a different voice. This feature only exists in
+   the sandbox today — run it as 'assembly --sandbox speak'.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --voice                TEXT     Voice id, or SPEAKER=VOICE for diarized      │
-  │                                 input (repeatable, e.g. --voice A=jane).     │
-  │ --language             TEXT     Language of the text. [default: English]     │
-  │ --sample-rate          INTEGER  Output sample rate in Hz. Server default if  │
-  │                                 omitted.                                     │
-  │ --out                  PATH     Write a WAV file instead of playing through  │
-  │                                 the speakers.                                │
-  │ --json         -j               Emit JSON metadata about the synthesized     │
-  │                                 audio.                                       │
-  │ --help                          Show this message and exit.                  │
+  │ --voice                TEXT                  Voice id (e.g. jane, michael,   │
+  │                                              mary, paul, eve, george), or    │
+  │                                              SPEAKER=VOICE for diarized      │
+  │                                              input (repeatable, e.g. --voice │
+  │                                              A=jane).                        │
+  │ --language             TEXT                  Language of the text.           │
+  │                                              [default: English]              │
+  │ --sample-rate          INTEGER RANGE [x>=1]  Output sample rate in Hz        │
+  │                                              (positive). Server default if   │
+  │                                              omitted.                        │
+  │ --out                  PATH                  Write a WAV file instead of     │
+  │                                              playing through the speakers.   │
+  │ --json         -j                            Emit JSON metadata about the    │
+  │                                              synthesized audio.              │
+  │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Speak text aloud (sandbox only)
-   $ assembly speak "Hello there, friend." --sandbox
+   $ assembly --sandbox speak "Hello there, friend."
    Pick a voice and language
-   $ assembly speak "Bonjour" --voice jane --language French --sandbox
+   $ assembly --sandbox speak "Bonjour" --voice jane --language French
    Speak a diarized transcript, one voice per speaker
-   $ assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox
+   $ assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak
    Override a speaker's voice
-   $ … | assembly speak --voice A=vera --voice B=paul --sandbox
+   $ … | assembly --sandbox speak --voice A=vera --voice B=paul
    Save to a WAV instead of playing
-   $ assembly speak "Hello" --out /tmp/hello.wav --sandbox
+   $ assembly --sandbox speak "Hello" --out /tmp/hello.wav
   
   
   
@@ -833,13 +836,20 @@
   │ --help                            Show this message and exit.                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
-  │ --sample-rate              INTEGER  Force a microphone capture rate in Hz    │
-  │                                     (default: device native).                │
-  │ --device                   INTEGER  Microphone device index.                 │
-  │ --system-audio                      macOS only: stream system/app audio and  │
-  │                                     microphone as separate sessions.         │
-  │ --system-audio-only                 macOS only: stream system/app audio      │
-  │                                     without the microphone.                  │
+  │ --sample-rate              INTEGER RANGE [x>=1]  Audio rate in Hz            │
+  │                                                  (positive): capture rate    │
+  │                                                  for the mic, or the         │
+  │                                                  declared rate of raw PCM on │
+  │                                                  stdin (default: device      │
+  │                                                  native / 16000).            │
+  │ --device                   INTEGER               Microphone device index.    │
+  │ --system-audio                                   macOS only: stream          │
+  │                                                  system/app audio and        │
+  │                                                  microphone as separate      │
+  │                                                  sessions.                   │
+  │ --system-audio-only                              macOS only: stream          │
+  │                                                  system/app audio without    │
+  │                                                  the microphone.             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model.  │
