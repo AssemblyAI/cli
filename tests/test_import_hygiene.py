@@ -1,10 +1,10 @@
 """The CLI's import chain must stay free of the heavy eval scoring stack.
 
-`assembly eval`'s WER/DER scoring pulls in jiwer and pyannote.metrics (which
-drags numpy/scipy/pandas). Those imports are lazy by design (`wer.py`/`der.py`),
-so every other command keeps working on an install that doesn't ship the
-scoring stack — a module-scope `import jiwer` once crashed *every* invocation
-(even `--help`) of a Homebrew install whose formula lacked those resources.
+`assembly eval`'s WER scoring pulls in jiwer (and its rapidfuzz backend). That
+import is lazy by design (`wer.py`), so every other command keeps working on an
+install that doesn't ship the scoring stack — a module-scope `import jiwer` once
+crashed *every* invocation (even `--help`) of a Homebrew install whose formula
+lacked those resources.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 _PROBE = """
 import sys
 import aai_cli.main
-heavy = {"jiwer", "rapidfuzz", "pyannote", "numpy", "scipy", "pandas", "sklearn"}
+heavy = {"jiwer", "rapidfuzz"}
 loaded = sorted(heavy & {name.split(".")[0] for name in sys.modules})
 assert not loaded, f"CLI import eagerly loaded: {loaded}"
 """
