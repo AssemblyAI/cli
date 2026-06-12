@@ -15,7 +15,9 @@ def test_stream_maps_turn_detection_flags(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}
 
-    def fake_stream_audio(api_key, source, *, params, **kw):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         captured["params"] = params
 
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)

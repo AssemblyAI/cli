@@ -79,7 +79,7 @@ def test_skill_presence_requires_skill_md(tmp_path):
 def test_mcp_present_when_claude_mcp_get_succeeds(monkeypatch):
     calls = []
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, *, timeout=120):
         calls.append(list(cmd))
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
@@ -92,7 +92,9 @@ def test_mcp_absent_when_claude_mcp_get_fails(monkeypatch):
     monkeypatch.setattr(
         coding_agent,
         "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr=""),
+        lambda cmd, *, timeout=120: subprocess.CompletedProcess(
+            args=cmd, returncode=1, stdout="", stderr=""
+        ),
     )
     assert coding_agent.mcp_present() is False
 

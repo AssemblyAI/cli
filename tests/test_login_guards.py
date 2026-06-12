@@ -14,7 +14,7 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _fake_login_result(key="sk_from_oauth", **_kwargs):
+def _fake_login_result(key="sk_from_oauth"):
     return LoginResult(api_key=key, session_jwt="jwt_x", session_token="tok_x", account_id=7)
 
 

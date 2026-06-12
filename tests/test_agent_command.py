@@ -30,7 +30,7 @@ def test_agent_help_lists_command():
 def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
     called = {"ran": False}
 
-    def fake_run_session(*a, **k):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         called["ran"] = True
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
@@ -61,7 +61,7 @@ def test_agent_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
     monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
 
-    def fake_run_session(api_key, **_kwargs):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         raise AssertionError(f"agent session should not run after auto-login: {api_key}")
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
@@ -157,8 +157,8 @@ def _capture_run_session(monkeypatch):
     """Patch run_session to record its kwargs and return the dict it fills in."""
     seen = {}
 
-    def fake_run_session(api_key, **kwargs):
-        seen.update(kwargs)
+    def fake_run_session(api_key, *, renderer, player, mic, config):
+        seen.update(renderer=renderer, player=player, mic=mic, config=config)
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
     return seen
@@ -227,7 +227,7 @@ def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
 
-    def fake_run_session(api_key, *, renderer, **kwargs):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.connected()  # session.ready arrives even for a file-driven run
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
@@ -257,7 +257,7 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
 
     monkeypatch.setattr("aai_cli.commands.agent.DuplexAudio", FakeDuplex)
 
-    def fake_run_session(api_key, *, renderer, **kwargs):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.connected()
 
     monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
@@ -344,7 +344,7 @@ def test_agent_output_text_emits_plain_transcript(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
 
-    def fake_run_session(api_key, *, renderer, **kwargs):
+    def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.user_final("hello there")
         renderer.agent_transcript("hi, how can I help?", interrupted=False)
 

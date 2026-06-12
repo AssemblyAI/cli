@@ -371,7 +371,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
     monkeypatch.setenv(config.ENV_API_KEY, "sk_env")
     ran = {"login": 0}
 
-    def fake_login(**_kwargs):
+    def fake_login(*, json_mode=False):
         ran["login"] += 1
         return LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=7)
 
