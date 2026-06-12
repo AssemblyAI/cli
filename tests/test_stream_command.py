@@ -21,9 +21,7 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _drive_turns(
-    api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
-):
+def _drive_turns(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
     # Simulate the streaming client driving the renderer callbacks.
     if on_begin:
         on_begin(types.SimpleNamespace(id="sess"))
@@ -57,7 +55,7 @@ def test_stream_file_uses_filesource(monkeypatch, tmp_path):
     seen = {}
 
     def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
     ):
         seen["source_type"] = type(source).__name__
         seen["rate"] = params.sample_rate
@@ -96,7 +94,9 @@ def test_stream_mic_listening_notice_waits_for_mic_open(monkeypatch):
 
     order = []
 
-    def fake_stream_audio(api_key, source, *, params, on_begin=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         if on_begin:
             on_begin(types.SimpleNamespace(id="x"))  # Begin must NOT print "Listening…"
         order.append("begin")
@@ -114,7 +114,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
-    def fake(api_key, source, *, params, on_begin=None, **_kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_begin:
             on_begin(types.SimpleNamespace(id="x"))
 
@@ -136,7 +136,9 @@ def test_stream_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         raise AssertionError(f"streaming should not start after auto-login: {api_key}")
 
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
@@ -147,9 +149,7 @@ def test_stream_unauthenticated_runs_login(monkeypatch):
 
 
 def _capture_source(seen):
-    def fake(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
-    ):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["source"] = source
         seen["rate"] = params.sample_rate
 
@@ -222,9 +222,7 @@ def test_stream_file_json_output(monkeypatch, tmp_path):
 
     config.set_api_key("default", "sk_live")
 
-    def fake(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
-    ):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         # In non-follow mode begin/turn/termination must all be wired through to the
         # renderer (pins the `follow is not None` None-vs-handler choices).
         if on_begin:
@@ -253,7 +251,7 @@ def test_stream_prompt_biases_speech_model(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake(api_key, source, *, params, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["prompt"] = params.prompt
 
     monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake)
@@ -276,7 +274,7 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
     monkeypatch.setattr("aai_cli.commands.stream.youtube.download_audio", lambda url, d: fake)
     seen = {}
 
-    def fake_stream(api_key, source, *, params, **kwargs):
+    def fake_stream(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["source_type"] = type(source).__name__
         seen["src"] = getattr(source, "source", None)
 
@@ -300,7 +298,7 @@ def test_stream_podcast_page_url_downloads_then_streams(monkeypatch, tmp_path):
     monkeypatch.setattr("aai_cli.commands.stream.youtube.download_audio", lambda url, d: fake)
     seen = {}
 
-    def fake_stream(api_key, source, *, params, **kwargs):
+    def fake_stream(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["source_type"] = type(source).__name__
         seen["src"] = getattr(source, "source", None)
 
@@ -347,7 +345,9 @@ def test_stream_sample_rate_floor_accepts_one_for_stdin(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         seen["rate"] = params.sample_rate
         b"".join(source)  # drain the StdinSource
 
@@ -361,7 +361,9 @@ def test_stream_reads_raw_pcm_from_stdin(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake_stream_audio(api_key, source, *, params, on_begin=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         seen["rate"] = params.sample_rate
         seen["audio"] = b"".join(source)  # consume the StdinSource
 
@@ -389,7 +391,9 @@ def test_stream_system_audio_parallel_worker_error_surfaces(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         if type(source).__name__ == "FakeMic":
             raise APIError("mic failed")
         time.sleep(0.2)
@@ -406,7 +410,9 @@ def test_stream_output_text_emits_plain_finalized_turns(monkeypatch):
     # `-o text` -> only finalized transcripts as plain stdout lines (pipe into assembly llm).
     config.set_api_key("default", "sk_live")
 
-    def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="partial", end_of_turn=False))
             on_turn(types.SimpleNamespace(transcript="hello world", end_of_turn=True))

@@ -73,11 +73,11 @@ def test_fetch_and_cache_writes_latest(tmp_path, monkeypatch):
     # Untyped capture dict (mirrors the pattern in tests/test_telemetry.py).
     captured = {}
 
-    def fake_get(url, **kwargs):
+    def fake_get(url, *, headers, timeout, follow_redirects):
         captured["url"] = url
-        captured["headers"] = kwargs.get("headers", {})
-        captured["timeout"] = kwargs.get("timeout")
-        captured["follow_redirects"] = kwargs.get("follow_redirects")
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        captured["follow_redirects"] = follow_redirects
         return _fake_response({"tag_name": "v0.4.0"})
 
     monkeypatch.setattr(httpx2, "get", fake_get)
@@ -229,9 +229,14 @@ def test_spawn_refresh_is_detached(monkeypatch):
     # Untyped capture dict (mirrors the pattern in tests/test_telemetry.py).
     calls = {}
 
-    def fake_popen(args, **kwargs):
+    def fake_popen(args, *, stdout, stderr, start_new_session, env):
         calls["args"] = args
-        calls["kwargs"] = kwargs
+        calls["kwargs"] = {
+            "stdout": stdout,
+            "stderr": stderr,
+            "start_new_session": start_new_session,
+            "env": env,
+        }
         return object()
 
     monkeypatch.setattr(update_check.subprocess, "Popen", fake_popen)

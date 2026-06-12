@@ -64,9 +64,9 @@ def test_build_helper_compiles_to_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(macos, "user_cache_path", lambda _app: tmp_path)
     seen = {}
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, *, capture_output, text, check):
         seen["cmd"] = cmd
-        seen["kwargs"] = kwargs
+        seen["kwargs"] = {"capture_output": capture_output, "text": text, "check": check}
         Path(cmd[-1]).write_bytes(b"binary")
         return types.SimpleNamespace(returncode=0, stderr="", stdout="")
 
