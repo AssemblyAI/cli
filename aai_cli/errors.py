@@ -93,6 +93,23 @@ class UsageError(CLIError):
         super().__init__(message, error_type="usage_error", exit_code=2, suggestion=suggestion)
 
 
+def mutually_exclusive(*flags: tuple[str, object], suggestion: str | None = None) -> None:
+    """Raise a :class:`UsageError` naming the conflicting flags when more than one is set.
+
+    The shared primitive behind every "these flags conflict" check (gh's
+    ``MutuallyExclusive``), so each call site is one declaration instead of a bespoke
+    validator. A flag counts as given when its value is truthy — call sites pass the
+    raw option values (``None``/``False``/``[]`` all mean "not passed").
+    """
+    given = [name for name, value in flags if value]
+    if not given[1:]:  # zero or one flag set: no conflict
+        return
+    *head, last = given
+    joined = ", ".join(head)
+    listed = f"{joined}, and {last}" if given[2:] else f"{joined} and {last}"
+    raise UsageError(f"{listed} can't be combined.", suggestion=suggestion)
+
+
 # Word-level phrases that mark a failure as "the credentials were rejected" rather
 # than a generic network/protocol error. Matched case-insensitively against str(exc).
 # Deliberately NOT bare numbers like "401"/"403"/"1008": those match unrelated text

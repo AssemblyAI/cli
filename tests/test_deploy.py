@@ -55,16 +55,16 @@ def _stub(
     monkeypatch.setattr("aai_cli.output.is_agentic", lambda: agentic)
     calls: dict[str, object] = {}
 
-    def fake_confirm(prompt: str, *a: object, **k: object) -> bool:
+    def fake_confirm(prompt: str) -> bool:
         calls["prompt"] = prompt
         return confirm
 
     monkeypatch.setattr("typer.confirm", fake_confirm)
 
-    def fake_run(cmd: list[str], **kwargs: object) -> types.SimpleNamespace:
+    def fake_run(cmd: list[str], *, cwd: Path, check: bool) -> types.SimpleNamespace:
         runs = calls.setdefault("runs", [])
         assert isinstance(runs, list)
-        runs.append({"cmd": cmd, "cwd": kwargs.get("cwd"), "check": kwargs.get("check")})
+        runs.append({"cmd": cmd, "cwd": cwd, "check": check})
         return types.SimpleNamespace(returncode=returncode)
 
     monkeypatch.setattr("aai_cli.commands.deploy.subprocess.run", fake_run)

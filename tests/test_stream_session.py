@@ -12,9 +12,7 @@ runner = CliRunner()
 
 
 def _capture_source(seen):
-    def fake(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
-    ):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["source"] = source
         seen["rate"] = params.sample_rate
 
@@ -112,7 +110,9 @@ def test_stream_system_audio_uses_macos_source(monkeypatch) -> None:
                 mic_on_open[0]()
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         source_type = type(source).__name__
         source_types.append(source_type)
         rates.append(params.sample_rate)
@@ -190,7 +190,9 @@ def test_stream_system_audio_forwards_mic_device_flags(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         list(source)
 
     monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
@@ -222,7 +224,9 @@ def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, on_turn=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript=type(source).__name__, end_of_turn=True))
@@ -261,7 +265,9 @@ def test_stream_system_audio_speaker_labels_only_diarizes_system(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         chunk = next(iter(source))
         speaker_labels_by_chunk[chunk] = params.speaker_labels
 
@@ -308,7 +314,9 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
         def join(self, timeout=None):
             return None
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         raise APIError(f"{type(source).__name__} failed")
 
     monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
@@ -320,6 +328,55 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
     assert "failed" in result.output
     # Both source workers run as daemons so a wedged stream can't block process exit.
     assert daemons and all(d is True for d in daemons)
+
+
+def test_stream_system_audio_parallel_unexpected_worker_error_fails_the_run(monkeypatch):
+    # A non-CLIError bug inside a worker must still fail the run with a clean error:
+    # uncaught, it would die with the daemon thread and the command would exit 0
+    # for a stream that actually failed.
+    config.set_api_key("default", "sk_live")
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"system"])
+
+    class FakeMic:
+        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
+            self.sample_rate = target_rate
+
+        def __iter__(self):
+            return iter([b"mic"])
+
+    class ImmediateThread:
+        def __init__(self, *, target, args, daemon):
+            self._target = target
+            self._args = args
+
+        def start(self):
+            self._target(*self._args)
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            return None
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        raise RuntimeError("event parsing blew up")
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
+    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
+    assert result.exit_code == 1
+    # Normalized to a clean worker error that names the source and the cause.
+    assert "Streaming worker" in result.output
+    assert "event parsing blew up" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypatch):
@@ -389,7 +446,7 @@ def test_stream_system_audio_rejects_both_modes():
     config.set_api_key("default", "sk_live")
     result = runner.invoke(app, ["stream", "--system-audio", "--system-audio-only"])
     assert result.exit_code == 2
-    assert "either --system-audio" in result.output
+    assert "--system-audio and --system-audio-only can't be combined." in result.output
 
 
 def test_stream_show_code_rejects_system_audio():

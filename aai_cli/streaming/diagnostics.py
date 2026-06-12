@@ -22,8 +22,6 @@ from aai_cli.errors import APIError, CLIError, NotAuthenticated
 # CLIError already carries the message, so the logger is raised above ERROR.
 SDK_STREAMING_LOGGER = "assemblyai.streaming"
 
-# Handshake statuses that mean the server refused the connection outright.
-_HANDSHAKE_AUTH_STATUSES = (401, 403)
 _UNAUTHORIZED = 401
 
 
@@ -46,22 +44,6 @@ def handshake_suggestion(host: str) -> str:
     )
 
 
-def _handshake_status(error: object) -> int | None:
-    """The HTTP status of a rejected WebSocket handshake (401/403), else None.
-
-    Reads the two structured shapes only — the assemblyai SDK's StreamingError
-    carries the status on ``.code``; websockets' InvalidStatus carries it on
-    ``.response.status_code`` — never the message text.
-    """
-    code = getattr(error, "code", None)
-    if code in _HANDSHAKE_AUTH_STATUSES:
-        return int(code)
-    status = getattr(getattr(error, "response", None), "status_code", None)
-    if status in _HANDSHAKE_AUTH_STATUSES:
-        return int(status)
-    return None
-
-
 def handshake_error(error: object, message: str, *, host: str) -> CLIError | None:
     """An auth-flavored CLIError for a handshake 401/403, else None.
 
@@ -70,7 +52,7 @@ def handshake_error(error: object, message: str, *, host: str) -> CLIError | Non
     stays an APIError — it also covers WAF/region/plan blocks, mirroring
     ``aai_cli.ws.is_rejected_key`` — but now carries the same suggestion.
     """
-    status = _handshake_status(error)
+    status = wsutil.handshake_status(error)
     if status is None:
         return None
     if status == _UNAUTHORIZED:

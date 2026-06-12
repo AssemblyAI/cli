@@ -1,4 +1,41 @@
-from aai_cli.errors import APIError, CLIError, NotAuthenticated, is_auth_failure
+import pytest
+
+from aai_cli.errors import (
+    APIError,
+    CLIError,
+    NotAuthenticated,
+    UsageError,
+    is_auth_failure,
+    mutually_exclusive,
+)
+
+
+def test_mutually_exclusive_two_set_flags_raise_usage_error():
+    with pytest.raises(UsageError) as exc:
+        mutually_exclusive(("--a", "x"), ("--b", True), suggestion="pick one")
+    assert exc.value.message == "--a and --b can't be combined."
+    assert exc.value.suggestion == "pick one"
+    assert exc.value.exit_code == 2
+    assert exc.value.error_type == "usage_error"
+
+
+def test_mutually_exclusive_lists_three_set_flags_with_oxford_comma():
+    with pytest.raises(UsageError) as exc:
+        mutually_exclusive(("--a", 1), ("--b", ["x"]), ("--c", True))
+    assert exc.value.message == "--a, --b, and --c can't be combined."
+    assert exc.value.suggestion is None
+
+
+def test_mutually_exclusive_names_only_the_set_flags():
+    with pytest.raises(UsageError) as exc:
+        mutually_exclusive(("--a", True), ("--b", None), ("--c", "y"))
+    assert exc.value.message == "--a and --c can't be combined."
+
+
+def test_mutually_exclusive_allows_zero_or_one_set_flag():
+    mutually_exclusive(("--a", None), ("--b", False))
+    # Falsy values ("", []) mean "not passed", same as None.
+    mutually_exclusive(("--a", "x"), ("--b", ""), ("--c", []))
 
 
 def test_not_authenticated_defaults():
