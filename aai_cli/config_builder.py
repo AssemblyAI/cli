@@ -8,6 +8,7 @@ from pathlib import Path
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from aai_cli import jsonshape
 from aai_cli.errors import UsageError
@@ -183,59 +184,31 @@ STREAM_COERCE: dict[str, str] = _coerce_table(StreamingParameters, STREAM_FIELD_
 TRANSCRIBE_FIELDS = TRANSCRIBE_COERCE
 STREAM_FIELDS = STREAM_COERCE
 
-_TRUE = {"1", "true", "yes", "on"}
-_FALSE = {"0", "false", "no", "off"}
-
-
-def _coerce_bool(field: str, raw: str) -> object:
-    low = raw.strip().lower()
-    if low in _TRUE:
-        return True
-    if low in _FALSE:
-        return False
-    raise UsageError(f"{field} expects a boolean (true/false), got {raw!r}.")
-
-
-def _coerce_int(field: str, raw: str) -> object:
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise UsageError(f"{field} expects an integer, got {raw!r}.") from exc
-
-
-def _coerce_float(field: str, raw: str) -> object:
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise UsageError(f"{field} expects a number, got {raw!r}.") from exc
-
-
-def _coerce_list(_field: str, raw: str) -> object:
-    return [part.strip() for part in raw.split(",") if part.strip()]
-
-
-def _coerce_json(field: str, raw: str) -> object:
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise UsageError(f"{field} expects a JSON value, got {raw!r}.") from exc
-
-
-# Coercion kind -> coercer. Kinds absent here ("str", and any unknown) pass through raw.
-_COERCERS: dict[str, Callable[[str, str], object]] = {
-    "bool": _coerce_bool,
-    "int": _coerce_int,
-    "float": _coerce_float,
-    "list": _coerce_list,
-    "json": _coerce_json,
+# Coercion kind -> (lax pydantic parser, expectation named in the error). Pydantic
+# parses the CLI's string inputs (bool spellings, int/float, raw JSON values);
+# "list" (CSV split) and "str"/unknown (passthrough) are handled inline in
+# `coerce_value`.
+_VALIDATORS: dict[str, tuple[Callable[[str], object], str]] = {
+    "bool": (TypeAdapter[object](bool).validate_python, "a boolean (true/false)"),
+    "int": (TypeAdapter[object](int).validate_python, "an integer"),
+    "float": (TypeAdapter[object](float).validate_python, "a number"),
+    "json": (TypeAdapter[object](JsonValue).validate_json, "a JSON value"),
 }
 
 
 def coerce_value(field: str, raw: str) -> object:
     """Coerce a string --config value to the type expected by `field`."""
     kind = TRANSCRIBE_COERCE.get(field) or STREAM_COERCE.get(field, "str")
-    coercer = _COERCERS.get(kind)
-    return coercer(field, raw) if coercer is not None else raw
+    if kind == "list":
+        return [part.strip() for part in raw.split(",") if part.strip()]
+    entry = _VALIDATORS.get(kind)
+    if entry is None:  # "str" and any unknown kind pass through raw
+        return raw
+    validate, expected = entry
+    try:
+        return validate(raw)
+    except ValidationError as exc:
+        raise UsageError(f"{field} expects {expected}, got {raw!r}.") from exc
 
 
 def parse_config_overrides(

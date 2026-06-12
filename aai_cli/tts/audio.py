@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from aai_cli.errors import CLIError
-from aai_cli.microphone import audio_missing_error
+from aai_cli.microphone import import_sounddevice
 
 
 class _OutputStream(Protocol):
@@ -53,10 +53,7 @@ def silence(sample_rate: int, seconds: float) -> bytes:
 
 def _default_output_stream(sample_rate: int) -> _OutputStream:
     """A started-on-demand raw 16-bit mono output stream from sounddevice."""
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise audio_missing_error() from exc
+    sd = import_sounddevice()
     stream: _OutputStream = sd.RawOutputStream(samplerate=sample_rate, channels=1, dtype="int16")
     return stream
 
