@@ -83,7 +83,9 @@ def test_stream_llm_rejects_output_text(monkeypatch):
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not stream")),
     )
     result = runner.invoke(app, ["stream", "--llm", "summarize", "-o", "text"])
-    assert result.exit_code == 2  # --llm renders a panel/NDJSON; -o text is contradictory
+    assert result.exit_code == 2
+    assert "--llm and -o text can't be combined." in result.output
+    assert "renders a live panel" in result.output  # the why lives in the suggestion
 
 
 def test_stream_without_prompt_does_not_transform(monkeypatch):

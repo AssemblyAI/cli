@@ -188,6 +188,7 @@ def test_transcribe_language_code_with_detection_exits_2(mocker):
     )
     assert result.exit_code == 2
     assert "--language-code and --language-detection can't be combined." in result.output
+    assert "Force a language or auto-detect it, not both." in result.output
     tx.assert_not_called()
 
 
@@ -299,7 +300,8 @@ def test_transcribe_json_with_non_json_output_field_exits_2(mocker):
     tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "text", "--json"])
     assert result.exit_code == 2
-    assert "--json conflicts with -o text" in result.output
+    assert "--json and -o text can't be combined." in result.output
+    assert "use -o json for the full JSON payload" in result.output
     tx.assert_not_called()
 
 
