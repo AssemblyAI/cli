@@ -73,9 +73,12 @@ def test_silence_stdout_redirects_to_devnull(monkeypatch):
 
     monkeypatch.setattr("os.open", fake_open)
     monkeypatch.setattr("os.dup2", fake_dup2)
+    monkeypatch.setattr("os.close", lambda fd: calls.setdefault("closed", fd))
     stdio.silence_stdout()
     assert calls["path"] == __import__("os").devnull
     assert calls["dup2"][0] == 99
+    # The temporary devnull fd must be closed after dup2 — it leaks otherwise.
+    assert calls["closed"] == 99
 
 
 def test_silence_stdout_suppresses_oserror(monkeypatch):

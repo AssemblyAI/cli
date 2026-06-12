@@ -24,13 +24,17 @@ _StreamHandler = Callable[[Any, Any], object]
 
 
 class _StreamingClientLike(Protocol):
-    def on(self, event: StreamingEvents, handler: _StreamHandler) -> None: ...
+    def on(self, event: StreamingEvents, handler: _StreamHandler) -> None:
+        """Register a handler for a streaming event."""
 
-    def connect(self, params: StreamingParameters) -> None: ...
+    def connect(self, params: StreamingParameters) -> None:
+        """Open the realtime session."""
 
-    def stream(self, data: bytes | Generator[bytes, None, None] | Iterable[bytes]) -> None: ...
+    def stream(self, data: bytes | Generator[bytes, None, None] | Iterable[bytes]) -> None:
+        """Send audio to the session."""
 
-    def disconnect(self, *, terminate: Literal[False, True] = False) -> None: ...
+    def disconnect(self, *, terminate: Literal[False, True] = False) -> None:  # pragma: no mutate
+        """Close the session."""
 
 
 def _make_streaming_client(api_key: str) -> _StreamingClientLike:

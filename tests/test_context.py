@@ -415,8 +415,6 @@ def test_run_command_maps_unexpected_exception_to_clean_internal_error():
 
 
 def test_run_command_unexpected_exception_keeps_json_error_shape():
-    import json
-
     def body(state, json_mode):
         raise ValueError("kaboom")
 

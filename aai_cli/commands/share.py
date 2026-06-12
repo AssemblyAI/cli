@@ -115,6 +115,8 @@ def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> N
         output.emit(payload, _render_share, json_mode=json_mode)
         server.wait()
     except KeyboardInterrupt:
+        # Ctrl-C is the expected way to stop a foreground share; the finally
+        # block below tears down the tunnel and server.
         pass
     finally:
         _terminate(proxy)
