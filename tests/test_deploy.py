@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.commands.deploy import FLY, RAILWAY, VERCEL, Target
+from aai_cli.deploy_exec import FLY, RAILWAY, VERCEL, Target
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -67,7 +67,7 @@ def _stub(
         runs.append({"cmd": cmd, "cwd": cwd, "check": check})
         return types.SimpleNamespace(returncode=returncode)
 
-    monkeypatch.setattr("aai_cli.commands.deploy.subprocess.run", fake_run)
+    monkeypatch.setattr("aai_cli.deploy_exec.subprocess.run", fake_run)
     return calls
 
 
@@ -358,7 +358,7 @@ def test_deploy_prod_error_suggests_dropping_the_flag(monkeypatch: pytest.Monkey
 
 
 def test_install_hint_platform_selection(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli.commands import deploy
+    from aai_cli import deploy_exec as deploy
 
     monkeypatch.setattr("sys.platform", "darwin")
     assert deploy._install_hint(FLY) == "Install it with `brew install flyctl`."

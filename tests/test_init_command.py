@@ -7,6 +7,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from aai_cli import init_exec
 from aai_cli.commands import init as init_cmd
 from aai_cli.errors import CLIError
 from aai_cli.main import app
@@ -255,7 +256,7 @@ def test_pick_template_interactive_returns_choice(monkeypatch):
     monkeypatch.setattr("sys.stdin", _Tty())
     monkeypatch.setattr("sys.stdout", _Tty())
     monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(TEMPLATE))
-    assert init_cmd._pick_template() == TEMPLATE
+    assert init_exec._pick_template() == TEMPLATE
 
 
 def test_pick_template_ctrl_c_exits_130(monkeypatch):
@@ -264,7 +265,7 @@ def test_pick_template_ctrl_c_exits_130(monkeypatch):
     monkeypatch.setattr("sys.stdout", _Tty())
     monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(None))
     with pytest.raises(typer.Exit) as exc:
-        init_cmd._pick_template()
+        init_exec._pick_template()
     assert exc.value.exit_code == 130
 
 
@@ -274,7 +275,7 @@ def test_pick_template_missing_questionary_errors(monkeypatch):
     monkeypatch.setattr("sys.stdout", _Tty())
     monkeypatch.setitem(sys.modules, "questionary", None)  # makes `import questionary` raise
     with pytest.raises(CLIError) as exc:
-        init_cmd._pick_template()
+        init_exec._pick_template()
     assert exc.value.error_type == "missing_dependency"
     assert exc.value.exit_code == 1
 
@@ -289,7 +290,7 @@ def test_pick_template_errors_when_either_stream_not_a_tty(monkeypatch, stdin_tt
     monkeypatch.setattr("sys.stdout", _Tty() if stdout_tty else io.StringIO())
     monkeypatch.setitem(sys.modules, "questionary", None)
     with pytest.raises(CLIError) as exc:
-        init_cmd._pick_template()
+        init_exec._pick_template()
     assert exc.value.error_type == "usage_error"
     assert exc.value.exit_code == 1
 
@@ -302,8 +303,8 @@ def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
         llm_gateway_base="https://llm.x",
         streaming_host="streaming.streaming.example.com",
     )
-    monkeypatch.setattr(init_cmd.environments, "active", lambda: fake_env)
-    assert init_cmd._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
+    monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
+    assert init_exec._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
 
 
 def test_init_install_failure_reports_and_exits(tmp_path, monkeypatch):
