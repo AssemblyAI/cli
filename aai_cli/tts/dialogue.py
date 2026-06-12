@@ -65,9 +65,6 @@ def parse_segments(text: str) -> list[Segment]:
     return [turn for turn in merged if turn.text]
 
 
-DEFAULT_VOICE_ROTATION = ("jane", "michael", "mary", "paul", "eve", "george")
-
-
 def parse_voice_overrides(values: list[str]) -> tuple[str | None, dict[str, str]]:
     """Split repeatable ``--voice`` values into ``(bare_voice, {speaker_id: voice})``.
 

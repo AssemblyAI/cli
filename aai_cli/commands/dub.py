@@ -60,7 +60,8 @@ def dub(
         [],
         "--voice",
         help="Voice id for every speaker (e.g. jane, michael, paul), or SPEAKER=VOICE "
-        "to pin a diarized speaker (repeatable, e.g. --voice A=jane).",
+        "to pin a diarized speaker (repeatable, e.g. --voice A=jane). Default: the "
+        "target language's native voice(s).",
     ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,

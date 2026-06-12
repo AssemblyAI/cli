@@ -115,6 +115,27 @@ def test_voice_and_language_flow_into_config(monkeypatch, fake_synthesize):
     assert cfg.query_params() == {"voice": "jane", "language": "English"}
 
 
+def test_default_voice_follows_the_language(monkeypatch, fake_synthesize):
+    # Each voice speaks one language: with no --voice, a non-English --language
+    # switches to that language's native voice instead of English "jane".
+    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(app, ["--sandbox", "speak", "Ciao", "--language", "Italian"])
+    assert result.exit_code == 0
+    cfg = fake_synthesize["cfg"]
+    assert cfg.voice == "giovanni"
+    assert cfg.language == "Italian"
+
+
+def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize):
+    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    result = runner.invoke(
+        app, ["--sandbox", "speak", "Bonjour", "--voice", "jane", "--language", "French"]
+    )
+    assert result.exit_code == 0
+    # A chosen voice always wins; the language only drives the default.
+    assert fake_synthesize["cfg"].voice == "jane"
+
+
 def test_json_mode_emits_metadata_object_on_stdout(monkeypatch, fake_synthesize):
     monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--voice", "jane", "--json"])
@@ -164,6 +185,16 @@ def test_labeled_stdin_uses_dialogue_path_with_default_rotation(fake_dialogue):
         ("michael", "Hi."),
         ("jane", "Bye."),
     ]
+
+
+def test_dialogue_rotation_follows_the_language(fake_dialogue):
+    # French has exactly one native voice, so every speaker switches to it —
+    # the language selects the voice in dialogue mode too.
+    text = "Speaker A: Bonjour.\nSpeaker B: Salut."
+    result = runner.invoke(app, ["--sandbox", "speak", "--language", "French"], input=text)
+    assert result.exit_code == 0
+    assert fake_dialogue["segments"] == [("estelle", "Bonjour."), ("estelle", "Salut.")]
+    assert fake_dialogue["language"] == "French"
 
 
 def test_speaker_voice_override_is_applied(fake_dialogue):
