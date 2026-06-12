@@ -251,7 +251,7 @@ def test_run_session_handshake_403_is_api_error_like_stream():
     # The rejected handshake carries the actionable next steps, env host included.
     assert exc.value.suggestion is not None
     assert "assembly whoami" in exc.value.suggestion
-    assert "agents.assemblyai.com" in exc.value.suggestion
+    assert "access to agents.assemblyai.com." in exc.value.suggestion
 
 
 def test_run_session_handshake_401_is_still_auth_failure():

@@ -65,7 +65,7 @@ def test_share_prints_public_url(tmp_path, monkeypatch):
     server, proxy = _stub(monkeypatch)
     result = runner.invoke(app, ["share"])
     assert result.exit_code == 0, result.output
-    assert "happy-slug.trycloudflare.com" in result.output
+    assert "Sharing https://happy-slug.trycloudflare.com" in result.output
     assert "localhost:3000" in result.output
     # proxy still running (poll None) -> terminated; server already exited (poll 0) -> not
     assert proxy.terminated is True
@@ -275,8 +275,7 @@ def test_share_json_emits_url(tmp_path, monkeypatch):
     _stub(monkeypatch)
     result = runner.invoke(app, ["share", "--json"])
     assert result.exit_code == 0, result.output
-    assert '"url"' in result.output
-    assert "happy-slug.trycloudflare.com" in result.output
+    assert '"url": "https://happy-slug.trycloudflare.com"' in result.output
 
 
 def test_share_tunnel_env_excludes_api_key(tmp_path, monkeypatch):

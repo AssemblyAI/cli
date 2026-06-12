@@ -273,7 +273,7 @@ def test_agent_show_code_prints_without_session(monkeypatch):
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code"])
     assert result.exit_code == 0
     assert called == []  # never ran a session
-    assert "agents.assemblyai.com" in result.output
+    assert "wss://agents.assemblyai.com/v1/ws" in result.output
     assert '"voice": "ivy"' in result.output
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in result.output
 
@@ -336,7 +336,7 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
     )
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code", "--json"])
     assert result.exit_code == 0
-    assert "agents.assemblyai.com" in result.output
+    assert "wss://agents.assemblyai.com/v1/ws" in result.output
 
 
 def test_agent_output_text_emits_plain_transcript(monkeypatch):

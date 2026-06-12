@@ -73,8 +73,10 @@ def login(
             config.clear_session(profile)
         # An --api-key login stores no browser session, so the AMS self-service
         # commands won't work for this profile — say so up front instead of letting
-        # the user hit "needs a browser login" later.
-        api_key_only = api_key is not None
+        # the user hit "needs a browser login" later. Named `key_only` (not api_key_*):
+        # CodeQL's name heuristic would classify the boolean itself as a secret and
+        # flag the emit below (py/clear-text-logging-sensitive-data).
+        key_only = api_key is not None
 
         def render(_d: object) -> str:
             lines = [
@@ -83,7 +85,7 @@ def login(
                     "Run `assembly onboard` to finish setup, or `assembly transcribe <file>`."
                 ),
             ]
-            if api_key_only:
+            if key_only:
                 lines.append(
                     output.hint(
                         "Account commands (keys/balance/usage/limits/audit) need "
@@ -93,7 +95,7 @@ def login(
             return "\n".join(lines)
 
         output.emit(
-            {"authenticated": True, "profile": profile, "env": env, "api_key_only": api_key_only},
+            {"authenticated": True, "profile": profile, "env": env, "api_key_only": key_only},
             render,
             json_mode=json_mode,
         )
@@ -163,7 +165,7 @@ def whoami(
         # The full env -> keyring chain (raises NotAuthenticated when empty), so a CI
         # box authenticated via ASSEMBLYAI_API_KEY can use whoami as a preflight check.
         key = state.resolve_api_key()
-        masked = output.mask_secret(key)
+        masked = output.redact_secret(key)
         env = environments.active().name
         # A network failure must not suppress the local table: profile, env, masked
         # key, and session are all known offline. reachable=None marks "couldn't

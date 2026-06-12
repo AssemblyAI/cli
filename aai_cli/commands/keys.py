@@ -71,7 +71,7 @@ def list_(
                     "id": token.get("id", ""),
                     "name": token.get("name") or token.get("token_name", ""),
                     "project": project_name,
-                    "key": output.mask_secret(str(token.get("api_key", ""))),
+                    "key": output.redact_secret(str(token.get("api_key", ""))),
                     "disabled": bool(token.get("is_disabled")),
                 }
                 for token in jsonshape.mapping_list(entry.get("tokens"))

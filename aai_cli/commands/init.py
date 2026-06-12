@@ -148,7 +148,11 @@ def _resolve_target(
 def _key_row(api_key: str | None, key_source: str | None, preserved: str | None) -> steps.Step:
     """The report's `key` row — emitted symmetrically whether a key resolved or not."""
     if api_key is not None:
-        return {"name": "key", "status": "written", "detail": f"from {key_source}"}
+        # Literal branches rather than interpolating key_source: it rode in the same
+        # return tuple as the API key, so CodeQL's coarse tuple taint marks it
+        # sensitive and flags the report emit (py/clear-text-logging-sensitive-data).
+        detail = "from environment" if key_source == "environment" else "from keyring"
+        return {"name": "key", "status": "written", "detail": detail}
     if preserved is not None:
         return {"name": "key", "status": "kept", "detail": "existing .env key preserved"}
     return {

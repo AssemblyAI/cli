@@ -47,10 +47,10 @@ def test_is_agentic_true_when_stdout_not_a_tty(monkeypatch):
     assert output.is_agentic() is True
 
 
-def test_mask_secret_preserves_only_short_edges():
-    assert output.mask_secret("sk_1234567890") == "sk_…7890"
-    assert output.mask_secret("12345678") == "123…5678"
-    assert output.mask_secret("short") == "***"
+def test_redact_secret_preserves_only_short_edges():
+    assert output.redact_secret("sk_1234567890") == "sk_…7890"
+    assert output.redact_secret("12345678") == "123…5678"
+    assert output.redact_secret("short") == "***"
 
 
 def test_emit_json_serializes(capsys):
