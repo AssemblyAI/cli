@@ -53,6 +53,7 @@ def test_defaults_map_to_options(captured_run):
     assert captured_run["opts"] == dub_exec.DubOptions(
         media="talk.mp4",
         language="de",
+        source_language=None,
         transcript_id=None,
         voice=[],
         model=llm.DEFAULT_MODEL,
@@ -69,6 +70,8 @@ def test_every_flag_maps_to_options(captured_run):
             "talk.mp4",
             "--lang",
             "German",
+            "--source-lang",
+            "fr",
             "-t",
             "tr_1",
             "--voice",
@@ -89,6 +92,7 @@ def test_every_flag_maps_to_options(captured_run):
     assert captured_run["opts"] == dub_exec.DubOptions(
         media="talk.mp4",
         language="German",
+        source_language="fr",
         transcript_id="tr_1",
         voice=["A=jane", "paul"],
         model="gpt-5",

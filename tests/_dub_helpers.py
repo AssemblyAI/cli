@@ -24,6 +24,7 @@ from aai_cli.tts.session import SpeakResult
 DEFAULTS = DubOptions(
     media="talk.mp4",
     language="de",
+    source_language=None,
     transcript_id=None,
     voice=[],
     model=llm.DEFAULT_MODEL,
@@ -42,9 +43,11 @@ def fake_transcript(utterances, *, audio_duration=5):
     return SimpleNamespace(id="tr_dub", utterances=utterances, audio_duration=audio_duration)
 
 
-def completion(text):
-    """The slice of an OpenAI ChatCompletion that gateway.content_of reads."""
-    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+def completion(text, finish_reason=None):
+    """The slice of an OpenAI ChatCompletion that gateway.content_of and the
+    dub truncation check read."""
+    choice = SimpleNamespace(message=SimpleNamespace(content=text), finish_reason=finish_reason)
+    return SimpleNamespace(choices=[choice])
 
 
 def write_media(tmp_path: Path) -> Path:

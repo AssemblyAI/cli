@@ -16,7 +16,7 @@ from pathlib import Path
 import assemblyai as aai
 
 from aai_cli import client, output
-from aai_cli.errors import CLIError
+from aai_cli.errors import APIError, CLIError
 
 
 def validate_local_media(media: Path, command: str) -> None:
@@ -56,6 +56,13 @@ def run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
+def path_arg(path: Path) -> str:
+    """``path`` as an ffmpeg argv token: a leading '-' is disambiguated with
+    ``./`` so a filename like ``-out.mp4`` can't be parsed as an option."""
+    text = str(path)
+    return f"./{text}" if text.startswith("-") else text
+
+
 def ffmpeg_failure(
     result: subprocess.CompletedProcess[str],
     action: str,
@@ -82,12 +89,43 @@ def resolve_diarized_transcript(
     status_message: str,
     json_mode: bool,
     quiet: bool,
+    language_code: str | None = None,
+    detect_language: bool = False,
 ) -> object:
-    """The diarized transcript driving the command: fetched by id, or made fresh
-    from the (already local) media file — always with speaker labels, so the
-    caller can select or voice content per speaker."""
+    """The diarized transcript driving the command: fetched by id (and verified
+    usable), or made fresh from the (already local) media file — always with
+    speaker labels, so the caller can select or voice content per speaker."""
     if transcript_id is not None:
-        return client.get_transcript(api_key, transcript_id)
-    config = aai.TranscriptionConfig(speaker_labels=True)
+        return _fetched_transcript(api_key, transcript_id)
+    config = aai.TranscriptionConfig(
+        speaker_labels=True,
+        language_code=language_code,
+        language_detection=detect_language or None,
+    )
     with output.status(status_message, json_mode=json_mode, quiet=quiet):
         return client.transcribe(api_key, str(media), config=config)
+
+
+def _fetched_transcript(api_key: str, transcript_id: str) -> object:
+    """A --transcript-id transcript, rejected unless it finished successfully —
+    a queued/processing/errored one would otherwise surface much later as a
+    misleading 'no utterances' failure."""
+    transcript = client.get_transcript(api_key, transcript_id)
+    raw_status = getattr(transcript, "status", None)
+    status = str(getattr(raw_status, "value", raw_status) or "")
+    if status == "error":
+        raise APIError(
+            getattr(transcript, "error", None) or "Transcript failed.",
+            transcript_id=transcript_id,
+        )
+    if status in {"queued", "processing"}:
+        raise CLIError(
+            f"Transcript {transcript_id} is still {status}.",
+            error_type="transcript_not_ready",
+            exit_code=2,
+            suggestion=(
+                f"Wait for it to finish (assembly transcripts get {transcript_id}), "
+                "or drop -t to transcribe the file fresh."
+            ),
+        )
+    return transcript

@@ -79,9 +79,12 @@ def test_run_dub_pipeline_end_to_end(
     opts = dataclasses.replace(DEFAULTS, media=str(media))
     _run(opts, json_mode=True)
 
-    # Transcription: the local file, diarized so speakers keep distinct voices.
+    # Transcription: the local file, diarized so speakers keep distinct voices,
+    # source language auto-detected (dub input is typically not English).
     assert fake_transcribe["audio"] == str(media)
     assert fake_transcribe["config"].speaker_labels is True
+    assert fake_transcribe["config"].language_detection is True
+    assert fake_transcribe["config"].language_code is None
 
     # Translation: one gateway call per utterance, in order, with the dubbing
     # system prompt naming the resolved language ("de" -> "German").
@@ -161,6 +164,30 @@ def test_run_dub_human_summary(
     assert "A=jane, B=michael" in out
 
 
+def test_human_summary_escapes_user_controlled_markup(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, capsys
+):
+    # An unescaped "[/]" in --lang/--voice would raise rich.errors.MarkupError —
+    # after the whole billed pipeline succeeded and the file was written.
+    opts = dataclasses.replace(
+        DEFAULTS, media=str(media), language="Ger[/]man", voice=["[/]bad"], out=Path("dub.x.mp4")
+    )
+    _run(opts, json_mode=False)
+    out = plain(capsys.readouterr().out)
+    assert "dubbed to Ger[/]man" in out
+    assert "A=[/]bad" in out
+
+
+def test_dash_prefixed_out_is_disambiguated_for_ffmpeg(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, monkeypatch, tmp_path
+):
+    # A bare "-dub.de.mp4" argv token would be parsed by ffmpeg as an option.
+    monkeypatch.chdir(tmp_path)
+    opts = dataclasses.replace(DEFAULTS, media=str(media), out=Path("-dub.de.mp4"))
+    _run(opts, json_mode=True)
+    assert fake_ffmpeg["args"][-1] == "./-dub.de.mp4"
+
+
 def test_run_dub_status_messages(
     media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, monkeypatch
 ):
@@ -190,12 +217,35 @@ def test_bare_voice_dubs_every_speaker(
 
 
 def test_voice_overrides_pin_speakers_without_consuming_rotation(
-    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, capsys
 ):
     opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["A=mary"])
     _run(opts, json_mode=True)
     # A is pinned; B still takes the first rotation voice (overrides don't consume slots).
     assert [cfg.voice for cfg in fake_synthesize] == ["mary", "jane"]
+    # Every mapping applied -> no "Ignoring" warning fires.
+    assert "Ignoring" not in capsys.readouterr().err
+
+
+def test_voice_pin_for_absent_speaker_warns_instead_of_silently_dropping(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, capsys
+):
+    # Mirrors `assembly speak`: a requested --voice mapping is never dropped silently.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["Z=paul"])
+    _run(opts, json_mode=False)
+    err = plain(capsys.readouterr().err)
+    assert "Ignoring --voice mapping(s) for speaker(s) not in the transcript: z." in err
+    # Human mode warns as prose, not as a {"warning": …} JSON object.
+    assert not err.lstrip().startswith("{")
+
+
+def test_source_lang_pins_the_transcription_language(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg
+):
+    opts = dataclasses.replace(DEFAULTS, media=str(media), source_language="fr")
+    _run(opts, json_mode=True)
+    assert fake_transcribe["config"].language_code == "fr"
+    assert fake_transcribe["config"].language_detection is None
 
 
 def test_transcript_id_reuses_existing_transcript(
@@ -232,6 +282,60 @@ def test_transcript_id_reuses_existing_transcript(
     assert payload["transcript_id"] == "tr_99"
     # 1000 samples at 300 Hz, rounded to milliseconds: 3.3333... -> 3.333.
     assert payload["audio_duration_seconds"] == 3.333
+
+
+@pytest.mark.parametrize("status", ["queued", "processing"])
+def test_transcript_id_still_in_flight_is_a_clear_error(media, fake_ffmpeg, monkeypatch, status):
+    # Without the status check this would surface as a misleading "no utterances
+    # to dub … pass one created with --speaker-labels".
+    monkeypatch.setattr(
+        client,
+        "get_transcript",
+        lambda *a: SimpleNamespace(id="tr_q", status=status, utterances=None),
+    )
+    opts = dataclasses.replace(DEFAULTS, media=str(media), transcript_id="tr_q")
+    with pytest.raises(CLIError) as exc:
+        _run(opts, json_mode=False)
+    assert exc.value.error_type == "transcript_not_ready"
+    assert exc.value.exit_code == 2
+    assert f"Transcript tr_q is still {status}" in exc.value.message
+    assert "assembly transcripts get tr_q" in (exc.value.suggestion or "")
+
+
+@pytest.mark.parametrize(
+    ("stored_error", "expected"),
+    [("Audio file unreadable", "Audio file unreadable"), (None, "Transcript failed.")],
+    ids=["with-reason", "without-reason"],
+)
+def test_transcript_id_with_error_status_surfaces_the_real_error(
+    media, fake_ffmpeg, monkeypatch, stored_error, expected
+):
+    monkeypatch.setattr(
+        client,
+        "get_transcript",
+        lambda *a: SimpleNamespace(id="tr_e", status="error", error=stored_error, utterances=None),
+    )
+    opts = dataclasses.replace(DEFAULTS, media=str(media), transcript_id="tr_e")
+    with pytest.raises(APIError) as exc:
+        _run(opts, json_mode=False)
+    assert expected in exc.value.message
+
+
+@pytest.mark.parametrize("finish", ["length", "max_tokens"], ids=["openai", "anthropic"])
+def test_truncated_translation_is_an_api_error(
+    media, fake_transcribe, fake_synthesize, fake_ffmpeg, monkeypatch, finish
+):
+    # A reply clipped by max_tokens is non-empty but incomplete; dubbing it would
+    # produce speech that stops mid-sentence with exit 0.
+    monkeypatch.setattr(
+        llm, "complete", lambda *a, **k: completion("Hallo, aber abgeschn", finish_reason=finish)
+    )
+    opts = dataclasses.replace(DEFAULTS, media=str(media))
+    with pytest.raises(APIError) as exc:
+        _run(opts, json_mode=False)
+    assert "utterance 1" in exc.value.message
+    assert f"cut off at --max-tokens ({llm.DEFAULT_MAX_TOKENS})" in exc.value.message
+    assert "higher --max-tokens" in (exc.value.suggestion or "")
 
 
 def test_empty_translation_is_an_api_error(media, fake_synthesize, fake_ffmpeg, monkeypatch):

@@ -49,6 +49,11 @@ def dub(
         "-l",
         help="Target language: an ISO code (de, fr, es, …) or a language name (German).",
     ),
+    source_lang: str | None = typer.Option(
+        None,
+        "--source-lang",
+        help="ISO code of the source audio (e.g. de). Default: auto-detect the language.",
+    ),
     transcript_id: str | None = typer.Option(
         None,
         "--transcript-id",
@@ -93,6 +98,7 @@ def dub(
     opts = dub_exec.DubOptions(
         media=media,
         language=lang,
+        source_language=source_lang,
         transcript_id=transcript_id,
         voice=voice,
         model=model,

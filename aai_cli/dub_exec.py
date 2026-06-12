@@ -72,6 +72,7 @@ class DubOptions:
 
     media: str
     language: str
+    source_language: str | None
     transcript_id: str | None
     voice: list[str]
     model: str
@@ -94,6 +95,13 @@ def resolve_language(value: str) -> str:
 def default_out_path(media: Path, language: str) -> Path:
     """The default output file: ``<stem>.dub.<lang><ext>`` next to the input."""
     slug = re.sub(r"[^a-z0-9]+", "-", language.casefold()).strip("-")
+    if not slug:
+        # A name that slugs to nothing (e.g. 中文) would collide every such
+        # language onto one "<stem>.dub.<ext>" file; make the user pick.
+        raise UsageError(
+            f"Can't derive a default output name for {language!r}.",
+            suggestion="Pass --out explicitly, e.g. --out dubbed.mp4.",
+        )
     return media.parent / f"{media.stem}.dub.{slug}{media.suffix}"
 
 
@@ -128,12 +136,32 @@ def _pcm_seconds(pcm: bytes | bytearray, sample_rate: int) -> float:
 
 
 def _validate_out(out: Path, media: Path) -> None:
-    """The dub must never overwrite its own input: ffmpeg would read and write the
-    same file concurrently, corrupting it."""
-    if out.resolve() == media.resolve():
+    """An unwritable or self-overwriting --out must fail here, before the billed
+    transcription/translation/synthesis pipeline runs.
+
+    The samefile check catches what path comparison can't: on case-insensitive
+    filesystems (macOS APFS) ``--out TALK.MP4`` against ``talk.mp4`` — or a hard
+    link — is the same file under a different spelling, and ffmpeg would read
+    and write it concurrently, corrupting the input."""
+    if out.resolve() == media.resolve() or (out.exists() and out.samefile(media)):
         raise UsageError(
             "--out would overwrite the input file.",
             suggestion="Pick a different output path.",
+        )
+    if out.is_dir():
+        raise UsageError(
+            f"--out is a directory: {out}",
+            suggestion="Point --out at a file path, e.g. --out dubbed.mp4.",
+        )
+    if not out.parent.is_dir():
+        raise UsageError(
+            f"The output directory doesn't exist: {out.parent}",
+            suggestion="Create it first, or point --out somewhere that exists.",
+        )
+    if not out.suffix:
+        raise UsageError(
+            f"The output file {out.name!r} has no extension.",
+            suggestion="ffmpeg picks the container from the extension; pass e.g. --out dubbed.mp4.",
         )
 
 
@@ -162,7 +190,7 @@ def _mux(ffmpeg: str, media: Path, track: Path, out: Path) -> None:
             "1:a",
             "-c:v",
             "copy",
-            str(out),
+            mediafile.path_arg(out),
         ]
     )
     if result.returncode != 0:
@@ -234,6 +262,14 @@ def _translate(
                 api_key, model=opts.model, messages=messages, max_tokens=opts.max_tokens
             )
             translated = gateway.content_of(response).strip()
+            # "length" is OpenAI's truncation marker; the gateway's Anthropic-flavored
+            # responses use "max_tokens". A clipped translation must never be dubbed.
+            if getattr(response.choices[0], "finish_reason", None) in {"length", "max_tokens"}:
+                raise APIError(
+                    f"The translation of utterance {index} was cut off at --max-tokens "
+                    f"({opts.max_tokens}).",
+                    suggestion="Re-run with a higher --max-tokens.",
+                )
             if not translated:
                 raise APIError(
                     f"The model returned an empty translation for utterance {index} "
@@ -273,10 +309,26 @@ def _synthesize(
     return [result.pcm for result in results], results[0].sample_rate
 
 
+def _warn_ignored_voice_pins(
+    overrides: dict[str, str], speakers: dict[str, str], *, json_mode: bool
+) -> None:
+    """Mirror `assembly speak`: a requested --voice mapping is never dropped
+    silently, so a pin for a speaker the diarization didn't produce is called out."""
+    present = {speaker.casefold() for speaker in speakers}
+    ignored = [speaker for speaker in overrides if speaker not in present]
+    if ignored:
+        output.emit_warning(
+            "Ignoring --voice mapping(s) for speaker(s) not in the transcript: "
+            f"{', '.join(ignored)}.",
+            json_mode=json_mode,
+        )
+
+
 def _assign_voices(
     utterances: list[_Utterance],
     translations: list[str],
-    voice_values: list[str],
+    bare_voice: str | None,
+    overrides: dict[str, str],
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
     """Resolve each translated utterance to ``(voice, text)`` plus the speaker→voice map.
 
@@ -284,7 +336,6 @@ def _assign_voices(
     mappings pin individual speakers; everyone else takes the rotation in
     first-appearance order (the same rules as `assembly speak`).
     """
-    bare_voice, overrides = dialogue.parse_voice_overrides(voice_values)
     rotation = (bare_voice,) if bare_voice is not None else dialogue.DEFAULT_VOICE_ROTATION
     segments = [
         dialogue.Segment(utterance.speaker, translated)
@@ -299,6 +350,14 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly dub` invocation from already-parsed flags."""
     language = resolve_language(opts.language)
     session.require_available("dub")
+    # Parse --voice now: a malformed mapping must fail before the billed pipeline.
+    bare_voice, overrides = dialogue.parse_voice_overrides(opts.voice)
+    if "://" in opts.media:
+        # Path() would collapse the "//" and report a corrupted echo of the URL.
+        raise UsageError(
+            f"assembly dub needs a local file, not a URL: {opts.media}",
+            suggestion="Download the media first, then dub the local copy.",
+        )
     media = Path(opts.media)
     mediafile.validate_local_media(media, "dub")
     out = opts.out if opts.out is not None else default_out_path(media, language)
@@ -313,13 +372,18 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
         status_message="Transcribing for dubbing…",
         json_mode=json_mode,
         quiet=state.quiet,
+        language_code=opts.source_language,
+        # Dub input is typically not English (the API default), so a fresh
+        # transcription auto-detects the source language unless --source-lang pins it.
+        detect_language=opts.source_language is None,
     )
     transcript_id = str(getattr(transcript, "id", ""))
     utterances = _utterances_of(transcript, transcript_id)
     translations = _translate(
         api_key, utterances, language, opts, json_mode=json_mode, quiet=state.quiet
     )
-    resolved, speakers = _assign_voices(utterances, translations, opts.voice)
+    resolved, speakers = _assign_voices(utterances, translations, bare_voice, overrides)
+    _warn_ignored_voice_pins(overrides, speakers, json_mode=json_mode)
     pcm_segments, sample_rate = _synthesize(
         api_key, resolved, language, json_mode=json_mode, quiet=state.quiet
     )
@@ -350,8 +414,10 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     }
     output.emit(
         payload,
+        # language and voices carry user-typed text, so they need escaping too.
         lambda _: output.success(
-            f"{escape(str(out))}  dubbed to {language} ({len(utterances)} utterances, {voices})"
+            f"{escape(str(out))}  dubbed to {escape(language)} "
+            f"({len(utterances)} utterances, {escape(voices)})"
         ),
         json_mode=json_mode,
     )

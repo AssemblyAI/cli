@@ -265,7 +265,7 @@ def _cut_clip(ffmpeg: str, media: Path, segment: Segment, dest: Path) -> None:
             f"{segment.start:.3f}",
             "-to",
             f"{segment.end:.3f}",
-            str(dest),
+            mediafile.path_arg(dest),
         ]
     )
     if result.returncode != 0:

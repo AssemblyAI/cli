@@ -8,6 +8,7 @@ parsing in test_dub_command.py."""
 from __future__ import annotations
 
 import dataclasses
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -108,6 +109,15 @@ def test_resolve_language_rejects_blank():
 def test_default_out_path(language, expected):
     out = dub_exec.default_out_path(Path("/x/talk.mp4"), language)
     assert out == Path("/x") / expected
+
+
+def test_default_out_path_rejects_unsluggable_language():
+    # 中文 and 日本語 would both slug to "" and collide on "talk.dub..mp4",
+    # silently overwriting each other via ffmpeg's -y.
+    with pytest.raises(UsageError) as exc:
+        dub_exec.default_out_path(Path("/x/talk.mp4"), "中文")
+    assert "default output name" in exc.value.message
+    assert "--out" in (exc.value.suggestion or "")
 
 
 def test_assemble_timeline_fills_gaps_and_pads_tail():
@@ -212,6 +222,60 @@ def test_run_dub_refuses_to_overwrite_the_input(sandbox, media):
     with pytest.raises(UsageError) as exc:
         dub_exec.run_dub(opts, AppState(), json_mode=False)
     assert "overwrite the input file" in exc.value.message
+
+
+@pytest.mark.parametrize(
+    "url", ["https://youtube.com/watch?v=x", "s3://bucket/talk.mp4"], ids=["https", "s3"]
+)
+def test_run_dub_rejects_urls_with_the_url_intact(sandbox, url):
+    # Path() would collapse "//" and echo a corrupted "s3:/bucket/…" back.
+    opts = dataclasses.replace(DEFAULTS, media=url)
+    with pytest.raises(UsageError) as exc:
+        dub_exec.run_dub(opts, AppState(), json_mode=False)
+    assert url in exc.value.message
+    assert "Download the media first" in (exc.value.suggestion or "")
+
+
+def test_run_dub_rejects_malformed_voice_before_any_network(sandbox, media):
+    # No transcription/ffmpeg fakes installed: pytest-socket would fail loudly
+    # if the malformed mapping survived to the billed pipeline.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["A="])
+    with pytest.raises(UsageError) as exc:
+        dub_exec.run_dub(opts, AppState(), json_mode=False)
+    assert "Invalid --voice mapping" in exc.value.message
+
+
+def test_validate_out_rejects_the_input_via_hard_link(media):
+    # Two spellings of one file (mimics --out TALK.MP4 on a case-insensitive
+    # filesystem): path comparison passes, samefile must still catch it.
+    clone = media.parent / "TALK.MP4"
+    os.link(media, clone)
+    with pytest.raises(UsageError) as exc:
+        dub_exec._validate_out(clone, media)
+    assert "overwrite the input file" in exc.value.message
+
+
+def test_validate_out_rejects_a_directory(media, tmp_path):
+    with pytest.raises(UsageError) as exc:
+        dub_exec._validate_out(tmp_path, media)
+    assert "--out is a directory" in exc.value.message
+    assert "file path" in (exc.value.suggestion or "")
+
+
+def test_validate_out_rejects_a_missing_parent_directory(media, tmp_path):
+    with pytest.raises(UsageError) as exc:
+        dub_exec._validate_out(tmp_path / "missing" / "dub.mp4", media)
+    assert "output directory doesn't exist" in exc.value.message
+    assert "missing" in exc.value.message
+
+
+def test_validate_out_rejects_an_extensionless_output(media, tmp_path):
+    # ffmpeg picks the container from the extension, so this would fail only
+    # after the whole billed pipeline (e.g. an extension-less input's default out).
+    with pytest.raises(UsageError) as exc:
+        dub_exec._validate_out(tmp_path / "noext", media)
+    assert "has no extension" in exc.value.message
+    assert ".mp4" in (exc.value.suggestion or "")
 
 
 def test_run_dub_requires_ffmpeg(sandbox, media, monkeypatch):

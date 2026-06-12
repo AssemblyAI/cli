@@ -215,6 +215,15 @@ def test_run_clip_rounds_payload_times_to_milliseconds(media, fake_ffmpeg, capsy
     }
 
 
+def test_dash_prefixed_clip_dest_is_disambiguated_for_ffmpeg(tmp_path, fake_ffmpeg, monkeypatch):
+    # A bare "-x.clip01.mp4" argv token would be parsed by ffmpeg as an option.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "-x.mp4").write_bytes(b"\x00fake-media")
+    opts = dataclasses.replace(DEFAULTS, media="-x.mp4", ranges=["1-2"])
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    assert fake_ffmpeg[1][-1] == "./-x.clip01.mp4"
+
+
 def test_run_clip_honors_out_dir(media, tmp_path, fake_ffmpeg, capsys):
     out_dir = tmp_path / "clips"
     out_dir.mkdir()
@@ -345,6 +354,8 @@ def test_run_clip_transcribes_with_speaker_labels(media, fake_ffmpeg, capsys, mo
     assert seen["api_key"] == "sk_test"
     assert seen["audio"] == str(media)
     assert seen["config"].speaker_labels is True
+    # Clip keeps the API's language defaults (only dub opts into detection).
+    assert seen["config"].language_detection is None
     payload = json.loads(capsys.readouterr().out)
     assert payload["transcript_id"] == "tr_123"
     # Speaker A's two utterances: 1.5-2.5s and 5-6s.

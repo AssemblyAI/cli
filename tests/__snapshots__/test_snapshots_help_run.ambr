@@ -238,6 +238,8 @@
   │ *  --lang           -l      TEXT  Target language: an ISO code (de, fr, es,  │
   │                                   …) or a language name (German).            │
   │                                   [required]                                 │
+  │    --source-lang            TEXT  ISO code of the source audio (e.g. de).    │
+  │                                   Default: auto-detect the language.         │
   │    --transcript-id  -t      TEXT  Reuse an existing diarized transcript of   │
   │                                   this media instead of transcribing it      │
   │                                   again.                                     │
