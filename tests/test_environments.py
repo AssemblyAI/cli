@@ -17,6 +17,11 @@ def test_production_uses_production_ams_endpoint():
     assert env.ams_base == "https://ams.internal.assemblyai-labs.com"
 
 
+def test_sync_base_per_environment():
+    assert environments.get("production").sync_base == "https://sync.assemblyai.com"
+    assert environments.get("sandbox000").sync_base == "https://sync.sandbox000.assemblyai-labs.com"
+
+
 def test_get_unknown_raises_cli_error():
     with pytest.raises(CLIError) as exc:
         environments.get("nope")

@@ -27,6 +27,7 @@ from aai_cli.commands import (
     audit,
     deploy,
     dev,
+    dictate,
     doctor,
     evaluate,
     init,
@@ -65,6 +66,7 @@ _COMMAND_ORDER = (
     # Run AssemblyAI — use AssemblyAI directly from the terminal
     "transcribe",
     "stream",
+    "dictate",
     "agent",
     "speak",
     "llm",
@@ -400,6 +402,7 @@ def main(
 # panel is controlled by `_COMMAND_ORDER` via `_OrderedGroup`, not registration order.
 app.add_typer(transcribe.app)
 app.add_typer(stream.app)
+app.add_typer(dictate.app)
 app.add_typer(transcripts.app, name="transcripts", rich_help_panel=help_panels.HISTORY)
 app.add_typer(sessions.app, name="sessions", rich_help_panel=help_panels.HISTORY)
 app.add_typer(audit.app)  # audit
