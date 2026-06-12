@@ -1,75 +1,21 @@
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
-from typing import Any
 
 import typer
 
-from aai_cli import choices, client, code_gen, help_panels, options, output
-from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
-from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent.session import (
-    DEFAULT_GREETING,
-    DEFAULT_PROMPT,
-    AgentRunConfig,
-    run_session,
-)
+from aai_cli import agent_exec, choices, help_panels, options, output
+from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import (
     DEFAULT_VOICE,
-    VOICE_NAMES,
     VOICES,
     complete_voice,
     format_voice_list,
 )
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
-from aai_cli.streaming.session import validate_output_flags
-from aai_cli.streaming.sources import FileSource
 
 app = typer.Typer()
-
-
-def _resolve_system_prompt(system_prompt: str, system_prompt_file: Path | None) -> str:
-    """The persona text: a --system-prompt-file (if given) overrides --system-prompt."""
-    if system_prompt_file is None:
-        return system_prompt
-    try:
-        return system_prompt_file.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise CLIError(
-            f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
-            error_type="file_not_found",
-            exit_code=2,
-            suggestion="Check the path and that the file is readable.",
-        ) from exc
-
-
-def _open_audio(
-    renderer: AgentRenderer,
-    *,
-    source: str | None,
-    sample: bool,
-    device: int | None,
-    from_file: bool,
-) -> tuple[Any, Any]:
-    """Build the (mic, player) pair for either file-driven or live-mic input."""
-    if from_file:
-        # Stream the clip as the user's speech and stop after the agent replies.
-        # No greeting and full-duplex so no part of the clip is muted/dropped,
-        # and a NullPlayer since there is no listener for the reply audio.
-        return FileSource(client.resolve_audio_source(source, sample=sample)), NullPlayer()
-    # One full-duplex stream for mic + speaker: macOS rejects two separate
-    # streams on a device, which silently kills capture.
-    duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=device)
-    # notice() self-suppresses in JSON mode and routes to stderr otherwise, so a
-    # piped `assembly agent | …` never reads this advisory as transcript data.
-    renderer.notice(
-        "Use headphones — the mic stays open while the agent speaks, "
-        "so speakers would let it hear itself.\n"
-    )
-    return duplex.mic, duplex.player
 
 
 def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
@@ -149,65 +95,19 @@ def agent(
         run_command(ctx, _emit_voice_list, json=json_out)
         return
 
-    def body(state: AppState, json_mode: bool) -> None:
-        validate_output_flags(json_mode=json_mode, output_field=output_field)
-        text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
-        if voice not in VOICE_NAMES:
-            raise UsageError(
-                f"Unknown voice {voice!r}.",
-                suggestion="Run 'assembly agent --list-voices' to see the options.",
-            )
-        system_prompt_text = _resolve_system_prompt(system_prompt, system_prompt_file)
-
-        if show_code:
-            # Print-only: emit the equivalent agent script from the flags and exit
-            # without authenticating or opening audio. Raw stdout for `> script.py`.
-            if source or sample:
-                # A faithful file-driven agent script would need the CLI's whole
-                # ffmpeg-decode + ready-gate + exit-after-reply machinery, which is
-                # impractical to inline; the snippet is microphone-driven, so say so
-                # on stderr instead of silently dropping the source. stderr keeps
-                # `--show-code > script.py` byte-clean.
-                output.error_console.print(
-                    "[aai.warn]Note:[/aai.warn] the generated script uses the microphone; "
-                    "it does not stream the audio source you passed."
-                )
-            output.print_code(code_gen.agent(voice, system_prompt_text, greeting))
-            return
-
-        from_file = bool(source) or sample
-        if from_file and device is not None:
-            raise UsageError("--device applies only to microphone input.")
-        if from_file:
-            # Existence-check the clip before credentials, so a typo'd path reads as
-            # "file not found" instead of triggering a login.
-            client.resolve_audio_source(source, sample=sample)
-        api_key = state.resolve_api_key()
-
-        renderer = AgentRenderer(
-            json_mode=json_mode,
-            text_mode=text_mode,
-            mic_input=not from_file,
-        )
-        audio, player = _open_audio(
-            renderer, source=source, sample=sample, device=device, from_file=from_file
-        )
-        run_config = AgentRunConfig(
-            voice=voice,
-            system_prompt=system_prompt_text,
-            greeting="" if from_file else greeting,
-            full_duplex=True,  # one duplex stream -> mic always open (use headphones)
-            exit_after_reply=from_file,
-        )
-        try:
-            run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
-        except KeyboardInterrupt:
-            renderer.stopped()
-        except BrokenPipeError as exc:
-            # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
-            raise typer.Exit(code=0) from exc
-        finally:
-            with contextlib.suppress(BrokenPipeError):
-                renderer.close()
-
-    run_command(ctx, body, json=json_out)
+    opts = agent_exec.AgentOptions(
+        source=source,
+        sample=sample,
+        voice=voice,
+        system_prompt=system_prompt,
+        system_prompt_file=system_prompt_file,
+        greeting=greeting,
+        device=device,
+        output_field=output_field,
+        show_code=show_code,
+    )
+    run_command(
+        ctx,
+        lambda state, json_mode: agent_exec.run_agent(opts, state, json_mode=json_mode),
+        json=json_out,
+    )

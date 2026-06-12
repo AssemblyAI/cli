@@ -212,7 +212,7 @@ def test_llm_transcript_id_stdin_warning_suppressed_by_quiet(monkeypatch):
 
 def test_llm_transcript_id_no_warning_when_stdin_is_a_terminal(monkeypatch):
     _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.stdio.stdin_is_piped", lambda: False)
+    monkeypatch.setattr("aai_cli.llm_exec.stdio.stdin_is_piped", lambda: False)
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("s"))
     result = runner.invoke(app, ["llm", "summarize", "--transcript-id", "t_9"])
     assert result.exit_code == 0
@@ -388,7 +388,7 @@ def test_llm_follow_requires_a_prompt(monkeypatch):
 def test_llm_follow_requires_piped_stdin(monkeypatch):
     # Interactively (no pipe) --follow would block forever; reject it with guidance.
     _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.stdio.stdin_is_piped", lambda: False)
+    monkeypatch.setattr("aai_cli.llm_exec.stdio.stdin_is_piped", lambda: False)
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"])
     assert result.exit_code == 2
@@ -424,9 +424,7 @@ def test_llm_follow_interrupt_before_first_turn_still_exits_0(monkeypatch):
         def __next__(self):
             raise KeyboardInterrupt
 
-    monkeypatch.setattr(
-        "aai_cli.commands.llm.stdio.iter_piped_stdin_lines", lambda: _InterruptIter()
-    )
+    monkeypatch.setattr("aai_cli.llm_exec.stdio.iter_piped_stdin_lines", lambda: _InterruptIter())
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
     assert result.exit_code == 0

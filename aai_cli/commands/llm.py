@@ -3,45 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import typer
-from rich.markup import escape
 
-from aai_cli import choices, client, help_panels, options, output, stdio
+from aai_cli import choices, help_panels, llm_exec, options, output
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
-from aai_cli.follow import FollowRenderer
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
-
-_FOLLOW_STDIN_MESSAGE = (
-    "--follow needs transcript text piped on stdin, e.g. "
-    '`assembly stream -o text | assembly llm -f "summarize action items as I talk"`.'
-)
-
-
-def _validate_follow_args(
-    prompt: str | None, output_field: str | None, transcript_id: str | None
-) -> str:
-    """Reject flag combinations that don't apply to --follow's live-panel mode.
-
-    Returns the validated (non-empty) prompt so the caller has a plain ``str``.
-    """
-    if not prompt:
-        raise UsageError("Provide a prompt to run over the streamed transcript.")
-    if output_field is not None:
-        raise UsageError(
-            "--output applies to one-shot mode; --follow renders a live panel "
-            "(or NDJSON when piped)."
-        )
-    if transcript_id:
-        raise UsageError(
-            "--follow runs over live transcript text piped on stdin; it can't be "
-            "combined with --transcript-id."
-        )
-    if not stdio.stdin_is_piped():
-        raise UsageError(_FOLLOW_STDIN_MESSAGE)
-    return prompt
 
 
 def _emit_model_list(_state: AppState, json_mode: bool) -> None:
@@ -65,27 +34,6 @@ def _list_models_body(
         _emit_model_list(state, json_mode)
 
     return body
-
-
-def _stdin_transcript_text(
-    state: AppState, json_mode: bool, transcript_id: str | None
-) -> str | None:
-    """Resolve the inline transcript text for one-shot mode.
-
-    Text piped on stdin becomes the content the prompt operates on, unless an
-    explicit --transcript-id is given — that injects server-side and takes
-    priority, so piped text is ignored with a visible warning (suppressed by
-    --quiet, structured under --json).
-    """
-    if transcript_id is None:
-        return stdio.piped_stdin_text()
-    # Same cheap local id check as `transcripts get`, before auth or network.
-    client.validate_transcript_id(transcript_id)
-    if stdio.stdin_is_piped() and not state.quiet:
-        output.emit_warning(
-            "Ignoring piped stdin; --transcript-id takes priority.", json_mode=json_mode
-        )
-    return None
 
 
 @app.command(
@@ -149,62 +97,17 @@ def llm(
         run_command(ctx, _list_models_body(output_field), json=json_out)
         return
 
-    def follow_body(state: AppState, json_mode: bool) -> None:
-        prompt_text = _validate_follow_args(prompt, output_field, transcript_id)
-        api_key = state.resolve_api_key()
-
-        def ask(transcript_text: str) -> str:
-            messages = gateway.build_messages(
-                prompt_text, system=system, transcript_text=transcript_text
-            )
-            response = gateway.complete(
-                api_key, model=model, messages=messages, max_tokens=max_tokens
-            )
-            return gateway.content_of(response)
-
-        transcript: list[str] = []
-        interrupted = False
-        with FollowRenderer(json_mode=json_mode) as render:
-            # Ctrl-C is the normal "stop watching" signal -> exit cleanly (code 0).
-            try:
-                for turn in stdio.iter_piped_stdin_lines():
-                    transcript.append(turn)
-                    render(ask("\n".join(transcript)), len(transcript))
-            except KeyboardInterrupt:
-                interrupted = True
-        if not transcript and not interrupted:
-            # An empty pipe (`assembly llm -f "…" </dev/null`) would otherwise exit 0
-            # silently, having asked nothing.
-            raise UsageError(_FOLLOW_STDIN_MESSAGE)
-
-    def body(state: AppState, json_mode: bool) -> None:
-        if not prompt:
-            raise UsageError(
-                "Provide a prompt.",
-                suggestion="Or pass --list-models to see available models.",
-            )
-        prompt_text = prompt
-        stdin_text = _stdin_transcript_text(state, json_mode, transcript_id)
-        api_key = state.resolve_api_key()
-        messages = gateway.build_messages(
-            prompt_text, system=system, transcript_id=transcript_id, transcript_text=stdin_text
-        )
-        response = gateway.complete(
-            api_key,
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            transcript_id=transcript_id,
-        )
-        content = gateway.content_of(response)
-        if output_field == "text":
-            # Just the answer, raw — so `… | assembly llm -o text "…" | next` composes cleanly.
-            output.emit_text(content)
-            return
-        output.emit(
-            {"model": model, "output": content, "usage": gateway.usage_of(response)},
-            lambda d: escape(str(d["output"])),
-            json_mode=json_mode or output_field == "json",
-        )
-
-    run_command(ctx, follow_body if follow else body, json=json_out)
+    opts = llm_exec.LlmOptions(
+        prompt=prompt,
+        model=model,
+        transcript_id=transcript_id,
+        system=system,
+        follow=follow,
+        output_field=output_field,
+        max_tokens=max_tokens,
+    )
+    run_command(
+        ctx,
+        lambda state, json_mode: llm_exec.run_llm(opts, state, json_mode=json_mode),
+        json=json_out,
+    )

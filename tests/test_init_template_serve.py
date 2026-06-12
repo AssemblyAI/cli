@@ -240,7 +240,7 @@ def test_ask_failure_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize("template", TOKEN_TEMPLATES)
 def test_token_mints_token_and_ws_url(template: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(*_args: object, **_kwargs: object) -> object:
+    def fake_get(url: str, *, params: object, headers: object) -> object:
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"token": "tok-1"})
 
     with serve(template) as (module, client):

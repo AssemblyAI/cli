@@ -9,8 +9,12 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _fake_login_result(key="sk_from_oauth", **_kwargs):
+def _login_result(key="sk_from_oauth"):
     return LoginResult(api_key=key, session_jwt="jwt_x", session_token="tok_x", account_id=7)
+
+
+def _fake_login_result(*, json_mode=False):
+    return _login_result()
 
 
 def test_login_with_api_key_flag_stores_key(mocker):
@@ -227,7 +231,9 @@ def test_login_binds_env_to_profile(monkeypatch):
 
 
 def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
-    monkeypatch.setattr("aai_cli.context.run_login_flow", lambda **_: _fake_login_result("sk_x"))
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow", lambda *, json_mode=False: _login_result("sk_x")
+    )
     result = runner.invoke(app, ["--sandbox", "login"])
     assert result.exit_code == 0
     assert config.get_profile_env("default") == "sandbox000"

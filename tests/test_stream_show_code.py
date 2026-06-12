@@ -15,7 +15,7 @@ def test_stream_show_code_prints_without_streaming(monkeypatch):
     # Print-only: emits the mic-streaming script, never opens audio or streams, no auth.
     called = []
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda *a, **k: called.append(True),
     )
     result = runner.invoke(app, ["stream", "--show-code"])
@@ -101,7 +101,7 @@ def test_stream_show_code_ignores_json_flag(monkeypatch):
         raise AssertionError("must not stream")
 
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         _boom,
     )
     result = runner.invoke(app, ["stream", "--show-code", "--json"])

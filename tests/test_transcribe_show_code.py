@@ -15,7 +15,7 @@ def test_transcribe_show_code_prints_without_transcribing(monkeypatch):
     # Print-only: emits code, never calls the API, needs no auth.
     called = []
     monkeypatch.setattr(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         lambda *a, **k: called.append(True),
     )
     result = runner.invoke(app, ["transcribe", "--sample", "--speaker-labels", "--show-code"])
@@ -34,7 +34,7 @@ def test_transcribe_show_code_includes_download_sections(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not transcribe")
 
-    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
     result = runner.invoke(
         app,
         ["transcribe", "https://youtu.be/abc", "--download-sections", "*0:00-5:00", "--show-code"],
@@ -50,7 +50,7 @@ def test_transcribe_show_code_without_source_uses_placeholder(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not transcribe")
 
-    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
     result = runner.invoke(app, ["transcribe", "--show-code"])
     assert result.exit_code == 0
     assert "import assemblyai as aai" in result.output
@@ -63,7 +63,7 @@ def test_transcribe_show_code_ignores_json_flag(monkeypatch):
         raise AssertionError("must not transcribe")
 
     monkeypatch.setattr(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         _boom,
     )
     result = runner.invoke(app, ["transcribe", "--sample", "--show-code", "--json"])
@@ -77,7 +77,7 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not call the API")
 
-    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
     monkeypatch.setattr("aai_cli.commands.transcribe.llm.transform_transcript", _boom)
     result = runner.invoke(
         app,
@@ -94,7 +94,7 @@ def test_transcribe_show_code_output_srt_generates_export(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not transcribe")
 
-    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
     result = runner.invoke(app, ["transcribe", "--sample", "-o", "srt", "--show-code"])
     assert result.exit_code == 0
     compile(result.output, "<generated>", "exec")  # the emitted script is runnable
@@ -106,7 +106,7 @@ def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not transcribe")
 
-    monkeypatch.setattr("aai_cli.commands.transcribe.client.transcribe", _boom)
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
     result = runner.invoke(app, ["transcribe", "--sample", "-o", "utterances", "--show-code"])
     assert result.exit_code == 0
     compile(result.output, "<generated>", "exec")

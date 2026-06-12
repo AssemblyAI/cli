@@ -13,7 +13,7 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {"texts": []}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hola", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
@@ -27,8 +27,8 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
         seen["max_tokens"] = max_tokens
         return f"answer:{transcript_text}"
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.commands.stream.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake)
+    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
     result = runner.invoke(
         app,
         [
@@ -59,7 +59,7 @@ def test_stream_llm_chains_multiple_prompts(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
@@ -67,8 +67,8 @@ def test_stream_llm_chains_multiple_prompts(monkeypatch):
         seen["prompts"] = prompts
         return "done"
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.commands.stream.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake)
+    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
     result = runner.invoke(
         app, ["stream", "--llm", "summarize", "--llm", "translate to french", "--json"]
     )
@@ -79,7 +79,7 @@ def test_stream_llm_chains_multiple_prompts(monkeypatch):
 def test_stream_llm_rejects_output_text(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not stream")),
     )
     result = runner.invoke(app, ["stream", "--llm", "summarize", "-o", "text"])
@@ -92,16 +92,16 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
     config.set_api_key("default", "sk_live")
     called = {"ran": False}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
-    def fake_run_chain(*a, **k):
+    def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
         called["ran"] = True
         return "x"
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.commands.stream.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake)
+    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
     result = runner.invoke(app, ["stream", "--json"])
     assert result.exit_code == 0
     assert called["ran"] is False  # no --llm -> no gateway call
@@ -111,7 +111,7 @@ def test_stream_show_code_with_llm_emits_follow_loop(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not stream")
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _boom)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", _boom)
     result = runner.invoke(app, ["stream", "--llm", "summarize", "--show-code"])
     assert result.exit_code == 0
     assert "from openai import OpenAI" in result.output
@@ -127,9 +127,9 @@ def _eot_turn(text):
 def _llm_session(*, interval, clock, monkeypatch, emitted):
     import io
 
-    from aai_cli.commands.stream import StreamSession
     from aai_cli.follow import FollowRenderer
     from aai_cli.streaming.render import StreamRenderer
+    from aai_cli.streaming.session import StreamSession
 
     # Capture each follow refresh (json mode emits one NDJSON object per refresh) and
     # make run_chain echo the transcript it summarized so assertions read the cadence.
@@ -218,8 +218,8 @@ def test_maybe_summarize_is_noop_without_follow():
     # is never run (no gateway call) regardless of transcript content.
     import io
 
-    from aai_cli.commands.stream import StreamSession
     from aai_cli.streaming.render import StreamRenderer
+    from aai_cli.streaming.session import StreamSession
 
     session = StreamSession(
         api_key="sk",

@@ -263,7 +263,7 @@ def test_status_enters_spinner_when_not_json_and_not_quiet(monkeypatch):
     entered = {"status": False}
 
     @contextlib.contextmanager
-    def fake_status(*a, **k):
+    def fake_status(message):
         entered["status"] = True
         yield
 

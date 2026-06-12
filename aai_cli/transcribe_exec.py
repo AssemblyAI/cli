@@ -10,13 +10,26 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import choices, client, llm, output, stdio, transcribe_render, youtube
+from aai_cli import (
+    choices,
+    client,
+    code_gen,
+    config_builder,
+    llm,
+    output,
+    stdio,
+    transcribe_render,
+    youtube,
+)
+from aai_cli.code_gen.transcribe import render as render_transcribe_code
+from aai_cli.context import AppState
 from aai_cli.errors import UsageError, mutually_exclusive
 
 # The PII policy strings the SDK accepts, validated client-side so a typo'd
@@ -225,3 +238,207 @@ def deliver_result(
         output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
     else:
         transcribe_render.render_transcript_result(transcript, output.console)
+
+
+@dataclass(frozen=True)
+class TranscribeOptions:
+    """Every `assembly transcribe` flag as plain data (options/run split, see AGENTS.md).
+
+    One field per CLI flag (``--json`` excluded: run_command resolves it into the
+    ``json_mode`` argument), so a test can describe an invocation without argv.
+    """
+
+    source: str | None
+    sample: bool
+    from_stdin: bool
+    concurrency: int
+    force: bool
+    speech_model: aai.SpeechModel | None
+    language_code: str | None
+    language_detection: bool | None
+    keyterms_prompt: list[str] | None
+    temperature: float | None
+    prompt: str | None
+    punctuate: bool | None
+    format_text: bool | None
+    disfluencies: bool | None
+    speaker_labels: bool
+    speakers_expected: int | None
+    multichannel: bool | None
+    redact_pii: bool | None
+    redact_pii_policy: str | None
+    redact_pii_sub: aai.PIISubstitutionPolicy | None
+    redact_pii_audio: bool | None
+    filter_profanity: bool | None
+    content_safety: bool | None
+    content_safety_confidence: int | None
+    speech_threshold: float | None
+    summarization: bool | None
+    summary_model: aai.SummarizationModel | None
+    summary_type: aai.SummarizationType | None
+    auto_chapters: bool | None
+    sentiment_analysis: bool | None
+    entity_detection: bool | None
+    auto_highlights: bool | None
+    topic_detection: bool | None
+    word_boost: list[str] | None
+    custom_spelling_file: Path | None
+    audio_start: int | None
+    audio_end: int | None
+    download_sections: list[str] | None
+    webhook_url: str | None
+    webhook_auth_header: str | None
+    translate_to: list[str] | None
+    config_kv: list[str] | None
+    config_file: Path | None
+    llm_prompt: list[str] | None
+    model: str
+    max_tokens: int
+    output_field: choices.TranscriptOutput | None
+    out: Path | None
+    show_code: bool
+
+    def flags(self, pii_policies: list[str] | None) -> dict[str, object]:
+        """The curated flags in TranscriptionConfig field names (None = unset)."""
+        flags: dict[str, object] = {
+            "speech_model": config_builder.enum_value(self.speech_model),
+            "language_code": self.language_code,
+            "language_detection": self.language_detection,
+            "keyterms_prompt": list(self.keyterms_prompt) if self.keyterms_prompt else None,
+            "temperature": self.temperature,
+            "prompt": self.prompt,
+            "punctuate": self.punctuate,
+            "format_text": self.format_text,
+            "disfluencies": self.disfluencies,
+            "speaker_labels": self.speaker_labels or None,
+            "speakers_expected": self.speakers_expected,
+            "multichannel": self.multichannel,
+            "redact_pii": self.redact_pii,
+            "redact_pii_policies": pii_policies,
+            "redact_pii_sub": config_builder.enum_value(self.redact_pii_sub),
+            "redact_pii_audio": self.redact_pii_audio,
+            "filter_profanity": self.filter_profanity,
+            "content_safety": self.content_safety,
+            "content_safety_confidence": self.content_safety_confidence,
+            "speech_threshold": self.speech_threshold,
+            "summarization": self.summarization,
+            "summary_model": config_builder.enum_value(self.summary_model),
+            "summary_type": config_builder.enum_value(self.summary_type),
+            "auto_chapters": self.auto_chapters,
+            "sentiment_analysis": self.sentiment_analysis,
+            "entity_detection": self.entity_detection,
+            "auto_highlights": self.auto_highlights,
+            "iab_categories": self.topic_detection,
+            "word_boost": list(self.word_boost) if self.word_boost else None,
+            "custom_spelling": (
+                config_builder.load_custom_spelling(self.custom_spelling_file)
+                if self.custom_spelling_file
+                else None
+            ),
+            "audio_start_from": self.audio_start,
+            "audio_end_at": self.audio_end,
+            "webhook_url": self.webhook_url,
+            "speech_understanding": (
+                config_builder.translation_request(list(self.translate_to))
+                if self.translate_to
+                else None
+            ),
+        }
+        flags.update(config_builder.auth_header_flags(self.webhook_auth_header))
+        return flags
+
+
+def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None:
+    """Print the equivalent SDK script and exit without transcribing or authenticating.
+
+    Raw stdout, so `--show-code > script.py` runs. No source/--sample needed — fall
+    back to a placeholder path for a pure snippet.
+    """
+    audio = (
+        client.resolve_audio_source(opts.source, sample=opts.sample, check_local=False)
+        if opts.source or opts.sample
+        else "your-audio-file.mp3"
+    )
+    gateway = code_gen.gateway_options(list(opts.llm_prompt or []), opts.model, opts.max_tokens)
+    output.print_code(
+        render_transcribe_code(
+            merged,
+            audio,
+            llm_gateway=gateway,
+            output=opts.output_field,
+            download_sections=list(opts.download_sections or []),
+        )
+    )
+
+
+def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool) -> None:
+    """Execute one `assembly transcribe` invocation from already-parsed flags."""
+    # Module-load order: transcribe_batch imports this module, so import it lazily.
+    from aai_cli import transcribe_batch
+
+    validate_language_flags(opts.language_code, language_detection=opts.language_detection)
+    pii_policies = config_builder.split_csv(opts.redact_pii_policy)
+    validate_pii_policies(pii_policies)
+    flags = opts.flags(pii_policies)
+
+    validate_out_with_llm(opts.out, opts.llm_prompt)
+    validate_out_path(opts.out)
+    validate_json_with_output(opts.output_field, json_mode=json_mode)
+
+    merged = config_builder.merge_transcribe_config(
+        flags=flags, overrides=opts.config_kv, config_file=opts.config_file
+    )
+    validate_speakers_expected(merged)
+
+    sources = transcribe_batch.expand_sources(
+        opts.source, from_stdin=opts.from_stdin, sample=opts.sample
+    )
+    if sources is not None:
+        transcribe_batch.reject_single_source_flags(
+            out=opts.out,
+            output_field=opts.output_field,
+            llm_prompt=opts.llm_prompt,
+            show_code=opts.show_code,
+        )
+        transcribe_batch.run_batch(
+            state.resolve_api_key(),
+            sources,
+            transcription_config=config_builder.construct_transcription_config(merged),
+            concurrency=opts.concurrency,
+            force=opts.force,
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        return
+
+    if opts.show_code:
+        _print_show_code(opts, merged)
+        return
+
+    tc = config_builder.construct_transcription_config(merged)
+
+    # A typo'd path must read as "file not found", not trigger a login.
+    check_source_exists(opts.source, sample=opts.sample)
+    warn_unrecognized_extension(opts.source, json_mode=json_mode, quiet=state.quiet)
+
+    api_key = state.resolve_api_key()
+    with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
+        transcript = run_transcription(
+            api_key,
+            opts.source,
+            sample=opts.sample,
+            transcription_config=tc,
+            download_sections=list(opts.download_sections or []),
+        )
+
+    deliver_result(
+        transcript,
+        api_key=api_key,
+        out=opts.out,
+        output_field=opts.output_field,
+        transform=TransformOptions(
+            prompts=list(opts.llm_prompt or []), model=opts.model, max_tokens=opts.max_tokens
+        ),
+        json_mode=json_mode,
+        quiet=state.quiet,
+    )

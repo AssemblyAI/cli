@@ -17,7 +17,7 @@ from aai_cli.main import app
 
 runner = CliRunner()
 
-_TRANSCRIBE = "aai_cli.commands.transcribe.client.transcribe"
+_TRANSCRIBE = "aai_cli.transcribe_exec.client.transcribe"
 
 
 @pytest.fixture(autouse=True)
