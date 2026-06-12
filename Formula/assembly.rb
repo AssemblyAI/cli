@@ -289,14 +289,17 @@ class Assembly < Formula
 
   def install
     # The GitHub source tarball has no .git, so hatch-vcs cannot derive the
-    # version. Feed it the formula's tag version (hatch-vcs delegates to
-    # setuptools-scm, which reads this env var); the build hook then writes the
-    # correct version into the installed aai_cli/_version.py.
-    # Note: the dist-specific form (SETUPTOOLS_SCM_PRETEND_VERSION_FOR_AAI_CLI)
-    # requires setuptools-scm to receive dist_name, which hatch-vcs 0.x does not
-    # forward; the generic form is the correct one here.
+    # version at build time. hatch-vcs (0.x) does not forward dist_name to
+    # setuptools-scm, so only the GENERIC SETUPTOOLS_SCM_PRETEND_VERSION is
+    # honored — but a global generic pretend-version would also override the
+    # version of any *resource* that builds via setuptools-scm. So install the
+    # pinned resources first under a clean env, then set the pretend-version and
+    # install only our own package (the build hook writes the tag version into
+    # the installed aai_cli/_version.py).
+    venv = virtualenv_create(libexec, "python3.13")
+    venv.pip_install resources
     ENV["SETUPTOOLS_SCM_PRETEND_VERSION"] = version.to_s
-    virtualenv_install_with_resources
+    venv.pip_install_and_link buildpath
   end
 
   test do
