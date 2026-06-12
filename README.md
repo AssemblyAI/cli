@@ -131,7 +131,7 @@ uv tool install "git+https://github.com/AssemblyAI/cli.git"
 If your default interpreter is older than Python 3.12, add `--python python3.12` (pipx) or
 `--python 3.12` (uv) to the install command.
 
-Only the live-audio commands need anything extra: `stream` and `agent` use PortAudio for
+Only the live-audio commands need anything extra: `stream`, `dictate`, and `agent` use PortAudio for
 microphone capture (Debian/Ubuntu: `sudo apt-get install libportaudio2`; Fedora:
 `sudo dnf install portaudio`) and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream
 non-WAV audio. Plain `transcribe` uploads your file directly and needs neither.
@@ -179,6 +179,7 @@ assembly init                  # scaffold a starter app
 - **Transcription**: `assembly transcribe` handles files, URLs, and YouTube/podcast pages, with flags for speaker labels, PII redaction, summarization, sentiment, chapters, and more.
 - **Batch transcription**: point `assembly transcribe` at a directory or glob (or pipe paths with `--from-stdin`) to transcribe everything concurrently, with sidecar files that make re-runs resumable. Add `--llm "prompt"` to run an LLM prompt over each finished transcript, saved into the sidecars.
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
+- **Dictation**: `assembly dictate` is push-to-talk for your terminal — press Enter to record, Enter again to get the utterance back instantly from the Sync API (up to 120 s per utterance).
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
 - **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`). Clip boundaries snap into nearby silence (ffmpeg `silencedetect`) so cuts don't land mid-word; `--no-snap` cuts at the exact selected times.
