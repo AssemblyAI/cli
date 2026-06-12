@@ -7,7 +7,7 @@ from rich.markup import escape
 
 from aai_cli import help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
-from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="View your account's audit log.")
@@ -98,7 +98,7 @@ def audit(
     """List recent audit-log entries for your account."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        _, jwt = resolve_session(state)
+        _, jwt = state.resolve_session()
         payload = ams.list_audit_logs(jwt, limit=limit, action_taken=action, resource_type=resource)
         rows = _audit_rows(payload)
 
@@ -106,13 +106,7 @@ def audit(
             hide_logins = not include_logins and action is None
             shown = [entry for entry in data if not (hide_logins and _is_login(entry))]
             hidden_logins = len(data) - len(shown)
-            hidden_note = (
-                output.muted(
-                    f"Hidden: {hidden_logins} login event(s). Use --include-logins to show them."
-                )
-                if hidden_logins
-                else None
-            )
+            hidden_note = output.hidden_note(hidden_logins, "login event", "--include-logins")
             if not shown:
                 message = (
                     "No notable audit events in the recent log."

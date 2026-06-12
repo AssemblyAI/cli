@@ -1,13 +1,12 @@
 # aai_cli/commands/init.py
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import typer
 from rich.markup import escape
 
-from aai_cli import __version__, environments, help_panels, options, output, steps
+from aai_cli import __version__, environments, help_panels, options, output, stdio, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
@@ -23,7 +22,7 @@ app = typer.Typer()
 
 def _pick_template() -> str:
     """Interactive picker; raises a usage error when there's no TTY to prompt on."""
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
+    if not stdio.interactive_stdio():
         raise CLIError(
             "No template given and not running interactively. "
             f"Pass one of: {', '.join(templates.TEMPLATE_ORDER)}.",

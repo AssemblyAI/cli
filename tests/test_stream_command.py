@@ -134,7 +134,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
 
 def test_stream_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
 
     def fake_stream_audio(
         api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None

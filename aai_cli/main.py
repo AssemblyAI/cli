@@ -43,7 +43,7 @@ from aai_cli.commands import (
     transcripts,
     webhooks,
 )
-from aai_cli.context import AppState, env_override_warning, resolve_environment
+from aai_cli.context import AppState
 from aai_cli.errors import CLIError, NotAuthenticated, UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
@@ -158,12 +158,17 @@ _patch_module(rich_utils, Table=_NoClipTable, Console=theme.PipeSafeConsole)
 _format_click_error = rich_utils.rich_format_error
 
 # Flags users habitually pass at the wrong level: `--json` belongs on the subcommand
-# (`assembly transcribe --json`), while these live on the root callback
+# (`assembly transcribe --json`), while the root callback's flags belong before it
 # (`assembly --sandbox transcribe`). A bare "No such option" — or worse, a similarity
 # guess like "(Possible options: --version)" — is unlearnable, so the Click error
 # formatter appends the correct placement instead.
-_JSON_FLAGS = ("--json", "-j")
-_ROOT_ONLY_FLAGS = ("--quiet", "-q", "--sandbox", "--env", "--profile", "-p")
+
+
+def _root_only_flags(ctx: ClickContext) -> frozenset[str]:
+    """Every flag the root callback declares (--quiet, --sandbox, --env, …), read off
+    the declarations themselves so a new global flag gets the placement hint without
+    a hand-maintained parallel list."""
+    return frozenset(opt for param in ctx.find_root().command.params for opt in param.opts)
 
 
 def _misplaced_flag_hint(err: NoSuchOption) -> str | None:
@@ -172,10 +177,10 @@ def _misplaced_flag_hint(err: NoSuchOption) -> str | None:
     if ctx is None:
         return None
     if ctx.parent is None:
-        if err.option_name in _JSON_FLAGS:
+        if err.option_name in argscan.JSON_FLAGS:
             return "Pass --json after the subcommand: assembly <command> --json"
         return None
-    if err.option_name in _ROOT_ONLY_FLAGS:
+    if err.option_name in _root_only_flags(ctx):
         command = ctx.command_path.removeprefix("assembly ")
         return (
             "This is a global flag; pass it before the subcommand: "
@@ -273,11 +278,6 @@ def _profile_has_key(state: AppState) -> bool:
     return True
 
 
-def _interactive_session() -> bool:
-    """True only when both ends are a real TTY (so we never block a piped/CI run)."""
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
 # The root callback runs before the subcommand parses its own ``--json``, so a failure
 # raised there (e.g. a bad ``--env``) would otherwise always render human text — leaving a
 # ``… --json`` pipeline without the uniform ``{"error": …}`` shape it relies on. The group
@@ -293,7 +293,7 @@ def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
     Credentials are environment-bound, so the conflict must not be resolved silently:
     ``--env`` wins, and the warning names the loser so the user can drop a flag.
     """
-    if sandbox and env is not None and env != "sandbox000":
+    if sandbox and env is not None and env != environments.SANDBOX_ENV:
         return f"--sandbox ignored: --env {env} takes precedence."
     return None
 
@@ -304,7 +304,7 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     `--help` (Click handles that eagerly before the callback)."""
     if not state.quiet:
         output.print_banner()
-    if _interactive_session() and not _profile_has_key(state):
+    if stdio.interactive_stdio() and not _profile_has_key(state):
         if not state.quiet:
             output.console.print()  # blank line so the prompt isn't flush against the banner
         if typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True):
@@ -333,9 +333,11 @@ def main(
     ctx: typer.Context,
     profile: str | None = typer.Option(None, "--profile", "-p", help="Named credential profile."),
     env: str | None = typer.Option(
-        None, "--env", help="Backend environment (production, sandbox000)."
+        None, "--env", help=f"Backend environment ({', '.join(environments.ENVIRONMENTS)})."
     ),
-    sandbox: bool = typer.Option(False, "--sandbox", help="Shortcut for --env sandbox000."),
+    sandbox: bool = typer.Option(
+        False, "--sandbox", help=f"Shortcut for --env {environments.SANDBOX_ENV}."
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
     ),
@@ -360,15 +362,15 @@ def main(
     json_mode = output.resolve_json(explicit=argscan.requests_json(raw_args))
     conflict_warning = _sandbox_conflict_warning(sandbox, env)
     if sandbox and env is None:
-        env = "sandbox000"
+        env = environments.SANDBOX_ENV
     state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
     try:
-        environments.set_active(resolve_environment(state))
+        environments.set_active(state.resolve_environment())
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
-    for warning in (conflict_warning, env_override_warning(state)):
+    for warning in (conflict_warning, state.env_override_warning()):
         if warning and not quiet:
             # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets
             # a machine-readable hint instead of an unexplained downstream auth failure.

@@ -64,6 +64,10 @@ ENVIRONMENTS: dict[str, Environment] = {
 # --env sandbox000 / AAI_ENV) to target the sandbox instead.
 DEFAULT_ENV = "production"
 
+# The environment the --sandbox shortcut expands to; the single place the sandbox
+# name lives outside ENVIRONMENTS itself (help text and hints derive from it).
+SANDBOX_ENV = "sandbox000"
+
 # The environment in effect for this process, set once at CLI startup (like
 # aai.settings). Resolved from --env / AAI_ENV / the profile's stored env.
 _active: Environment | None = None

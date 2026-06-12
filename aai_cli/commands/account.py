@@ -10,7 +10,7 @@ from rich.text import Text
 
 from aai_cli import help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
-from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
@@ -144,7 +144,7 @@ def balance(
     """Show your remaining account balance."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        _, jwt = resolve_session(state)
+        _, jwt = state.resolve_session()
         data = ams.get_balance(jwt)
         cents = jsonshape.as_float(data.get("balance_in_cents"))
         output.emit(
@@ -207,7 +207,7 @@ def usage(
             )
         start_date = _utc_day_start(start_day)
         end_date = _utc_day_start(end_day)
-        _, jwt = resolve_session(state)
+        _, jwt = state.resolve_session()
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, object]) -> object:
@@ -243,13 +243,7 @@ def usage(
                 if show_breakdown:
                     row.append(escape(breakdown))
                 table.add_row(*row)
-            hidden_note = (
-                output.muted(
-                    f"Hidden: {hidden_count} zero-usage window(s). Use --include-zero to show them."
-                )
-                if hidden_count
-                else None
-            )
+            hidden_note = output.hidden_note(hidden_count, "zero-usage window", "--include-zero")
             return output.stack(summary, table, hidden_note)
 
         output.emit(data, render, json_mode=json_mode)
@@ -273,7 +267,7 @@ def limits(
     """Show your account's rate limits per service."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        account_id, jwt = resolve_session(state)
+        account_id, jwt = state.resolve_session()
         data = ams.get_rate_limits(account_id, jwt)
 
         def render(d: dict[str, object]) -> object:

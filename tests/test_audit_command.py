@@ -176,7 +176,7 @@ def test_audit_summarizes_all_login_rows(monkeypatch, mocker):
 
 def test_audit_without_session_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     logs = mocker.patch(
         "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
     )

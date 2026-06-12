@@ -23,7 +23,7 @@ def test_login_browser_flow_fails_fast_when_keyring_unusable(monkeypatch):
     # final keyring write: probe the keyring first and point at what works.
     monkeypatch.setattr("aai_cli.commands.login.config.keyring_usable", lambda: False)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("browser flow must not start")),
     )
     result = runner.invoke(app, ["login"])
@@ -70,7 +70,7 @@ def test_login_passes_json_mode_to_browser_flow(monkeypatch):
         seen["json_mode"] = json_mode
         return _fake_login_result()
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", fake)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fake)
     assert runner.invoke(app, ["login", "--json"]).exit_code == 0
     assert seen["json_mode"] is True
     assert runner.invoke(app, ["login"]).exit_code == 0

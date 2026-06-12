@@ -5,7 +5,7 @@ from rich.markup import escape
 
 from aai_cli import jsonshape, options, output
 from aai_cli.auth import ams
-from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError, UsageError
 from aai_cli.help_text import examples_epilog
 
@@ -60,7 +60,7 @@ def list_(
     """List API keys across your projects (keys shown masked)."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        account_id, jwt = resolve_session(state)
+        account_id, jwt = state.resolve_session()
         projects = ams.list_projects(account_id, jwt)
         rows: list[dict[str, object]] = []
         for entry in projects:
@@ -126,7 +126,7 @@ def create(
                 "--name must not be empty.",
                 suggestion="Pass a label for the key, e.g. --name ci-pipeline.",
             )
-        account_id, jwt = resolve_session(state)
+        account_id, jwt = state.resolve_session()
         pid = project_id if project_id is not None else _default_project_id(account_id, jwt)
         created = ams.create_token(account_id, pid, name, jwt)
         output.emit(
@@ -158,7 +158,7 @@ def rename(
     """Rename an existing API key."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        account_id, jwt = resolve_session(state)
+        account_id, jwt = state.resolve_session()
         ams.rename_token(account_id, token_id, new_name, jwt)
         output.emit(
             {"id": token_id, "name": new_name},

@@ -8,11 +8,10 @@ options directly, with no CliRunner argv round-trip.
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from aai_cli import output
+from aai_cli import environments, output, stdio
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.tts import audio, dialogue, session
@@ -44,10 +43,8 @@ def _read_text(text: str | None) -> str:
     if text is not None and text.strip():
         return text
     # `text is None` (argument omitted), not merely blank: see the docstring rationale.
-    if text is None and not sys.stdin.isatty():
-        piped = sys.stdin.read().strip()
-        if piped:
-            return piped
+    if text is None and (piped := stdio.piped_stdin_text()) is not None:
+        return piped.strip()
     raise UsageError(
         "No text to speak.",
         suggestion='Pass text as an argument: assembly speak "Hello" — or pipe it via stdin.',
@@ -66,6 +63,14 @@ def _disposition(out: Path | None) -> str:
     return f"saved to {out}" if out is not None else "played"
 
 
+def _emit(payload: dict[str, object], human_line: str, *, json_mode: bool) -> None:
+    """One result summary: the JSON object on stdout, or a muted human note on stderr."""
+    if json_mode:
+        output.emit_ndjson(payload)
+    else:
+        output.error_console.print(f"[aai.muted]{human_line}[/aai.muted]")
+
+
 def _emit_single(
     result: session.SpeakResult,
     cfg: session.SpeakConfig,
@@ -73,22 +78,18 @@ def _emit_single(
     *,
     json_mode: bool,
 ) -> None:
-    """Single-voice result: a JSON object on stdout, or a human note on stderr."""
     duration = round(result.audio_duration_seconds, 3)
-    if json_mode:
-        output.emit_ndjson(
-            {
-                "voice": cfg.voice,
-                "language": cfg.language,
-                "sample_rate": result.sample_rate,
-                "audio_duration_seconds": duration,
-                "bytes": len(result.pcm),
-                "out": str(out) if out is not None else None,
-            }
-        )
-        return
-    output.error_console.print(
-        f"[aai.muted]Spoke {duration}s of audio ({_disposition(out)}).[/aai.muted]"
+    _emit(
+        {
+            "voice": cfg.voice,
+            "language": cfg.language,
+            "sample_rate": result.sample_rate,
+            "audio_duration_seconds": duration,
+            "bytes": len(result.pcm),
+            "out": str(out) if out is not None else None,
+        },
+        f"Spoke {duration}s of audio ({_disposition(out)}).",
+        json_mode=json_mode,
     )
 
 
@@ -100,25 +101,20 @@ def _emit_multi(
     *,
     json_mode: bool,
 ) -> None:
-    """Multi-voice result: a JSON object on stdout, or a human note on stderr."""
     duration = round(result.audio_duration_seconds, 3)
-    if json_mode:
-        output.emit_ndjson(
-            {
-                "mode": "multi",
-                "speakers": speakers,
-                "segments": segment_count,
-                "sample_rate": result.sample_rate,
-                "audio_duration_seconds": duration,
-                "bytes": len(result.pcm),
-                "out": str(out) if out is not None else None,
-            }
-        )
-        return
     voices = ", ".join(f"{spk}={voice}" for spk, voice in speakers.items())
-    output.error_console.print(
-        f"[aai.muted]Spoke {duration}s across {len(speakers)} voices "
-        f"({voices}) ({_disposition(out)}).[/aai.muted]"
+    _emit(
+        {
+            "mode": "multi",
+            "speakers": speakers,
+            "segments": segment_count,
+            "sample_rate": result.sample_rate,
+            "audio_duration_seconds": duration,
+            "bytes": len(result.pcm),
+            "out": str(out) if out is not None else None,
+        },
+        f"Spoke {duration}s across {len(speakers)} voices ({voices}) ({_disposition(out)}).",
+        json_mode=json_mode,
     )
 
 
@@ -187,7 +183,7 @@ def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
             error_type="unsupported_environment",
             exit_code=2,
             suggestion="Re-run as: assembly --sandbox speak … "
-            "(--sandbox goes before the command; or use --env sandbox000).",
+            f"(--sandbox goes before the command; or use --env {environments.SANDBOX_ENV}).",
         )
     spoken = _read_text(opts.text)
     api_key = state.resolve_api_key()

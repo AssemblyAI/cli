@@ -81,7 +81,7 @@ def test_transcribe_json_output(mocker):
 
 def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     tx = mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,

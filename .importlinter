@@ -28,6 +28,7 @@ source_modules =
     aai_cli.microphone
     aai_cli.options
     aai_cli.output
+    aai_cli.procs
     aai_cli.render
     aai_cli.speak_exec
     aai_cli.stdio

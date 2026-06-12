@@ -239,7 +239,7 @@ def test_spawn_refresh_is_detached(monkeypatch):
         }
         return object()
 
-    monkeypatch.setattr(update_check.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr("aai_cli.procs.subprocess.Popen", fake_popen)
     update_check.spawn_refresh()
 
     assert calls["args"][:3] == [sys.executable, "-m", "aai_cli"]
