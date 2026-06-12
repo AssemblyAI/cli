@@ -4,8 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-import typer.main
-from click.testing import CliRunner
+from typer.testing import CliRunner
 
 from aai_cli.main import app
 
@@ -24,8 +23,7 @@ def _write_fixture(
     name: str,
     args: tuple[str, ...],
 ) -> None:
-    command = typer.main.get_command(app)
-    result = runner.invoke(command, list(args), env=_ENV)
+    result = runner.invoke(app, list(args), env=_ENV)
     if result.exit_code != 0:
         detail = result.stderr.strip() or result.output.strip() or str(result.exception)
         raise RuntimeError(f"{name}: {' '.join(args)} failed: {detail}")
@@ -108,7 +106,7 @@ def main() -> int:
         ),
     )
 
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     for name, args in cases:
         _write_fixture(runner, out_dir, name, args)
 
