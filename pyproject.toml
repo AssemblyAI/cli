@@ -197,6 +197,8 @@ venv = ".venv"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# hatch-vcs writes this at build time; it is not linted or formatted to project style.
+extend-exclude = ["aai_cli/_version.py"]
 
 [tool.ruff.lint]
 # PGH/ERA/TRY/TD/FIX close the "make the error go away" escape hatches a coding agent
@@ -264,6 +266,7 @@ max-statements = 40
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]
+exclude = ["aai_cli/_version.py"]
 min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
 ignore_names = ["app", "capture_output", "download", "healthy", "ist", "memory_keyring", "org",
