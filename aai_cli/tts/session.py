@@ -4,6 +4,7 @@ import base64
 import binascii
 import contextlib
 import json
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -20,9 +21,15 @@ class _WebSocket(Protocol):
     """The slice of a websockets sync connection this module drives — named as a
     Protocol so the untyped library boundary is structurally typed, not opaque."""
 
-    def recv(self, timeout: float | None = None) -> str | bytes: ...
-    def send(self, data: str, /) -> None: ...  # positional-only: matches ws send(message)
-    def close(self) -> None: ...
+    @abstractmethod
+    def recv(self, timeout: float | None = None) -> str | bytes:
+        """Receive the next text or binary frame."""
+
+    def send(self, data: str, /) -> None:
+        """Send a text frame (positional-only: matches ws send(message))."""
+
+    def close(self) -> None:
+        """Close the connection."""
 
 
 # The connect factory: returns a fresh _WebSocket. websockets' real sync client

@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from aai_cli import microphone
 from aai_cli.errors import CLIError
 from aai_cli.microphone import (
     _FALLBACK_RATE,
@@ -11,6 +12,7 @@ from aai_cli.microphone import (
     _default_mic_stream,
     _device_default_rate,
     _SoundDeviceMic,
+    resample_pcm16,
 )
 
 
@@ -193,11 +195,10 @@ def test_resample_pcm16_uses_16bit_mono_params():
     # resample_pcm16 must treat the buffer as 16-bit (2-byte) mono (1-channel) PCM.
     # Compare against audioop driven with those exact params; a mutated width/channel
     # count yields different bytes (or rejects the frame count), killing the mutant.
-    import aai_cli.microphone as m
-
+    # (`microphone.audioop` is the module's own import, so both sides agree.)
     chunk = bytes(range(256))  # 128 little-endian 16-bit mono samples (a ramp)
-    expected, _ = m.audioop.ratecv(chunk, 2, 1, 48000, 24000, None)
-    out, _ = m.resample_pcm16(chunk, None, src_rate=48000, dst_rate=24000)
+    expected, _ = microphone.audioop.ratecv(chunk, 2, 1, 48000, 24000, None)
+    out, _ = resample_pcm16(chunk, None, src_rate=48000, dst_rate=24000)
     assert out == expected
     assert out != chunk  # 48k -> 24k actually changes the data
 

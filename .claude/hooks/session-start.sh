@@ -9,6 +9,8 @@
 #   - go:     actionlint + gitleaks (Go binaries, no PyPI/npm wheel) — without them
 #             check.sh silently self-skips those gates here and the failure only
 #             surfaces in CI
+#   - codeql: the CLI+query-pack bundle for check.sh's codeql gate (security +
+#             quality suites; alerts otherwise only surface on GitHub after push)
 #   - python: `uv sync` to materialize the locked dev environment up front
 #
 # Hook stdout is injected into the agent's context at session start, so emit one
@@ -99,7 +101,22 @@ else
   log "go not found; skipping actionlint/gitleaks (check.sh self-skips them; CI still runs them)"
 fi
 
-# 4. Git history — web containers start from a shallow clone, where origin/main
+# 4. CodeQL bundle (CLI + query packs, pinned in gate_tool_pins.sh) — without it
+#    check.sh self-skips its codeql gate and security/quality alerts only surface
+#    on GitHub after push. ~1 GB release tarball; soft-fails like everything else.
+if command -v codeql >/dev/null 2>&1; then
+  log "codeql already present"
+elif curl -fsSL "https://github.com/github/codeql-action/releases/download/${CODEQL_BUNDLE_VERSION}/codeql-bundle-linux64.tar.gz" -o /tmp/codeql-bundle.tar.gz >>"$LOG" 2>&1 \
+  && tar -xzf /tmp/codeql-bundle.tar.gz -C /usr/local/lib >>"$LOG" 2>&1 \
+  && ln -sf /usr/local/lib/codeql/codeql /usr/local/bin/codeql \
+  && rm -f /tmp/codeql-bundle.tar.gz; then
+  log "installed codeql (${CODEQL_BUNDLE_VERSION})"
+else
+  rm -f /tmp/codeql-bundle.tar.gz
+  log "WARNING: codeql bundle install failed; check.sh self-skips its codeql gate (codeql.yml still runs it; see $LOG)"
+fi
+
+# 5. Git history — web containers start from a shallow clone, where origin/main
 #    can exist with NO merge base to the session branch; check.sh's diff-scoped
 #    tail gates (diff-cover/mutation) then crash with "fatal: ... no merge base"
 #    instead of self-skipping, and the branch auto-update below can't merge.
@@ -114,7 +131,7 @@ else
   log "clone already has full history"
 fi
 
-# 5. Keep the session branch current. Resumed web containers hold a clone frozen
+# 6. Keep the session branch current. Resumed web containers hold a clone frozen
 #    at creation time, so two things can go stale: the branch's own remote tip
 #    (pushes from another session/machine) and origin/main (which the diff-scoped
 #    gates — diff-cover, mutation — compare against). Fast-forward to the remote
@@ -149,7 +166,7 @@ if [ "$branch" != "HEAD" ] && [ "$branch" != "main" ]; then
   fi
 fi
 
-# 6. Python environment — materialize the locked dev env so the first `uv run`
+# 7. Python environment — materialize the locked dev env so the first `uv run`
 #    doesn't pay the full sync cost mid-task. `uv` syncs the default dev group.
 if uv sync >>"$LOG" 2>&1; then
   log "uv environment synced (locked dev group)"

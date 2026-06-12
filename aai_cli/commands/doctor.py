@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import NotRequired, Protocol, TypedDict
 
@@ -37,7 +38,9 @@ class DoctorResult(TypedDict):
 
 
 class _SoundDeviceModule(Protocol):
-    def query_devices(self) -> Sequence[Mapping[str, object]]: ...
+    @abstractmethod
+    def query_devices(self) -> Sequence[Mapping[str, object]]:
+        """List the audio devices sounddevice can see."""
 
 
 # Status -> (affordance symbol, render style). "fail" is a blocker; "warn" is

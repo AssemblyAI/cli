@@ -25,21 +25,28 @@ type _Pipe = IO[bytes] | io.BytesIO
 
 class _CaptureProcess(Protocol):
     @property
-    def stdout(self) -> _Pipe | None: ...
+    def stdout(self) -> _Pipe | None:
+        """The helper's PCM output pipe."""
 
     @property
-    def stderr(self) -> _Pipe | None: ...
+    def stderr(self) -> _Pipe | None:
+        """The helper's diagnostic pipe."""
 
     @property
-    def returncode(self) -> int | None: ...
+    def returncode(self) -> int | None:
+        """Exit code once the helper has exited."""
 
-    def poll(self) -> int | None: ...
+    def poll(self) -> int | None:
+        """Non-blocking exit-code check."""
 
-    def terminate(self) -> None: ...
+    def terminate(self) -> None:
+        """Ask the helper to exit."""
 
-    def kill(self) -> None: ...
+    def kill(self) -> None:
+        """Force the helper to exit."""
 
-    def wait(self, timeout: float | None = None) -> int | None: ...
+    def wait(self, timeout: float | None = None) -> int | None:
+        """Block until the helper exits."""
 
 
 def _unsupported_platform() -> CLIError:

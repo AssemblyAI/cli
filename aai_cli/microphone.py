@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import Any, Protocol, cast
 
@@ -18,21 +19,28 @@ _FALLBACK_RATE = 48000
 
 
 class _RawInputStream(Protocol):
-    def start(self) -> None: ...
+    def start(self) -> None:
+        """Begin capturing."""
 
-    def read(self, frames: int) -> tuple[bytes, object]: ...
+    @abstractmethod
+    def read(self, frames: int) -> tuple[bytes, object]:
+        """Read up to `frames` frames of PCM plus an overflow flag."""
 
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        """Stop capturing."""
 
-    def close(self) -> None: ...
+    def close(self) -> None:
+        """Release the device."""
 
 
 class _SoundDeviceModule(Protocol):
     RawInputStream: Callable[..., _RawInputStream]
 
+    @abstractmethod
     def query_devices(
         self, device: int | None = None, kind: str | None = None
-    ) -> Mapping[str, object]: ...
+    ) -> Mapping[str, object]:
+        """Describe an audio device (or the default one for `kind`)."""
 
 
 def audio_missing_error() -> CLIError:

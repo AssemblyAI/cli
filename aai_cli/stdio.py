@@ -15,7 +15,13 @@ def silence_stdout() -> None:
     one-shot entry point and the streaming reader thread.
     """
     with contextlib.suppress(OSError):
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull_fd, sys.stdout.fileno())
+        finally:
+            # dup2 duplicates the descriptor, so the original must be closed
+            # or it leaks one fd per call.
+            os.close(devnull_fd)
 
 
 def stdin_is_piped() -> bool:

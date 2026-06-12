@@ -14,11 +14,20 @@ class _OutputStream(Protocol):
     """The slice of a sounddevice output stream play_pcm drives — named as a
     Protocol so the untyped library boundary is structurally typed, not opaque."""
 
-    def start(self) -> None: ...
-    def write(self, data: bytes, /) -> object: ...  # real write returns a bool we ignore
-    def stop(self) -> None: ...
-    def abort(self) -> None: ...  # immediate stop: discards buffered frames (vs stop's drain)
-    def close(self) -> None: ...
+    def start(self) -> None:
+        """Begin playback."""
+
+    def write(self, data: bytes, /) -> object:
+        """Queue PCM for playback (the real write returns a bool we ignore)."""
+
+    def stop(self) -> None:
+        """Stop after draining buffered frames."""
+
+    def abort(self) -> None:
+        """Immediate stop: discards buffered frames (vs stop's drain)."""
+
+    def close(self) -> None:
+        """Release the stream."""
 
 
 # Write playback in ~4 KiB chunks (≈85 ms of 16-bit mono at 24 kHz) instead of one
