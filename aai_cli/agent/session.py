@@ -205,20 +205,6 @@ def _send_audio_loop(ws: _WebSocket, session: VoiceAgentSession, mic: _IO) -> No
             return
 
 
-def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
-    """Open the Voice Agent socket, mapping a connect failure to a clean CLIError.
-
-    A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
-    (whoami / environment / network); anything else keeps the wsutil mapping.
-    """
-    try:
-        return connect(ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
-    except Exception as exc:
-        raise diagnostics.classify_error(
-            exc, "Could not connect to the voice agent", host=environments.active().agents_host
-        ) from exc
-
-
 def _session_update_message(config: AgentRunConfig) -> str:
     """The initial session.update payload as a JSON string: persona, greeting, voice."""
     return json.dumps(
@@ -270,7 +256,13 @@ def run_session(
         ready_event=ready_event,
     )
 
-    ws = _open_ws(connect, api_key)
+    ws = diagnostics.open_authorized_ws(
+        connect,
+        api_key,
+        ws_url(),
+        message="Could not connect to the voice agent",
+        host=environments.active().agents_host,
+    )
 
     # The mic opens lazily on first iteration, inside the capture thread; a failure
     # there (no device, sounddevice missing) must reach the user instead of vanishing
