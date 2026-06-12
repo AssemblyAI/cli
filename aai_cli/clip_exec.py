@@ -12,8 +12,9 @@ diarized utterances of a transcript (made on the fly, reused via
 ``--transcript-id``, or piped on stdin with ``-t -``), ``--llm`` hands the
 timestamped utterances to the LLM Gateway and lets the model pick the windows,
 and ``--range`` adds explicit ones. The selected segments are padded, merged
-where they touch, and each surviving segment is re-encoded into its own file
-with ffmpeg.
+where they touch, snapped into nearby silence (one ffmpeg ``silencedetect``
+pass over the source, skipped with ``--no-snap``), and each surviving segment
+is re-encoded into its own file with ffmpeg.
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ class ClipOptions:
     max_tokens: int
     ranges: list[str]
     padding: float
+    snap: bool
     out_dir: Path | None
 
 
@@ -250,6 +252,37 @@ def _run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
+# -30dB for at least 0.2s reads as a pause in normal speech recordings.
+_SILENCE_FILTER = "silencedetect=noise=-30dB:d=0.2"
+
+
+def _detect_silences(ffmpeg: str, media: Path) -> list[Segment]:
+    """The silence intervals ffmpeg hears in ``media`` (one decode pass).
+
+    Snapping is best-effort: a failed detection returns no silences (so the
+    cut proceeds at the selected times) rather than failing the command.
+    silencedetect logs at info level on stderr, so the usual ``-loglevel
+    error`` would silence the very lines this parses.
+    """
+    result = _run_ffmpeg(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(media),
+            "-af",
+            _SILENCE_FILTER,
+            "-f",
+            "null",
+            "-",
+        ]
+    )
+    if result.returncode != 0:
+        return []
+    return clip_select.parse_silences(result.stderr)
+
+
 def _cut_clip(ffmpeg: str, media: Path, segment: Segment, dest: Path) -> None:
     """Re-encode one segment of ``media`` into ``dest``.
 
@@ -350,6 +383,10 @@ def _cut_and_emit(
     """Select, cut, and report the clips for an already-local media file."""
     matched, transcript_id = _transcript_segments(opts, media, state, json_mode=json_mode)
     segments = clip_select.merge_segments([*matched, *explicit], opts.padding)
+    if opts.snap:
+        with output.status("Detecting silence…", json_mode=json_mode, quiet=state.quiet):
+            silences = _detect_silences(ffmpeg, media)
+        segments = clip_select.snap_to_silences(segments, silences)
     written: list[WrittenClip] = []
     cutting = f"Cutting {len(segments)} clip(s)…"
     with output.status(cutting, json_mode=json_mode, quiet=state.quiet):

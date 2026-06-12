@@ -30,6 +30,7 @@ DEFAULTS = ClipOptions(
     max_tokens=llm.DEFAULT_MAX_TOKENS,
     ranges=[],
     padding=0.0,
+    snap=True,
     out_dir=None,
 )
 
@@ -54,14 +55,20 @@ def fake_transcript(utterances):
     return SimpleNamespace(id="tr_123", utterances=utterances)
 
 
-def record_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    """Resolve ffmpeg and record every invocation, succeeding with no output."""
+def record_ffmpeg(monkeypatch: pytest.MonkeyPatch, detect_log: str = "") -> list[list[str]]:
+    """Resolve ffmpeg and record every invocation, succeeding with no output.
+
+    With snapping on (the default) the first recorded call is the silencedetect
+    pass; ``detect_log`` is what it reports on stderr (empty: no silences, so
+    snapping is a no-op and cut times stay exactly as selected).
+    """
     monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
     calls: list[list[str]] = []
 
     def run(args: list[str]) -> subprocess.CompletedProcess[str]:
         calls.append(args)
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        stderr = detect_log if "-af" in args else ""
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr=stderr)
 
     monkeypatch.setattr(clip_exec, "_run_ffmpeg", run)
     return calls
