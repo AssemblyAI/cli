@@ -1,4 +1,4 @@
-"""`assembly eval` behavior: WER/DER scoring, rendering, flags, error paths.
+"""`assembly eval` behavior: WER scoring, rendering, flags, error paths.
 
 The transcription boundary (`client.transcribe`) is mocked; datasets are real
 temp manifests so the command exercises the loader end to end.
@@ -28,8 +28,8 @@ def _auth():
     config.set_api_key("default", "sk_live")
 
 
-def _transcript(text, utterances=None):
-    return SimpleNamespace(text=text, utterances=utterances)
+def _transcript(text):
+    return SimpleNamespace(text=text)
 
 
 def _write_wer_manifest(tmp_path):
@@ -38,29 +38,6 @@ def _write_wer_manifest(tmp_path):
     (tmp_path / "manifest.csv").write_text(
         "audio,text\na.wav,hello there\nb.wav,goodbye now\n", encoding="utf-8"
     )
-
-
-def _write_speaker_manifest(tmp_path, *, with_text=False):
-    (tmp_path / "a.wav").write_bytes(b"fake-audio")
-    row = {
-        "audio": "a.wav",
-        "speakers": ["alice", "bob"],
-        "timestamps_start": [0.0, 10.0],
-        "timestamps_end": [10.0, 20.0],
-    }
-    if with_text:
-        row["text"] = "hello there"
-    (tmp_path / "manifest.jsonl").write_text(json.dumps(row), encoding="utf-8")
-
-
-def _diarized_utterances():
-    # Against the manifest's alice 0-10s / bob 10-20s reference: 2s of confusion
-    # around the 10s boundary. The default 1s collar forgives 10-10.5s and trims
-    # 2s of boundary speech from the 20s total -> DER 1.5/18 (see test_der.py).
-    return [
-        SimpleNamespace(speaker="A", start=0, end=12000),
-        SimpleNamespace(speaker="B", start=12000, end=20000),
-    ]
 
 
 def _mock_transcribe(mocker, results):
@@ -92,7 +69,6 @@ def test_wer_table_with_per_file_and_pooled_scores(tmp_path, mocker):
     assert "1 errors" not in result.output
     assert "manifest.csv" in result.output
     assert "default model" in result.output
-    assert "DER" not in result.output
 
 
 def test_summary_pluralizes_errors(tmp_path, mocker):
@@ -117,7 +93,6 @@ def test_json_payload_shape(tmp_path, mocker):
     assert payload["words"] == 4
     assert payload["errors"] == 1
     assert payload["wer"] == 0.25
-    assert "der" not in payload
     assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
     assert payload["rows"][1] == {"item": "b.wav", "words": 2, "errors": 1, "wer": 0.5}
     assert "failed" not in payload  # only present when a row failed
@@ -131,9 +106,7 @@ def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker, model):
     result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model, "--json"])
     assert result.exit_code == 0
     assert _payload_of(result)["speech_model"] == model
-    tx_config = tx.call_args.kwargs["config"]
-    assert tx_config.speech_models == [model]
-    assert tx_config.speaker_labels is None  # not requested -> omitted, not False
+    assert tx.call_args.kwargs["config"].speech_models == [model]
 
 
 def test_no_speech_model_leaves_speech_models_unset(tmp_path, mocker):
@@ -163,88 +136,6 @@ def test_speech_model_named_in_human_header(tmp_path, mocker):
     assert "default model" not in result.output
 
 
-def test_speaker_labels_scores_der_only_when_dataset_has_no_text(tmp_path, mocker):
-    _auth()
-    _write_speaker_manifest(tmp_path)
-    tx = _mock_transcribe(mocker, [_transcript("ignored", _diarized_utterances())])
-    result = runner.invoke(app, ["eval", "manifest.jsonl", "--speaker-labels"])
-    assert result.exit_code == 0
-    assert tx.call_args.kwargs["config"].speaker_labels is True
-    assert "DER" in result.output
-    assert "8.33%" in result.output  # 1.5/18 under the default 1s collar
-    # The summary names each DER component; here the error is pure confusion.
-    assert "missed 0.00%" in result.output
-    assert "false alarm 0.00%" in result.output
-    assert "confusion 8.33%" in result.output
-    assert "WER" not in result.output
-    assert "WORDS" not in result.output
-
-
-def test_speaker_labels_with_text_scores_both_metrics(tmp_path, mocker):
-    _auth()
-    _write_speaker_manifest(tmp_path, with_text=True)
-    _mock_transcribe(mocker, [_transcript("hello there", _diarized_utterances())])
-    result = runner.invoke(app, ["eval", "manifest.jsonl", "--speaker-labels", "--json"])
-    assert result.exit_code == 0
-    payload = _payload_of(result)
-    assert payload["wer"] == 0.0
-    assert payload["der"] == 1.5 / 18  # default 1s collar
-    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.0, "confusion": 1.5 / 18}
-    assert payload["rows"][0]["wer"] == 0.0
-    assert payload["rows"][0]["der"] == 1.5 / 18
-
-
-def test_both_metrics_render_in_one_table(tmp_path, mocker):
-    _auth()
-    _write_speaker_manifest(tmp_path, with_text=True)
-    _mock_transcribe(mocker, [_transcript("hello there", _diarized_utterances())])
-    result = runner.invoke(app, ["eval", "manifest.jsonl", "--speaker-labels"])
-    assert "WER" in result.output
-    assert "DER" in result.output
-    assert "8.33%" in result.output
-
-
-def test_der_counts_leading_speech_the_model_missed(tmp_path, mocker):
-    _auth()
-    (tmp_path / "a.wav").write_bytes(b"fake-audio")
-    row = {
-        "audio": "a.wav",
-        "speakers": ["alice"],
-        "timestamps_start": [0.0],
-        "timestamps_end": [10.0],
-    }
-    (tmp_path / "m.jsonl").write_text(json.dumps(row), encoding="utf-8")
-    # The hypothesis starts 1000ms in (1.0s exactly after ms→s conversion):
-    # 1s missed over 10s of reference speech, scored without collar forgiveness.
-    utterances = [SimpleNamespace(speaker="A", start=1000, end=10000)]
-    _mock_transcribe(mocker, [_transcript("x", utterances)])
-    result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
-    payload = _payload_of(result)
-    assert payload["der"] == 0.1
-    # All missed detection — distinguishes the breakdown keys from one another.
-    assert payload["der_breakdown"] == {"missed": 0.1, "false_alarm": 0.0, "confusion": 0.0}
-
-
-def test_der_counts_trailing_hypothesis_speech_as_false_alarm(tmp_path, mocker):
-    _auth()
-    (tmp_path / "a.wav").write_bytes(b"fake-audio")
-    row = {
-        "audio": "a.wav",
-        "speakers": ["alice"],
-        "timestamps_start": [0.0],
-        "timestamps_end": [10.0],
-    }
-    (tmp_path / "m.jsonl").write_text(json.dumps(row), encoding="utf-8")
-    # The hypothesis keeps "speaking" 5s past the 10s reference: 5s of false
-    # alarm over 10s of reference speech, scored without collar forgiveness.
-    utterances = [SimpleNamespace(speaker="A", start=0, end=15000)]
-    _mock_transcribe(mocker, [_transcript("x", utterances)])
-    result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
-    payload = _payload_of(result)
-    assert payload["der"] == 0.5
-    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.5, "confusion": 0.0}
-
-
 def _assign(obj, attribute, value):
     setattr(obj, attribute, value)
 
@@ -252,19 +143,9 @@ def _assign(obj, attribute, value):
 def test_item_results_are_immutable():
     from aai_cli.commands.evaluate import _ItemResult
 
-    result = _ItemResult(row={}, words=None, speakers=None)
+    result = _ItemResult(row={}, words=None)
     with pytest.raises(dataclasses.FrozenInstanceError):
         _assign(result, "words", None)
-
-
-def test_collar_flag_loosens_der(tmp_path, mocker):
-    _auth()
-    _write_speaker_manifest(tmp_path)
-    _mock_transcribe(mocker, [_transcript("ignored", _diarized_utterances())])
-    result = runner.invoke(
-        app, ["eval", "manifest.jsonl", "--speaker-labels", "--collar", "4.0", "--json"]
-    )
-    assert _payload_of(result)["der"] == 0.0
 
 
 def test_missing_transcript_text_scores_as_all_deletions(tmp_path, mocker):
@@ -291,7 +172,6 @@ def test_loader_defaults(tmp_path, mocker):
     assert result.exit_code == 0
     kwargs = load.call_args.kwargs
     assert kwargs["limit"] == 10
-    assert kwargs["with_speakers"] is False
     assert kwargs["split"] is None and kwargs["subset"] is None
     assert kwargs["audio_column"] is None and kwargs["text_column"] is None
 
@@ -346,16 +226,6 @@ def test_progress_status_counts_items(tmp_path, mocker, monkeypatch):
     monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
     assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
     assert seen == ["[1/2] Transcribing a.wav…", "[2/2] Transcribing b.wav…"]
-
-
-def test_collar_without_speaker_labels_is_a_usage_error(mocker):
-    # Mirrors transcribe's --speakers-expected guard: a silently inert flag is a bug.
-    tx = mocker.patch("aai_cli.commands.evaluate.client.transcribe", autospec=True)
-    result = runner.invoke(app, ["eval", "org/ds", "--collar", "0.5"])
-    assert result.exit_code == 2
-    assert "--collar only applies" in result.output
-    assert "Add --speaker-labels." in result.output
-    tx.assert_not_called()
 
 
 def test_missing_manifest_is_a_usage_failure(tmp_path):

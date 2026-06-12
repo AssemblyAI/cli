@@ -247,8 +247,7 @@
    text; both are normalized first (lowercased, punctuation stripped) so style
    differences don't count as errors, and the summary pools total errors over
    total reference words. Handy for picking a model: run once per
-   --speech-model and compare. --speaker-labels also diarizes and scores DER
-   against reference speaker turns.
+   --speech-model and compare.
   
    Datasets come from the Hugging Face Hub (any public dataset its viewer
    serves with audio + reference columns; gated ones need HF_TOKEN), a local
@@ -259,8 +258,7 @@
    (meetings), gigaspeech, peoples (real-world US English), commonvoice
    (English; --subset fr etc. for its 98 other locales), voxpopuli
    (parliament speech), switchboard (phone calls), expresso (expressive
-   speech), loquacious, and callhome (phone calls with speaker turns, for
-   --speaker-labels).
+   speech), loquacious, and callhome (phone calls).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    dataset      TEXT  Hugging Face dataset id, or a local .csv/.jsonl      │
@@ -268,37 +266,27 @@
   │                         [required]                                           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --split                   TEXT                     Hugging Face split to     │
+  │ --split                  TEXT                      Hugging Face split to     │
   │                                                    score (default: test).    │
-  │ --subset                  TEXT                     Hugging Face              │
+  │ --subset                 TEXT                      Hugging Face              │
   │                                                    config/subset name (e.g.  │
   │                                                    a language).              │
-  │ --limit                   INTEGER RANGE            Rows to evaluate (1-100). │
-  │                           [1<=x<=100]              [default: 10]             │
-  │ --audio-column            TEXT                     Audio column name         │
+  │ --limit                  INTEGER RANGE             Rows to evaluate (1-100). │
+  │                          [1<=x<=100]               [default: 10]             │
+  │ --audio-column           TEXT                      Audio column name         │
   │                                                    (default: auto-detect).   │
-  │ --text-column             TEXT                     Reference text column     │
+  │ --text-column            TEXT                      Reference text column     │
   │                                                    name (default:            │
   │                                                    auto-detect).             │
-  │ --speech-model            [universal-3-pro|univer  Speech model to evaluate. │
-  │                           sal-2]                                             │
-  │ --language-code           TEXT                     Force a language (e.g.    │
+  │ --speech-model           [universal-3-pro|univers  Speech model to evaluate. │
+  │                          al-2]                                               │
+  │ --language-code          TEXT                      Force a language (e.g.    │
   │                                                    en_us).                   │
-  │ --speaker-labels                                   Diarize and also score    │
-  │                                                    DER against the dataset's │
-  │                                                    reference speaker turns   │
-  │                                                    (speakers/timestamps_sta… │
-  │                                                    columns, in seconds).     │
-  │ --collar                  FLOAT RANGE [x>=0.0]     DER forgiveness (seconds) │
-  │                                                    around each reference     │
-  │                                                    turn boundary (default:   │
-  │                                                    1.0; needs                │
-  │                                                    --speaker-labels).        │
-  │ --concurrency             INTEGER RANGE [x>=1]     How many items to         │
+  │ --concurrency            INTEGER RANGE [x>=1]      How many items to         │
   │                                                    transcribe at once        │
   │                                                    (sequential by default).  │
   │                                                    [default: 1]              │
-  │ --json            -j                               Output the rows and       │
+  │ --json           -j                                Output the rows and       │
   │                                                    summary as one JSON       │
   │                                                    object.                   │
   │ --help                                             Show this message and     │
@@ -310,14 +298,10 @@
    $ assembly eval tedlium
    Compare models on your own audio
    $ assembly eval calls.csv --speech-model universal-3-pro
-   Score diarization too (WER + DER)
-   $ assembly eval agent-calls.jsonl --speaker-labels
    More rows, transcribed four at a time
    $ assembly eval librispeech --limit 50 --concurrency 4
    Evaluate non-English audio
    $ assembly eval commonvoice --subset fr --language-code fr
-   DER on a diarization benchmark
-   $ assembly eval callhome --speaker-labels
   
   
   

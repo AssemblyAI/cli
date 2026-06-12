@@ -11,11 +11,6 @@ Two source shapes, one output: a list of (audio, reference-text) items.
   API ingests directly. Gated/private datasets authenticate via ``HF_TOKEN``.
   The common benchmarks also have short **aliases** (``ALIASES``) that fill in
   the hub id plus the subset/split/audio-column defaults each set needs.
-
-With ``with_speakers`` (the ``--speaker-labels`` flag), rows must also carry
-diarization references as the parallel ``speakers`` / ``timestamps_start`` /
-``timestamps_end`` arrays the Hugging Face diarization datasets use (seconds);
-reference text then becomes optional, since diarization sets often have none.
 """
 
 from __future__ import annotations
@@ -26,7 +21,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from aai_cli import der, eval_hf_api, jsonshape, wer
+from aai_cli import eval_hf_api, jsonshape, wer
 from aai_cli.errors import APIError, CLIError, UsageError
 
 _MANIFEST_SUFFIXES = (".csv", ".jsonl")
@@ -38,9 +33,6 @@ _HF_ID_RE = re.compile(r"^[\w.-]+(?:/[\w.-]+)?$")
 # and manifest tools use (HF audio datasets, Common Voice, NeMo manifests).
 _AUDIO_COLUMNS = ("audio", "audio_filepath", "audio_url", "path", "file")
 _TEXT_COLUMNS = ("text", "sentence", "transcription", "transcript", "normalized_text")
-# Diarization references: the parallel-array convention the Hugging Face
-# diarization datasets (diarizers-community/*) use, in seconds.
-_SPEAKER_COLUMNS = ("speakers", "timestamps_start", "timestamps_end")
 
 
 @dataclass(frozen=True)
@@ -78,13 +70,11 @@ ALIASES: dict[str, Alias] = {
 
 @dataclass(frozen=True)
 class EvalItem:
-    """One evaluation row: an audio source (path or URL) plus its references —
-    text for WER, speaker turns for DER (each optional, never both absent)."""
+    """One evaluation row: an audio source (path or URL) plus its reference text."""
 
     item_id: str
     audio: str
-    reference: str | None
-    turns: list[der.Turn] | None = None
+    reference: str
 
 
 @dataclass(frozen=True)
@@ -104,7 +94,6 @@ def load(
     audio_column: str | None = None,
     text_column: str | None = None,
     limit: int,
-    with_speakers: bool = False,
 ) -> EvalDataset:
     """Load evaluation items from a local manifest or a Hugging Face dataset id."""
     path = Path(dataset)
@@ -118,7 +107,6 @@ def load(
             audio_column=audio_column,
             text_column=text_column,
             limit=limit,
-            with_speakers=with_speakers,
         )
     alias = ALIASES.get(dataset)
     if alias is not None:
@@ -133,7 +121,6 @@ def load(
         audio_column=audio_column,
         text_column=text_column,
         limit=limit,
-        with_speakers=with_speakers,
     )
 
 
@@ -164,22 +151,9 @@ def _resolve_columns(
     *,
     audio_column: str | None,
     text_column: str | None,
-    with_speakers: bool,
-) -> tuple[str, str | None]:
-    """The (audio, text) columns to read. Text is only optional when speaker
-    turns are being scored instead — diarization datasets often carry no text."""
+) -> tuple[str, str]:
+    """The (audio, text) columns to read."""
     audio_col = _pick_column(columns, audio_column, _AUDIO_COLUMNS, "--audio-column")
-    if with_speakers:
-        missing = [name for name in _SPEAKER_COLUMNS if name not in columns]
-        if missing:
-            raise UsageError(
-                f"--speaker-labels needs speaker-turn columns; missing: {', '.join(missing)} "
-                f"(columns: {', '.join(columns)}).",
-                suggestion="Rows carry parallel speakers/timestamps_start/timestamps_end "
-                "arrays in seconds (arrays need a .jsonl manifest, not .csv).",
-            )
-        if text_column is None and not any(name in columns for name in _TEXT_COLUMNS):
-            return audio_col, None
     return audio_col, _pick_column(columns, text_column, _TEXT_COLUMNS, "--text-column")
 
 
@@ -193,31 +167,8 @@ def _checked_reference(item_id: str, reference: str) -> str:
     return reference
 
 
-def _row_reference(cells: dict[str, object], text_col: str | None, item_id: str) -> str | None:
-    if text_col is None:
-        return None
+def _row_reference(cells: dict[str, object], text_col: str, item_id: str) -> str:
     return _checked_reference(item_id, str(cells.get(text_col) or ""))
-
-
-def _row_turns(cells: dict[str, object], item_id: str) -> list[der.Turn]:
-    """The row's reference speaker turns from the parallel-array columns."""
-    speakers = jsonshape.object_list(cells.get("speakers"))
-    starts = jsonshape.object_list(cells.get("timestamps_start"))
-    ends = jsonshape.object_list(cells.get("timestamps_end"))
-    if not speakers or len(starts) != len(speakers) or len(ends) != len(speakers):
-        raise UsageError(
-            f"{item_id} needs non-empty, equal-length speakers/timestamps_start/"
-            "timestamps_end arrays.",
-            suggestion="Each row lists who spoke plus matching start/end seconds.",
-        )
-    return [
-        der.Turn(
-            speaker=str(speakers[i]),
-            start=jsonshape.as_float(starts[i]),
-            end=jsonshape.as_float(ends[i]),
-        )
-        for i in range(len(speakers))
-    ]
 
 
 # ---------------------------------------------------------------- local manifests
@@ -248,7 +199,6 @@ def _load_manifest(
     audio_column: str | None,
     text_column: str | None,
     limit: int,
-    with_speakers: bool,
 ) -> EvalDataset:
     if not path.is_file():
         raise CLIError(
@@ -271,12 +221,9 @@ def _load_manifest(
         list(rows[0]),
         audio_column=audio_column,
         text_column=text_column,
-        with_speakers=with_speakers,
     )
     items = [
-        _manifest_item(
-            path, index, row, audio_col=audio_col, text_col=text_col, with_speakers=with_speakers
-        )
+        _manifest_item(path, index, row, audio_col=audio_col, text_col=text_col)
         for index, row in enumerate(rows[:limit], start=1)
     ]
     return EvalDataset(label=path.name, items=items)
@@ -288,8 +235,7 @@ def _manifest_item(
     row: dict[str, object],
     *,
     audio_col: str,
-    text_col: str | None,
-    with_speakers: bool,
+    text_col: str,
 ) -> EvalItem:
     audio = str(row.get(audio_col) or "")
     if not audio:
@@ -311,7 +257,6 @@ def _manifest_item(
         item_id=item_id,
         audio=audio,
         reference=_row_reference(row, text_col, item_id),
-        turns=_row_turns(row, item_id) if with_speakers else None,
     )
 
 
@@ -338,8 +283,7 @@ def _hf_item(
     split_name: str,
     *,
     audio_col: str,
-    text_col: str | None,
-    with_speakers: bool,
+    text_col: str,
 ) -> EvalItem:
     cells = jsonshape.as_mapping(row.get("row")) or {}
     item_id = f"{split_name}[{row.get('row_idx')}]"
@@ -347,7 +291,6 @@ def _hf_item(
         item_id=item_id,
         audio=_audio_source(cells.get(audio_col), column=audio_col, item_id=item_id),
         reference=_row_reference(cells, text_col, item_id),
-        turns=_row_turns(cells, item_id) if with_speakers else None,
     )
 
 
@@ -359,7 +302,6 @@ def _load_hf(
     audio_column: str | None,
     text_column: str | None,
     limit: int,
-    with_speakers: bool,
 ) -> EvalDataset:
     if not _HF_ID_RE.match(dataset):
         raise UsageError(
@@ -381,14 +323,8 @@ def _load_hf(
         list(jsonshape.as_mapping(rows[0].get("row")) or {}),
         audio_column=audio_column,
         text_column=text_column,
-        with_speakers=with_speakers,
     )
     return EvalDataset(
         label=f"{dataset} · {config}/{split_name}",
-        items=[
-            _hf_item(
-                row, split_name, audio_col=audio_col, text_col=text_col, with_speakers=with_speakers
-            )
-            for row in rows
-        ],
+        items=[_hf_item(row, split_name, audio_col=audio_col, text_col=text_col) for row in rows],
     )
