@@ -87,6 +87,16 @@ def pin_timezone(monkeypatch):
         time.tzset()
 
 
+@pytest.fixture
+def fixed_render_size(monkeypatch):
+    # Pin the render width/height so the CLI-surface goldens (the
+    # test_snapshots_* modules) are byte-identical across machines and CI.
+    # Named (not autouse): only the snapshot modules opt in via
+    # `pytestmark = pytest.mark.usefixtures("fixed_render_size")`.
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setenv("LINES", "40")
+
+
 @pytest.fixture(autouse=True)
 def reset_active_environment():
     # The active environment is a process-global (set at CLI startup); pin it to

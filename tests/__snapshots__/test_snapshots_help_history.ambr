@@ -1,0 +1,120 @@
+# serializer version: 1
+# name: test_command_help_matches_snapshot[sessions_get]
+  '''
+  
+   Usage: assembly sessions get [OPTIONS] SESSION_ID
+  
+   Show details for one streaming session.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    session_id      TEXT  Streaming session id. [required]                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show one session's details
+   $ assembly sessions get sess_5551234
+   Raw JSON for one session
+   $ assembly sessions get sess_5551234 --json
+   Drill into the latest session
+   $ assembly sessions get $(assembly sessions list --json | jq -r
+   '.[0].session_id')
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[sessions_list]
+  '''
+  
+   Usage: assembly sessions list [OPTIONS]
+  
+   List recent streaming sessions.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --limit           INTEGER RANGE [x>=1]       How many sessions to show.      │
+  │                                              [default: 10]                   │
+  │ --status          [created|completed|error]  Only show sessions with this    │
+  │                                              status.                         │
+  │ --json    -j                                 Output raw JSON.                │
+  │ --help                                       Show this message and exit.     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   List recent streaming sessions
+   $ assembly sessions list
+   Find failed sessions
+   $ assembly sessions list --status error
+   Inspect the most recent session
+   $ assembly sessions get $(assembly sessions list --json | jq -r
+   '.[0].session_id')
+   Total audio across recent sessions (seconds)
+   $ assembly sessions list --json | jq '[.[].audio_duration_sec] | add'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[transcripts_get]
+  '''
+  
+   Usage: assembly transcripts get [OPTIONS] TRANSCRIPT_ID
+  
+   Fetch a past transcript by id and print its text.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    transcript_id      TEXT  Transcript id. [required]                      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --output  -o      [text|id|status|utterances|s  Print one field of the       │
+  │                   rt|json]                      result.                      │
+  │ --json    -j                                    Output raw JSON.             │
+  │ --help                                          Show this message and exit.  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Fetch a transcript's text by id
+   $ assembly transcripts get 5551234-abcd
+   Speaker-labeled turns
+   $ assembly transcripts get 5551234-abcd -o utterances
+   Save SRT subtitles
+   $ assembly transcripts get 5551234-abcd -o srt > captions.srt
+   Get the raw JSON
+   $ assembly transcripts get 5551234-abcd --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[transcripts_list]
+  '''
+  
+   Usage: assembly transcripts list [OPTIONS]
+  
+   List recent transcripts.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --limit          INTEGER RANGE [x>=1]  How many transcripts to show.         │
+  │                                        [default: 10]                         │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   List your recent transcripts
+   $ assembly transcripts list
+   Show more at once
+   $ assembly transcripts list --limit 50
+   Grab the latest transcript id
+   $ assembly transcripts list --json | jq -r '.[0].id'
+   Summarize your latest transcript
+   $ assembly llm "summarize" --transcript-id $(assembly transcripts list --json
+   | jq -r '.[0].id')
+  
+  
+  
+  '''
+# ---
