@@ -13,16 +13,19 @@ class Assembly < Formula
     sha256 cellar: :any, arm64_sonoma: "daa913744f7176cf27100ea3860b2eba2c72438737eada3dfd7122860ac8d38b"
   end
 
-  depends_on "pkgconf" => :build      # cffi / cryptography native builds
-  depends_on "rust" => :build         # pydantic-core, jiter, cryptography
+  depends_on "pkgconf" => :build      # cffi native build (sounddevice; +cryptography on Linux)
+  depends_on "rust" => :build         # pydantic-core, jiter (+cryptography on Linux)
   depends_on "cloudflared"           # public quick-tunnel for `assembly share`
   depends_on "ffmpeg"                # decode non-WAV/URL audio (transcribe/stream)
-  depends_on "openssl@3"             # cryptography linkage
   depends_on "portaudio"             # sounddevice (audio capture)
   depends_on "python@3.13"
 
-  # Linux-only keyring backend (D-Bus Secret Service); not built on macOS.
+  # Linux-only keyring backend (D-Bus Secret Service); not built on macOS, which
+  # uses the Keychain backend instead. secretstorage pulls in cryptography (a
+  # Rust+OpenSSL source build), so both it and openssl@3 stay off the macOS bottle.
   on_linux do
+    depends_on "openssl@3" # cryptography linkage
+
     resource "jeepney" do
       url "https://files.pythonhosted.org/packages/7b/6f/357efd7602486741aa73ffc0617fb310a29b588ed0fd69c2399acbb85b0c/jeepney-0.9.0.tar.gz"
       sha256 "cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732"
@@ -31,6 +34,11 @@ class Assembly < Formula
     resource "secretstorage" do
       url "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz"
       sha256 "f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be"
+    end
+
+    resource "cryptography" do
+      url "https://files.pythonhosted.org/packages/9f/a9/db8f313fdcd85d767d4973515e1db101f9c71f95fced83233de224673757/cryptography-48.0.0.tar.gz"
+      sha256 "5c3932f4436d1cccb036cb0eaef46e6e2db91035166f1ad6505c3c9d5a635920"
     end
   end
 
@@ -77,11 +85,6 @@ class Assembly < Formula
   resource "colorama" do
     url "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz"
     sha256 "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"
-  end
-
-  resource "cryptography" do
-    url "https://files.pythonhosted.org/packages/9f/a9/db8f313fdcd85d767d4973515e1db101f9c71f95fced83233de224673757/cryptography-48.0.0.tar.gz"
-    sha256 "5c3932f4436d1cccb036cb0eaef46e6e2db91035166f1ad6505c3c9d5a635920"
   end
 
   resource "distro" do
