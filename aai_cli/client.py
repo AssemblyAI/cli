@@ -17,7 +17,7 @@ from assemblyai.streaming.v3 import (
 
 from aai_cli import environments, jsonshape, stdio
 from aai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
-from aai_cli.streaming.diagnostics import handshake_error, silence_streaming_logging
+from aai_cli.streaming.diagnostics import classify_error, silence_streaming_logging
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
 _StreamHandler = Callable[[Any, Any], object]
@@ -271,12 +271,7 @@ def _streaming_run_error(error: object) -> CLIError:
     A rejected handshake (HTTP 401/403) gets an actionable suggestion: bare
     "Streaming error: WebSocket handshake rejected (HTTP 403)" left users cold.
     """
-    rejected = handshake_error(error, "Streaming error", host=environments.active().streaming_host)
-    if rejected is not None:
-        return rejected
-    if is_auth_failure(error):
-        return auth_failure()
-    return APIError(f"Streaming error: {error}")
+    return classify_error(error, "Streaming error", host=environments.active().streaming_host)
 
 
 def stream_audio(
