@@ -60,9 +60,9 @@ def test_run_clip_downloads_youtube_audio_into_cwd(
     assert fake_download["url"] == YT_URL
     # ffmpeg reads the downloaded temp file; the clip lands in the cwd, named
     # after the download (the temp dir is gone after the run).
-    assert fake_ffmpeg[0][6] == str(fake_download["path"])
+    assert fake_ffmpeg[1][6] == str(fake_download["path"])
     dest = tmp_path / "vid123.clip01.m4a"
-    assert fake_ffmpeg[0][-1] == str(dest)
+    assert fake_ffmpeg[1][-1] == str(dest)
     payload = json.loads(capsys.readouterr().out)
     assert payload["source"] == YT_URL
     assert payload["clips"][0]["path"] == str(dest)
@@ -73,7 +73,7 @@ def test_run_clip_youtube_honors_out_dir(tmp_path, fake_ffmpeg, fake_download, c
     out_dir.mkdir()
     opts = dataclasses.replace(DEFAULTS, media=YT_URL, ranges=["1-2"], out_dir=out_dir)
     clip_exec.run_clip(opts, AppState(), json_mode=True)
-    assert fake_ffmpeg[0][-1] == str(out_dir / "vid123.clip01.m4a")
+    assert fake_ffmpeg[1][-1] == str(out_dir / "vid123.clip01.m4a")
 
 
 def test_run_clip_youtube_transcribes_the_downloaded_file(
@@ -112,7 +112,7 @@ def test_run_clip_youtube_download_status_message(
     monkeypatch.setattr(clip_exec.output, "status", fake_status)
     opts = dataclasses.replace(DEFAULTS, media=YT_URL, ranges=["1-2"])
     clip_exec.run_clip(opts, AppState(), json_mode=False)
-    assert messages == ["Downloading audio…", "Cutting 1 clip(s)…"]
+    assert messages == ["Downloading audio…", "Detecting silence…", "Cutting 1 clip(s)…"]
 
 
 # --- transcript piped on stdin (-t -) -------------------------------------------
@@ -216,7 +216,7 @@ def test_run_clip_llm_selection_drives_the_cut(media, fake_ffmpeg, capsys, monke
     payload = json.loads(capsys.readouterr().out)
     assert payload["transcript_id"] == "tr_123"
     assert [(c["start"], c["end"]) for c in payload["clips"]] == [(1.5, 4.0)]
-    assert fake_ffmpeg[0][7:11] == ["-ss", "1.500", "-to", "4.000"]
+    assert fake_ffmpeg[1][7:11] == ["-ss", "1.500", "-to", "4.000"]
 
 
 def test_run_clip_llm_composes_with_speaker_filter(media, fake_ffmpeg, capsys, monkeypatch):
@@ -290,5 +290,6 @@ def test_run_clip_llm_status_message_names_the_model(media, fake_ffmpeg, monkeyp
     assert messages == [
         "Transcribing for clip selection…",
         "Selecting segments with gpt-5…",
+        "Detecting silence…",
         "Cutting 1 clip(s)…",
     ]

@@ -95,6 +95,12 @@ def clip(
     padding: float = typer.Option(
         0.0, "--padding", min=0.0, help="Seconds of padding to add around each clip."
     ),
+    snap: bool = typer.Option(
+        True,
+        "--snap/--no-snap",
+        help="Snap clip boundaries into nearby silence (detected with ffmpeg) so cuts "
+        "don't land mid-word; --no-snap cuts at the exact selected times.",
+    ),
     out_dir: Path | None = typer.Option(
         None, "--out-dir", help="Directory for the clip files (default: next to the input)."
     ),
@@ -104,10 +110,11 @@ def clip(
 
     --speaker and --search select from a diarized transcript (made on the fly,
     or reused with --transcript-id); --llm has an LLM Gateway model pick the
-    windows; --range adds explicit ones. Overlapping selections merge, and each
-    surviving segment is written as <name>.clipNN<ext> using ffmpeg (which must
-    be installed). A YouTube/media-page source is downloaded first; its clips
-    land in --out-dir or the current directory.
+    windows; --range adds explicit ones. Overlapping selections merge, clip
+    boundaries snap into nearby silence so cuts don't land mid-word (--no-snap
+    disables), and each surviving segment is written as <name>.clipNN<ext>
+    using ffmpeg (which must be installed). A YouTube/media-page source is
+    downloaded first; its clips land in --out-dir or the current directory.
     """
     opts = clip_exec.ClipOptions(
         media=media,
@@ -119,6 +126,7 @@ def clip(
         max_tokens=max_tokens,
         ranges=ranges,
         padding=padding,
+        snap=snap,
         out_dir=out_dir,
     )
     run_command(

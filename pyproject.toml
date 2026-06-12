@@ -276,7 +276,7 @@ exclude = ["aai_cli/_version.py"]
 min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
 ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
-                "org", "refresh", "rpath"]
+                "org", "preserve_logging_state", "refresh", "rpath"]
 
 [tool.deptry]
 exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]

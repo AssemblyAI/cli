@@ -125,8 +125,9 @@ fly, or pass `-t/--transcript-id` (an id, or `-` to read an id or
 `transcribe --json` output from stdin). `--llm "instruction"` sends the
 timestamped utterances to LLM Gateway and the model picks the windows.
 `--range START-END` adds explicit windows (seconds or `[HH:]MM:SS`).
-Overlapping selections merge; each surviving segment is written as
-`<name>.clipNN<ext>`.
+Overlapping selections merge, and clip boundaries snap into nearby silence
+(one ffmpeg `silencedetect` pass) so cuts don't land mid-word; each surviving
+segment is written as `<name>.clipNN<ext>`.
 
 High-value flags:
 
@@ -134,7 +135,8 @@ High-value flags:
   `--llm "the best moments"` (composes with the filters), `--range 1:30-2:45`
   (repeatable).
 - LLM: `--model` (default `claude-haiku-4-5-20251001`), `--max-tokens N`.
-- Shaping: `--padding 0.5` (seconds around each clip), `--out-dir clips/`.
+- Shaping: `--padding 0.5` (seconds around each clip), `--no-snap` (cut at the
+  exact selected times instead of snapping into silence), `--out-dir clips/`.
 - Output: `--json` (paths + start/end/duration of each clip written).
 
 Examples:
