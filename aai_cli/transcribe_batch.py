@@ -7,6 +7,11 @@ concurrently behind a live progress table; each finished source gets a
 the resume marker — a re-run skips any source whose sidecar records a completed
 transcription of the same bytes — so retrying a partly-failed batch only pays for
 what's missing (``--force`` re-transcribes everything).
+
+``--llm`` prompts run per source once its transcription is recorded, landing under
+the sidecar's ``transform`` key. The chain is resumable on its own: a re-run with
+missing or changed prompts replays just the LLM step against the recorded
+transcript id, never a second transcription.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from typing import TYPE_CHECKING
 from rich.live import Live
 from rich.markup import escape
 
-from aai_cli import client, jsonshape, output, stdio, theme, transcribe_exec
+from aai_cli import client, jsonshape, llm, output, stdio, theme, transcribe_exec
 from aai_cli.errors import CLIError, NotAuthenticated, UsageError, mutually_exclusive
 
 if TYPE_CHECKING:
@@ -132,10 +137,13 @@ def reject_single_source_flags(
     *,
     out: Path | None,
     output_field: object | None,
-    llm_prompt: list[str] | None,
     show_code: bool,
 ) -> None:
-    """Batch mode writes one sidecar per source; the single-result flags don't apply."""
+    """Batch mode writes one sidecar per source; the single-result flags don't apply.
+
+    ``--llm`` is deliberately not here: in batch mode the chain runs per source and
+    its steps land in each sidecar.
+    """
     mutually_exclusive(
         ("--show-code", show_code),
         ("multiple sources", True),
@@ -144,7 +152,6 @@ def reject_single_source_flags(
     mutually_exclusive(
         ("--out", out),
         ("-o/--output", output_field),
-        ("--llm", llm_prompt),
         ("multiple sources", True),
         suggestion=f"Each source gets a '{SIDECAR_SUFFIX}' sidecar with the full result.",
     )
@@ -185,9 +192,13 @@ def resumable_record(sidecar: Path, *, digest: str | None) -> dict[str, object] 
     return record
 
 
+def _dump_sidecar(sidecar: Path, record: dict[str, object]) -> None:
+    sidecar.write_text(json.dumps(record, indent=2, default=str) + "\n")
+
+
 def _write_sidecar(
     sidecar: Path, *, source: str, transcript: aai.Transcript, digest: str | None
-) -> None:
+) -> dict[str, object]:
     record: dict[str, object] = {
         "source": source,
         "id": transcript.id,
@@ -196,7 +207,35 @@ def _write_sidecar(
     }
     if digest is not None:
         record["source_sha256"] = digest
-    sidecar.write_text(json.dumps(record, indent=2, default=str) + "\n")
+    _dump_sidecar(sidecar, record)
+    return record
+
+
+def _transform_record(
+    api_key: str, transform: transcribe_exec.TransformOptions, *, transcript_id: str
+) -> dict[str, object]:
+    """Run the ``--llm`` chain server-side over the transcript; the sidecar entry."""
+    steps = llm.run_chain_steps(
+        api_key,
+        transform.prompts,
+        transcript_id=transcript_id,
+        model=transform.model,
+        max_tokens=transform.max_tokens,
+    )
+    return {"model": transform.model, "prompts": transform.prompts, "steps": steps}
+
+
+def _transform_satisfied(
+    record: dict[str, object], transform: transcribe_exec.TransformOptions
+) -> bool:
+    """True when no ``--llm`` chain was requested, or the sidecar already records this
+    exact chain (same prompts against the same gateway model)."""
+    if not transform.prompts:
+        return True
+    existing = jsonshape.as_mapping(record.get("transform"))
+    if existing is None:
+        return False
+    return existing.get("prompts") == transform.prompts and existing.get("model") == transform.model
 
 
 @dataclasses.dataclass
@@ -218,10 +257,46 @@ class _Item:
         return rec
 
 
+def _resume_one(
+    api_key: str,
+    item: _Item,
+    record: dict[str, object],
+    sidecar: Path,
+    *,
+    transform: transcribe_exec.TransformOptions,
+) -> bool:
+    """Finish a source whose completed transcription the sidecar already holds.
+
+    Skips outright when the recorded ``transform`` satisfies the requested chain;
+    otherwise replays just the chain against the recorded transcript id. Returns
+    False (transcribe again) when the record has no id to anchor the chain on.
+    """
+    item.transcript_id = str(record.get("id") or "")
+    if _transform_satisfied(record, transform):
+        item.status, item.detail = "skipped", str(sidecar)
+        return True
+    if not item.transcript_id:
+        return False
+    item.status = "processing"
+    transformed = _transform_record(api_key, transform, transcript_id=item.transcript_id)
+    _dump_sidecar(sidecar, dict(record) | {"transform": transformed})
+    item.status, item.detail = "completed", str(sidecar)
+    return True
+
+
 def _transcribe_one(
-    api_key: str, item: _Item, *, transcription_config: aai.TranscriptionConfig, force: bool
+    api_key: str,
+    item: _Item,
+    *,
+    transcription_config: aai.TranscriptionConfig,
+    force: bool,
+    transform: transcribe_exec.TransformOptions,
 ) -> None:
     """Worker body: resume from the sidecar, or transcribe and write one.
+
+    The ``--llm`` chain runs only after the sidecar records the completed
+    transcription, so a failed chain leaves a resumable transcription and the
+    retry pays only for the LLM step.
 
     A per-source failure is recorded on the item and the batch carries on — except
     NotAuthenticated, which re-raises so ``_drain`` aborts the batch (one rejected
@@ -230,16 +305,18 @@ def _transcribe_one(
     try:
         sidecar = sidecar_path(item.source)
         digest = _source_digest(item.source)
-        if not force and (record := resumable_record(sidecar, digest=digest)) is not None:
-            item.transcript_id = str(record.get("id") or "")
-            item.status, item.detail = "skipped", str(sidecar)
+        record = None if force else resumable_record(sidecar, digest=digest)
+        if record is not None and _resume_one(api_key, item, record, sidecar, transform=transform):
             return
         item.status = "processing"
         transcript = transcribe_exec.run_transcription(
             api_key, item.source, sample=False, transcription_config=transcription_config
         )
-        _write_sidecar(sidecar, source=item.source, transcript=transcript, digest=digest)
+        fresh = _write_sidecar(sidecar, source=item.source, transcript=transcript, digest=digest)
         item.transcript_id = transcript.id or ""
+        if transform.prompts:
+            transformed = _transform_record(api_key, transform, transcript_id=item.transcript_id)
+            _dump_sidecar(sidecar, fresh | {"transform": transformed})
         item.status, item.detail = "completed", str(sidecar)
     except CLIError as err:
         item.status, item.detail = "failed", err.message
@@ -285,6 +362,7 @@ def _drain(
     transcription_config: aai.TranscriptionConfig,
     concurrency: int,
     force: bool,
+    transform: transcribe_exec.TransformOptions,
     json_mode: bool,
 ) -> None:
     """Run the workers, emitting one NDJSON record per finished source under ``--json``.
@@ -300,6 +378,7 @@ def _drain(
                 item,
                 transcription_config=transcription_config,
                 force=force,
+                transform=transform,
             ): item
             for item in items
         }
@@ -333,6 +412,7 @@ def run_batch(
     transcription_config: aai.TranscriptionConfig,
     concurrency: int,
     force: bool,
+    transform: transcribe_exec.TransformOptions,
     json_mode: bool,
     quiet: bool,
 ) -> None:
@@ -349,6 +429,7 @@ def run_batch(
             transcription_config=transcription_config,
             concurrency=concurrency,
             force=force,
+            transform=transform,
             json_mode=json_mode,
         )
     _summarize(items, json_mode=json_mode, quiet=quiet)

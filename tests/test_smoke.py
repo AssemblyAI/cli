@@ -157,6 +157,7 @@ def test_help_lists_commands_in_workflow_order():
         "speak",
         "llm",
         "eval",
+        "webhooks",
         # Setup & Tools
         "doctor",
         "setup",

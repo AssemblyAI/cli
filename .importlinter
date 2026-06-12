@@ -38,6 +38,7 @@ source_modules =
     aai_cli.transcribe_batch
     aai_cli.transcribe_exec
     aai_cli.transcribe_render
+    aai_cli.webhook_listen
     aai_cli.wer
     aai_cli.ws
     aai_cli.youtube
@@ -66,6 +67,7 @@ modules =
     aai_cli.commands.telemetry
     aai_cli.commands.transcribe
     aai_cli.commands.transcripts
+    aai_cli.commands.webhooks
 
 [importlinter:contract:3]
 name = Library layers do not depend on Rich rendering

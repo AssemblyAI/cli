@@ -41,6 +41,7 @@ from aai_cli.commands import (
     telemetry,
     transcribe,
     transcripts,
+    webhooks,
 )
 from aai_cli.context import AppState, env_override_warning, resolve_environment
 from aai_cli.errors import CLIError, NotAuthenticated, UsageError
@@ -67,6 +68,7 @@ _COMMAND_ORDER = (
     "speak",
     "llm",
     "eval",
+    "webhooks",
     # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
@@ -399,6 +401,7 @@ app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
 app.add_typer(telemetry.app, name="telemetry", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
+app.add_typer(webhooks.app, name="webhooks", rich_help_panel=help_panels.TRANSCRIPTION)
 
 
 @app.command(

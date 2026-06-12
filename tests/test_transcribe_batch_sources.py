@@ -185,7 +185,6 @@ def test_expand_sources_directory_error_message_names_the_path(tmp_path):
     [
         (["--out", "x.txt"], "--out", "sidecar with the full result"),
         (["-o", "text"], "-o/--output", "sidecar with the full result"),
-        (["--llm", "summarize"], "--llm", "sidecar with the full result"),
         (["--show-code"], "--show-code", "Pass one file or URL"),
     ],
 )

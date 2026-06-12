@@ -2,16 +2,12 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import typer
 from rich.markup import escape
 
-from aai_cli import config, help_panels, options, output, steps
+from aai_cli import help_panels, options, output, steps
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
@@ -21,41 +17,12 @@ from aai_cli.init import devserver, procfile, runner, tunnel
 app = typer.Typer()
 
 
-# brew exists only on macOS; everywhere else point at Cloudflare's install docs.
-_CLOUDFLARED_DOCS = (
-    "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
-)
-
-
-def _cloudflared_install_hint() -> str:
-    # A ternary (not an if/return) so neither branch reads as unreachable under
-    # mypy --warn-unreachable, which targets one platform at a time: on macOS the
-    # second return looked dead, on Linux the first would.
-    hint = "brew install cloudflared" if sys.platform == "darwin" else _CLOUDFLARED_DOCS
-    return f"Install it: {hint}"
-
-
-def _require_cloudflared() -> None:
-    if shutil.which(tunnel.CLOUDFLARED) is None:
-        raise CLIError(
-            "cloudflared is required to share a public link.",
-            error_type="missing_dependency",
-            exit_code=1,
-            suggestion=_cloudflared_install_hint(),
-        )
-
-
 def _render_share(data: dict[str, object]) -> str:
     return (
         f"[aai.heading]Sharing[/aai.heading] [aai.url]{escape(str(data['url']))}[/aai.url]\n"
         f"[aai.muted]→ serving[/aai.muted] [aai.url]{escape(str(data['local']))}[/aai.url]"
         "  [aai.muted](Ctrl-C to stop)[/aai.muted]"
     )
-
-
-def _terminate(proc: subprocess.Popen[str] | None) -> None:
-    if proc is not None and proc.poll() is None:
-        proc.terminate()
 
 
 def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> None:
@@ -67,7 +34,7 @@ def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> N
     devserver.notify_port_change(port, chosen_port, json_mode=json_mode, quiet=quiet)
     env = {**os.environ, "PORT": str(chosen_port)}
     web = procfile.web_argv(target, env=env)  # validates we're in a scaffolded project
-    _require_cloudflared()
+    tunnel.require_cloudflared("share a public link")
 
     report: list[steps.Step] = [
         devserver.install_step(target, no_install=no_install, use_uv=use_uv)
@@ -77,7 +44,7 @@ def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> N
         raise typer.Exit(code=1)
 
     server = runner.spawn(devserver.dev_command(target, web, use_uv=use_uv), cwd=target, env=env)
-    proxy: subprocess.Popen[str] | None = None
+    proxy = None
     log_path: Path | None = None
     keep_log = False
     try:
@@ -87,16 +54,7 @@ def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> N
                 error_type="server_error",
                 exit_code=1,
             )
-        fd, name = tempfile.mkstemp(prefix="aai-tunnel-", suffix=".log")
-        os.close(fd)
-        log_path = Path(name)
-        # The tunnel binary only proxies the port; don't hand it the API key the
-        # dev server needs (keeps the secret out of cloudflared's logs/diagnostics).
-        tunnel_env = {k: v for k, v in os.environ.items() if k != config.ENV_API_KEY}
-        proxy = runner.spawn(
-            tunnel.tunnel_command(chosen_port), cwd=target, env=tunnel_env, log_path=log_path
-        )
-        public = tunnel.await_url(log_path)
+        proxy, public, log_path = tunnel.open_quick_tunnel(chosen_port, cwd=target)
         if public is None:
             # Keep the captured cloudflared output: it's the only evidence of why
             # the tunnel never came up.
@@ -119,8 +77,8 @@ def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> N
         # block below tears down the tunnel and server.
         pass
     finally:
-        _terminate(proxy)
-        _terminate(server)
+        tunnel.terminate(proxy)
+        tunnel.terminate(server)
         if log_path is not None and not keep_log:
             log_path.unlink(missing_ok=True)
 
