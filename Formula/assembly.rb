@@ -288,7 +288,18 @@ class Assembly < Formula
   end
 
   def install
-    virtualenv_install_with_resources
+    # The GitHub source tarball has no .git, so hatch-vcs cannot derive the
+    # version at build time. hatch-vcs (0.x) does not forward dist_name to
+    # setuptools-scm, so only the GENERIC SETUPTOOLS_SCM_PRETEND_VERSION is
+    # honored — but a global generic pretend-version would also override the
+    # version of any *resource* that builds via setuptools-scm. So install the
+    # pinned resources first under a clean env, then set the pretend-version and
+    # install only our own package (the build hook writes the tag version into
+    # the installed aai_cli/_version.py).
+    venv = virtualenv_create(libexec, "python3.13")
+    venv.pip_install resources
+    ENV["SETUPTOOLS_SCM_PRETEND_VERSION"] = version.to_s
+    venv.pip_install_and_link buildpath
   end
 
   test do

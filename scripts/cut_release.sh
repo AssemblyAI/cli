@@ -1,14 +1,16 @@
 #!/bin/sh
-# Cut an AssemblyAI CLI release: tag the version from pyproject.toml and push the
-# tag, which triggers .github/workflows/release.yml (builds the arm64 bottle,
-# creates the GitHub Release, opens the formula PR).
+# Cut an AssemblyAI CLI release: tag the version and push the tag, which triggers
+# .github/workflows/release.yml (builds the arm64 bottle, creates the GitHub
+# Release, opens the formula PR).
 #
-#   ./scripts/cut_release.sh         # verify, confirm, then tag + push
+# With hatch-vcs the git tag IS the version — there is no version file to bump
+# or version-bump PR to merge first. By default the script tags the next patch
+# above the latest vX.Y.Z tag; pass an explicit version to override.
+#
+#   ./scripts/cut_release.sh         # next patch above latest tag; confirm, tag + push
+#   ./scripts/cut_release.sh 0.2.0   # tag an explicit version instead
 #   ./scripts/cut_release.sh --yes   # skip the interactive confirmation
 #   ./scripts/cut_release.sh -n      # dry run: verify only, don't tag or push
-#
-# Bump the version (pyproject.toml + aai_cli/__init__.py) and merge that PR
-# BEFORE running this — the script tags whatever version main currently holds.
 set -eu
 
 ASSUME_YES=0
@@ -18,9 +20,10 @@ for arg in "$@"; do
     -y | --yes) ASSUME_YES=1 ;;
     -n | --dry-run) DRY_RUN=1 ;;
     -h | --help)
-      sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
+    [0-9]*.[0-9]*.[0-9]*) EXPLICIT_VERSION="$arg" ;;
     *)
       printf 'unknown argument: %s (try --help)\n' "$arg" >&2
       exit 2
@@ -38,15 +41,30 @@ err() {
 root="$(git rev-parse --show-toplevel)" || err "not inside a git repository."
 cd "$root"
 
-# --- Single source of truth: the version in pyproject.toml -----------------
-version="$(grep -m1 '^version = ' pyproject.toml | sed -E 's/^version = "([^"]+)".*/\1/')"
-[ -n "$version" ] || err "could not read version from pyproject.toml."
-tag="v${version}"
+# --- Resolve the version to tag --------------------------------------------
+# With hatch-vcs the git tag IS the version; there is no file to read. Default
+# to the next patch above the latest vX.Y.Z tag; an explicit arg overrides.
+latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
 
-# __version__ must match (the `version` command and tests read it).
-init_version="$(grep -m1 '__version__' aai_cli/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')"
-[ "$init_version" = "$version" ] ||
-  err "version mismatch: pyproject.toml=$version but aai_cli/__init__.py=$init_version."
+if [ -n "${EXPLICIT_VERSION:-}" ]; then
+  version="$EXPLICIT_VERSION"
+else
+  # Auto-bump needs a tag to bump from; an explicit version does not.
+  [ -n "$latest" ] || err "no existing vX.Y.Z tag found; pass an explicit version."
+  base="${latest#v}"
+  major="$(echo "$base" | cut -d. -f1)"
+  minor="$(echo "$base" | cut -d. -f2)"
+  patch="$(echo "$base" | cut -d. -f3)"
+  version="${major}.${minor}.$((patch + 1))"
+fi
+echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
+  err "version '$version' is not a plain MAJOR.MINOR.PATCH triple."
+tag="v${version}"
+if [ -n "$latest" ]; then
+  info "Latest tag ${latest}; releasing ${tag}."
+else
+  info "No prior tags; releasing ${tag}."
+fi
 
 # --- Safety gates ----------------------------------------------------------
 [ -f .github/workflows/release.yml ] ||

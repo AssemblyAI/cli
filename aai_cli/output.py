@@ -225,18 +225,16 @@ def emit_error(err: CLIError, *, json_mode: bool) -> None:
             error_console.print(f"[aai.muted]Suggestion:[/aai.muted] {escape(err.suggestion)}")
 
 
-# A one-line header: emoji + product + version, then the product tagline.
-_TAGLINE = "AssemblyAI from your terminal"
+# A one-line header: emoji + product + version.
 
 
 def print_banner() -> None:
-    """Print the welcome header — a single emoji + product + version + tagline line
-    in the brand accent (the bare-command welcome screen)."""
-    # highlight=False so Rich's repr-highlighter doesn't recolor the version digits or
-    # the quoted tagline — the line stays a single muted tone behind the brand label.
+    """Print the welcome header — a single emoji + product + version line in the
+    brand accent (the bare-command welcome screen)."""
+    # highlight=False so Rich's repr-highlighter doesn't recolor the version digits —
+    # the line stays a single muted tone behind the brand label.
     console.print(
-        f"[aai.brand]🎙️  AssemblyAI CLI[/aai.brand] "
-        f"[aai.muted]{__version__} — {_TAGLINE}[/aai.muted]",
+        f"[aai.brand]🎙️  AssemblyAI CLI[/aai.brand] [aai.muted]{__version__}[/aai.muted]",
         highlight=False,  # pragma: no mutate (purely cosmetic: toggles Rich repr coloring, not text)
     )
 

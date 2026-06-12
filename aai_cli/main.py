@@ -252,8 +252,8 @@ for _opt in _completion_placeholder.__defaults__ or ():
 
 app = typer.Typer(
     name="assembly",
-    # No top-level `help=`: the bare-`assembly` welcome banner already carries the
-    # "AssemblyAI from your terminal" tagline, so a description here would duplicate it.
+    # No top-level `help=`: the bare-`assembly` welcome banner plus the command table
+    # below already introduce the tool, so a description here would be redundant.
     # `assembly --install-completion` / `--show-completion` for bash/zsh/fish/PowerShell,
     # the discoverability affordance gh/kubectl/docker users reach for.
     add_completion=True,
