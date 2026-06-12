@@ -9,6 +9,7 @@ builtin; the command itself registers as ``eval``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 import assemblyai as aai
 import typer
@@ -19,6 +20,14 @@ from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+
+class EvalSpeechModel(StrEnum):
+    """The current-generation models, requested via the SDK's ``speech_models``
+    list parameter (its legacy ``SpeechModel`` enum predates them)."""
+
+    universal_3_pro = "universal-3-pro"
+    universal_2 = "universal-2"
 
 
 def _pct(value: object) -> str:
@@ -62,7 +71,7 @@ def _score_item(
 
 
 def _payload(
-    label: str, speech_model: aai.SpeechModel | None, results: list[_ItemResult]
+    label: str, speech_model: EvalSpeechModel | None, results: list[_ItemResult]
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "dataset": label,
@@ -120,10 +129,13 @@ def _render(payload: dict[str, object]) -> RenderableType:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Score a model on 10 rows of an HF dataset", "assembly eval distil-whisper/meanwhile"),
+            (
+                "Score a model on 10 rows of an HF dataset",
+                "assembly eval sanchit-gandhi/tedlium-data",
+            ),
             (
                 "Compare models on your own audio",
-                "assembly eval calls.csv --speech-model universal",
+                "assembly eval calls.csv --speech-model universal-3-pro",
             ),
             (
                 "Score diarization too (WER + DER)",
@@ -135,11 +147,11 @@ def _render(payload: dict[str, object]) -> RenderableType:
             ),
             (
                 "Evaluate non-English audio",
-                "assembly eval PolyAI/minds14 --subset fr-FR --language-code fr",
+                "assembly eval fixie-ai/common_voice_17_0 --subset fr --language-code fr",
             ),
             (
                 "DER on a Hugging Face diarization set",
-                "assembly eval diarizers-community/simsamu --speaker-labels",
+                "assembly eval talkbank/callhome --subset eng --speaker-labels",
             ),
         ]
     ),
@@ -163,7 +175,7 @@ def evaluate(
     text_column: str | None = typer.Option(
         None, "--text-column", help="Reference text column name (default: auto-detect)."
     ),
-    speech_model: aai.SpeechModel | None = typer.Option(
+    speech_model: EvalSpeechModel | None = typer.Option(
         None, "--speech-model", help="Speech model to evaluate."
     ),
     language_code: str | None = typer.Option(
@@ -195,10 +207,19 @@ def evaluate(
     serves with audio + reference columns; gated ones need HF_TOKEN) or a local
     .csv/.jsonl manifest with audio + text columns. Hub sets to try:
     openslr/librispeech_asr (read English; subsets clean/other),
-    MLCommons/peoples_speech (real-world US English; subset clean),
-    distil-whisper/meanwhile (long-form English), PolyAI/minds14 (banking
-    calls in 14 locales; subsets like fr-FR), and diarizers-community/simsamu
-    (French dispatch calls with speaker turns, for --speaker-labels).
+    sanchit-gandhi/tedlium-data (TED talks),
+    sanchit-gandhi/earnings22_robust_split (earnings calls),
+    kensho/spgispeech (financial calls; subset test),
+    edinburghcstr/ami (meetings; subsets ihm/sdm),
+    fixie-ai/gigaspeech (--subset dev --split dev),
+    fixie-ai/peoples_speech (real-world US English; subset clean),
+    fixie-ai/common_voice_17_0 (99 locales; subsets like en/fr),
+    facebook/voxpopuli (parliament speech; subset en),
+    hhoangphuoc/switchboard (phone calls; --split validation),
+    ylacombe/expresso (expressive speech),
+    speechbrain/LoquaciousSet (--subset small --audio-column wav), and
+    talkbank/callhome (phone calls with speaker turns; --subset eng, for
+    --speaker-labels).
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -213,7 +234,7 @@ def evaluate(
         )
         api_key = config.resolve_api_key(profile=state.profile)
         transcription_config = aai.TranscriptionConfig(
-            speech_model=speech_model,
+            speech_models=[speech_model.value] if speech_model else None,
             language_code=language_code,
             speaker_labels=speaker_labels or None,
         )
