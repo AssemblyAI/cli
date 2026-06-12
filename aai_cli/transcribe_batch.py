@@ -25,7 +25,7 @@ from rich.live import Live
 from rich.markup import escape
 
 from aai_cli import client, jsonshape, output, stdio, theme, transcribe_exec
-from aai_cli.errors import CLIError, NotAuthenticated, UsageError
+from aai_cli.errors import CLIError, NotAuthenticated, UsageError, mutually_exclusive
 
 if TYPE_CHECKING:
     import assemblyai as aai
@@ -136,16 +136,18 @@ def reject_single_source_flags(
     show_code: bool,
 ) -> None:
     """Batch mode writes one sidecar per source; the single-result flags don't apply."""
-    if show_code:
-        raise UsageError(
-            "--show-code generates code for a single source, not a batch.",
-            suggestion="Pass one file or URL with --show-code.",
-        )
-    if out is not None or output_field is not None or llm_prompt:
-        raise UsageError(
-            "--out, -o/--output, and --llm apply to a single source, not a batch.",
-            suggestion=f"Each source gets a '{SIDECAR_SUFFIX}' sidecar with the full result.",
-        )
+    mutually_exclusive(
+        ("--show-code", show_code),
+        ("multiple sources", True),
+        suggestion="Pass one file or URL with --show-code.",
+    )
+    mutually_exclusive(
+        ("--out", out),
+        ("-o/--output", output_field),
+        ("--llm", llm_prompt),
+        ("multiple sources", True),
+        suggestion=f"Each source gets a '{SIDECAR_SUFFIX}' sidecar with the full result.",
+    )
 
 
 def sidecar_path(source: str) -> Path:

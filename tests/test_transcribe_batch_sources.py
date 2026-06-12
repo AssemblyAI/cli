@@ -181,15 +181,21 @@ def test_expand_sources_directory_error_message_names_the_path(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "extra",
-    [["--out", "x.txt"], ["-o", "text"], ["--llm", "summarize"], ["--show-code"]],
+    ("extra", "flag_name", "hint"),
+    [
+        (["--out", "x.txt"], "--out", "sidecar with the full result"),
+        (["-o", "text"], "-o/--output", "sidecar with the full result"),
+        (["--llm", "summarize"], "--llm", "sidecar with the full result"),
+        (["--show-code"], "--show-code", "Pass one file or URL"),
+    ],
 )
-def test_batch_rejects_single_source_flags(tmp_path, extra):
+def test_batch_rejects_single_source_flags(tmp_path, extra, flag_name, hint):
     _auth()
     (tmp_path / "a.mp3").write_bytes(b"a")
     result = runner.invoke(app, ["transcribe", "*.mp3", *extra])
     assert result.exit_code == 2
-    assert "single source" in result.output
+    assert f"{flag_name} and multiple sources can't be combined." in result.output
+    assert hint in result.output
 
 
 def test_glob_batch_writes_per_source_sidecars(tmp_path, mocker, monkeypatch):

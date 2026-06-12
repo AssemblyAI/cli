@@ -113,7 +113,8 @@ def test_stream_json_with_text_output_is_usage_error():
     # credentials, like the --llm + -o text precedent.
     result = runner.invoke(app, ["stream", "--json", "-o", "text"])
     assert result.exit_code == 2
-    assert "can't be combined with -o text" in result.output
+    assert "--json and -o text can't be combined." in result.output
+    assert "Pick one output format." in result.output
 
 
 def test_stream_stdin_with_sample_rejected():
