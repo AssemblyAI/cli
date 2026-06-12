@@ -52,6 +52,10 @@ dependencies = [
     # `assembly eval` WER scoring uses jiwer (the de-facto standard WER
     # implementation); wer.py imports it lazily to keep CLI startup fast.
     "jiwer>=4.0",
+    # Bucket-URL audio sources (s3://, gs://, …) for `assembly transcribe` (remotefs.py,
+    # imported lazily). fsspec core only — each protocol's backend (s3fs, gcsfs, adlfs,
+    # …) stays a user-installed extra surfaced via a clean install hint.
+    "fsspec>=2026.4.0",
 ]
 
 [project.urls]
@@ -271,8 +275,8 @@ paths = ["aai_cli", "tests"]
 exclude = ["aai_cli/_version.py"]
 min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
-ignore_names = ["app", "capture_output", "download", "healthy", "ist", "memory_keyring", "org",
-                "refresh"]
+ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
+                "org", "refresh", "rpath"]
 
 [tool.deptry]
 exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]

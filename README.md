@@ -169,7 +169,7 @@ assembly init                  # scaffold a starter app
 ## 📋 Key features
 
 - **Transcription**: `assembly transcribe` handles files, URLs, and YouTube/podcast pages, with flags for speaker labels, PII redaction, summarization, sentiment, chapters, and more.
-- **Batch transcription**: point `assembly transcribe` at a directory or glob (or pipe paths with `--from-stdin`) to transcribe everything concurrently, with sidecar files that make re-runs resumable. Add `--llm "prompt"` to run an LLM prompt over each finished transcript, saved into the sidecars.
+- **Batch transcription**: point `assembly transcribe` at a directory or glob — local, or in bucket storage (`"s3://bucket/calls/*.mp3"`, `gs://`, `az://`, …, with the matching fsspec backend such as `s3fs` installed) — or pipe paths with `--from-stdin` to transcribe everything concurrently, with sidecar files that make re-runs resumable. Add `--llm "prompt"` to run an LLM prompt over each finished transcript, saved into the sidecars.
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
@@ -194,6 +194,7 @@ Transcribe in batches — a directory, a glob, or a piped list, resumable on re-
 
 ```sh
 assembly transcribe ./recordings
+assembly transcribe "s3://bucket/calls/*.mp3"   # needs: pip install s3fs
 find . -name "*.wav" | assembly transcribe --from-stdin
 ```
 

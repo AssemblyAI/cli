@@ -19,6 +19,7 @@ app = typer.Typer()
             ("Transcribe a local file", "assembly transcribe call.mp3"),
             ("Batch-transcribe a folder", "assembly transcribe ./recordings"),
             ("Batch-transcribe a glob", 'assembly transcribe "calls/*.mp3"'),
+            ("Batch-transcribe an S3 prefix", 'assembly transcribe "s3://bucket/calls/*.mp3"'),
             ("Try it with the hosted sample", "assembly transcribe --sample"),
             ("Transcribe a YouTube video", "assembly transcribe https://youtu.be/dtp6b76pMak"),
             ("Transcribe a podcast page", 'assembly transcribe "https://podcasts.apple.com/…"'),
@@ -33,7 +34,9 @@ app = typer.Typer()
 def transcribe(
     ctx: typer.Context,
     source: str | None = typer.Argument(
-        None, help="Audio file, URL, YouTube/podcast URL, or a directory/glob (batch mode)."
+        None,
+        help="Audio file, URL, YouTube/podcast URL, bucket URL (s3://, gs://, …), or a "
+        "directory/glob (batch mode).",
     ),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
     # batch mode
@@ -347,6 +350,10 @@ def transcribe(
     with the full result (including any --llm responses), and a re-run skips
     sources already transcribed — with changed --llm prompts it replays just
     the LLM step, never a second transcription.
+
+    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
+    batches (a glob, or a folder ending in /); install the matching fsspec
+    backend first (e.g. pip install s3fs) and use its usual credentials.
 
     Curated flags cover common features; --config KEY=VALUE and --config-file reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """

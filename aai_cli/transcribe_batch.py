@@ -1,7 +1,9 @@
 """Batch transcription: directories, globs, and stdin lists with sidecar resume.
 
 ``assembly transcribe`` switches to batch mode when the source is a directory or a
-glob pattern, or when ``--from-stdin`` supplies one path/URL per line. Sources run
+glob pattern — local, or on fsspec-addressable remote storage (an ``s3://…/*.mp3``
+glob, or a trailing-slash folder like ``s3://bucket/calls/``) — or when
+``--from-stdin`` supplies one path/URL per line. Sources run
 concurrently behind a live progress table; each finished source gets a
 ``<source>.aai.json`` sidecar holding the full transcript. The sidecar doubles as
 the resume marker — a re-run skips any source whose sidecar records a completed
@@ -29,7 +31,7 @@ from typing import TYPE_CHECKING
 from rich.live import Live
 from rich.markup import escape
 
-from aai_cli import client, jsonshape, llm, output, stdio, theme, transcribe_exec
+from aai_cli import client, jsonshape, llm, output, remotefs, stdio, theme, transcribe_exec
 from aai_cli.errors import CLIError, NotAuthenticated, UsageError, mutually_exclusive
 
 if TYPE_CHECKING:
@@ -73,8 +75,9 @@ def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> lis
     """The batch source list, or ``None`` when this is a single-source invocation.
 
     Batch mode triggers on ``--from-stdin``, a directory (scanned recursively for
-    audio files), or a glob pattern that names no existing file. A plain file, URL,
-    ``-`` (audio piped on stdin), or ``--sample`` stays on the single-source path.
+    audio files), a glob pattern that names no existing file, or a bucket URL
+    that is a glob or trailing-slash folder. A plain file, URL, ``-`` (audio
+    piped on stdin), or ``--sample`` stays on the single-source path.
     """
     if from_stdin:
         return _stdin_sources(source, sample=sample)
@@ -84,6 +87,8 @@ def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> lis
     # whole working directory; instead it stays single-source and fails validation.
     if not source or sample or source == "-" or source.startswith(_URL_PREFIXES):
         return None
+    if remotefs.is_remote_url(source):
+        return _remote_sources(source)
     path = Path(source)
     if path.is_dir():
         return _directory_sources(path)
@@ -117,6 +122,29 @@ def _directory_sources(path: Path) -> list[str]:
             suggestion="Recognized extensions: " + ", ".join(sorted(AUDIO_EXTENSIONS)) + ".",
         )
     return files
+
+
+def _remote_sources(url: str) -> list[str] | None:
+    """Batch sources for a bucket/remote URL, or ``None`` when it's a single file.
+
+    Mirrors the local rules: a glob expands to its file matches (sidecars
+    excluded), a trailing-slash folder to its audio files (recursive, filtered by
+    ``AUDIO_EXTENSIONS``); anything else is downloaded as one file.
+    """
+    if _GLOB_CHARS.intersection(url):
+        matches = [u for u in remotefs.glob_files(url) if not u.endswith(SIDECAR_SUFFIX)]
+        if not matches:
+            raise UsageError(f"No files match {url}.")
+        return matches
+    if url.endswith("/"):
+        files = [u for u in remotefs.list_files(url) if Path(u).suffix.lower() in AUDIO_EXTENSIONS]
+        if not files:
+            raise UsageError(
+                f"No audio files found under {url}.",
+                suggestion="Recognized extensions: " + ", ".join(sorted(AUDIO_EXTENSIONS)) + ".",
+            )
+        return files
+    return None
 
 
 def _glob_sources(pattern: str) -> list[str]:
@@ -159,8 +187,8 @@ def reject_single_source_flags(
 
 def sidecar_path(source: str) -> Path:
     """Where ``source``'s sidecar lives: ``<file>.aai.json`` next to a local file, or
-    a slug + URL-hash name in the working directory for a URL."""
-    if source.startswith(_URL_PREFIXES):
+    a slug + URL-hash name in the working directory for a URL (web or bucket)."""
+    if source.startswith(_URL_PREFIXES) or remotefs.is_remote_url(source):
         digest = hashlib.sha256(source.encode()).hexdigest()[:8]
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", source.partition("://")[2]).strip("-.")[:64]
         return Path(f"{slug}-{digest}{SIDECAR_SUFFIX}")

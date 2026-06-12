@@ -98,6 +98,29 @@ def test_resolve_audio_source_skips_existence_check_for_urls_and_show_code():
     )
 
 
+def test_resolve_audio_source_remote_url_needs_allow_remote():
+    # Only callers that can fetch bucket URLs (transcribe) opt in; everywhere
+    # else an s3://-style source must keep failing as a missing file.
+    url = "s3://bucket/key.mp3"
+    with pytest.raises(CLIError) as exc:
+        client.resolve_audio_source(url, sample=False)
+    assert exc.value.error_type == "file_not_found"
+    assert client.resolve_audio_source(url, sample=False, allow_remote=True) == url
+
+
+def test_resolve_audio_source_allow_remote_still_checks_local_paths():
+    with pytest.raises(CLIError) as exc:
+        client.resolve_audio_source("missing.mp3", sample=False, allow_remote=True)
+    assert exc.value.error_type == "file_not_found"
+
+
+def test_stream_rejects_bucket_urls_as_missing_files():
+    # stream/agent can't fetch bucket URLs; the pre-credential check still fires.
+    result = runner.invoke(app, ["stream", "s3://bucket/key.mp3"])
+    assert result.exit_code == 2
+    assert "File not found: s3://bucket/key.mp3" in result.output
+
+
 def test_validate_transcript_id_rejects_path_segments():
     assert client.validate_transcript_id("t_42-abc") == "t_42-abc"
     for bad in ("../../etc/passwd", "", "a/b", "id?x=1"):

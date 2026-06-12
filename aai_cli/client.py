@@ -16,7 +16,7 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
 )
 
-from aai_cli import environments, jsonshape, stdio
+from aai_cli import environments, jsonshape, remotefs, stdio
 from aai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
 from aai_cli.streaming.diagnostics import classify_error, silence_streaming_logging
 
@@ -45,14 +45,17 @@ def _make_streaming_client(api_key: str) -> _StreamingClientLike:
     return client
 
 
-def resolve_audio_source(source: str | None, *, sample: bool, check_local: bool = True) -> str:
+def resolve_audio_source(
+    source: str | None, *, sample: bool, check_local: bool = True, allow_remote: bool = False
+) -> str:
     """The audio reference to use: the hosted --sample clip, else the given path/URL.
 
     Shared by `transcribe` and `stream` so both accept a file or URL and `--sample`.
     A local path that doesn't exist fails here — before any credential resolution or
     request — so a typo'd filename reads as "file not found", not as an API failure.
     ``--show-code`` paths pass ``check_local=False``: generating code for a file you
-    don't have yet is legitimate.
+    don't have yet is legitimate. Callers that can fetch fsspec bucket URLs (s3://,
+    gs://, …) pass ``allow_remote=True``; elsewhere those fail as missing files.
     """
     if sample:
         if source:
@@ -68,6 +71,8 @@ def resolve_audio_source(source: str | None, *, sample: bool, check_local: bool 
             suggestion="Or pass --sample to use the hosted demo file.",
         )
     if check_local and not source.startswith(("http://", "https://")):
+        if allow_remote and remotefs.is_remote_url(source):
+            return source
         path = Path(source)
         if not path.exists():
             raise CLIError(

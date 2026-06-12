@@ -24,6 +24,7 @@ from aai_cli import (
     config_builder,
     llm,
     output,
+    remotefs,
     stdio,
     transcribe_render,
     youtube,
@@ -155,7 +156,7 @@ def check_source_exists(source: str | None, *, sample: bool) -> None:
     Stdin (``-``) is exempt: its bytes are buffered at transcription time.
     """
     if source != "-":
-        client.resolve_audio_source(source, sample=sample)
+        client.resolve_audio_source(source, sample=sample, allow_remote=True)
 
 
 def run_transcription(
@@ -177,7 +178,12 @@ def run_transcription(
             local.write_bytes(data)
             return client.transcribe(api_key, str(local), config=transcription_config)
 
-    audio = client.resolve_audio_source(source, sample=sample)
+    audio = client.resolve_audio_source(source, sample=sample, allow_remote=True)
+    if remotefs.is_remote_url(audio):
+        # Fetch from bucket/remote storage first; the API can't read s3://-style URLs.
+        with tempfile.TemporaryDirectory(prefix="aai-remote-") as td:
+            local = remotefs.download(audio, Path(td))
+            return client.transcribe(api_key, str(local), config=transcription_config)
     if youtube.is_downloadable_url(audio):
         # Fetch first; AssemblyAI can't read a YouTube/podcast page URL itself.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
@@ -368,6 +374,11 @@ def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None
     Raw stdout, so `--show-code > script.py` runs. No source/--sample needed — fall
     back to a placeholder path for a pure snippet.
     """
+    if opts.source and remotefs.is_remote_url(opts.source):
+        raise UsageError(
+            "--show-code does not support bucket URLs (s3://, gs://, …) yet.",
+            suggestion="Download the audio first and pass the local file.",
+        )
     audio = (
         client.resolve_audio_source(opts.source, sample=opts.sample, check_local=False)
         if opts.source or opts.sample
