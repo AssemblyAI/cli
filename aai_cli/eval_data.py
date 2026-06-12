@@ -9,6 +9,8 @@ Two source shapes, one output: a list of (audio, reference-text) items.
   fetched through the hub's datasets-server REST API — no heavyweight
   ``datasets`` dependency, and the audio arrives as hosted URLs the AssemblyAI
   API ingests directly. Gated/private datasets authenticate via ``HF_TOKEN``.
+  The common benchmarks also have short **aliases** (``ALIASES``) that fill in
+  the hub id plus the subset/split/audio-column defaults each set needs.
 
 With ``with_speakers`` (the ``--speaker-labels`` flag), rows must also carry
 diarization references as the parallel ``speakers`` / ``timestamps_start`` /
@@ -45,6 +47,39 @@ _TEXT_COLUMNS = ("text", "sentence", "transcription", "transcript", "normalized_
 # Diarization references: the parallel-array convention the Hugging Face
 # diarization datasets (diarizers-community/*) use, in seconds.
 _SPEAKER_COLUMNS = ("speakers", "timestamps_start", "timestamps_end")
+
+
+@dataclass(frozen=True)
+class Alias:
+    """A built-in benchmark alias: the hub dataset id plus the subset/split/
+    audio-column defaults its layout needs (explicit flags still win)."""
+
+    dataset: str
+    subset: str | None = None
+    split: str | None = None
+    audio_column: str | None = None
+
+
+# The benchmarks the `assembly eval` help recommends, under short memorable names
+# — each pins the hub id and the fiddly defaults its layout needs, so
+# `assembly eval tedlium` just works.
+ALIASES: dict[str, Alias] = {
+    "librispeech": Alias("openslr/librispeech_asr", subset="clean"),
+    "librispeech-other": Alias("openslr/librispeech_asr", subset="other"),
+    "tedlium": Alias("sanchit-gandhi/tedlium-data"),
+    "earnings22": Alias("sanchit-gandhi/earnings22_robust_split"),
+    "spgispeech": Alias("kensho/spgispeech", subset="test"),
+    "ami": Alias("edinburghcstr/ami", subset="ihm"),
+    "ami-sdm": Alias("edinburghcstr/ami", subset="sdm"),
+    "gigaspeech": Alias("fixie-ai/gigaspeech", subset="dev", split="dev"),
+    "peoples": Alias("fixie-ai/peoples_speech", subset="clean"),
+    "commonvoice": Alias("fixie-ai/common_voice_17_0", subset="en"),
+    "voxpopuli": Alias("facebook/voxpopuli", subset="en"),
+    "switchboard": Alias("hhoangphuoc/switchboard", split="validation"),
+    "expresso": Alias("ylacombe/expresso"),
+    "loquacious": Alias("speechbrain/LoquaciousSet", subset="small", audio_column="wav"),
+    "callhome": Alias("talkbank/callhome", subset="eng"),
+}
 
 
 @dataclass(frozen=True)
@@ -91,6 +126,12 @@ def load(
             limit=limit,
             with_speakers=with_speakers,
         )
+    alias = ALIASES.get(dataset)
+    if alias is not None:
+        dataset = alias.dataset
+        subset = subset or alias.subset
+        split = split or alias.split
+        audio_column = audio_column or alias.audio_column
     return _load_hf(
         dataset,
         split=split,

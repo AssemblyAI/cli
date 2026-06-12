@@ -8,6 +8,7 @@ builtin; the command itself registers as ``eval``.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -70,6 +71,52 @@ def _score_item(
     return _ItemResult(row=row, words=words, speakers=speakers)
 
 
+def _transcripts(
+    api_key: str,
+    items: list[eval_data.EvalItem],
+    *,
+    transcription_config: aai.TranscriptionConfig,
+    concurrency: int,
+    json_mode: bool,
+    quiet: bool,
+) -> list[aai.Transcript]:
+    """Each item's transcript, in dataset order.
+
+    Sequential by default, with a per-item spinner; ``--concurrency`` fans the
+    API calls out across a thread pool (the transcribe-batch pattern: the first
+    worker error drops the not-yet-started items and re-raises).
+    """
+    if concurrency == 1:
+        transcripts: list[aai.Transcript] = []
+        for index, item in enumerate(items, start=1):
+            with output.status(
+                f"[{index}/{len(items)}] Transcribing {item.item_id}…",
+                json_mode=json_mode,
+                quiet=quiet,
+            ):
+                transcripts.append(
+                    client.transcribe(api_key, item.audio, config=transcription_config)
+                )
+        return transcripts
+    with (
+        output.status(
+            f"Transcribing {len(items)} items (concurrency {concurrency})…",
+            json_mode=json_mode,
+            quiet=quiet,
+        ),
+        ThreadPoolExecutor(max_workers=concurrency) as pool,
+    ):
+        futures = [
+            pool.submit(client.transcribe, api_key, item.audio, config=transcription_config)
+            for item in items
+        ]
+        for future in as_completed(futures):
+            if (exc := future.exception()) is not None:
+                pool.shutdown(cancel_futures=True)
+                raise exc
+        return [future.result() for future in futures]
+
+
 def _payload(
     label: str, speech_model: EvalSpeechModel | None, results: list[_ItemResult]
 ) -> dict[str, object]:
@@ -85,7 +132,13 @@ def _payload(
         payload.update({"words": total.words, "errors": total.errors, "wer": total.wer})
     der_scores = [result.speakers for result in results if result.speakers is not None]
     if der_scores:
-        payload["der"] = der.pooled(der_scores).der
+        pooled = der.pooled(der_scores)
+        payload["der"] = pooled.der
+        payload["der_breakdown"] = {
+            "missed": pooled.missed / pooled.total,
+            "false_alarm": pooled.false_alarm / pooled.total,
+            "confusion": pooled.confusion / pooled.total,
+        }
     return payload
 
 
@@ -98,7 +151,12 @@ def _summary(payload: dict[str, object]) -> str:
             f"WER {_pct(payload.get('wer'))} ({errors} {noun} / {payload.get('words')} words)"
         )
     if "der" in payload:
-        parts.append(f"DER {_pct(payload.get('der'))}")
+        breakdown = jsonshape.as_mapping(payload.get("der_breakdown")) or {}
+        parts.append(
+            f"DER {_pct(payload.get('der'))} (missed {_pct(breakdown.get('missed'))} · "
+            f"false alarm {_pct(breakdown.get('false_alarm'))} · "
+            f"confusion {_pct(breakdown.get('confusion'))})"
+        )
     return output.heading("   ".join(parts))
 
 
@@ -130,8 +188,8 @@ def _render(payload: dict[str, object]) -> RenderableType:
     epilog=examples_epilog(
         [
             (
-                "Score a model on 10 rows of an HF dataset",
-                "assembly eval sanchit-gandhi/tedlium-data",
+                "Score a model on 10 rows of a benchmark",
+                "assembly eval tedlium",
             ),
             (
                 "Compare models on your own audio",
@@ -142,16 +200,16 @@ def _render(payload: dict[str, object]) -> RenderableType:
                 "assembly eval agent-calls.jsonl --speaker-labels",
             ),
             (
-                "Pick a subset/split and more rows",
-                "assembly eval openslr/librispeech_asr --subset clean --limit 50",
+                "More rows, transcribed four at a time",
+                "assembly eval librispeech --limit 50 --concurrency 4",
             ),
             (
                 "Evaluate non-English audio",
-                "assembly eval fixie-ai/common_voice_17_0 --subset fr --language-code fr",
+                "assembly eval commonvoice --subset fr --language-code fr",
             ),
             (
-                "DER on a Hugging Face diarization set",
-                "assembly eval talkbank/callhome --subset eng --speaker-labels",
+                "DER on a diarization benchmark",
+                "assembly eval callhome --speaker-labels",
             ),
         ]
     ),
@@ -192,6 +250,12 @@ def evaluate(
         min=0.0,
         help="DER forgiveness (seconds) around each reference turn boundary.",
     ),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        min=1,
+        help="How many items to transcribe at once (sequential by default).",
+    ),
     json_out: bool = options.json_option("Output the rows and summary as one JSON object."),
 ) -> None:
     """Transcribe an evaluation dataset and score WER against its reference texts.
@@ -204,21 +268,15 @@ def evaluate(
     against reference speaker turns.
 
     Datasets come from the Hugging Face Hub (any public dataset its viewer
-    serves with audio + reference columns; gated ones need HF_TOKEN) or a local
-    .csv/.jsonl manifest with audio + text columns. Hub sets to try:
-    openslr/librispeech_asr (read English; subsets clean/other),
-    sanchit-gandhi/tedlium-data (TED talks),
-    sanchit-gandhi/earnings22_robust_split (earnings calls),
-    kensho/spgispeech (financial calls; subset test),
-    edinburghcstr/ami (meetings; subsets ihm/sdm),
-    fixie-ai/gigaspeech (--subset dev --split dev),
-    fixie-ai/peoples_speech (real-world US English; subset clean),
-    fixie-ai/common_voice_17_0 (99 locales; subsets like en/fr),
-    facebook/voxpopuli (parliament speech; subset en),
-    hhoangphuoc/switchboard (phone calls; --split validation),
-    ylacombe/expresso (expressive speech),
-    speechbrain/LoquaciousSet (--subset small --audio-column wav), and
-    talkbank/callhome (phone calls with speaker turns; --subset eng, for
+    serves with audio + reference columns; gated ones need HF_TOKEN), a local
+    .csv/.jsonl manifest with audio + text columns, or a built-in benchmark
+    alias that fills in the right hub id, subset, split, and columns:
+    librispeech / librispeech-other (read English), tedlium (TED talks),
+    earnings22 (earnings calls), spgispeech (financial calls), ami / ami-sdm
+    (meetings), gigaspeech, peoples (real-world US English), commonvoice
+    (English; --subset fr etc. for its 98 other locales), voxpopuli
+    (parliament speech), switchboard (phone calls), expresso (expressive
+    speech), loquacious, and callhome (phone calls with speaker turns, for
     --speaker-labels).
     """
 
@@ -238,15 +296,22 @@ def evaluate(
             language_code=language_code,
             speaker_labels=speaker_labels or None,
         )
-        results: list[_ItemResult] = []
-        for index, item in enumerate(data.items, start=1):
-            with output.status(
-                f"[{index}/{len(data.items)}] Transcribing {item.item_id}…",
-                json_mode=json_mode,
-                quiet=state.quiet,
-            ):
-                transcript = client.transcribe(api_key, item.audio, config=transcription_config)
-            results.append(_score_item(item, transcript, collar=collar))
+        transcripts = _transcripts(
+            api_key,
+            data.items,
+            transcription_config=transcription_config,
+            concurrency=concurrency,
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        results = [
+            _score_item(item, transcript, collar=collar)
+            for item, transcript in zip(
+                data.items,
+                transcripts,
+                strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one transcript per item)
+            )
+        ]
         output.emit(_payload(data.label, speech_model, results), _render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
