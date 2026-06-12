@@ -4,10 +4,10 @@ A thin shim over :mod:`jiwer` — the de-facto standard WER implementation — s
 the alignment math is never re-derived here. Texts are normalized the way ASR
 benchmarks conventionally are (lowercase, punctuation stripped, whitespace
 collapsed) so a transcript isn't penalized for casing or punctuation style.
-jiwer is imported lazily inside the scoring functions (mirroring ``der.py``'s
-lazy pyannote import) so this module stays import-cheap for the command layer —
-an install that's missing the eval scoring stack must still run every other
-command. No SDK, no Rich: the command layer owns all rendering.
+jiwer is imported lazily inside the scoring functions so this module stays
+import-cheap for the command layer — an install that's missing the eval scoring
+stack must still run every other command. No SDK, no Rich: the command layer
+owns all rendering.
 """
 
 from __future__ import annotations

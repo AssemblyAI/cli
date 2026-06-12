@@ -49,11 +49,9 @@ dependencies = [
     "packaging>=24.0",
     # audioop (used for PCM resampling) left the stdlib in 3.13; this backport provides it.
     "audioop-lts>=0.2; python_version >= '3.13'",
-    # `assembly eval` scoring: jiwer for WER, pyannote.metrics for DER — the de-facto
-    # standard implementations of each. pyannote drags numpy/scipy/pandas, so der.py
-    # imports it lazily to keep CLI startup fast.
+    # `assembly eval` WER scoring uses jiwer (the de-facto standard WER
+    # implementation); wer.py imports it lazily to keep CLI startup fast.
     "jiwer>=4.0",
-    "pyannote-metrics>=4.0",
 ]
 
 [project.urls]

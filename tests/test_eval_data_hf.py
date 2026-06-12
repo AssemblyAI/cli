@@ -10,7 +10,7 @@ import dataclasses
 import httpx2 as httpx
 import pytest
 
-from aai_cli import der, eval_data, eval_hf_api
+from aai_cli import eval_data, eval_hf_api
 from aai_cli.errors import APIError, UsageError
 
 # ------------------------------------------------------- Hugging Face datasets
@@ -94,13 +94,6 @@ def test_hf_unusable_audio_cell_errors(monkeypatch):
     with pytest.raises(APIError) as exc:
         eval_data.load("org/ds", limit=1)
     assert "test[0]" in exc.value.message and "no audio URL" in exc.value.message
-
-
-def test_hf_speaker_rows(monkeypatch):
-    row = _hf_row(speakers=["alice"], timestamps_start=[0.5], timestamps_end=[2.0])
-    _hf_handler(monkeypatch, splits=_ONE_SPLIT, rows=[row])
-    data = eval_data.load("org/ds", limit=1, with_speakers=True)
-    assert data.items[0].turns == [der.Turn(speaker="alice", start=0.5, end=2.0)]
 
 
 def test_hf_single_named_config_auto_picked(monkeypatch):

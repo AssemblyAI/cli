@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from aai_cli import der, eval_data
+from aai_cli import eval_data
 from aai_cli.errors import CLIError, UsageError
 
 # ---------------------------------------------------------------- local manifests
@@ -48,7 +48,6 @@ def test_csv_manifest_loads_items(tmp_path):
     assert [item.item_id for item in data.items] == ["a.wav", "b.wav"]
     assert data.items[0].audio == str(tmp_path / "a.wav")
     assert data.items[0].reference == "hello there"
-    assert data.items[0].turns is None
 
 
 def test_manifest_respects_limit(tmp_path):
@@ -198,84 +197,3 @@ def test_split_and_subset_rejected_for_manifests(tmp_path):
         eval_data.load(str(manifest), split="test", limit=10)
     with pytest.raises(UsageError, match="local manifests"):
         eval_data.load(str(manifest), subset="default", limit=10)
-
-
-# ------------------------------------------------- manifests with speaker turns
-
-
-def _speaker_row(audio, **extra):
-    return {
-        "audio": audio,
-        "speakers": ["alice", "bob"],
-        "timestamps_start": [0.0, 10.0],
-        "timestamps_end": [10.0, 20.0],
-        **extra,
-    }
-
-
-def test_speaker_manifest_loads_turns_without_text(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.jsonl"
-    _write_jsonl(manifest, [_speaker_row("a.wav")])
-    data = eval_data.load(str(manifest), limit=10, with_speakers=True)
-    assert data.items[0].reference is None
-    assert data.items[0].turns == [
-        der.Turn(speaker="alice", start=0.0, end=10.0),
-        der.Turn(speaker="bob", start=10.0, end=20.0),
-    ]
-
-
-def test_speaker_manifest_with_text_scores_both(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.jsonl"
-    _write_jsonl(manifest, [_speaker_row("a.wav", text="hello world")])
-    data = eval_data.load(str(manifest), limit=10, with_speakers=True)
-    assert data.items[0].reference == "hello world"
-    assert data.items[0].turns is not None
-
-
-def test_speaker_manifest_with_explicit_text_column(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.jsonl"
-    _write_jsonl(manifest, [_speaker_row("a.wav", ref="hello world")])
-    data = eval_data.load(str(manifest), text_column="ref", limit=10, with_speakers=True)
-    assert data.items[0].reference == "hello world"
-
-
-def test_speakers_requested_but_columns_missing(tmp_path):
-    manifest = tmp_path / "m.jsonl"
-    _write_jsonl(manifest, [{"audio": "a.wav", "text": "x", "speakers": ["a"]}])
-    with pytest.raises(UsageError) as exc:
-        eval_data.load(str(manifest), limit=10, with_speakers=True)
-    assert "missing: timestamps_start, timestamps_end" in exc.value.message
-    assert exc.value.suggestion is not None and ".jsonl" in exc.value.suggestion
-
-
-def test_speaker_arrays_of_unequal_length_rejected(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.jsonl"
-    row = _speaker_row("a.wav")
-    row["timestamps_end"] = [10.0]
-    _write_jsonl(manifest, [row])
-    with pytest.raises(UsageError, match="equal-length"):
-        eval_data.load(str(manifest), limit=10, with_speakers=True)
-
-
-def test_empty_speaker_arrays_rejected(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.jsonl"
-    row = {"audio": "a.wav", "speakers": [], "timestamps_start": [], "timestamps_end": []}
-    _write_jsonl(manifest, [row])
-    with pytest.raises(UsageError, match="non-empty"):
-        eval_data.load(str(manifest), limit=10, with_speakers=True)
-
-
-def test_csv_cells_cannot_hold_speaker_arrays(tmp_path):
-    _write_audio(tmp_path, "a.wav")
-    manifest = tmp_path / "m.csv"
-    manifest.write_text(
-        'audio,speakers,timestamps_start,timestamps_end\na.wav,"[""alice""]","[0.0]","[10.0]"\n',
-        encoding="utf-8",
-    )
-    with pytest.raises(UsageError, match=r"equal-length|non-empty"):
-        eval_data.load(str(manifest), limit=10, with_speakers=True)

@@ -16,7 +16,6 @@ source_modules =
     aai_cli.config
     aai_cli.config_builder
     aai_cli.context
-    aai_cli.der
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
@@ -76,7 +75,6 @@ source_modules =
     aai_cli.client
     aai_cli.config
     aai_cli.config_builder
-    aai_cli.der
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
