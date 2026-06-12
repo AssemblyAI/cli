@@ -21,5 +21,5 @@ pytestmark = pytest.mark.usefixtures("fixed_render_size")
 
 
 @pytest.mark.parametrize("argv", help_group_argvs("tools"), ids=lambda a: "_".join(a))
-def test_command_help_matches_snapshot(argv, snapshot):
+def test_command_help_matches_snapshot_tools(argv, snapshot):
     assert_help_matches_snapshot(argv, snapshot)
