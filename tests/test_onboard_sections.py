@@ -7,8 +7,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from aai_cli import output, transcribe_exec, transcribe_render
-from aai_cli.commands import init as init_cmd
+from aai_cli import init_exec, output, transcribe_exec, transcribe_render
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError
@@ -161,7 +160,7 @@ def test_build_path_skip_choice_does_nothing(
         called = True
         return Path()
 
-    monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
+    monkeypatch.setattr(init_exec, "run_init", _fake_run_init)
     # NonInteractivePrompter.select returns the default; build_path's default is "skip".
     assert sections.build_path(NonInteractivePrompter(), ctx) is SectionResult.SKIPPED
     assert called is False
@@ -255,34 +254,28 @@ def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatc
     seen: dict[str, object] = {}
 
     def _fake_run_init(
+        opts: init_exec.InitOptions,
         state: object,
         *,
-        template: str | None,
-        directory: str | None,
-        no_install: bool,
-        no_open: bool,
-        force: bool,
-        here: bool,
-        port: int,
         json_mode: bool,
         launch: bool = True,
     ) -> Path:
         nonlocal calls
         calls += 1
         seen.update(
-            template=template,
-            directory=directory,
-            no_install=no_install,
-            no_open=no_open,
-            force=force,
-            here=here,
-            port=port,
+            template=opts.template,
+            directory=opts.directory,
+            no_install=opts.no_install,
+            no_open=opts.no_open,
+            force=opts.force,
+            here=opts.here,
+            port=opts.port,
             json_mode=json_mode,
             launch=launch,
         )
         return Path("/scaffolded/app")
 
-    monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
+    monkeypatch.setattr(init_exec, "run_init", _fake_run_init)
     prompter = _ScriptedPrompter(select="audio-transcription", confirm=True)
     result = sections.build_path(prompter, ctx)
     assert result is SectionResult.DONE
@@ -314,7 +307,7 @@ def test_build_path_declined_after_select(
         called = True
         return Path()
 
-    monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
+    monkeypatch.setattr(init_exec, "run_init", _fake_run_init)
     result = sections.build_path(_ScriptedPrompter(select="voice-agent", confirm=False), ctx)
     assert result is SectionResult.SKIPPED
     assert called is False
@@ -324,7 +317,7 @@ def test_build_path_run_init_failure(ctx: WizardContext, monkeypatch: pytest.Mon
     def _boom(*a: object, **k: object) -> Path:
         raise typer.Exit(code=1)
 
-    monkeypatch.setattr(init_cmd, "run_init", _boom)
+    monkeypatch.setattr(init_exec, "run_init", _boom)
     result = sections.build_path(_ScriptedPrompter(select="live-captions", confirm=True), ctx)
     assert result is SectionResult.FAILED
     # Nothing scaffolded, so launch_app must have nothing to launch.
@@ -382,7 +375,7 @@ def _spy_launch(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
         captured["target"] = target
         captured.update(port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
 
-    monkeypatch.setattr(init_cmd, "launch_app", _fake_launch)
+    monkeypatch.setattr(init_exec, "launch_app", _fake_launch)
     return captured
 
 
@@ -452,6 +445,6 @@ def test_launch_app_failure(
     def _boom(*a: object, **k: object) -> None:
         raise exc
 
-    monkeypatch.setattr(init_cmd, "launch_app", _boom)
+    monkeypatch.setattr(init_exec, "launch_app", _boom)
     ctx.scaffolded = Path("/scaffolded/app")
     assert sections.launch_app(_ScriptedPrompter(confirm=True), ctx) is SectionResult.FAILED

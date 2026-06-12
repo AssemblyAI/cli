@@ -19,16 +19,20 @@ source_modules =
     aai_cli.config_builder
     aai_cli.context
     aai_cli.debuglog
+    aai_cli.deploy_exec
+    aai_cli.dev_exec
     aai_cli.dictate_exec
     aai_cli.dub_exec
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
+    aai_cli.evaluate_exec
     aai_cli.follow
     aai_cli.help_panels
     aai_cli.help_text
     aai_cli.hotkey
     aai_cli.init
+    aai_cli.init_exec
     aai_cli.llm
     aai_cli.llm_exec
     aai_cli.microphone
@@ -37,6 +41,7 @@ source_modules =
     aai_cli.procs
     aai_cli.remotefs
     aai_cli.render
+    aai_cli.share_exec
     aai_cli.speak_exec
     aai_cli.stdio
     aai_cli.stream_exec
