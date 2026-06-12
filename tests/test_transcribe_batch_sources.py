@@ -1,11 +1,15 @@
 """Batch-mode source selection for `assembly transcribe`: glob/directory/stdin
-expansion and the single-source flags batch mode rejects.
+expansion (local and remote/bucket URLs) and the single-source flags batch mode
+rejects.
 
 The batch *run* (sidecar resume, concurrency, failures, output) lives in
-test_transcribe_batch.py.
+test_transcribe_batch.py. Remote sources use fsspec's memory:// filesystem (the
+shared ``memory_fs`` fixture), so the real download/glob paths run offline.
 """
 
+import hashlib
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -197,9 +201,110 @@ def test_batch_rejects_single_source_flags(tmp_path, extra, flag_name, hint):
     assert hint in result.output
 
 
-def test_glob_batch_writes_per_source_sidecars(tmp_path, mocker, monkeypatch):
-    import hashlib
+def _patch_transcribe_recording_uploads(mocker, monkeypatch):
+    """Patch client.transcribe with a fake that records (name, bytes, path) per upload.
 
+    Remote sources are downloaded to a temp file before upload, so the audio arg
+    is a local path whose basename and bytes must match the remote object.
+    """
+    seen = []
+
+    def fake(api_key, audio, *, config):
+        seen.append((Path(audio).name, Path(audio).read_bytes(), audio))
+        t = mocker.MagicMock()
+        t.id = f"t_{Path(audio).name}"
+        t.text = "hi"
+        t.status = "completed"
+        t.json_response = {"id": t.id, "text": t.text, "status": "completed"}
+        return t
+
+    monkeypatch.setattr(_TRANSCRIBE, fake)
+    return seen
+
+
+def test_remote_glob_batch_downloads_and_transcribes(mocker, monkeypatch, memory_fs):
+    _auth()
+    memory_fs.pipe("/calls/a.mp3", b"aaa")
+    memory_fs.pipe("/calls/b.mp3", b"bbb")
+    memory_fs.pipe("/calls/notes.txt", b"not audio")
+    seen = _patch_transcribe_recording_uploads(mocker, monkeypatch)
+    result = runner.invoke(app, ["transcribe", "memory://calls/*.mp3", "--json"])
+    assert result.exit_code == 0
+    # Each match was fetched to a temp dir (never the cwd) and its bytes uploaded.
+    assert sorted((name, data) for name, data, _ in seen) == [
+        ("a.mp3", b"aaa"),
+        ("b.mp3", b"bbb"),
+    ]
+    assert all("aai-remote-" in path for _, _, path in seen)
+    records = {r["source"]: r for r in map(json.loads, result.output.splitlines())}
+    record = records["memory:///calls/a.mp3"]
+    assert record["status"] == "completed"
+    digest = hashlib.sha256(b"memory:///calls/a.mp3").hexdigest()[:8]
+    assert record["sidecar"] == f"calls-a.mp3-{digest}.aai.json"
+    assert json.loads(Path(record["sidecar"]).read_text())["status"] == "completed"
+
+
+def test_remote_batch_rerun_resumes_from_sidecars(mocker, monkeypatch, memory_fs):
+    _auth()
+    memory_fs.pipe("/calls/a.mp3", b"aaa")
+    seen = _patch_transcribe_recording_uploads(mocker, monkeypatch)
+    assert runner.invoke(app, ["transcribe", "memory://calls/*.mp3", "--json"]).exit_code == 0
+    result = runner.invoke(app, ["transcribe", "memory://calls/*.mp3", "--json"])
+    assert result.exit_code == 0
+    assert [json.loads(line)["status"] for line in result.output.splitlines()] == ["skipped"]
+    assert len(seen) == 1  # the re-run never downloaded or transcribed again
+
+
+def test_remote_glob_skips_sidecar_files(mocker, monkeypatch, memory_fs):
+    _auth()
+    memory_fs.pipe("/calls/a.mp3", b"aaa")
+    memory_fs.pipe("/calls/stale.aai.json", b"{}")
+    seen = _patch_transcribe_recording_uploads(mocker, monkeypatch)
+    result = runner.invoke(app, ["transcribe", "memory://calls/*", "--json"])
+    assert result.exit_code == 0
+    assert [name for name, _, _ in seen] == ["a.mp3"]
+
+
+def test_remote_folder_scan_is_recursive_and_audio_only(mocker, monkeypatch, memory_fs):
+    _auth()
+    memory_fs.pipe("/calls/a.mp3", b"a")
+    memory_fs.pipe("/calls/sub/b.WAV", b"b")  # extension match is case-insensitive
+    memory_fs.pipe("/calls/notes.txt", b"not audio")
+    seen = _patch_transcribe_recording_uploads(mocker, monkeypatch)
+    result = runner.invoke(app, ["transcribe", "memory://calls/", "--json"])
+    assert result.exit_code == 0
+    assert sorted(name for name, _, _ in seen) == ["a.mp3", "b.WAV"]
+
+
+def test_remote_folder_without_audio_exits_2(memory_fs):
+    _auth()
+    memory_fs.pipe("/calls/notes.txt", b"x")
+    result = runner.invoke(app, ["transcribe", "memory://calls/"])
+    assert result.exit_code == 2
+    assert "No audio files found under memory://calls/" in result.output
+    assert ".mp3" in result.output  # the suggestion lists recognized extensions
+
+
+def test_remote_glob_without_matches_exits_2(memory_fs):
+    _auth()
+    result = runner.invoke(app, ["transcribe", "memory://calls/*.mp3"])
+    assert result.exit_code == 2
+    assert "No files match" in result.output
+
+
+def test_plain_remote_file_url_stays_single_source(memory_fs):
+    # No glob and no trailing slash: a bucket URL is one file, like a local path.
+    for url in ("memory://calls/a.mp3", "memory://calls"):
+        assert transcribe_batch.expand_sources(url, from_stdin=False, sample=False) is None
+
+
+def test_sidecar_path_for_remote_url_is_slug_plus_hash():
+    url = "memory:///calls/a.mp3"
+    digest = hashlib.sha256(url.encode()).hexdigest()[:8]
+    assert transcribe_batch.sidecar_path(url) == Path(f"calls-a.mp3-{digest}.aai.json")
+
+
+def test_glob_batch_writes_per_source_sidecars(tmp_path, mocker, monkeypatch):
     _auth()
     (tmp_path / "a.mp3").write_bytes(b"aaa")
     (tmp_path / "b.mp3").write_bytes(b"bbb")

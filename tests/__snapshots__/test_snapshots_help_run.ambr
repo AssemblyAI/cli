@@ -561,13 +561,17 @@
    sources already transcribed — with changed --llm prompts it replays just
    the LLM step, never a second transcription.
   
+   Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
+   batches (a glob, or a folder ending in /); install the matching fsspec
+   backend first (e.g. pip install s3fs) and use its usual credentials.
+  
    Curated flags cover common features; --config KEY=VALUE and --config-file
    reach every other field. Analysis (summary, chapters, ...) renders in human
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, or a           │
-  │                         directory/glob (batch mode).                         │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
+  │                         (s3://, gs://, …), or a directory/glob (batch mode). │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -715,6 +719,8 @@
    $ assembly transcribe ./recordings
    Batch-transcribe a glob
    $ assembly transcribe "calls/*.mp3"
+   Batch-transcribe an S3 prefix
+   $ assembly transcribe "s3://bucket/calls/*.mp3"
    Try it with the hosted sample
    $ assembly transcribe --sample
    Transcribe a YouTube video

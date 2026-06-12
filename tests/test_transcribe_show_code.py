@@ -126,3 +126,18 @@ def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
     assert result.exit_code == 0
     compile(result.output, "<generated>", "exec")
     assert 'print(f"Speaker {utt.speaker}: {utt.text}")' in result.output
+
+
+def test_transcribe_show_code_rejects_bucket_urls(monkeypatch):
+    # Generated SDK code can't fetch s3://-style URLs (the API only reads http(s)),
+    # so a bucket source is rejected up front instead of emitting a broken script.
+    called = []
+    monkeypatch.setattr(
+        "aai_cli.transcribe_exec.client.transcribe",
+        lambda *a, **k: called.append(True),
+    )
+    result = runner.invoke(app, ["transcribe", "s3://bucket/call.mp3", "--show-code"])
+    assert result.exit_code == 2
+    assert "--show-code does not support bucket URLs" in result.output
+    assert "pass the local file" in result.output
+    assert called == []

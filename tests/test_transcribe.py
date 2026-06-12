@@ -393,6 +393,38 @@ def test_transcribe_podcast_page_url_downloads_then_transcribes(monkeypatch, moc
     assert tx.call_args.args[1] == str(fake)  # transcribed the downloaded local file
 
 
+def test_transcribe_remote_bucket_url_downloads_then_transcribes(monkeypatch, mocker, memory_fs):
+    # A single fsspec bucket URL (memory:// stands in for s3://, gs://, …) is
+    # fetched to a temp file and that local copy is uploaded.
+    _auth()
+    memory_fs.pipe("/bucket/call.mp3", b"remote-bytes")
+    seen = {}
+
+    def fake(api_key, audio, *, config):
+        from pathlib import Path
+
+        seen["path"] = audio
+        seen["bytes"] = Path(audio).read_bytes()
+        return _fake_transcript(mocker)
+
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", fake)
+    result = runner.invoke(app, ["transcribe", "memory://bucket/call.mp3", "-o", "text"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "hello world"
+    assert seen["path"].endswith("/call.mp3")
+    assert "aai-remote-" in seen["path"]  # a temp copy, not the URL itself
+    assert seen["bytes"] == b"remote-bytes"
+
+
+def test_transcribe_missing_remote_file_fails_cleanly(mocker, memory_fs):
+    _auth()
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", "memory://bucket/nope.mp3"])
+    assert result.exit_code == 2
+    assert "Remote file not found" in result.output
+    tx.assert_not_called()
+
+
 def test_transcribe_direct_audio_url_passes_through_without_download(monkeypatch, mocker):
     # The API fetches direct audio URLs itself; no yt-dlp download must happen.
     _auth()
