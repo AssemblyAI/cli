@@ -36,7 +36,9 @@ def test_production_env_is_rejected_with_sandbox_hint():
     result = runner.invoke(app, ["speak", "Hello"])  # default = production
     assert result.exit_code == 2
     assert "only available in the sandbox" in result.output
-    assert "--sandbox" in result.output
+    # The full command, not just the flag: --sandbox is root-only, so a naive
+    # `assembly speak … --sandbox` retry would fail with "No such option".
+    assert "assembly --sandbox speak" in result.output
 
 
 def test_plays_audio_by_default(monkeypatch, fake_synthesize):

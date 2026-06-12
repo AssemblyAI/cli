@@ -169,22 +169,22 @@ def _speak_dialogue(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Speak text aloud (sandbox only)", 'assembly speak "Hello there, friend." --sandbox'),
+            ("Speak text aloud (sandbox only)", 'assembly --sandbox speak "Hello there, friend."'),
             (
                 "Pick a voice and language",
-                'assembly speak "Bonjour" --voice jane --language French --sandbox',
+                'assembly --sandbox speak "Bonjour" --voice jane --language French',
             ),
             (
                 "Speak a diarized transcript, one voice per speaker",
-                "assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox",
+                "assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak",
             ),
             (
                 "Override a speaker's voice",
-                "… | assembly speak --voice A=vera --voice B=paul --sandbox",
+                "… | assembly --sandbox speak --voice A=vera --voice B=paul",
             ),
             (
                 "Save to a WAV instead of playing",
-                'assembly speak "Hello" --out /tmp/hello.wav --sandbox',
+                'assembly --sandbox speak "Hello" --out /tmp/hello.wav',
             ),
         ]
     ),
@@ -211,7 +211,8 @@ def speak(
     Plays the audio through your speakers by default, or writes a WAV with --out.
     Speaker-labeled input (from 'assembly transcribe --speaker-labels') is detected
     automatically: the labels are stripped and each speaker gets a different
-    voice. This feature only exists in the sandbox today — run it with --sandbox.
+    voice. This feature only exists in the sandbox today — run it as
+    'assembly --sandbox speak' (--sandbox goes before the subcommand).
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -220,7 +221,7 @@ def speak(
                 "assembly speak is only available in the sandbox.",
                 error_type="unsupported_environment",
                 exit_code=2,
-                suggestion="Re-run with --sandbox (or --env sandbox000).",
+                suggestion="Re-run as 'assembly --sandbox speak …'.",
             )
         spoken = _read_text(text)
         api_key = config.resolve_api_key(profile=state.profile)

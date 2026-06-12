@@ -152,9 +152,22 @@ def test_from_stdin_rejects_sample():
     assert "--from-stdin reads sources from stdin" in result.output
 
 
-@pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None])
+@pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None, ""])
 def test_non_batch_sources_return_none(source):
     assert transcribe_batch.expand_sources(source, from_stdin=False, sample=False) is None
+
+
+def test_empty_source_is_rejected_not_treated_as_cwd(tmp_path, mocker, monkeypatch):
+    # Path("") == Path("."), so an empty source (e.g. an unset shell variable in
+    # `assembly transcribe "$FILE"`) used to batch-transcribe the whole working
+    # directory; it must fail like a missing source instead.
+    _auth()
+    (tmp_path / "a.mp3").write_bytes(b"a")
+    seen = _patch_transcribe(mocker, monkeypatch)
+    result = runner.invoke(app, ["transcribe", ""])
+    assert result.exit_code == 2
+    assert "Provide an audio path or URL." in result.output
+    assert seen == []  # nothing in the cwd was picked up, let alone transcribed
 
 
 def test_sample_returns_none_even_without_source():

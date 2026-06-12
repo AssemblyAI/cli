@@ -73,7 +73,11 @@ def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> lis
     """
     if from_stdin:
         return _stdin_sources(source, sample=sample)
-    if source is None or sample or source == "-" or source.startswith(_URL_PREFIXES):
+    # `not source` (rather than `is None`) also catches the empty string — e.g. an
+    # unset shell variable in `assembly transcribe "$FILE"`. `Path("")` is `Path(".")`,
+    # so it would otherwise fall into the directory branch and batch-transcribe the
+    # whole working directory; instead it stays single-source and fails validation.
+    if not source or sample or source == "-" or source.startswith(_URL_PREFIXES):
         return None
     path = Path(source)
     if path.is_dir():
