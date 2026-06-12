@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from aai_cli import dub_exec, llm
 from aai_cli.main import app
-from tests._dub_helpers import plain
+from tests._clip_helpers import plain
 
 runner = CliRunner()
 

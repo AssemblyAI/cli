@@ -20,17 +20,14 @@ is re-encoded into its own file with ffmpeg.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import client, clip_select, jsonshape, llm, output, stdio, youtube
+from aai_cli import clip_select, jsonshape, llm, mediafile, output, stdio, youtube
 from aai_cli.clip_select import Segment
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
@@ -140,12 +137,14 @@ def _resolve_transcript(
         if text.startswith("{"):
             return _piped_transcript(text)
         transcript_id = text  # a bare id (e.g. from `assembly transcribe … -o id`)
-    if transcript_id is not None:
-        return client.get_transcript(state.resolve_api_key(), transcript_id)
-    config = aai.TranscriptionConfig(speaker_labels=True)
-    api_key = state.resolve_api_key()
-    with output.status("Transcribing for clip selection…", json_mode=json_mode, quiet=state.quiet):
-        return client.transcribe(api_key, str(media), config=config)
+    return mediafile.resolve_diarized_transcript(
+        state.resolve_api_key(),
+        transcript_id,
+        media,
+        status_message="Transcribing for clip selection…",
+        json_mode=json_mode,
+        quiet=state.quiet,
+    )
 
 
 def _transcript_segments(
@@ -190,26 +189,6 @@ def _transcript_segments(
     return [clip_select.segment_of(utterance) for utterance in matched], transcript_id
 
 
-def _validate_media(media: Path) -> None:
-    """Reject a missing local source before credential resolution, so a typo'd
-    path reads as "file not found", never as a login prompt or an opaque
-    ffmpeg error."""
-    if not media.exists():
-        raise CLIError(
-            f"File not found: {media}",
-            error_type="file_not_found",
-            exit_code=2,
-            suggestion="Check the path. assembly clip needs a local audio/video file.",
-        )
-    if not media.is_file():
-        raise CLIError(
-            f"Not a file: {media}",
-            error_type="not_a_file",
-            exit_code=2,
-            suggestion="Pass a media file, not a directory.",
-        )
-
-
 def _validate_out_dir(out_dir: Path | None) -> None:
     if out_dir is not None and not out_dir.is_dir():
         raise UsageError(
@@ -235,23 +214,6 @@ def _validate_selection(opts: ClipOptions) -> None:
         )
 
 
-def _require_ffmpeg() -> str:
-    """The ffmpeg executable; checked before any (billed) transcription work."""
-    path = shutil.which("ffmpeg")
-    if path is None:
-        raise CLIError(
-            "ffmpeg is required to cut media, but it isn't on PATH.",
-            error_type="missing_dependency",
-            suggestion="Install it (brew install ffmpeg / apt install ffmpeg) and re-run.",
-        )
-    return path
-
-
-def _run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Boundary seam for tests: one ffmpeg invocation, output captured."""
-    return subprocess.run(args, capture_output=True, text=True, check=False)
-
-
 # -30dB for at least 0.2s reads as a pause in normal speech recordings.
 _SILENCE_FILTER = "silencedetect=noise=-30dB:d=0.2"
 
@@ -264,7 +226,7 @@ def _detect_silences(ffmpeg: str, media: Path) -> list[Segment]:
     silencedetect logs at info level on stderr, so the usual ``-loglevel
     error`` would silence the very lines this parses.
     """
-    result = _run_ffmpeg(
+    result = mediafile.run_ffmpeg(
         [
             ffmpeg,
             "-hide_banner",
@@ -290,7 +252,7 @@ def _cut_clip(ffmpeg: str, media: Path, segment: Segment, dest: Path) -> None:
     would snap to the nearest keyframe; ``-y`` makes a re-run overwrite its own
     earlier output instead of stalling on ffmpeg's prompt.
     """
-    result = _run_ffmpeg(
+    result = mediafile.run_ffmpeg(
         [
             ffmpeg,
             "-hide_banner",
@@ -307,13 +269,7 @@ def _cut_clip(ffmpeg: str, media: Path, segment: Segment, dest: Path) -> None:
         ]
     )
     if result.returncode != 0:
-        detail = result.stderr.strip().splitlines()
-        reason = detail[-1] if detail else f"ffmpeg exited with code {result.returncode}"
-        raise CLIError(
-            f"Could not cut {dest.name}: {reason}",
-            error_type="clip_failed",
-            suggestion="Check that the input is a readable audio/video file.",
-        )
+        raise mediafile.ffmpeg_failure(result, "cut", dest, error_type="clip_failed")
 
 
 def _clip_dest(media: Path, out_dir: Path | None, index: int) -> Path:
@@ -348,7 +304,7 @@ def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
     _validate_out_dir(opts.out_dir)
     _validate_selection(opts)
     explicit = [clip_select.parse_range(value) for value in opts.ranges]
-    ffmpeg = _require_ffmpeg()
+    ffmpeg = mediafile.require_ffmpeg("cut media")
     if youtube.is_downloadable_url(opts.media):
         # A media-page URL (YouTube, podcast page, …) is downloaded once and
         # clipped locally. The download dir is temporary, so the clips land in
@@ -366,7 +322,7 @@ def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
             suggestion="Download the media first, then clip the local copy.",
         )
     media = Path(opts.media)
-    _validate_media(media)
+    mediafile.validate_local_media(media, "clip")
     _cut_and_emit(opts, media, opts.out_dir, explicit, ffmpeg, state, json_mode=json_mode)
 
 

@@ -8,7 +8,6 @@ parsing in test_dub_command.py."""
 from __future__ import annotations
 
 import dataclasses
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -140,7 +139,7 @@ def test_utterances_of_defaults_and_filtering():
             utterance(4000, "C", "  Bye  "),
         ]
     )
-    assert dub_exec._utterances_of(transcript) == [
+    assert dub_exec._utterances_of(transcript, "tr_dub") == [
         dub_exec._Utterance(start_ms=0, speaker="A", text="Hi"),
         dub_exec._Utterance(start_ms=4000, speaker="C", text="Bye"),
     ]
@@ -153,7 +152,7 @@ def test_utterances_of_defaults_and_filtering():
 )
 def test_utterances_of_requires_spoken_utterances(utterances):
     with pytest.raises(CLIError) as exc:
-        dub_exec._utterances_of(SimpleNamespace(id="tr_x", utterances=utterances))
+        dub_exec._utterances_of(SimpleNamespace(utterances=utterances), "tr_x")
     assert exc.value.error_type == "no_utterances"
     assert exc.value.exit_code == 2
     assert "Transcript tr_x has no utterances to dub" in exc.value.message
@@ -168,21 +167,6 @@ def test_utterances_of_requires_spoken_utterances(utterances):
 def test_total_seconds(duration, expected):
     transcript = SimpleNamespace(audio_duration=duration)
     assert dub_exec._total_seconds(transcript) == expected
-
-
-def test_run_ffmpeg_captures_output_and_does_not_raise():
-    # The real boundary (not the fake): output is captured as text and a non-zero
-    # exit must not raise — _mux turns the exit code into a CLIError itself.
-    result = dub_exec._run_ffmpeg(
-        [
-            sys.executable,
-            "-c",
-            "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
-        ]
-    )
-    assert result.returncode == 3
-    assert result.stdout == "out\n"
-    assert result.stderr == "err\n"
 
 
 # --- validation order (cheap local checks before any credential or network) ----
@@ -210,7 +194,8 @@ def test_run_dub_rejects_missing_file(sandbox, tmp_path):
         dub_exec.run_dub(opts, AppState(), json_mode=False)
     assert exc.value.error_type == "file_not_found"
     assert exc.value.exit_code == 2
-    assert "local audio/video file" in (exc.value.suggestion or "")
+    # The command name pins the shared helper's parameterization.
+    assert "assembly dub needs a local audio/video file" in (exc.value.suggestion or "")
 
 
 def test_run_dub_rejects_directory(sandbox, tmp_path):
@@ -235,4 +220,5 @@ def test_run_dub_requires_ffmpeg(sandbox, media, monkeypatch):
     with pytest.raises(CLIError) as exc:
         dub_exec.run_dub(opts, AppState(), json_mode=False)
     assert exc.value.error_type == "missing_dependency"
-    assert "ffmpeg" in exc.value.message
+    # The purpose string pins the shared helper's parameterization.
+    assert "ffmpeg is required to write the dubbed file" in exc.value.message

@@ -36,7 +36,7 @@ class _OutputStream(Protocol):
 _PLAYBACK_CHUNK_BYTES = 4096
 
 
-def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
+def write_wav(path: Path, pcm: bytes | bytearray, sample_rate: int) -> None:
     """Write 16-bit mono PCM to a WAV file, creating parent dirs as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as wav:

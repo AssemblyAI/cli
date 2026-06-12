@@ -2,11 +2,12 @@
 the transcribe → translate → synthesize → ffmpeg mux orchestration, voice
 assignment, and the failure modes of each boundary. The LLM Gateway, streaming
 TTS, and ffmpeg are faked at the modules dub_exec calls into (`llm.complete`,
-`session.synthesize`, `client.transcribe`) and at `dub_exec._run_ffmpeg`; the
+`session.synthesize`, `client.transcribe`) and at `mediafile.run_ffmpeg`; the
 pure helpers and validation order live in test_dub_exec.py."""
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import subprocess
@@ -15,11 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import client, dub_exec, llm
+from aai_cli import client, dub_exec, llm, mediafile
 from aai_cli.context import AppState
 from aai_cli.errors import APIError, CLIError
 from aai_cli.tts import session
 from aai_cli.tts.session import SpeakResult
+from tests._clip_helpers import plain
 from tests._dub_helpers import (
     DEFAULTS,
     SAMPLE_RATE,
@@ -27,7 +29,6 @@ from tests._dub_helpers import (
     enable_sandbox,
     fake_transcript,
     patch_api_key,
-    plain,
     record_ffmpeg,
     record_synthesize,
     record_transcribe,
@@ -160,6 +161,26 @@ def test_run_dub_human_summary(
     assert "A=jane, B=michael" in out
 
 
+def test_run_dub_status_messages(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg, monkeypatch
+):
+    messages: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_status(message, *, json_mode, quiet):
+        messages.append(message)
+        yield
+
+    monkeypatch.setattr(dub_exec.output, "status", fake_status)
+    _run(dataclasses.replace(DEFAULTS, media=str(media)), json_mode=False)
+    assert messages == [
+        "Transcribing for dubbing…",
+        f"Translating 2 utterance(s) to German with {llm.DEFAULT_MODEL}…",
+        "Synthesizing 2 segment(s)…",
+        "Writing the dubbed file…",
+    ]
+
+
 def test_bare_voice_dubs_every_speaker(
     media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg
 ):
@@ -249,8 +270,8 @@ def test_ffmpeg_failure_reports_last_stderr_line(
 ):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        dub_exec,
-        "_run_ffmpeg",
+        mediafile,
+        "run_ffmpeg",
         lambda args: subprocess.CompletedProcess(
             args=args, returncode=1, stdout="", stderr="noise\nInvalid data found\n"
         ),
@@ -271,8 +292,8 @@ def test_ffmpeg_silent_failure_reports_exit_code(
 ):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        dub_exec,
-        "_run_ffmpeg",
+        mediafile,
+        "run_ffmpeg",
         lambda args: subprocess.CompletedProcess(args=args, returncode=3, stdout="", stderr=""),
     )
     opts = dataclasses.replace(DEFAULTS, media=str(media))

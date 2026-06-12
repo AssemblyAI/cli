@@ -9,7 +9,7 @@ import subprocess
 
 from typer.testing import CliRunner
 
-from aai_cli import clip_exec, llm
+from aai_cli import clip_exec, llm, mediafile
 from aai_cli.clip_exec import ClipOptions
 from aai_cli.main import app
 
@@ -138,7 +138,7 @@ def test_clip_end_to_end_range_cut_via_cli(tmp_path, monkeypatch):
         calls.append(args)
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(clip_exec, "_run_ffmpeg", fake_run)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", fake_run)
     result = runner.invoke(app, ["clip", str(media), "--range", "1-2", "--json"])
     assert result.exit_code == 0, result.output
     # calls[0] is the silencedetect pass; calls[1] the cut.

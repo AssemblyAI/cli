@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli import clip_exec, clip_select, config
+from aai_cli import client, clip_exec, clip_select, config
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._clip_helpers import DEFAULTS, UTTERANCES, fake_transcript, record_ffmpeg
@@ -87,7 +87,7 @@ def test_run_clip_youtube_transcribes_the_downloaded_file(
         seen["audio"] = audio
         return fake_transcript(list(UTTERANCES))
 
-    monkeypatch.setattr(clip_exec.client, "transcribe", fake_transcribe)
+    monkeypatch.setattr(client, "transcribe", fake_transcribe)
     monkeypatch.setattr(
         clip_exec.llm, "transform_transcript", lambda *a, **k: '[{"start": 1, "end": 2}]'
     )
@@ -134,7 +134,7 @@ def test_run_clip_reads_transcript_json_from_stdin(media, fake_ffmpeg, capsys, m
     # No API key configured and no client call: the piped JSON is the transcript.
     monkeypatch.setattr(clip_exec.stdio, "piped_stdin_text", _piped_payload)
     monkeypatch.setattr(
-        clip_exec.client,
+        client,
         "get_transcript",
         lambda *a: pytest.fail("must not fetch when JSON is piped"),
     )
@@ -154,7 +154,7 @@ def test_run_clip_reads_transcript_id_from_stdin(media, fake_ffmpeg, capsys, mon
         seen["args"] = (api_key, transcript_id)
         return fake_transcript(list(UTTERANCES))
 
-    monkeypatch.setattr(clip_exec.client, "get_transcript", fake_get)
+    monkeypatch.setattr(client, "get_transcript", fake_get)
     opts = dataclasses.replace(DEFAULTS, media=str(media), transcript_id="-", speakers=["B"])
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     assert seen["args"] == ("sk_test", "tr_999")
@@ -182,9 +182,7 @@ def test_run_clip_stdin_transcript_rejects_bad_json(media, fake_ffmpeg, monkeypa
 
 def test_run_clip_llm_selection_drives_the_cut(media, fake_ffmpeg, capsys, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     seen = {}
 
     def fake_transform(api_key, *, prompt, transcript_text, model, max_tokens):
@@ -222,9 +220,7 @@ def test_run_clip_llm_selection_drives_the_cut(media, fake_ffmpeg, capsys, monke
 def test_run_clip_llm_composes_with_speaker_filter(media, fake_ffmpeg, capsys, monkeypatch):
     # --speaker narrows the utterances first; the LLM only sees what survived.
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     seen = {}
 
     def fake_transform(api_key, *, prompt, transcript_text, model, max_tokens):
@@ -243,9 +239,7 @@ def test_run_clip_llm_composes_with_speaker_filter(media, fake_ffmpeg, capsys, m
 def test_run_clip_llm_works_with_transcript_id(media, fake_ffmpeg, capsys, monkeypatch):
     # -t with --llm alone is a valid selection (no --speaker/--search needed).
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "get_transcript", lambda *a: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "get_transcript", lambda *a: fake_transcript(list(UTTERANCES)))
     monkeypatch.setattr(
         clip_exec.llm,
         "transform_transcript",
@@ -259,9 +253,7 @@ def test_run_clip_llm_works_with_transcript_id(media, fake_ffmpeg, capsys, monke
 
 def test_run_clip_llm_parse_error_surfaces(media, fake_ffmpeg, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     monkeypatch.setattr(clip_exec.llm, "transform_transcript", lambda *a, **k: "no json, sorry")
     opts = dataclasses.replace(DEFAULTS, media=str(media), llm_prompt="x")
     with pytest.raises(CLIError) as exc:
@@ -271,9 +263,7 @@ def test_run_clip_llm_parse_error_surfaces(media, fake_ffmpeg, monkeypatch):
 
 def test_run_clip_llm_status_message_names_the_model(media, fake_ffmpeg, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     monkeypatch.setattr(
         clip_exec.llm, "transform_transcript", lambda *a, **k: '[{"start": 1, "end": 2}]'
     )

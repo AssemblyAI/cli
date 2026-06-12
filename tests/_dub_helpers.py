@@ -8,7 +8,6 @@ fakes, and boundary recorders they share live here.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import wave
 from pathlib import Path
@@ -16,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import client, config, dub_exec, llm
+from aai_cli import client, config, llm, mediafile
 from aai_cli.dub_exec import DubOptions
 from aai_cli.tts import session
 from aai_cli.tts.session import SpeakResult
@@ -33,14 +32,6 @@ DEFAULTS = DubOptions(
 )
 
 SAMPLE_RATE = 100  # tiny rate keeps the timeline byte math exact and readable
-
-_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def plain(text: str) -> str:
-    """Strip SGR color codes (CI forces color on, splitting flags like --lang
-    with style sequences) for substring assertions."""
-    return _ANSI_SGR.sub("", text)
 
 
 def utterance(start, speaker, text):
@@ -125,5 +116,5 @@ def record_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
             recorded["wav_frames"] = wav.readframes(wav.getnframes())
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(dub_exec, "_run_ffmpeg", run)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", run)
     return recorded

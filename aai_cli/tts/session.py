@@ -86,6 +86,19 @@ def is_available() -> bool:
     return bool(environments.active().streaming_tts_host)
 
 
+def require_available(command: str) -> None:
+    """Refuse to run a streaming-TTS command (speak, dub) outside the sandbox,
+    pointing at the exact --sandbox re-invocation."""
+    if not is_available():
+        raise CLIError(
+            f"assembly {command} is only available in the sandbox (it uses streaming TTS).",
+            error_type="unsupported_environment",
+            exit_code=2,
+            suggestion=f"Re-run as: assembly --sandbox {command} … "
+            f"(--sandbox goes before the command; or use --env {environments.SANDBOX_ENV}).",
+        )
+
+
 def ws_url(params: dict[str, str]) -> str:
     """The streaming-TTS socket URL for the active environment, with query params."""
     base = f"wss://{environments.active().streaming_tts_host}/v1/ws/"
