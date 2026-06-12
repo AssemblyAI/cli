@@ -25,6 +25,6 @@ def test_cli_import_does_not_load_eval_scoring_stack():
     # A fresh interpreter: the suite's own process has long since imported the
     # scoring stack, so sys.modules can only be probed in a child.
     result = subprocess.run(
-        [sys.executable, "-c", _PROBE], capture_output=True, text=True, timeout=120, check=False
+        [sys.executable, "-c", _PROBE], capture_output=True, text=True, timeout=15, check=False
     )
     assert result.returncode == 0, result.stderr
