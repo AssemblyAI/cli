@@ -144,6 +144,29 @@ def test_capture_times_out_without_callback():
     assert result.token is None
 
 
+def test_first_callback_wins_duplicate_never_overwrites_the_token():
+    # A second callback (browser reload/double-click — or anything else that can
+    # reach the loopback port) is acknowledged but must not replace the token the
+    # genuine first callback delivered.
+    capture = loopback.start_capture()
+    assert _hit("/callback?stytch_token_type=discovery_oauth&token=tok_first") == 200
+    assert _hit("/callback?stytch_token_type=discovery_oauth&token=tok_second") == 200
+    result = capture.wait(timeout=5.0)
+    assert result.token == "tok_first"
+    assert result.token_type == "discovery_oauth"
+    assert result.error is None
+
+
+def test_timeout_claims_the_capture():
+    # On timeout, wait() claims the capture (sets the done event) under the lock, so
+    # a callback losing the race takes the already-claimed branch and can no longer
+    # mutate the result the caller is about to receive.
+    capture = loopback.start_capture()
+    result = capture.wait(timeout=0.05)
+    assert result.error == "timeout"
+    assert capture.done.is_set()
+
+
 def test_capture_server_thread_is_daemon_and_joined_with_timeout(monkeypatch):
     # The serve_forever thread must be a daemon (so it can't block process exit) and the
     # cleanup join must be bounded (5s) so a wedged server can't hang shutdown. The

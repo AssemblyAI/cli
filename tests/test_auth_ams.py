@@ -64,6 +64,21 @@ def test_500_raises_api_error_with_detail(monkeypatch):
     assert "detail" not in str(exc.value)
 
 
+def test_ok_response_with_non_json_body_raises_clean_api_error(monkeypatch):
+    # A 2xx whose body isn't JSON (proxy interference, truncation) must surface as
+    # a clean AMS error, not escape as a raw JSONDecodeError that run_command can
+    # only report as an internal bug.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>proxy intercepted</html>")
+
+    _patch_transport(monkeypatch, handler)
+    with pytest.raises(APIError) as exc:
+        ams.discover("x")
+    assert "not valid JSON" in str(exc.value)
+    assert "HTTP 200" in str(exc.value)
+    assert exc.value.suggestion is not None and "support" in exc.value.suggestion
+
+
 def test_error_with_non_json_body_falls_back_to_text(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="upstream is down")
