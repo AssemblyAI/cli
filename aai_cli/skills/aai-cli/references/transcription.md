@@ -1,8 +1,9 @@
 # Transcription & AI
 
-Four commands. All accept `--json` (auto-enabled when piped) and `-o/--output`
-to print a single field. `transcribe`, `stream`, and `agent` accept
-`--show-code` to print equivalent Python SDK code without calling the API.
+Five commands. All accept `--json` (auto-enabled when piped); `transcribe`,
+`stream`, `agent`, and `llm` accept `-o/--output` to print a single field.
+`transcribe`, `stream`, and `agent` accept `--show-code` to print equivalent
+Python SDK code without calling the API.
 
 ## `assembly transcribe [SOURCE]` — file / URL / YouTube / podcast page
 
@@ -112,4 +113,36 @@ assembly llm "summarize" --transcript-id 5551234-abcd
 echo "meeting notes" | assembly llm "turn into action items"
 assembly stream -o text | assembly llm -f "summarize action items as I talk"
 assembly llm --list-models
+```
+
+## `assembly clip MEDIA` — cut a media file by transcript content
+
+Cuts clips out of an audio/video file with ffmpeg (must be installed). `MEDIA`
+is a local file or a YouTube/media-page URL (audio downloaded via yt-dlp; the
+clips then land in `--out-dir` or the current directory). `--speaker`/`--search`
+select diarized utterances — the file is transcribed with speaker labels on the
+fly, or pass `-t/--transcript-id` (an id, or `-` to read an id or
+`transcribe --json` output from stdin). `--llm "instruction"` sends the
+timestamped utterances to LLM Gateway and the model picks the windows.
+`--range START-END` adds explicit windows (seconds or `[HH:]MM:SS`).
+Overlapping selections merge; each surviving segment is written as
+`<name>.clipNN<ext>`.
+
+High-value flags:
+
+- Selection: `--speaker A` (repeatable), `--search "topic"` (case-insensitive),
+  `--llm "the best moments"` (composes with the filters), `--range 1:30-2:45`
+  (repeatable).
+- LLM: `--model` (default `claude-haiku-4-5-20251001`), `--max-tokens N`.
+- Shaping: `--padding 0.5` (seconds around each clip), `--out-dir clips/`.
+- Output: `--json` (paths + start/end/duration of each clip written).
+
+Examples:
+
+```bash
+assembly clip meeting.mp4 --speaker A
+assembly clip call.mp3 --search "pricing" --padding 0.5
+assembly clip talk.mp4 --range 1:30-2:45 --range 10:00-10:30
+assembly clip "https://youtube.com/watch?v=ID" --llm "the strongest quote"
+assembly transcribe meeting.mp4 --speaker-labels --json | assembly clip meeting.mp4 -t - --llm "the funniest exchange"
 ```

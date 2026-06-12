@@ -11,6 +11,8 @@ source_modules =
     aai_cli.argscan
     aai_cli.auth
     aai_cli.client
+    aai_cli.clip_exec
+    aai_cli.clip_select
     aai_cli.code_gen
     aai_cli.coding_agent
     aai_cli.config
@@ -54,6 +56,7 @@ modules =
     aai_cli.commands.account
     aai_cli.commands.agent
     aai_cli.commands.audit
+    aai_cli.commands.clip
     aai_cli.commands.deploy
     aai_cli.commands.dev
     aai_cli.commands.doctor
@@ -77,6 +80,7 @@ type = forbidden
 source_modules =
     aai_cli.argscan
     aai_cli.client
+    aai_cli.clip_select
     aai_cli.config
     aai_cli.config_builder
     aai_cli.debuglog
