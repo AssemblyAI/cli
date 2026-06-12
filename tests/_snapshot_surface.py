@@ -23,7 +23,9 @@ from tests._cli_tree import leaf_command_argvs
 # ``tests/test_snapshots_help_<group>.py`` module suffixes.
 HELP_GROUPS: dict[str, frozenset[str]] = {
     "build": frozenset({"onboard", "init", "dev", "share", "deploy"}),
-    "run": frozenset({"transcribe", "stream", "agent", "speak", "llm", "clip", "eval", "webhooks"}),
+    "run": frozenset(
+        {"transcribe", "stream", "dictate", "agent", "speak", "llm", "clip", "eval", "webhooks"}
+    ),
     "tools": frozenset({"doctor", "setup", "telemetry", "_update-check"}),
     "history": frozenset({"transcripts", "sessions"}),
     "account": frozenset(
