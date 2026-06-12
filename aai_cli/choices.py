@@ -17,6 +17,7 @@ class TranscriptOutput(enum.StrEnum):
     status = "status"
     utterances = "utterances"
     srt = "srt"
+    vtt = "vtt"
     json = "json"
 
 

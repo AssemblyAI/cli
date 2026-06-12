@@ -102,6 +102,21 @@ def test_transcribe_show_code_output_srt_generates_export(monkeypatch):
     assert "print(transcript.text)" not in result.output
 
 
+def test_transcribe_show_code_output_vtt_with_chars_per_caption(monkeypatch):
+    # The caption-length knob must be reflected in the generated export call.
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.transcribe_exec.client.transcribe", _boom)
+    result = runner.invoke(
+        app,
+        ["transcribe", "--sample", "-o", "vtt", "--chars-per-caption", "42", "--show-code"],
+    )
+    assert result.exit_code == 0
+    compile(result.output, "<generated>", "exec")
+    assert "print(transcript.export_subtitles_vtt(chars_per_caption=42))" in result.output
+
+
 def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not transcribe")

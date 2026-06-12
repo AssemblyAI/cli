@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+from abc import abstractmethod
 from collections.abc import Callable, Generator, Iterable
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -222,24 +223,61 @@ def _render_utterances(transcript: Any) -> str:
     )
 
 
-def _export_srt(transcript: Any) -> str:
+class _SubtitleTranscript(Protocol):
+    """The slice of ``aai.Transcript`` the subtitle renderers touch."""
+
+    @abstractmethod
+    def export_subtitles_srt(self, chars_per_caption: int | None) -> str:
+        """Fetch the transcript's SRT captions."""
+
+    @abstractmethod
+    def export_subtitles_vtt(self, chars_per_caption: int | None) -> str:
+        """Fetch the transcript's VTT captions."""
+
+
+def _export_srt(transcript: _SubtitleTranscript, chars_per_caption: int | None) -> str:
     # The SDK fetches SRT from the `/srt` export endpoint, so this hits the network.
     with _sdk_errors("Could not export SRT subtitles"):
-        return str(transcript.export_subtitles_srt())
+        return str(transcript.export_subtitles_srt(chars_per_caption=chars_per_caption))
 
+
+def _export_vtt(transcript: _SubtitleTranscript, chars_per_caption: int | None) -> str:
+    # The SDK fetches VTT from the `/vtt` export endpoint, so this hits the network.
+    with _sdk_errors("Could not export VTT subtitles"):
+        return str(transcript.export_subtitles_vtt(chars_per_caption=chars_per_caption))
+
+
+# Subtitle fields hit an export endpoint and take the --chars-per-caption knob.
+_SUBTITLE_RENDERERS: dict[str, Callable[[_SubtitleTranscript, int | None], str]] = {
+    "srt": _export_srt,
+    "vtt": _export_vtt,
+}
 
 # Output field -> renderer. Fields absent here fall back to the plain transcript text.
 _FIELD_RENDERERS: dict[str, Callable[[Any], str]] = {
     "id": lambda t: str(getattr(t, "id", "") or ""),
     "status": status_str,
     "utterances": _render_utterances,
-    "srt": _export_srt,
     "json": lambda t: json.dumps(transcript_json_payload(t), default=str),
 }
 
 
-def select_transcript_field(transcript: Any, field: str) -> str:
+def validate_chars_per_caption(chars_per_caption: int | None, field: str | None) -> None:
+    """``--chars-per-caption`` only shapes subtitle exports; any other ``-o`` contradicts it."""
+    if chars_per_caption is not None and field not in _SUBTITLE_RENDERERS:
+        raise UsageError(
+            "--chars-per-caption only applies to subtitle output.",
+            suggestion="Add -o srt or -o vtt.",
+        )
+
+
+def select_transcript_field(
+    transcript: Any, field: str, *, chars_per_caption: int | None = None
+) -> str:
     """Render a single transcript field for ``-o/--output``."""
+    subtitles = _SUBTITLE_RENDERERS.get(field)
+    if subtitles is not None:
+        return subtitles(transcript, chars_per_caption)
     return _FIELD_RENDERERS.get(field, _transcript_text)(transcript)
 
 

@@ -320,8 +320,9 @@ def transcribe(
         None,
         "-o",
         "--output",
-        help="Print one field: text, id, status, utterances, srt (captions), or json.",
+        help="Print one field: text, id, status, utterances, srt or vtt (captions), or json.",
     ),
+    chars_per_caption: int | None = options.chars_per_caption_option(),
     out: Path | None = typer.Option(
         None,
         "--out",
@@ -397,6 +398,7 @@ def transcribe(
         model=model,
         max_tokens=max_tokens,
         output_field=output_field,
+        chars_per_caption=chars_per_caption,
         out=out,
         show_code=show_code,
     )

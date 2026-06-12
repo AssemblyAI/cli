@@ -152,7 +152,12 @@ def test_fuzz_result_handling_always_execs(merged):
 
 @given(
     merged=merged_strategy(config_builder.TRANSCRIBE_COERCE),
-    field=st.sampled_from(["text", "id", "status", "utterances", "srt", "json"]),
+    field=st.sampled_from(["text", "id", "status", "utterances", "srt", "vtt", "json"]),
+    chars_per_caption=st.one_of(st.none(), st.integers(min_value=1, max_value=500)),
 )
-def test_fuzz_transcribe_output_fields_always_compile(merged, field):
-    _compiles(render_transcribe_code(merged, "audio.mp3", output=field))
+def test_fuzz_transcribe_output_fields_always_compile(merged, field, chars_per_caption):
+    _compiles(
+        render_transcribe_code(
+            merged, "audio.mp3", output=field, chars_per_caption=chars_per_caption
+        )
+    )

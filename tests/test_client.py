@@ -254,14 +254,39 @@ def test_select_transcript_field_srt_uses_sdk(mocker):
     assert client.select_transcript_field(t, "srt") == (
         "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
     )
-    t.export_subtitles_srt.assert_called_once_with()
+    t.export_subtitles_srt.assert_called_once_with(chars_per_caption=None)
+
+
+def test_select_transcript_field_vtt_uses_sdk(mocker):
+    t = mocker.MagicMock()
+    t.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello world\n"
+    assert client.select_transcript_field(t, "vtt") == (
+        "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello world\n"
+    )
+    t.export_subtitles_vtt.assert_called_once_with(chars_per_caption=None)
+
+
+@pytest.mark.parametrize("field", ["srt", "vtt"])
+def test_select_transcript_field_subtitles_forward_chars_per_caption(mocker, field):
+    t = mocker.MagicMock()
+    client.select_transcript_field(t, field, chars_per_caption=42)
+    getattr(t, f"export_subtitles_{field}").assert_called_once_with(chars_per_caption=42)
 
 
 def test_select_transcript_field_srt_network_error_becomes_apierror(mocker):
     t = mocker.MagicMock()
     t.export_subtitles_srt.side_effect = RuntimeError("connection reset")
-    with pytest.raises(APIError):
+    with pytest.raises(APIError) as exc:
         client.select_transcript_field(t, "srt")
+    assert "Could not export SRT subtitles" in exc.value.message
+
+
+def test_select_transcript_field_vtt_network_error_becomes_apierror(mocker):
+    t = mocker.MagicMock()
+    t.export_subtitles_vtt.side_effect = RuntimeError("connection reset")
+    with pytest.raises(APIError) as exc:
+        client.select_transcript_field(t, "vtt")
+    assert "Could not export VTT subtitles" in exc.value.message
 
 
 def test_select_transcript_field_srt_auth_error_becomes_not_authenticated(mocker):
@@ -271,6 +296,34 @@ def test_select_transcript_field_srt_auth_error_becomes_not_authenticated(mocker
     t.export_subtitles_srt.side_effect = RuntimeError("HTTP 401 Unauthorized")
     with pytest.raises(NotAuthenticated):
         client.select_transcript_field(t, "srt")
+
+
+def test_select_transcript_field_vtt_auth_error_becomes_not_authenticated(mocker):
+    from aai_cli.errors import NotAuthenticated
+
+    t = mocker.MagicMock()
+    t.export_subtitles_vtt.side_effect = RuntimeError("HTTP 401 Unauthorized")
+    with pytest.raises(NotAuthenticated):
+        client.select_transcript_field(t, "vtt")
+
+
+@pytest.mark.parametrize("field", ["srt", "vtt"])
+def test_validate_chars_per_caption_allows_subtitle_fields(field):
+    client.validate_chars_per_caption(40, field)  # no exception
+
+
+def test_validate_chars_per_caption_allows_unset_value():
+    client.validate_chars_per_caption(None, "text")  # no exception
+
+
+@pytest.mark.parametrize("field", [None, "text", "json"])
+def test_validate_chars_per_caption_rejects_non_subtitle_fields(field):
+    from aai_cli.errors import UsageError
+
+    with pytest.raises(UsageError) as exc:
+        client.validate_chars_per_caption(40, field)
+    assert "--chars-per-caption only applies to subtitle output" in exc.value.message
+    assert "-o srt or -o vtt" in (exc.value.suggestion or "")
 
 
 def test_get_transcript_calls_sdk(mocker):

@@ -7,7 +7,7 @@ from aai_cli.code_gen import serialize, snippets
 
 # ``-o/--output`` choice -> printed-result code, mirroring the run path's
 # ``client._FIELD_RENDERERS`` semantics: plain fields, the speaker-labeled
-# utterances loop, the SRT export endpoint, and the raw ``json_response`` payload.
+# utterances loop, the SRT/VTT export endpoints, and the raw ``json_response`` payload.
 _OUTPUT_SNIPPETS: dict[str, str] = {
     "text": "print(transcript.text)",
     "id": "print(transcript.id)",
@@ -16,8 +16,12 @@ _OUTPUT_SNIPPETS: dict[str, str] = {
         'for utt in transcript.utterances or []:\n    print(f"Speaker {utt.speaker}: {utt.text}")'
     ),
     "srt": "print(transcript.export_subtitles_srt())",
+    "vtt": "print(transcript.export_subtitles_vtt())",
     "json": "print(json.dumps(transcript.json_response, default=str))",
 }
+
+# The subtitle exports take the --chars-per-caption knob as a kwarg.
+_SUBTITLE_FORMATS = ("srt", "vtt")
 
 
 def render(
@@ -26,6 +30,7 @@ def render(
     *,
     llm_gateway: dict[str, object] | None = None,
     output: str | None = None,
+    chars_per_caption: int | None = None,
     download_sections: list[str] | None = None,
 ) -> str:
     """Generate a runnable transcribe script reproducing this CLI invocation.
@@ -37,7 +42,7 @@ def render(
 
     When `output` (a ``-o/--output`` field name) is given, the script prints that one
     field instead — and, as in the real command, it takes precedence over the LLM chain
-    and the analysis sections.
+    and the analysis sections. `chars_per_caption` shapes the srt/vtt export calls.
 
     When `download_sections` (yt-dlp ``--download-sections`` specs) is given for a
     downloadable URL, the generated yt-dlp call fetches only those parts of the source.
@@ -57,7 +62,7 @@ def render(
             has_sections=ranges_expr is not None,
         )
         + _transcribe_block(merged, source, needs_download=needs_download, ranges_expr=ranges_expr)
-        + _result_block(merged, llm_gateway, output)
+        + _result_block(merged, llm_gateway, output, chars_per_caption)
     )
     parts.append("")
     return "\n".join(parts)
@@ -183,10 +188,18 @@ def _transcribe_block(
 
 
 def _result_block(
-    merged: dict[str, object], llm_gateway: dict[str, object] | None, output: str | None
+    merged: dict[str, object],
+    llm_gateway: dict[str, object] | None,
+    output: str | None,
+    chars_per_caption: int | None,
 ) -> list[str]:
     """The printed-result lines: one ``-o`` field, the LLM chain, or the analysis sections."""
     if output is not None:
+        if output in _SUBTITLE_FORMATS and chars_per_caption is not None:
+            return [
+                f"print(transcript.export_subtitles_{output}"
+                f"(chars_per_caption={chars_per_caption}))"
+            ]
         # Unknown names fall back to the plain text, like select_transcript_field does.
         return [_OUTPUT_SNIPPETS.get(output, _OUTPUT_SNIPPETS["text"])]
     if llm_gateway:

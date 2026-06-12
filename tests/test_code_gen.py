@@ -238,6 +238,7 @@ def test_every_snippet_execs_against_a_realistic_transcript() -> None:
         ("status", "print(transcript.status.value)"),
         ("utterances", 'print(f"Speaker {utt.speaker}: {utt.text}")'),
         ("srt", "print(transcript.export_subtitles_srt())"),
+        ("vtt", "print(transcript.export_subtitles_vtt())"),
         ("json", "print(json.dumps(transcript.json_response, default=str))"),
     ],
 )
@@ -259,8 +260,10 @@ def test_output_field_maps_cover_every_transcript_output_choice():
 
     values = {member.value for member in TranscriptOutput}
     assert set(_OUTPUT_SNIPPETS) == values
-    # `text` is the run path's documented fallback; every other choice is explicit.
-    assert set(client._FIELD_RENDERERS) == values - {"text"}
+    # `text` is the run path's documented fallback; every other choice is explicit,
+    # split between the plain renderers and the subtitle exports.
+    assert set(client._FIELD_RENDERERS) | set(client._SUBTITLE_RENDERERS) == values - {"text"}
+    assert set(client._SUBTITLE_RENDERERS) == {"srt", "vtt"}
 
 
 def test_transcribe_render_output_json_imports_json_only_when_needed():
@@ -296,6 +299,14 @@ def test_transcribe_render_unknown_output_falls_back_to_text():
     code = render_transcribe_code({}, "audio.mp3", output="bogus")
     _compiles(code)
     assert "print(transcript.text)" in code
+
+
+@pytest.mark.parametrize("fmt", ["srt", "vtt"])
+def test_transcribe_render_chars_per_caption_shapes_subtitle_export(fmt):
+    # --chars-per-caption must land in the export call, not be silently dropped.
+    code = render_transcribe_code({}, "audio.mp3", output=fmt, chars_per_caption=42)
+    _compiles(code)
+    assert f"print(transcript.export_subtitles_{fmt}(chars_per_caption=42))" in code
 
 
 def test_transcribe_show_code_includes_llm_gateway_transform():
