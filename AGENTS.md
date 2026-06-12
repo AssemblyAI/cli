@@ -95,11 +95,20 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
   with "No such option"; it's `assembly transcribe … --json`. (The root callback still sniffs the
   whole token list via `argscan.requests_json`, so a callback-level failure like a bad
   `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
+- **Tests that touch global logging state must snapshot/restore it** — root handlers/level
+  and per-logger levels are process-global, so a leak only fails on some pytest-randomly
+  seeds (green locally, red in CI). Opt in to the shared `preserve_logging_state` conftest
+  fixture (it also resets the websockets wire loggers a silencer test may have clamped)
+  instead of hand-rolling the snapshot per module.
 
 ### Manual QA / running the CLI in sandboxed sessions
 
 Lessons that cost time in agent sessions — read before exercising `uv run assembly` by hand:
 
+- **Check for in-flight duplicates before starting a fix.** Sessions run concurrently:
+  before implementing a bug fix or small feature, scan open PRs and the last few
+  `origin/main` commits touching the same files (two sessions once shipped the identical
+  fix; the slower PR was closed as redundant). Seconds of checking beats a discarded PR.
 - **Web/remote containers are fully provisioned at session start**
   (`.claude/hooks/session-start.sh`): system deps, `markdownlint`/`prettier`, and the Go
   gate binaries (`actionlint`, `gitleaks`) are installed at CI's pinned versions, so

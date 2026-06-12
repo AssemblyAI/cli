@@ -11,7 +11,6 @@ import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config, debuglog
-from aai_cli import ws as wsutil
 from aai_cli.context import AppState
 from aai_cli.main import app
 
@@ -19,28 +18,12 @@ runner = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def reset_debuglog(monkeypatch):
-    # enable() mutates process-global state (the root logger and the module's
-    # verbosity/secret registries); snapshot and restore so pytest-randomly
-    # ordering can't leak a verbose run into unrelated tests.
-    root = logging.getLogger()
-    previous_handlers = list(root.handlers)
-    previous_level = root.level
-    # Logger levels are process-global too: any earlier test that exercised the
-    # realtime silencers left the websockets loggers clamped at CRITICAL, which
-    # would swallow the wire-level records asserted here. Reset them so these
-    # tests are order-independent under pytest-randomly, then restore.
-    wire_loggers = [logging.getLogger(name) for name in wsutil.WEBSOCKETS_LOGGERS]
-    previous_wire_levels = [logger.level for logger in wire_loggers]
-    for logger in wire_loggers:
-        logger.setLevel(logging.NOTSET)
+def reset_debuglog(preserve_logging_state, monkeypatch):
+    # The shared conftest fixture snapshots the process-global logging state
+    # (root handlers/level, websockets wire-logger levels); enable() also
+    # mutates the module's own verbosity/secret registries, reset here.
     monkeypatch.setattr(debuglog, "_verbosity", 0)
     monkeypatch.setattr(debuglog, "_secrets", set())
-    yield
-    root.handlers[:] = previous_handlers
-    root.setLevel(previous_level)
-    for logger, level in zip(wire_loggers, previous_wire_levels, strict=True):
-        logger.setLevel(level)
 
 
 def test_enable_zero_is_the_everyday_no_op():
