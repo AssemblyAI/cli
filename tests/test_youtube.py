@@ -214,7 +214,7 @@ def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
     assert "no audio file" in exc.value.message
 
 
-def test_download_audio_error_raises_cli_error(tmp_path, monkeypatch):
+def _raising_ydl(message):
     class FakeYDL:
         def __init__(self, opts):
             pass
@@ -226,16 +226,51 @@ def test_download_audio_error_raises_cli_error(tmp_path, monkeypatch):
             return False
 
         def extract_info(self, url, download):
-            raise RuntimeError("network down")
+            raise RuntimeError(message)
 
         def prepare_filename(self, info):
             return ""
 
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    return FakeYDL
+
+
+def test_download_audio_error_raises_cli_error(tmp_path, monkeypatch):
+    _fake_ytdlp(monkeypatch, _raising_ydl("network down"))
     with pytest.raises(CLIError) as exc:
         youtube.download_audio("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
     assert exc.value.exit_code == 1
+    # A message without boilerplate passes through untouched.
+    assert exc.value.message == "Could not download audio from https://youtu.be/x: network down"
+
+
+_YTDLP_BOILERPLATE = (
+    "please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling "
+    "out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U"
+)
+
+
+def test_download_audio_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch):
+    # yt-dlp appends report-a-bug boilerplate to extractor errors; only the
+    # meaningful part should reach the user, without the "ERROR: " prefix.
+    message = f"ERROR: [youtube] abc: Video unavailable; {_YTDLP_BOILERPLATE}"
+    _fake_ytdlp(monkeypatch, _raising_ydl(message))
+    with pytest.raises(CLIError) as exc:
+        youtube.download_audio("https://youtu.be/x", tmp_path)
+    assert exc.value.message == (
+        "Could not download audio from https://youtu.be/x: [youtube] abc: Video unavailable"
+    )
+    assert "report this issue" not in exc.value.message
+    assert "latest version" not in exc.value.message
+
+
+def test_download_audio_all_boilerplate_message_falls_back_to_raw_text(tmp_path, monkeypatch):
+    # When trimming would leave nothing, keep the original message over an empty error.
+    message = _YTDLP_BOILERPLATE[0].upper() + _YTDLP_BOILERPLATE[1:]
+    _fake_ytdlp(monkeypatch, _raising_ydl(message))
+    with pytest.raises(CLIError) as exc:
+        youtube.download_audio("https://youtu.be/x", tmp_path)
+    assert message in exc.value.message
 
 
 def test_download_audio_missing_ytdlp_raises(tmp_path, monkeypatch):

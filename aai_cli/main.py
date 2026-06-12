@@ -10,6 +10,7 @@ from rich.style import StyleType
 from rich.table import Table
 from typer import completion, rich_utils
 from typer._click.exceptions import ClickException, NoSuchOption
+from typer._click.exceptions import UsageError as ClickUsageError
 from typer._click.utils import PacifyFlushWrapper
 from typer.core import TyperGroup
 
@@ -42,7 +43,7 @@ from aai_cli.commands import (
     transcripts,
 )
 from aai_cli.context import AppState, env_override_warning, resolve_environment
-from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.errors import CLIError, NotAuthenticated, UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
 from aai_cli.onboard.sections import WizardContext
@@ -154,14 +155,79 @@ _patch_module(rich_utils, Table=_NoClipTable, Console=theme.PipeSafeConsole)
 
 _format_click_error = rich_utils.rich_format_error
 
+# Flags users habitually pass at the wrong level: `--json` belongs on the subcommand
+# (`assembly transcribe --json`), while these live on the root callback
+# (`assembly --sandbox transcribe`). A bare "No such option" — or worse, a similarity
+# guess like "(Possible options: --version)" — is unlearnable, so the Click error
+# formatter appends the correct placement instead.
+_JSON_FLAGS = ("--json", "-j")
+_ROOT_ONLY_FLAGS = ("--quiet", "-q", "--sandbox", "--env", "--profile", "-p")
+
+
+def _misplaced_flag_hint(err: NoSuchOption) -> str | None:
+    """A placement hint when a known flag landed at the wrong level, else None."""
+    ctx = err.ctx
+    if ctx is None:
+        return None
+    if ctx.parent is None:
+        if err.option_name in _JSON_FLAGS:
+            return "Pass --json after the subcommand: assembly <command> --json"
+        return None
+    if err.option_name in _ROOT_ONLY_FLAGS:
+        command = ctx.command_path.removeprefix("assembly ")
+        return (
+            "This is a global flag; pass it before the subcommand: "
+            f"assembly {err.option_name} {command} …"
+        )
+    return None
+
+
+def _rewrite_version_command_error(err: ClickException) -> None:
+    # There is no `version` subcommand (the reflex is `assembly --version`), and the
+    # closest-match engine would suggest an unrelated command ("Did you mean
+    # 'sessions'?"). Point at the real spelling instead.
+    if err.message.startswith("No such command 'version'"):
+        err.message = "No such command 'version'. Did you mean 'assembly --version'?"
+
+
+def _click_error_requests_json(err: ClickException) -> bool:
+    """Whether the invocation that failed to parse had opted into JSON output.
+
+    A parse error fires before any command's own ``--json`` is read, so sniff the raw
+    token list the root group stashed on the context (see ``_OrderedGroup.parse_args``).
+    A ClickException raised without a context falls back to the process argv.
+    """
+    ctx = err.ctx if isinstance(err, ClickUsageError) else None
+    if ctx is not None and _RAW_ARGS_META_KEY in ctx.meta:
+        raw_args: list[str] = ctx.meta[_RAW_ARGS_META_KEY]
+    else:
+        raw_args = sys.argv[1:]
+    return _command_line_requests_json(raw_args)
+
 
 def _format_click_error_fixed(self: ClickException) -> None:
     # Typer's vendored Click renders flag suggestions as a stringified 1-tuple:
     # "No such option: --jsno ('(Possible options: --json)',)". Fold the suggestion
-    # into the message ourselves so the user sees "(Possible options: --json)".
-    if isinstance(self, NoSuchOption) and self.possibilities:
-        self.message = f"{self.message} (Possible options: {', '.join(sorted(self.possibilities))})"
+    # into the message ourselves so the user sees "(Possible options: --json)" — or,
+    # for a known flag passed at the wrong level, the placement hint instead of a
+    # misleading similarity guess.
+    if isinstance(self, NoSuchOption):
+        hint = _misplaced_flag_hint(self)
+        if hint is not None:
+            self.message = f"{self.message}. {hint}"
+        elif self.possibilities:
+            self.message = (
+                f"{self.message} (Possible options: {', '.join(sorted(self.possibilities))})"
+            )
         self.possibilities = None
+    _rewrite_version_command_error(self)
+    if _click_error_requests_json(self):
+        # An invocation that opted into JSON gets the uniform {"error": …} envelope for
+        # parse errors too, mirroring the root-callback failure path; the exit code (2)
+        # is Click's and unchanged. NoArgsIsHelpError never reaches this branch: its
+        # message is the help screen and a bare invocation carries no JSON flag.
+        output.emit_error(UsageError(self.format_message()), json_mode=True)
+        return
     _format_click_error(self)
 
 
@@ -190,8 +256,8 @@ app = typer.Typer(
 
 def _version_callback(value: bool) -> None:
     """Print the version and exit when `assembly --version`/`-V` is passed, before any command
-    runs. Mirrors the reflex (`tool --version`) every other CLI answers; the `version`
-    subcommand stays for parity."""
+    runs. Mirrors the reflex (`tool --version`) every other CLI answers. There is
+    deliberately no `version` subcommand; the unknown-command error points here instead."""
     if value:
         typer.echo(__version__)
         raise typer.Exit()
@@ -297,16 +363,16 @@ def main(
         is_eager=True,  # pragma: no mutate
     ),
 ) -> None:
-    conflict_warning = _sandbox_conflict_warning(sandbox, env)
-    if sandbox and env is None:
-        env = "sandbox000"
-    state = AppState(profile=profile, env=env, quiet=quiet)
-    ctx.obj = state
     # The command's own --json flag isn't parsed yet, so sniff the pending command line:
     # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
     # invocation opted into JSON, and renders human text on stderr otherwise.
     raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
     json_mode = output.resolve_json(explicit=_command_line_requests_json(raw_args))
+    conflict_warning = _sandbox_conflict_warning(sandbox, env)
+    if sandbox and env is None:
+        env = "sandbox000"
+    state = AppState(profile=profile, env=env, quiet=quiet)
+    ctx.obj = state
     try:
         environments.set_active(resolve_environment(state))
     except CLIError as err:

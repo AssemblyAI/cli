@@ -109,7 +109,9 @@ def stream(
     sample_rate: int | None = typer.Option(
         None,
         "--sample-rate",
-        help="Force a microphone capture rate in Hz (default: device native).",
+        help="Audio rate in Hz (positive): capture rate for the mic, or the declared "
+        "rate of raw PCM on stdin (default: device native / 16000).",
+        min=1,
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
     device: int | None = typer.Option(

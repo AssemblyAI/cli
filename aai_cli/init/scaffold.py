@@ -58,6 +58,25 @@ def target_conflict(target: Path) -> bool:
     return target.is_dir() and any(target.iterdir())
 
 
+def existing_env_key(target: Path) -> str | None:
+    """The real API key already configured in ``target/.env``, or None.
+
+    Re-scaffolding (``assembly init --force``) rewrites ``.env``; when no key resolves
+    for the new write, blindly writing the placeholder would silently wipe a key the
+    user already configured. Returns None for a missing ``.env``, a blank value, or
+    the placeholder itself — only a configured real key is worth preserving.
+    """
+    env_path = target / ".env"
+    if not env_path.is_file():
+        return None
+    for line in env_path.read_text().splitlines():
+        if line.startswith("ASSEMBLYAI_API_KEY="):
+            value = line.removeprefix("ASSEMBLYAI_API_KEY=").strip()
+            if value and value != PLACEHOLDER_KEY:
+                return value
+    return None
+
+
 def _copy_tree(node: Traversable, dest: Path) -> None:
     for child in node.iterdir():
         if child.name in _SKIP_NAMES or child.name.endswith(".pyc"):

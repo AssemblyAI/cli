@@ -8,16 +8,12 @@ import contextlib
 import dataclasses
 import json
 import re
-import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config, eval_data
-from aai_cli.commands import evaluate
-from aai_cli.errors import APIError
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -124,6 +120,7 @@ def test_json_payload_shape(tmp_path, mocker):
     assert "der" not in payload
     assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
     assert payload["rows"][1] == {"item": "b.wav", "words": 2, "errors": 1, "wer": 0.5}
+    assert "failed" not in payload  # only present when a row failed
 
 
 @pytest.mark.parametrize("model", ["universal-3-pro", "universal-2"])
@@ -351,81 +348,14 @@ def test_progress_status_counts_items(tmp_path, mocker, monkeypatch):
     assert seen == ["[1/2] Transcribing a.wav…", "[2/2] Transcribing b.wav…"]
 
 
-def test_concurrency_runs_items_at_once_and_keeps_dataset_order(tmp_path, mocker):
-    # With concurrency 2 and two items, both transcriptions must be in flight at
-    # once (the barrier times out otherwise), and the rows stay in dataset order
-    # no matter which finishes first.
-    _auth()
-    _write_wer_manifest(tmp_path)
-    barrier = threading.Barrier(2, timeout=10)
-    texts = {"a.wav": "hello there", "b.wav": "goodbye cow"}
-
-    def fake_transcribe(api_key, audio, *, config):
-        barrier.wait()
-        return _transcript(texts[Path(audio).name])
-
-    mocker.patch(
-        "aai_cli.commands.evaluate.client.transcribe", autospec=True, side_effect=fake_transcribe
-    )
-    result = runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2", "--json"])
-    assert result.exit_code == 0
-    payload = _payload_of(result)
-    assert [row["item"] for row in payload["rows"]] == ["a.wav", "b.wav"]
-    assert payload["rows"][0]["wer"] == 0.0
-    assert payload["rows"][1]["wer"] == 0.5
-
-
-def test_concurrency_shows_one_pooled_status(tmp_path, mocker, monkeypatch):
-    _auth()
-    _write_wer_manifest(tmp_path)
-    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
-    seen = []
-
-    @contextlib.contextmanager
-    def fake_status(message, *, json_mode, quiet):
-        seen.append(message)
-        yield
-
-    monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
-    assert runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2"]).exit_code == 0
-    assert seen == ["Transcribing 2 items (concurrency 2)…"]
-
-
-def test_concurrent_failure_drops_queued_items_and_fails_cleanly(tmp_path, mocker, monkeypatch):
-    # The abort path must shut the pool down with cancel_futures=True — that's what
-    # keeps one failure from burning an API call per queued item. Asserted on the
-    # shutdown call because which queued futures actually get dropped is a race
-    # (the test_transcribe_batch.py pattern).
-    _auth()
-    _write_wer_manifest(tmp_path)
-    seen = {}
-    real = evaluate.ThreadPoolExecutor
-
-    class Capture(real):
-        def shutdown(self, wait=True, *, cancel_futures=False):
-            seen.setdefault("cancel_futures", cancel_futures)  # first call wins
-            super().shutdown(wait=wait, cancel_futures=cancel_futures)
-
-    monkeypatch.setattr(evaluate, "ThreadPoolExecutor", Capture)
-    _mock_transcribe(mocker, [APIError("rate limited"), APIError("rate limited")])
-    result = runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2"])
-    assert result.exit_code == 1
-    assert "rate limited" in result.output
-    assert seen["cancel_futures"] is True
-
-
-def test_concurrency_below_one_is_a_usage_error(tmp_path):
-    result = runner.invoke(app, ["eval", "org/ds", "--concurrency", "0"])
+def test_collar_without_speaker_labels_is_a_usage_error(mocker):
+    # Mirrors transcribe's --speakers-expected guard: a silently inert flag is a bug.
+    tx = mocker.patch("aai_cli.commands.evaluate.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["eval", "org/ds", "--collar", "0.5"])
     assert result.exit_code == 2
-
-
-def test_api_error_mid_run_fails_cleanly(tmp_path, mocker):
-    _auth()
-    _write_wer_manifest(tmp_path)
-    _mock_transcribe(mocker, [_transcript("hello there"), APIError("rate limited")])
-    result = runner.invoke(app, ["eval", "manifest.csv"])
-    assert result.exit_code == 1
-    assert "rate limited" in result.output
+    assert "--collar only applies" in result.output
+    assert "Add --speaker-labels." in result.output
+    tx.assert_not_called()
 
 
 def test_missing_manifest_is_a_usage_failure(tmp_path):

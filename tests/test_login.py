@@ -9,7 +9,7 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _fake_login_result(key="sk_from_oauth"):
+def _fake_login_result(key="sk_from_oauth", **_kwargs):
     return LoginResult(api_key=key, session_jwt="jwt_x", session_token="tok_x", account_id=7)
 
 
@@ -148,7 +148,7 @@ def test_logout_clears_session():
 def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
     from aai_cli.errors import APIError
 
-    def boom():
+    def boom(**_kwargs):
         raise APIError("Login failed: the server returned an unexpected response.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", boom)
@@ -161,7 +161,7 @@ def test_login_timeout_is_auth_typed_with_exit_4(monkeypatch):
     # The loopback timeout surfaces as not_authenticated/exit 4, not api_error/1.
     from aai_cli.errors import NotAuthenticated
 
-    def timed_out():
+    def timed_out(**_kwargs):
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", timed_out)
@@ -177,7 +177,9 @@ def test_login_empty_api_key_flag_is_usage_error(monkeypatch):
     # into the browser flow.
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("empty --api-key must not start a browser")),
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("empty --api-key must not start a browser")
+        ),
     )
     result = runner.invoke(app, ["login", "--api-key", ""])
     assert result.exit_code == 2
@@ -188,7 +190,9 @@ def test_login_empty_api_key_flag_is_usage_error(monkeypatch):
 def test_login_whitespace_api_key_flag_is_usage_error(monkeypatch):
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("blank --api-key must not start a browser")),
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("blank --api-key must not start a browser")
+        ),
     )
     result = runner.invoke(app, ["login", "--api-key", "   "])
     assert result.exit_code == 2
@@ -206,7 +210,7 @@ def test_login_empty_api_key_flag_json_error_shape():
 def test_login_api_key_flag_still_bypasses_oauth(monkeypatch, mocker):
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("OAuth must not run with --api-key")),
+        lambda **_: (_ for _ in ()).throw(AssertionError("OAuth must not run with --api-key")),
     )
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["login", "--api-key", "sk_flag2"])
@@ -223,7 +227,7 @@ def test_login_binds_env_to_profile(monkeypatch):
 
 
 def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
-    monkeypatch.setattr("aai_cli.context.run_login_flow", lambda: _fake_login_result("sk_x"))
+    monkeypatch.setattr("aai_cli.context.run_login_flow", lambda **_: _fake_login_result("sk_x"))
     result = runner.invoke(app, ["--sandbox", "login"])
     assert result.exit_code == 0
     assert config.get_profile_env("default") == "sandbox000"
@@ -397,7 +401,7 @@ def test_login_failure_never_auto_logs_in_again(monkeypatch):
 
     calls = {"n": 0}
 
-    def timed_out():
+    def timed_out(**_kwargs):
         calls["n"] += 1
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
@@ -416,7 +420,7 @@ def test_logout_never_auto_logs_in(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("logout must never start a login")),
+        lambda **_: (_ for _ in ()).throw(AssertionError("logout must never start a login")),
     )
     monkeypatch.setattr(
         "aai_cli.commands.login.config.clear_api_key",
@@ -424,3 +428,14 @@ def test_logout_never_auto_logs_in(monkeypatch):
     )
     result = runner.invoke(app, ["logout"])
     assert result.exit_code == 4
+
+
+def test_invalid_profile_name_fails_before_any_network(mocker):
+    # `assembly --profile 'bad name!' login --api-key X` used to validate the key over
+    # the network first and only reject the profile at keyring-write time; the root
+    # callback now rejects it at resolution time.
+    validate = mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True)
+    result = runner.invoke(app, ["--profile", "bad name!", "login", "--api-key", "sk_x"])
+    assert result.exit_code == 2
+    assert "Invalid profile name" in result.output
+    validate.assert_not_called()

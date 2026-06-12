@@ -101,6 +101,28 @@ def test_manifest_audio_file_missing_names_resolved_path(tmp_path):
     assert exc.value.suggestion is not None and str(tmp_path) in exc.value.suggestion
 
 
+def test_manifest_with_unsupported_suffix_rejected(tmp_path):
+    # A .parquet (or any non-.csv/.jsonl file) must name the real constraint, not
+    # fail as "line 1 is not valid JSON" from the JSONL fallback parser.
+    manifest = tmp_path / "data.parquet"
+    manifest.write_bytes(b"PAR1\x00not-json")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "Manifests must be .csv or .jsonl" in exc.value.message
+    assert "data.parquet" in exc.value.message
+    assert "not valid JSON" not in exc.value.message
+
+
+def test_manifest_with_no_recognized_audio_column_uses_an_article(tmp_path):
+    # Grammar: "an audio column", not "a audio column".
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("wav,text\na.wav,hello\n", encoding="utf-8")
+    with pytest.raises(UsageError) as exc:
+        eval_data.load(str(manifest), limit=10)
+    assert "Could not find an audio column" in exc.value.message
+    assert exc.value.suggestion is not None and "--audio-column" in exc.value.suggestion
+
+
 def test_manifest_row_without_audio_value_reports_row_number(tmp_path):
     _write_audio(tmp_path, "a.wav")
     manifest = tmp_path / "m.csv"

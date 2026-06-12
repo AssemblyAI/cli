@@ -131,6 +131,33 @@ def test_scaffold_is_idempotent_over_existing_tree(tmp_path):
     assert "ASSEMBLYAI_API_KEY=k2" in (target / ".env").read_text()
 
 
+def test_existing_env_key_none_when_env_missing(tmp_path):
+    assert scaffold.existing_env_key(tmp_path) is None
+
+
+def test_existing_env_key_none_for_placeholder(tmp_path):
+    (tmp_path / ".env").write_text(f"ASSEMBLYAI_API_KEY={scaffold.PLACEHOLDER_KEY}\n")
+    assert scaffold.existing_env_key(tmp_path) is None
+
+
+def test_existing_env_key_none_for_blank_value(tmp_path):
+    (tmp_path / ".env").write_text("ASSEMBLYAI_API_KEY=\n")
+    assert scaffold.existing_env_key(tmp_path) is None
+
+
+def test_existing_env_key_none_when_key_line_absent(tmp_path):
+    (tmp_path / ".env").write_text("ASSEMBLYAI_BASE_URL=https://api.example\n")
+    assert scaffold.existing_env_key(tmp_path) is None
+
+
+def test_existing_env_key_returns_configured_key(tmp_path):
+    # Other lines before/after the key line are skipped; trailing whitespace is trimmed.
+    (tmp_path / ".env").write_text(
+        "OTHER=1\nASSEMBLYAI_API_KEY=sk-configured \nASSEMBLYAI_BASE_URL=https://api.example\n"
+    )
+    assert scaffold.existing_env_key(tmp_path) == "sk-configured"
+
+
 def test_target_conflict_detects_nonempty_dir(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

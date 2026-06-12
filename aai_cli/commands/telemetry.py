@@ -14,7 +14,10 @@ from aai_cli import config, options, output, telemetry
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
-app = typer.Typer(help="Anonymous usage telemetry: status, enable, disable.")
+app = typer.Typer(
+    help="Anonymous usage telemetry: status, enable, disable.",
+    no_args_is_help=True,
+)
 
 
 def _consent_label() -> str:
@@ -39,6 +42,7 @@ def status(
         data: dict[str, object] = {
             "enabled": telemetry.is_enabled(),
             "consent": _consent_label(),
+            "source": telemetry.consent_source(),
             "token_configured": bool(telemetry.client_token()),
         }
 
@@ -49,11 +53,17 @@ def status(
                 else output.muted("Telemetry is disabled.")
             )
             detail = output.muted(
-                f"Consent: {d['consent']}. Intake token configured: "
+                f"Consent: {d['consent']} (source: {d['source']}). Intake token configured: "
                 f"{'yes' if d['token_configured'] else 'no'}."
             )
-            hint = output.hint(
-                "Opt out any time: 'assembly telemetry disable' or AAI_TELEMETRY_DISABLED=1."
+            # The hint points the way the user can actually move: opt out while
+            # enabled, re-enable once disabled — never the direction they're already in.
+            hint = (
+                output.hint(
+                    "Opt out any time: 'assembly telemetry disable' or AAI_TELEMETRY_DISABLED=1."
+                )
+                if d["enabled"]
+                else output.hint("Re-enable with 'assembly telemetry enable'.")
             )
             return output.stack(state_line, detail, hint)
 

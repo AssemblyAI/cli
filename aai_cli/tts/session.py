@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 from aai_cli import environments
 from aai_cli import ws as wsutil
 from aai_cli.errors import APIError, CLIError
+from aai_cli.streaming import diagnostics
 from aai_cli.tts import audio
 
 
@@ -109,7 +110,12 @@ def _default_connect(
 
 
 def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
-    """Open the TTS socket, mapping a connect failure to a clean CLIError."""
+    """Open the TTS socket, mapping a connect failure to a clean CLIError.
+
+    A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
+    (whoami / environment / network); anything else keeps the wsutil mapping.
+    """
+    message = "Could not connect to the TTS service"
     try:
         return connect(
             url,
@@ -117,7 +123,12 @@ def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
             max_size=None,
         )
     except Exception as exc:
-        raise wsutil.auth_or_api_error(exc, "Could not connect to the TTS service") from exc
+        rejected = diagnostics.handshake_error(
+            exc, message, host=environments.active().streaming_tts_host
+        )
+        if rejected is not None:
+            raise rejected from exc
+        raise wsutil.auth_or_api_error(exc, message) from exc
 
 
 def _run_protocol(

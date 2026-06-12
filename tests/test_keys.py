@@ -14,7 +14,7 @@ def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
     )
@@ -207,3 +207,37 @@ def test_keys_create_with_explicit_project_skips_lookup(mocker):
     assert result.exit_code == 0
     list_projects.assert_not_called()
     create.assert_called_once_with(42, 9, "ci", "jwt")
+
+
+def test_keys_create_rejects_empty_name(monkeypatch, mocker):
+    # Local validation fires before session resolution or any AMS call — even when
+    # not logged in (no login flow may start for a request that can never be valid).
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
+    )
+    create = mocker.patch("aai_cli.commands.keys.ams.create_token", autospec=True)
+    result = runner.invoke(app, ["keys", "create", "--name", ""])
+    assert result.exit_code == 2
+    assert "must not be empty" in result.output
+    create.assert_not_called()
+
+
+def test_keys_create_rejects_whitespace_only_name(mocker):
+    _auth()
+    create = mocker.patch("aai_cli.commands.keys.ams.create_token", autospec=True)
+    result = runner.invoke(app, ["keys", "create", "--name", "   ", "--json"])
+    assert result.exit_code == 2
+    assert json.loads(result.output)["error"]["type"] == "usage_error"
+    create.assert_not_called()
+
+
+def test_bare_keys_command_shows_subcommand_help():
+    # `assembly keys` with no subcommand renders the sub-app help (no_args_is_help)
+    # instead of a bare "Missing command." error.
+    result = runner.invoke(app, ["keys"])
+    assert "list" in result.output
+    assert "create" in result.output
+    assert "rename" in result.output
+    assert "Missing command" not in result.output

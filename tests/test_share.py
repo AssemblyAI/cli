@@ -172,6 +172,69 @@ def test_share_no_tunnel_url(tmp_path, monkeypatch):
     assert proxy.terminated is True
 
 
+def _capture_tunnel_log(monkeypatch, server, proxy):
+    """Re-patch runner.spawn to record the cloudflared log path (after _stub)."""
+    seq = iter([server, proxy])
+    logs = []
+
+    def spawn(command, **kwargs):
+        if kwargs.get("log_path") is not None:
+            logs.append(kwargs["log_path"])
+        return next(seq)
+
+    monkeypatch.setattr("aai_cli.init.runner.spawn", spawn)
+    return logs
+
+
+def test_share_tunnel_timeout_keeps_log_and_points_at_it(tmp_path, monkeypatch):
+    # On "didn't report a tunnel URL in time", cloudflared's captured output is the
+    # only evidence — the error must name the log file, and the file must survive.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    server, proxy = _stub(
+        monkeypatch, url=None, server=_FakeProc(poll_rc=None), proxy=_FakeProc(poll_rc=None)
+    )
+    logs = _capture_tunnel_log(monkeypatch, server, proxy)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 1
+    [log] = logs
+    try:
+        assert log.exists()  # the evidence is kept on the failure path
+        packed = "".join(result.output.split())  # the suggestion line may soft-wrap
+        assert str(log) in packed
+        assert "checkitforerrors" in packed
+    finally:
+        log.unlink(missing_ok=True)
+
+
+def test_share_deletes_tunnel_log_on_clean_exit(tmp_path, monkeypatch):
+    # A successful share must not leave aai-tunnel-*.log litter in /tmp.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    server, proxy = _stub(monkeypatch)
+    logs = _capture_tunnel_log(monkeypatch, server, proxy)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 0, result.output
+    [log] = logs
+    assert not log.exists()
+    assert str(log) not in result.output  # nothing points the user at a deleted file
+
+
+def test_share_log_cleanup_tolerates_already_missing_file(tmp_path, monkeypatch):
+    # If the log vanished before cleanup, the unlink must not blow up the command.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub(monkeypatch)
+
+    def await_and_remove(log_path, **kwargs):
+        log_path.unlink()
+        return "https://happy-slug.trycloudflare.com"
+
+    monkeypatch.setattr("aai_cli.init.tunnel.await_url", await_and_remove)
+    result = runner.invoke(app, ["share"])
+    assert result.exit_code == 0, result.output
+
+
 def test_share_keyboard_interrupt_is_clean(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)
@@ -184,6 +247,26 @@ def test_share_keyboard_interrupt_is_clean(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert server.terminated is True
     assert proxy.terminated is True
+
+
+def test_share_busy_port_notice_on_stderr(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda p, **k: p + 1)
+    result = runner.invoke(app, ["share", "--port", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "Port 5000 is in use; using 5001." in result.stderr
+
+
+def test_share_busy_port_notice_suppressed_by_quiet(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda p, **k: p + 1)
+    result = runner.invoke(app, ["--quiet", "share", "--port", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "is in use" not in result.output
 
 
 def test_share_json_emits_url(tmp_path, monkeypatch):

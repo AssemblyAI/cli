@@ -30,8 +30,16 @@ class AppState:
     quiet: bool = False
 
     def resolve_profile(self) -> str:
-        """The profile to act on: explicit --profile, else the active profile."""
-        return self.profile or config.get_active_profile()
+        """The profile to act on: explicit --profile, else the active profile.
+
+        An explicit ``--profile`` is validated here, at resolution time, so a typo'd
+        name is a fast usage error in the root callback — before any network
+        round-trip — instead of only failing at keyring-write time after the work.
+        """
+        if self.profile is not None:
+            config.validate_profile(self.profile)
+            return self.profile
+        return config.get_active_profile()
 
     def resolve_environment(self) -> Environment:
         """The backend environment: --env > AAI_ENV > the profile's stored env > default."""
@@ -51,8 +59,15 @@ class AppState:
         session = config.get_session(profile)
         account_id = config.get_account_id(profile)
         if session is None or account_id is None:
+            # The inherited default suggestion offers ASSEMBLYAI_API_KEY, which can
+            # never satisfy these endpoints — they authenticate with the browser
+            # session, not the API key — so spell out the only fix that works.
             raise NotAuthenticated(
-                "These commands need a browser login. Run 'assembly login' (without --api-key)."
+                "These commands need a browser login. Run 'assembly login' (without --api-key).",
+                suggestion=(
+                    "Run 'assembly login' to sign in via your browser — an API key alone "
+                    "can't access account commands."
+                ),
             )
         return account_id, session["jwt"]
 
@@ -98,9 +113,13 @@ def env_override_warning(state: AppState) -> str | None:
     return state.env_override_warning()
 
 
-def persist_browser_login(profile: str, env: str) -> None:
-    """Run the browser login flow and persist its credentials for `profile`/`env`."""
-    result = run_login_flow()
+def persist_browser_login(profile: str, env: str, *, json_mode: bool = False) -> None:
+    """Run the browser login flow and persist its credentials for `profile`/`env`.
+
+    ``json_mode`` keeps the flow's stderr progress notes machine-readable under
+    ``--json`` (each becomes a ``{"hint": …}`` object instead of prose).
+    """
+    result = run_login_flow(json_mode=json_mode)
     config.persist_login(
         profile,
         api_key=result.api_key,
@@ -111,8 +130,8 @@ def persist_browser_login(profile: str, env: str) -> None:
     )
 
 
-def _persist_browser_login(state: AppState) -> None:
-    persist_browser_login(state.resolve_profile(), environments.active().name)
+def _persist_browser_login(state: AppState, *, json_mode: bool) -> None:
+    persist_browser_login(state.resolve_profile(), environments.active().name, json_mode=json_mode)
 
 
 def _login_persistence_error(exc: object) -> APIError:
@@ -164,7 +183,7 @@ def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
             output.error_console.print(
                 "[aai.muted]Not signed in; starting browser login.[/aai.muted]"
             )
-        _persist_browser_login(state)
+        _persist_browser_login(state, json_mode=json_mode)
     except CLIError as login_err:
         output.emit_error(login_err, json_mode=json_mode)
         raise typer.Exit(code=login_err.exit_code) from None

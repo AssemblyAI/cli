@@ -14,18 +14,26 @@ from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
 
-def _utc_day_start(day: str) -> str:
-    """Render a ``YYYY-MM-DD`` date as a tz-aware UTC ISO-8601 timestamp.
+def _parse_day(day: str) -> date:
+    try:
+        return date.fromisoformat(day)
+    except ValueError as exc:
+        raise UsageError(f"Invalid date {day!r}; expected YYYY-MM-DD.") from exc
+
+
+def _utc_day_start(day: date) -> str:
+    """Render a date as a tz-aware UTC ISO-8601 timestamp.
 
     The AMS billing endpoint compares the bounds against tz-aware datetimes and
     rejects naive ones ("can't compare offset-naive and offset-aware datetimes"),
     so the wire value always carries an explicit ``+00:00`` offset.
     """
-    try:
-        parsed = date.fromisoformat(day)
-    except ValueError as exc:
-        raise UsageError(f"Invalid date {day!r}; expected YYYY-MM-DD.") from exc
-    return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC).isoformat()
+    return datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat()
+
+
+# The AMS usage endpoint's recognized window sizes; anything else is silently
+# misinterpreted server-side, so reject it client-side as a usage error.
+_USAGE_WINDOWS = ("day", "week", "month")
 
 
 def _format_usage_number(value: object) -> str:
@@ -149,7 +157,9 @@ def usage(
         None, "--start", help="Start date (YYYY-MM-DD). Default: 30d ago."
     ),
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD). Default: today."),
-    window: str | None = typer.Option(None, "--window", help="Window size, e.g. 'day' or 'month'."),
+    window: str | None = typer.Option(
+        None, "--window", help="Window size: 'day', 'week', or 'month'."
+    ),
     include_zero: bool = typer.Option(
         False,
         "--include-zero",
@@ -161,11 +171,23 @@ def usage(
     """Show usage over a date range (defaults to the last 30 days)."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        # Parse/validate the date flags before any session resolution or network
-        # work, so a bad --start/--end is a fast usage error even when not logged in.
+        # Parse/validate the flags before any session resolution or network work,
+        # so a bad --start/--end/--window is a fast usage error even when not logged in.
         today = datetime.now(UTC).date()
-        start_date = _utc_day_start(start or (today - timedelta(days=30)).isoformat())
-        end_date = _utc_day_start(end or today.isoformat())
+        start_day = _parse_day(start) if start else today - timedelta(days=30)
+        end_day = _parse_day(end) if end else today
+        if end_day < start_day:
+            raise UsageError(
+                f"--end {end_day.isoformat()} is before --start {start_day.isoformat()}.",
+                suggestion="Pick an end date on or after the start date.",
+            )
+        if window is not None and window not in _USAGE_WINDOWS:
+            raise UsageError(
+                f"Invalid --window {window!r}.",
+                suggestion=f"Use one of: {', '.join(_USAGE_WINDOWS)}.",
+            )
+        start_date = _utc_day_start(start_day)
+        end_date = _utc_day_start(end_day)
         _, jwt = resolve_session(state)
         data = ams.get_usage(jwt, start_date, end_date, window)
 

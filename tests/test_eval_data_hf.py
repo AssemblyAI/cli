@@ -10,7 +10,7 @@ import dataclasses
 import httpx2 as httpx
 import pytest
 
-from aai_cli import der, eval_data
+from aai_cli import der, eval_data, eval_hf_api
 from aai_cli.errors import APIError, UsageError
 
 # ------------------------------------------------------- Hugging Face datasets
@@ -23,7 +23,7 @@ def _patch_transport(monkeypatch, handler):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real_client(*args, **kwargs)
 
-    monkeypatch.setattr(eval_data.httpx, "Client", fake_client)
+    monkeypatch.setattr(eval_hf_api.httpx, "Client", fake_client)
 
 
 def _audio_cell(url="https://hf.example/audio/0.wav"):
@@ -212,6 +212,40 @@ def test_hf_auth_failure_suggests_hf_token(monkeypatch, status):
     with pytest.raises(APIError) as exc:
         eval_data.load("org/gated", limit=1)
     assert str(status) in exc.value.message
+    assert "denied access" in exc.value.message
+    assert "gated" in exc.value.message  # the response body is surfaced, not discarded
+    assert exc.value.suggestion is not None and "HF_TOKEN" in exc.value.suggestion
+
+
+def test_hf_proxy_403_surfaces_detail_without_hf_token_hint(monkeypatch):
+    # A sandbox proxy block ("Host not in allowlist") is not a gated dataset; the
+    # body must be shown and the misleading HF_TOKEN hint withheld.
+    _patch_transport(monkeypatch, lambda request: httpx.Response(403, text="Host not in allowlist"))
+    with pytest.raises(APIError) as exc:
+        eval_data.load("org/ds", limit=1)
+    assert "denied access" in exc.value.message
+    assert "Host not in allowlist" in exc.value.message
+    assert exc.value.suggestion is None
+
+
+def test_hf_401_with_empty_body_keeps_hf_token_hint(monkeypatch):
+    # No body to judge by -> fall back to the gated/private guess (and no ": " tail).
+    _patch_transport(monkeypatch, lambda request: httpx.Response(401))
+    with pytest.raises(APIError) as exc:
+        eval_data.load("org/ds", limit=1)
+    assert exc.value.message.endswith("(HTTP 401)")
+    assert exc.value.suggestion is not None and "HF_TOKEN" in exc.value.suggestion
+
+
+@pytest.mark.parametrize(
+    "detail",
+    ["This dataset is gated", "private dataset", "Authentication required", "Invalid token"],
+)
+def test_hf_auth_sounding_details_keep_hf_token_hint(monkeypatch, detail):
+    _patch_transport(monkeypatch, lambda request: httpx.Response(403, json={"error": detail}))
+    with pytest.raises(APIError) as exc:
+        eval_data.load("org/ds", limit=1)
+    assert detail in exc.value.message
     assert exc.value.suggestion is not None and "HF_TOKEN" in exc.value.suggestion
 
 

@@ -31,6 +31,49 @@ def test_onboard_propagates_exit_code_one(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("aai_cli.commands.onboard.wizard.run_onboarding", lambda p, c: 1)
     result = CliRunner().invoke(app, ["onboard"])
     assert result.exit_code == 1
+    # Human mode exits plainly — no error envelope text.
+    assert "did not complete" not in result.output
+
+
+def test_onboard_json_failure_emits_error_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    monkeypatch.setattr("aai_cli.commands.onboard.wizard.run_onboarding", lambda p, c: 4)
+    result = CliRunner().invoke(app, ["onboard", "--json"])
+    assert result.exit_code == 4  # the wizard's own code, not a generic 1
+    err = json.loads(result.stderr.strip().splitlines()[-1])
+    assert err["error"]["type"] == "onboarding_incomplete"
+    assert "did not complete" in err["error"]["message"]
+
+
+def test_onboard_json_success_has_no_error_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("aai_cli.commands.onboard.wizard.run_onboarding", lambda p, c: 0)
+    result = CliRunner().invoke(app, ["onboard", "--json"])
+    assert result.exit_code == 0, result.output
+    assert "onboarding_incomplete" not in result.output
+
+
+def test_onboard_json_emits_machine_readable_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    # End to end: `assembly onboard --json` puts exactly one JSON document on stdout
+    # (the section summary) — previously it produced zero machine-readable output.
+    import json
+
+    class _FakeTranscript:
+        id = "t_1"
+        status = "completed"
+        text = "hello"
+        utterances = None
+
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    monkeypatch.setattr(
+        "aai_cli.transcribe_exec.run_transcription", lambda *a, **k: _FakeTranscript()
+    )
+    result = CliRunner().invoke(app, ["onboard", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)  # parses only if stdout is a single JSON doc
+    assert payload["ok"] is True
+    assert payload["sections"]["sign-in"] == "skipped"  # key already present
+    assert payload["failed"] == []
 
 
 def test_onboard_does_not_auto_login_on_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,6 +163,16 @@ def test_onboard_stays_interactive_without_flag_or_agent(
     result = CliRunner().invoke(app, ["onboard"])
     assert result.exit_code == 0, result.output
     assert captured["forced"] is False
+
+
+def test_onboard_json_forces_noninteractive(monkeypatch: pytest.MonkeyPatch) -> None:
+    # --json forces non-interactive even with no agent detected: a machine-output run
+    # can't block on prompts (and the interactive prompter writes prose to stdout).
+    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: False)
+    captured = _spy_forced(monkeypatch)
+    result = CliRunner().invoke(app, ["onboard", "--json"])
+    assert result.exit_code == 0, result.output
+    assert captured["forced"] is True
 
 
 def test_onboard_sorts_first_in_quick_start() -> None:

@@ -405,3 +405,48 @@ def test_keyring_write_failure_suggestion_covers_headless_linux(monkeypatch):
     assert "set ASSEMBLYAI_API_KEY instead" in exc.value.suggestion
     # The macOS path stays for keychain users.
     assert "security delete-generic-password -s assemblyai-cli" in exc.value.suggestion
+
+
+def test_resolve_treats_whitespace_only_env_key_as_missing(monkeypatch):
+    # `export ASSEMBLYAI_API_KEY='   '` must read as "no key" (the clean exit-4
+    # not-signed-in path), never reach httpx as an illegal header value.
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "   ")
+    with pytest.raises(NotAuthenticated):
+        config.resolve_api_key()
+
+
+def test_resolve_strips_padding_from_env_key(monkeypatch):
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "  sk_padded \n")
+    assert config.resolve_api_key() == "sk_padded"
+
+
+def test_resolve_treats_whitespace_only_keyring_key_as_missing():
+    config.set_api_key("default", "   ")
+    with pytest.raises(NotAuthenticated):
+        config.resolve_api_key()
+
+
+def test_resolve_strips_padding_from_keyring_key():
+    config.set_api_key("default", " sk_stored\n")
+    assert config.resolve_api_key() == "sk_stored"
+
+
+def test_resolve_rejects_whitespace_only_flag():
+    with pytest.raises(CLIError) as exc:
+        config.resolve_api_key(api_key_flag="   ")
+    assert exc.value.error_type == "invalid_key"
+    assert exc.value.exit_code == 2
+
+
+def test_resolve_strips_padding_from_flag():
+    assert config.resolve_api_key(api_key_flag=" sk_flag ") == "sk_flag"
+
+
+def test_validate_profile_public_wrapper():
+    # Public so resolution-time callers (context.AppState) can fail fast on a typo'd
+    # --profile before any network work.
+    config.validate_profile("ok-name_1")  # valid: no exception
+    with pytest.raises(CLIError) as exc:
+        config.validate_profile("bad name!")
+    assert exc.value.exit_code == 2
+    assert exc.value.message.startswith("Invalid profile name")

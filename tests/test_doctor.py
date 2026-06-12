@@ -73,9 +73,11 @@ def test_doctor_rejected_key_fails(healthy, monkeypatch):
     assert result.exit_code == 1
     api = _checks(result)["api-key"]
     assert api["status"] == "fail"
-    # 401 and 403 both mean "rejected" (proxies often answer 403), so the
-    # message must not claim a specific 401.
-    assert "rejected (HTTP 401/403)" in api["detail"]
+    # validate_key collapses every auth-shaped failure (401, 403, proxy "forbidden")
+    # to False, so the detail must not claim a status code that was never observed.
+    assert api["detail"] == "API key was rejected by the server."
+    assert "401" not in api["detail"]
+    assert "assembly login" in api["fix"]
 
 
 def test_doctor_network_error_is_a_failure(healthy, monkeypatch):

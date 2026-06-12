@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import help_panels, output
+from aai_cli import help_panels, options, output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
@@ -105,7 +105,7 @@ def _confirmed(target: Target, *, assume_yes: bool) -> bool:
     return typer.confirm(f"Deploy this project to {target.name}?")
 
 
-def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
+def run_deploy(*, target: Target, prod: bool, assume_yes: bool, json_mode: bool) -> None:
     """Confirm, then run the target's deploy command in the current directory."""
     if prod and not target.supports_prod:
         raise UsageError(
@@ -117,7 +117,8 @@ def run_deploy(*, target: Target, prod: bool, assume_yes: bool) -> None:
     procfile.require_procfile(Path.cwd())
     _require_cli(target)
     if not _confirmed(target, assume_yes=assume_yes):
-        output.console.print("Aborted.")
+        aborted = {"status": "aborted", "target": target.name}
+        output.emit(aborted, lambda _d: "Aborted.", json_mode=json_mode)
         return
     result = subprocess.run(target.command(prod=prod), cwd=Path.cwd(), check=False)
     if result.returncode:
@@ -144,6 +145,7 @@ def deploy(
     railway: bool = typer.Option(False, "--railway", help="Deploy to Railway."),
     fly: bool = typer.Option(False, "--fly", help="Deploy to Fly.io."),
     assume_yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    json_out: bool = options.json_option(),
 ) -> None:
     """Deploy the current project to Vercel (default), Railway, or Fly.io.
 
@@ -152,8 +154,10 @@ def deploy(
     (Render deploys from a connected Git repo — see the project README.)
     """
 
-    def body(_state: AppState, _json_mode: bool) -> None:
+    def body(_state: AppState, json_mode: bool) -> None:
         selected = [t for t, on in ((VERCEL, vercel), (RAILWAY, railway), (FLY, fly)) if on]
-        run_deploy(target=_resolve_target(selected), prod=prod, assume_yes=assume_yes)
+        run_deploy(
+            target=_resolve_target(selected), prod=prod, assume_yes=assume_yes, json_mode=json_mode
+        )
 
-    run_command(ctx, body)
+    run_command(ctx, body, json=json_out)

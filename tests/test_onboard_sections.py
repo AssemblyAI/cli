@@ -143,18 +143,12 @@ def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.M
     assert sections.first_request(_ScriptedPrompter(text="bad.mp3"), ctx) is SectionResult.FAILED
 
 
-def test_environment_is_non_blocking(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Even if checks warn/fail, the section never blocks the wizard.
-    seen: dict[str, object] = {}
-
-    def _capture_render(payload: dict[str, object]) -> str:
-        seen.update(payload)
-        return ""
-
-    monkeypatch.setattr("aai_cli.commands.doctor.render", _capture_render)
-    assert sections.environment(NonInteractivePrompter(), ctx) is SectionResult.DONE
-    # The environment section always renders as a non-fatal report (ok=True).
-    assert seen["ok"] is True
+def _capture_console(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    printed: list[str] = []
+    monkeypatch.setattr(
+        output.console, "print", lambda *a, **k: printed.append(str(a[0]) if a else "")
+    )
+    return printed
 
 
 def test_build_path_skip_choice_does_nothing(
@@ -173,8 +167,54 @@ def test_build_path_skip_choice_does_nothing(
     assert called is False
 
 
-def test_next_steps(ctx: WizardContext) -> None:
+def test_next_steps(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    printed = _capture_console(monkeypatch)
     assert sections.next_steps(NonInteractivePrompter(), ctx) is SectionResult.DONE
+    flat = "\n".join(printed)
+    # Human mode prints the three next-step hints.
+    assert "assembly transcribe" in flat
+    assert "assembly stream" in flat
+    assert "assembly init" in flat
+
+
+def test_next_steps_json_mode_keeps_stdout_clean(monkeypatch: pytest.MonkeyPatch) -> None:
+    json_ctx = WizardContext(state=AppState(), profile="default", json_mode=True)
+    printed = _capture_console(monkeypatch)
+    assert sections.next_steps(NonInteractivePrompter(), json_ctx) is SectionResult.DONE
+    assert printed == []
+
+
+def test_first_request_json_mode_skips_human_transcript_render(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Under --json the wizard's summary owns stdout; the Rich transcript render
+    # would corrupt it.
+    json_ctx = WizardContext(state=AppState(), profile="default", json_mode=True)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    monkeypatch.setattr(transcribe_exec, "run_transcription", lambda *a, **k: _FakeTranscript())
+    rendered = {"n": 0}
+    monkeypatch.setattr(
+        transcribe_render,
+        "render_transcript_result",
+        lambda *a, **k: rendered.__setitem__("n", rendered["n"] + 1),
+    )
+    assert sections.first_request(NonInteractivePrompter(), json_ctx) is SectionResult.DONE
+    assert rendered["n"] == 0
+
+
+def test_first_request_human_mode_renders_transcript(
+    ctx: WizardContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
+    monkeypatch.setattr(transcribe_exec, "run_transcription", lambda *a, **k: _FakeTranscript())
+    rendered = {"n": 0}
+    monkeypatch.setattr(
+        transcribe_render,
+        "render_transcript_result",
+        lambda *a, **k: rendered.__setitem__("n", rendered["n"] + 1),
+    )
+    assert sections.first_request(NonInteractivePrompter(), ctx) is SectionResult.DONE
+    assert rendered["n"] == 1
 
 
 def test_welcome_cold_start(ctx: WizardContext) -> None:

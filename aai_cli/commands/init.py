@@ -9,9 +9,11 @@ from rich.markup import escape
 
 from aai_cli import __version__, environments, help_panels, options, output, steps
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import CLIError
+from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import keys, runner, scaffold, templates
+
+_DEFAULT_PORT = 3000
 
 # Single-command sub-typer flattened to `assembly init` (the exact pattern `assembly transcribe`
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
@@ -118,8 +120,11 @@ def _install_step(
     ], will_launch
 
 
-def _resolve_target(directory: str | None, chosen: str, *, here: bool, force: bool) -> Path:
-    """Resolve the target directory and reject --here+DIRECTORY or a non-empty conflict."""
+def _resolve_target(
+    directory: str | None, chosen: str, *, here: bool, force: bool
+) -> tuple[Path, bool]:
+    """Resolve the target directory, rejecting --here+DIRECTORY, an existing file, or
+    a non-empty conflict. Returns the target and whether --force is overlaying it."""
     if here and directory:
         raise CLIError(
             "Pass either a DIRECTORY or --here, not both.",
@@ -127,29 +132,51 @@ def _resolve_target(directory: str | None, chosen: str, *, here: bool, force: bo
             exit_code=1,
         )
     target = _resolve_dir(directory, chosen, here=here)
-    if scaffold.target_conflict(target) and not force:
+    if target.exists() and not target.is_dir():
+        raise UsageError(f"{target} exists and is not a directory.")
+    conflict = scaffold.target_conflict(target)
+    if conflict and not force:
         raise CLIError(
             f"{target} already exists and is not empty. "
             f"Use --force to overwrite or pick another directory.",
             error_type="usage_error",
             exit_code=1,
         )
-    return target
+    return target, conflict
 
 
-def _scaffold_report(chosen: str, target: Path, api_key: str | None) -> list[steps.Step]:
+def _key_row(api_key: str | None, key_source: str | None, preserved: str | None) -> steps.Step:
+    """The report's `key` row — emitted symmetrically whether a key resolved or not."""
+    if api_key is not None:
+        return {"name": "key", "status": "written", "detail": f"from {key_source}"}
+    if preserved is not None:
+        return {"name": "key", "status": "kept", "detail": "existing .env key preserved"}
+    return {
+        "name": "key",
+        "status": "skipped",
+        "detail": "no API key found; wrote a placeholder to .env (run `assembly login`)",
+    }
+
+
+def _scaffold_report(
+    chosen: str,
+    target: Path,
+    *,
+    api_key: str | None,
+    key_source: str | None,
+    preserved: str | None,
+) -> list[steps.Step]:
     """Write the template to `target` and return the opening report rows."""
-    scaffold.scaffold(chosen, target, api_key=api_key, env_vars=_active_env_vars())
-    report: list[steps.Step] = [{"name": "scaffold", "status": "created", "detail": str(target)}]
-    if api_key is None:
-        report.append(
-            {
-                "name": "key",
-                "status": "skipped",
-                "detail": "no API key found; wrote a placeholder to .env (run `assembly login`)",
-            }
-        )
-    return report
+    scaffold.scaffold(chosen, target, api_key=api_key or preserved, env_vars=_active_env_vars())
+    return [
+        {"name": "scaffold", "status": "created", "detail": str(target)},
+        _key_row(api_key, key_source, preserved),
+    ]
+
+
+def _dev_hint(port: int) -> str:
+    """The `assembly dev` invocation matching the chosen port (the default needs no flag)."""
+    return "assembly dev" if port == _DEFAULT_PORT else f"assembly dev --port {port}"
 
 
 def launch_app(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: bool) -> None:
@@ -168,6 +195,37 @@ def launch_app(target: Path, *, port: int, use_uv: bool, no_open: bool, json_mod
     code = runner.launch_and_open(target, port=chosen_port, use_uv=use_uv, open_browser=not no_open)
     if code:
         raise typer.Exit(code=code)
+
+
+def _build_report(
+    state: AppState, chosen: str, target: Path, *, no_install: bool, use_uv: bool, port: int
+) -> tuple[list[steps.Step], bool]:
+    """Scaffold and assemble the report rows; returns them plus whether to launch."""
+    api_key, key_source = keys.resolve_optional_api_key(profile=state.profile)
+    # A configured (non-placeholder) .env key must survive a re-scaffold when no key
+    # resolves — otherwise --force would silently reset it to the placeholder.
+    preserved = scaffold.existing_env_key(target) if api_key is None else None
+    effective_key = api_key or preserved
+    report = _scaffold_report(
+        chosen, target, api_key=api_key, key_source=key_source, preserved=preserved
+    )
+
+    install_rows, will_launch = _install_step(
+        target, no_install=no_install, api_key=effective_key, use_uv=use_uv
+    )
+    report.extend(install_rows)
+
+    # Deps are installed but there's no key, so the server can't start — say so
+    # rather than exiting silently.
+    if not no_install and effective_key is None:
+        report.append(
+            {
+                "name": "launch",
+                "status": "skipped",
+                "detail": f"no API key; run `assembly login`, then: cd {target} && {_dev_hint(port)}",
+            }
+        )
+    return report, will_launch
 
 
 def run_init(
@@ -189,34 +247,27 @@ def run_init(
     running dev server mid-flow — it stops after install and leaves the run command as
     a hint (the wizard calls `launch_app` itself once its remaining sections are done).
     """
+    chosen = _resolve_template(template)
+    target, overwriting = _resolve_target(directory, chosen, here=here, force=force)
     if not json_mode:
-        # Vercel-style banner at the top of the run. Decoration goes to stderr (data →
-        # stdout): it must never pollute a piped stdout, even on an error path.
+        # Vercel-style banner, printed only once validation passes so pure error runs
+        # (unknown template, conflicting target) stay undecorated like the sibling
+        # commands. Decoration goes to stderr (data → stdout): it must never pollute
+        # a piped stdout.
         output.error_console.print(
             f"[aai.heading]AssemblyAI CLI[/aai.heading] [aai.muted]{__version__}[/aai.muted]"
         )
-    chosen = _resolve_template(template)
-    target = _resolve_target(directory, chosen, here=here, force=force)
-
-    api_key = keys.resolve_optional_api_key(profile=state.profile)
-    report = _scaffold_report(chosen, target, api_key)
+    if overwriting:
+        output.emit_warning(
+            f"--force: overwriting existing files in {target} "
+            "(the template is overlaid; files not in the template are kept).",
+            json_mode=json_mode,
+        )
 
     use_uv = runner.has_uv()
-    install_rows, will_launch = _install_step(
-        target, no_install=no_install, api_key=api_key, use_uv=use_uv
+    report, will_launch = _build_report(
+        state, chosen, target, no_install=no_install, use_uv=use_uv, port=port
     )
-    report.extend(install_rows)
-
-    # Deps are installed but there's no key, so the server can't start — say so
-    # rather than exiting silently.
-    if not no_install and api_key is None:
-        report.append(
-            {
-                "name": "launch",
-                "status": "skipped",
-                "detail": f"no API key; run `assembly login`, then: cd {target} && assembly dev",
-            }
-        )
 
     output.emit(report, lambda d: steps.render_steps(d, heading="Setup"), json_mode=json_mode)
     if any(s["status"] == "failed" for s in report):
@@ -227,7 +278,7 @@ def run_init(
     elif not json_mode:
         # Scaffolded but not launched (no key, or --no-install, or launch=False): leave the
         # user with the one command that starts their app, the way `vercel`/`supabase` sign off.
-        output.console.print(output.hint(f"Run `cd {escape(str(target))} && assembly dev`."))
+        output.console.print(output.hint(f"Run `cd {escape(str(target))} && {_dev_hint(port)}`."))
     return target
 
 
@@ -267,9 +318,16 @@ def init(
     no_open: bool = typer.Option(
         False, "--no-open", help="Install + launch, but don't open the browser."
     ),
-    force: bool = typer.Option(False, "--force", help="Overwrite a non-empty target directory."),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Overwrite a non-empty target directory (overlays the template; "
+            "files not in the template are kept)."
+        ),
+    ),
     here: bool = typer.Option(False, "--here", help="Scaffold into the current directory."),
-    port: int = typer.Option(3000, "--port", help="Local server port."),
+    port: int = typer.Option(_DEFAULT_PORT, "--port", help="Local server port."),
     json_out: bool = options.json_option(),
 ) -> None:
     """Scaffold a new project from a template, then launch it.

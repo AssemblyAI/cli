@@ -55,6 +55,22 @@ def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
     assert "may be rejected" in json.loads(warning_line)["warning"]
 
 
+def test_sandbox_alone_targets_sandbox():
+    from aai_cli import environments
+
+    result = runner.invoke(app, ["--sandbox"])
+    assert result.exit_code == 0
+    assert environments.active().name == "sandbox000"
+
+
+def test_sandbox_with_agreeing_env_is_fine():
+    from aai_cli import environments
+
+    result = runner.invoke(app, ["--sandbox", "--env", "sandbox000"])
+    assert result.exit_code == 0
+    assert environments.active().name == "sandbox000"
+
+
 def test_sandbox_flag_conflicting_env_warns():
     # Credentials are environment-bound, so `--sandbox --env production` must not pick
     # one silently: --env wins, with a warning. Agreeing flags and --quiet stay silent.

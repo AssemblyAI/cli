@@ -17,6 +17,7 @@ from assemblyai.streaming.v3 import (
 
 from aai_cli import environments, jsonshape, stdio
 from aai_cli.errors import APIError, CLIError, UsageError, auth_failure, is_auth_failure
+from aai_cli.streaming.diagnostics import handshake_error, silence_streaming_logging
 
 SAMPLE_AUDIO_URL = "https://assembly.ai/wildfires.mp3"
 _StreamHandler = Callable[[Any, Any], object]
@@ -104,7 +105,14 @@ def _sdk_errors(message: str) -> Generator[None]:
     except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
-        raise APIError(f"{message}: {exc}") from exc
+        # Compact the reason (httpx-backed SDK errors embed a multi-line
+        # `Request: <…>` repr) and drop the SDK's own "failed to …" preamble when
+        # `message` already says the same thing, so the error reads once, cleanly.
+        reason = _SDK_PREAMBLE_RE.sub("", _compact_reason(exc))
+        raise APIError(
+            f"{message}: {reason}",
+            suggestion="Check your network and try again.",
+        ) from exc
 
 
 def _list_transcript_params(limit: int) -> aai.ListTranscriptParameters:
@@ -123,6 +131,13 @@ def _list_transcript_params(limit: int) -> aai.ListTranscriptParameters:
 
 # httpx-backed SDK errors embed a multi-line repr ("…\nReason: …\nRequest: <Request(…)>").
 _REQUEST_REPR_RE = re.compile(r"Request: <[^>]*>")
+
+# The SDK prefixes transcript-history errors with its own "failed to retrieve
+# transcript(s) …:" preamble, doubling up with the wrapper's message ("Could not
+# list transcripts: failed to retrieve transcripts: …"). Strip just that known
+# preamble; transcript ids are url-safe tokens, so the optional id segment can
+# never swallow a colon-bearing reason (e.g. a URL).
+_SDK_PREAMBLE_RE = re.compile(r"^failed to retrieve transcripts?(?: [A-Za-z0-9_-]+)?: ")
 
 
 def _compact_reason(exc: object) -> str:
@@ -246,6 +261,20 @@ def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
         return aai.Transcript.get_by_id(transcript_id)
 
 
+def _streaming_run_error(error: object) -> CLIError:
+    """Classify a recorded streaming Error event into the CLIError to raise.
+
+    A rejected handshake (HTTP 401/403) gets an actionable suggestion: bare
+    "Streaming error: WebSocket handshake rejected (HTTP 403)" left users cold.
+    """
+    rejected = handshake_error(error, "Streaming error", host=environments.active().streaming_host)
+    if rejected is not None:
+        return rejected
+    if is_auth_failure(error):
+        return auth_failure()
+    return APIError(f"Streaming error: {error}")
+
+
 def stream_audio(
     api_key: str,
     source: Iterable[bytes],
@@ -260,6 +289,9 @@ def stream_audio(
     Forwards Begin/Turn/Termination events to the callbacks; raises APIError on a stream error.
     `params` is a fully-built StreamingParameters (sample_rate/speech_model/etc).
     """
+    # The SDK's reader thread and websockets both log connection failures at ERROR;
+    # with no logging configured those lines would duplicate the CLIError on stderr.
+    silence_streaming_logging()
     sc = _make_streaming_client(api_key)
 
     def _guard(cb: Callable[[Any], Any]) -> _StreamHandler:
@@ -299,6 +331,4 @@ def stream_audio(
         sc.disconnect(terminate=True)
 
     if errors:
-        if is_auth_failure(errors[0]):
-            raise auth_failure()
-        raise APIError(f"Streaming error: {errors[0]}")
+        raise _streaming_run_error(errors[0])

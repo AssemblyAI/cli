@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import typer
 from rich.markup import escape
 
-from aai_cli import choices, config, help_panels, options, output, stdio
+from aai_cli import choices, client, config, help_panels, options, output, stdio
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -46,6 +48,44 @@ def _emit_model_list(_state: AppState, json_mode: bool) -> None:
     """--list-models body, routed through run_command so --json yields a
     machine-readable array instead of the human list; needs no auth."""
     output.emit(list(gateway.KNOWN_MODELS), "\n".join, json_mode=json_mode)
+
+
+def _list_models_body(
+    output_field: choices.TextOrJson | None,
+) -> Callable[[AppState, bool], None]:
+    """The --list-models command body: rejects -o (it only applies to one-shot
+    mode, mirroring how --follow rejects it) before printing the known models."""
+
+    def body(state: AppState, json_mode: bool) -> None:
+        if output_field is not None:
+            raise UsageError(
+                "--output applies to one-shot mode; --list-models prints the plain "
+                "list (use --json for a machine-readable array)."
+            )
+        _emit_model_list(state, json_mode)
+
+    return body
+
+
+def _stdin_transcript_text(
+    state: AppState, json_mode: bool, transcript_id: str | None
+) -> str | None:
+    """Resolve the inline transcript text for one-shot mode.
+
+    Text piped on stdin becomes the content the prompt operates on, unless an
+    explicit --transcript-id is given — that injects server-side and takes
+    priority, so piped text is ignored with a visible warning (suppressed by
+    --quiet, structured under --json).
+    """
+    if transcript_id is None:
+        return stdio.piped_stdin_text()
+    # Same cheap local id check as `transcripts get`, before auth or network.
+    client.validate_transcript_id(transcript_id)
+    if stdio.stdin_is_piped() and not state.quiet:
+        output.emit_warning(
+            "Ignoring piped stdin; --transcript-id takes priority.", json_mode=json_mode
+        )
+    return None
 
 
 @app.command(
@@ -94,7 +134,7 @@ def llm(
         help="Print one field of the result: text (just the answer, pipe-friendly) or json.",
     ),
     max_tokens: int = typer.Option(
-        gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate."
+        gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate.", min=1
     ),
     list_models: bool = typer.Option(False, "--list-models", help="Print known models and exit."),
     json_out: bool = options.json_option("Output raw JSON (one object per turn in --follow mode)."),
@@ -106,7 +146,7 @@ def llm(
     """
 
     if list_models:
-        run_command(ctx, _emit_model_list, json=json_out)
+        run_command(ctx, _list_models_body(output_field), json=json_out)
         return
 
     def follow_body(state: AppState, json_mode: bool) -> None:
@@ -144,10 +184,8 @@ def llm(
                 suggestion="Or pass --list-models to see available models.",
             )
         prompt_text = prompt
+        stdin_text = _stdin_transcript_text(state, json_mode, transcript_id)
         api_key = config.resolve_api_key(profile=state.profile)
-        # Text piped on stdin becomes the content the prompt operates on, unless an
-        # explicit --transcript-id is given (that injects server-side and takes priority).
-        stdin_text = stdio.piped_stdin_text() if not transcript_id else None
         messages = gateway.build_messages(
             prompt_text, system=system, transcript_id=transcript_id, transcript_text=stdin_text
         )

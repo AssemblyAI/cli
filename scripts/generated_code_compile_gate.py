@@ -4,12 +4,18 @@ import json
 import sys
 from pathlib import Path
 
-from typer.testing import CliRunner
+import typer.main
+from click.testing import CliRunner
 
 from aai_cli.main import app
 
 _ARG_COUNT = 2
 _USAGE_EXIT = 2
+
+# Compile exactly what `assembly … --show-code > script.py` would capture: stdout
+# only (stderr carries human chrome like warnings), with telemetry disabled so a
+# gate run never mints a device id or spawns a flusher on the host.
+_ENV = {"AAI_TELEMETRY_DISABLED": "1"}
 
 
 def _write_fixture(
@@ -18,9 +24,10 @@ def _write_fixture(
     name: str,
     args: tuple[str, ...],
 ) -> None:
-    result = runner.invoke(app, list(args))
+    command = typer.main.get_command(app)
+    result = runner.invoke(command, list(args), env=_ENV)
     if result.exit_code != 0:
-        detail = result.output.strip() or str(result.exception)
+        detail = result.stderr.strip() or result.output.strip() or str(result.exception)
         raise RuntimeError(f"{name}: {' '.join(args)} failed: {detail}")
     code = result.output
     if not code.strip():
@@ -101,7 +108,7 @@ def main() -> int:
         ),
     )
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     for name, args in cases:
         _write_fixture(runner, out_dir, name, args)
 

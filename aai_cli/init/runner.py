@@ -10,6 +10,7 @@ import time
 import webbrowser
 from pathlib import Path
 
+from aai_cli import output
 from aai_cli.errors import CLIError
 
 
@@ -121,6 +122,18 @@ def run_setup(target: Path, *, use_uv: bool) -> subprocess.CompletedProcess[str]
     return last
 
 
+def open_app_browser(port: int) -> None:
+    """Open the app URL, saying where to point a browser when none can launch.
+
+    `webbrowser.open` returns False on headless boxes (no display/$BROWSER); a
+    silent False would leave the user staring at a running server with no URL.
+    The hint goes to stderr so stdout stays clean for pipelines.
+    """
+    url = f"http://localhost:{port}"
+    if not webbrowser.open(url):
+        output.error_console.print(output.hint(f"Couldn't open a browser — visit {url}"))
+
+
 def run_server(
     target: Path,
     *,
@@ -137,7 +150,7 @@ def run_server(
     proc = subprocess.Popen(command, cwd=target, env=env)
     try:
         if wait_for_port(port) and open_browser:
-            webbrowser.open(f"http://localhost:{port}")
+            open_app_browser(port)
         proc.wait()
     except KeyboardInterrupt:
         proc.terminate()

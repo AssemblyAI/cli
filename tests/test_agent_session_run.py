@@ -246,7 +246,12 @@ def test_run_session_handshake_403_is_api_error_like_stream():
         _run_with_connect(reject)
     assert exc.value.error_type == "api_error"
     assert exc.value.exit_code == 1
+    assert "Could not connect to the voice agent" in exc.value.message
     assert "HTTP 403" in exc.value.message
+    # The rejected handshake carries the actionable next steps, env host included.
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
+    assert "agents.assemblyai.com" in exc.value.suggestion
 
 
 def test_run_session_handshake_401_is_still_auth_failure():
@@ -257,6 +262,9 @@ def test_run_session_handshake_401_is_still_auth_failure():
     with pytest.raises(NotAuthenticated) as exc:
         _run_with_connect(reject)
     assert exc.value.exit_code == 4
+    assert exc.value.rejected_key is True
+    assert exc.value.suggestion is not None
+    assert "assembly whoami" in exc.value.suggestion
 
 
 def test_run_session_auth_worded_failure_is_still_auth_failure():

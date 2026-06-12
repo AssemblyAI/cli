@@ -6,6 +6,7 @@ import typer
 
 from aai_cli import help_panels, options, output
 from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
 from aai_cli.onboard.prompter import InteractivePrompter, NonInteractivePrompter, Prompter
@@ -46,9 +47,19 @@ def onboard(
     def body(state: AppState, json_mode: bool) -> None:
         profile = resolve_profile(state)
         wiz_ctx = WizardContext(state=state, profile=profile, json_mode=json_mode)
-        forced = non_interactive or output.is_agentic()
+        # --json also forces non-interactive: a machine-output run can't block on
+        # prompts, and the interactive prompter would write prose onto the JSON stdout.
+        forced = non_interactive or output.is_agentic() or json_mode
         code = wizard.run_onboarding(build_prompter(non_interactive=forced), wiz_ctx)
         if code != 0:
+            if json_mode:
+                # The standard {"error": …} envelope on stderr; the wizard already
+                # emitted its JSON section summary on stdout.
+                raise CLIError(
+                    "Onboarding did not complete.",
+                    error_type="onboarding_incomplete",
+                    exit_code=code,
+                )
             raise typer.Exit(code=code)
 
     # auto_login=False: the wizard owns the sign-in step itself.

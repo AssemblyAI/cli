@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -14,7 +15,7 @@ def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
     )
@@ -22,6 +23,16 @@ def _login_result():
 
 def _human(monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+
+
+def test_sessions_help_lists_list_before_get():
+    # Pins the list-then-get subcommand order `transcripts --help` mirrors.
+    result = runner.invoke(app, ["sessions", "--help"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    list_idx = next(i for i, line in enumerate(lines) if "List recent streaming sessions" in line)
+    get_idx = next(i for i, line in enumerate(lines) if "Show details for one" in line)
+    assert list_idx < get_idx
 
 
 def test_sessions_list_renders_rows(mocker):
@@ -99,6 +110,50 @@ def test_sessions_list_passes_status_filter(mocker):
     result = runner.invoke(app, ["sessions", "list", "--status", "error", "--limit", "5"])
     assert result.exit_code == 0
     list_streaming.assert_called_once_with("jwt", limit=5, status="error")
+
+
+def test_sessions_list_limit_must_be_at_least_one(mocker):
+    # min=1 on --limit: 0 and negatives are rejected client-side, before any
+    # request (parity with `transcripts list`).
+    _auth()
+    list_streaming = mocker.patch("aai_cli.commands.sessions.ams.list_streaming", autospec=True)
+    for bad in ("0", "-3"):
+        result = runner.invoke(app, ["sessions", "list", "--limit", bad])
+        assert result.exit_code == 2
+        assert "limit" in result.output.lower()
+    list_streaming.assert_not_called()
+
+
+def test_sessions_list_rejects_unknown_status(mocker):
+    # --status is a closed choice set; a typo fails instantly instead of silently
+    # filtering nothing server-side.
+    _auth()
+    list_streaming = mocker.patch("aai_cli.commands.sessions.ams.list_streaming", autospec=True)
+    result = runner.invoke(app, ["sessions", "list", "--status", "comlpeted"])
+    assert result.exit_code == 2
+    assert "status" in result.output.lower()
+    list_streaming.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["created", "completed", "error"])
+def test_sessions_list_passes_each_status_value(mocker, status):
+    _auth()
+    list_streaming = mocker.patch(
+        "aai_cli.commands.sessions.ams.list_streaming", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["sessions", "list", "--status", status])
+    assert result.exit_code == 0
+    list_streaming.assert_called_once_with("jwt", limit=10, status=status)
+
+
+def test_sessions_list_without_status_passes_none(mocker):
+    _auth()
+    list_streaming = mocker.patch(
+        "aai_cli.commands.sessions.ams.list_streaming", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["sessions", "list"])
+    assert result.exit_code == 0
+    list_streaming.assert_called_once_with("jwt", limit=10, status=None)
 
 
 def test_sessions_get_renders_detail(monkeypatch, mocker):

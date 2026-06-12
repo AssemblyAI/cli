@@ -18,6 +18,7 @@ from rich.console import RenderableType
 
 from aai_cli import client, config, der, eval_data, help_panels, jsonshape, options, output, wer
 from aai_cli.context import AppState, run_command
+from aai_cli.errors import CLIError, NotAuthenticated, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
@@ -56,6 +57,11 @@ class _ItemResult:
     speakers: der.DerScore | None
 
 
+def _failed_result(item: eval_data.EvalItem, err: CLIError) -> _ItemResult:
+    """A row whose transcription failed: the error rides along, no scores pooled."""
+    return _ItemResult(row={"item": item.item_id, "error": err.message}, words=None, speakers=None)
+
+
 def _score_item(
     item: eval_data.EvalItem, transcript: aai.Transcript, *, collar: float
 ) -> _ItemResult:
@@ -71,6 +77,63 @@ def _score_item(
     return _ItemResult(row=row, words=words, speakers=speakers)
 
 
+def _pooled_metrics(results: list[_ItemResult]) -> dict[str, object]:
+    """The summary scores pooled over the scored rows (failed rows carry none)."""
+    metrics: dict[str, object] = {}
+    word_scores = [result.words for result in results if result.words is not None]
+    if word_scores:
+        total = wer.pooled(word_scores)
+        metrics.update({"words": total.words, "errors": total.errors, "wer": total.wer})
+    der_scores = [result.speakers for result in results if result.speakers is not None]
+    if der_scores:
+        pooled = der.pooled(der_scores)
+        metrics["der"] = pooled.der
+        metrics["der_breakdown"] = {
+            "missed": pooled.missed / pooled.total,
+            "false_alarm": pooled.false_alarm / pooled.total,
+            "confusion": pooled.confusion / pooled.total,
+        }
+    return metrics
+
+
+def _transcribe_one(
+    api_key: str, item: eval_data.EvalItem, config: aai.TranscriptionConfig
+) -> aai.Transcript | CLIError:
+    """One item's outcome: its transcript, or the CLIError it failed with.
+
+    A bad item must not discard the other (paid) items, so per-item failures
+    are recorded rather than raised — except ``NotAuthenticated`` (one rejected
+    key fails every row identically) and non-CLIError bugs, which propagate and
+    abort the run.
+    """
+    try:
+        return client.transcribe(api_key, item.audio, config=config)
+    except NotAuthenticated:
+        raise
+    except CLIError as err:
+        return err
+
+
+def _concurrent_transcripts(
+    api_key: str,
+    items: list[eval_data.EvalItem],
+    *,
+    transcription_config: aai.TranscriptionConfig,
+    concurrency: int,
+) -> list[aai.Transcript | CLIError]:
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [
+            pool.submit(_transcribe_one, api_key, item, transcription_config) for item in items
+        ]
+        for future in as_completed(futures):
+            if (exc := future.exception()) is not None:
+                # Only aborting failures escape _transcribe_one: drop the
+                # not-yet-started items rather than burn an API call on each.
+                pool.shutdown(cancel_futures=True)
+                raise exc
+        return [future.result() for future in futures]
+
+
 def _transcripts(
     api_key: str,
     items: list[eval_data.EvalItem],
@@ -79,42 +142,31 @@ def _transcripts(
     concurrency: int,
     json_mode: bool,
     quiet: bool,
-) -> list[aai.Transcript]:
-    """Each item's transcript, in dataset order.
+) -> list[aai.Transcript | CLIError]:
+    """Each item's transcript — or the CLIError it failed with — in dataset order.
 
     Sequential by default, with a per-item spinner; ``--concurrency`` fans the
-    API calls out across a thread pool (the transcribe-batch pattern: the first
-    worker error drops the not-yet-started items and re-raises).
+    API calls out across a thread pool (see ``_transcribe_one`` for which
+    failures are per-item outcomes and which abort the run).
     """
     if concurrency == 1:
-        transcripts: list[aai.Transcript] = []
+        outcomes: list[aai.Transcript | CLIError] = []
         for index, item in enumerate(items, start=1):
             with output.status(
                 f"[{index}/{len(items)}] Transcribing {item.item_id}…",
                 json_mode=json_mode,
                 quiet=quiet,
             ):
-                transcripts.append(
-                    client.transcribe(api_key, item.audio, config=transcription_config)
-                )
-        return transcripts
-    with (
-        output.status(
-            f"Transcribing {len(items)} items (concurrency {concurrency})…",
-            json_mode=json_mode,
-            quiet=quiet,
-        ),
-        ThreadPoolExecutor(max_workers=concurrency) as pool,
+                outcomes.append(_transcribe_one(api_key, item, transcription_config))
+        return outcomes
+    with output.status(
+        f"Transcribing {len(items)} items (concurrency {concurrency})…",
+        json_mode=json_mode,
+        quiet=quiet,
     ):
-        futures = [
-            pool.submit(client.transcribe, api_key, item.audio, config=transcription_config)
-            for item in items
-        ]
-        for future in as_completed(futures):
-            if (exc := future.exception()) is not None:
-                pool.shutdown(cancel_futures=True)
-                raise exc
-        return [future.result() for future in futures]
+        return _concurrent_transcripts(
+            api_key, items, transcription_config=transcription_config, concurrency=concurrency
+        )
 
 
 def _payload(
@@ -126,19 +178,10 @@ def _payload(
         "items": len(results),
         "rows": [result.row for result in results],
     }
-    word_scores = [result.words for result in results if result.words is not None]
-    if word_scores:
-        total = wer.pooled(word_scores)
-        payload.update({"words": total.words, "errors": total.errors, "wer": total.wer})
-    der_scores = [result.speakers for result in results if result.speakers is not None]
-    if der_scores:
-        pooled = der.pooled(der_scores)
-        payload["der"] = pooled.der
-        payload["der_breakdown"] = {
-            "missed": pooled.missed / pooled.total,
-            "false_alarm": pooled.false_alarm / pooled.total,
-            "confusion": pooled.confusion / pooled.total,
-        }
+    payload.update(_pooled_metrics(results))
+    failed = sum(1 for result in results if "error" in result.row)
+    if failed:
+        payload["failed"] = failed
     return payload
 
 
@@ -160,21 +203,34 @@ def _summary(payload: dict[str, object]) -> str:
     return output.heading("   ".join(parts))
 
 
+def _cell(row: dict[str, object], key: str) -> str:
+    """The row's value as table text — blank when absent (e.g. a failed row's scores)."""
+    return str(row[key]) if key in row else ""
+
+
+def _pct_cell(row: dict[str, object], key: str) -> str:
+    return _pct(row[key]) if key in row else ""
+
+
 def _render(payload: dict[str, object]) -> RenderableType:
     has_wer = "wer" in payload
     has_der = "der" in payload
+    has_failed = "failed" in payload
     columns = [
         "ITEM",
         *(["WORDS", "ERRORS", "WER"] if has_wer else []),
         *(["DER"] if has_der else []),
+        *(["ERROR"] if has_failed else []),
     ]
     table = output.data_table(*columns)
     for row in jsonshape.mapping_list(payload.get("rows")):
         cells = [str(row.get("item"))]
         if has_wer:
-            cells += [str(row.get("words")), str(row.get("errors")), _pct(row.get("wer"))]
+            cells += [_cell(row, "words"), _cell(row, "errors"), _pct_cell(row, "wer")]
         if has_der:
-            cells.append(_pct(row.get("der")))
+            cells.append(_pct_cell(row, "der"))
+        if has_failed:
+            cells.append(_cell(row, "error"))
         table.add_row(*cells)
     model = payload.get("speech_model") or "default model"
     return output.stack(
@@ -244,11 +300,12 @@ def evaluate(
         "--speaker-labels",
         help="Diarize and also score DER against the dataset's reference speaker turns (speakers/timestamps_start/timestamps_end columns, in seconds).",
     ),
-    collar: float = typer.Option(
-        1.0,
+    collar: float | None = typer.Option(
+        None,
         "--collar",
         min=0.0,
-        help="DER forgiveness (seconds) around each reference turn boundary.",
+        help="DER forgiveness (seconds) around each reference turn boundary "
+        "(default: 1.0; needs --speaker-labels).",
     ),
     concurrency: int = typer.Option(
         1,
@@ -281,6 +338,14 @@ def evaluate(
     """
 
     def body(state: AppState, json_mode: bool) -> None:
+        if collar is not None and not speaker_labels:
+            raise UsageError(
+                "--collar only applies when diarization is being scored.",
+                suggestion="Add --speaker-labels.",
+            )
+        # Resolve credentials before any dataset download: a signed-out user must
+        # not pull the whole dataset only to fail at the first transcription.
+        api_key = config.resolve_api_key(profile=state.profile)
         data = eval_data.load(
             dataset,
             split=split,
@@ -290,13 +355,12 @@ def evaluate(
             limit=limit,
             with_speakers=speaker_labels,
         )
-        api_key = config.resolve_api_key(profile=state.profile)
         transcription_config = aai.TranscriptionConfig(
             speech_models=[speech_model.value] if speech_model else None,
             language_code=language_code,
             speaker_labels=speaker_labels or None,
         )
-        transcripts = _transcripts(
+        outcomes = _transcripts(
             api_key,
             data.items,
             transcription_config=transcription_config,
@@ -305,13 +369,23 @@ def evaluate(
             quiet=state.quiet,
         )
         results = [
-            _score_item(item, transcript, collar=collar)
-            for item, transcript in zip(
+            _failed_result(item, outcome)
+            if isinstance(outcome, CLIError)
+            else _score_item(item, outcome, collar=collar if collar is not None else 1.0)
+            for item, outcome in zip(
                 data.items,
-                transcripts,
-                strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one transcript per item)
+                outcomes,
+                strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one outcome per item)
             )
         ]
-        output.emit(_payload(data.label, speech_model, results), _render, json_mode=json_mode)
+        payload = _payload(data.label, speech_model, results)
+        output.emit(payload, _render, json_mode=json_mode)
+        failed = jsonshape.as_int(payload.get("failed"))
+        if failed:
+            raise CLIError(
+                f"{failed} of {len(results)} items failed to transcribe.",
+                error_type="eval_failed",
+                suggestion="The summary covers only the items that transcribed.",
+            )
 
     run_command(ctx, body, json=json_out)

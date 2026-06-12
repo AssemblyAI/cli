@@ -119,13 +119,6 @@ def test_init_refuses_nonempty_dir_without_force(tmp_path, monkeypatch):
     assert result.exit_code == 1
 
 
-def test_init_force_overwrites(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
-    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--force"])
-    assert result.exit_code == 0
-
-
 def test_init_no_template_non_interactive_errors(tmp_path, monkeypatch):
     # CliRunner has no TTY, so the picker can't run; bare `assembly init` must error helpfully.
     monkeypatch.chdir(tmp_path)
@@ -157,15 +150,25 @@ def test_init_prints_cli_banner_in_human_mode(tmp_path, monkeypatch):
     assert "AssemblyAI CLI" not in result.stdout
 
 
-def test_init_banner_stays_off_stdout_on_error_paths(tmp_path, monkeypatch):
-    # The banner prints before template validation; an error run must still leave
-    # stdout empty (errors + banner are both stderr-only in human mode).
+def test_init_banner_skipped_on_error_only_runs(tmp_path, monkeypatch):
+    # The banner prints only after validation passes: a pure error run (unknown
+    # template) stays undecorated like the sibling commands, and stdout stays empty.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["init", "nope", "x", "--no-install"])
     assert result.exit_code == 1
-    assert "AssemblyAI CLI" in result.stderr
+    assert "AssemblyAI CLI" not in result.stderr
     assert result.stdout == ""
+
+
+def test_init_banner_skipped_on_target_conflict_error(tmp_path, monkeypatch):
+    # Target validation failures are error-only runs too: no banner.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+    assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
+    assert result.exit_code == 1
+    assert "AssemblyAI CLI" not in result.stderr
 
 
 def test_init_help_enumerates_template_names():

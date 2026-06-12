@@ -171,6 +171,51 @@ def test_dev_server_nonzero_exit_propagates(tmp_path, monkeypatch):
     assert result.exit_code == 3
 
 
+def test_dev_busy_port_notice_on_stderr(tmp_path, monkeypatch):
+    # A busy --port silently substituting a neighbor would leave the user pointing
+    # tools at a dead port; the substitution is announced on stderr.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub_runner(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda port, **k: port + 1)
+    result = runner.invoke(app, ["dev", "--no-open", "--port", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "Port 5000 is in use; using 5001." in result.stderr
+    assert "is in use" not in result.stdout  # stderr-only: stdout stays pipeline-clean
+
+
+def test_dev_no_port_notice_when_requested_port_is_free(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub_runner(monkeypatch)  # find_free_port returns the requested port
+    result = runner.invoke(app, ["dev", "--no-open", "--port", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "is in use" not in result.output
+
+
+def test_dev_busy_port_notice_suppressed_by_quiet(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub_runner(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda port, **k: port + 1)
+    result = runner.invoke(app, ["--quiet", "dev", "--no-open", "--port", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "is in use" not in result.output
+
+
+def test_dev_busy_port_notice_structured_in_json(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub_runner(monkeypatch)
+    monkeypatch.setattr("aai_cli.init.runner.find_free_port", lambda port, **k: port + 1)
+    result = runner.invoke(app, ["dev", "--no-open", "--port", "5000", "--json"])
+    assert result.exit_code == 0, result.output
+    warning = json.loads(result.stderr.strip().splitlines()[0])
+    assert warning["warning"] == "Port 5000 is in use; using 5001."
+
+
 def test_dev_json_emits_install_step(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)

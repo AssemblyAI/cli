@@ -111,10 +111,12 @@ def _check_api_key(profile: str) -> Check:
         )
     if valid:
         return _check("api-key", "ok", "API key is valid and AssemblyAI is reachable.")
+    # validate_key collapses every auth-shaped failure (401, 403, proxy "forbidden")
+    # to False, so don't claim a specific status code we never saw.
     return _check(
         "api-key",
         "fail",
-        "API key was rejected (HTTP 401/403).",
+        "API key was rejected by the server.",
         fix="Run 'assembly login' with a valid key.",
         affects=["everything"],
     )

@@ -99,7 +99,7 @@ def test_run_login_flow_opens_the_discovery_start_url(monkeypatch):
     # The browser is opened with exactly the URL build_start_url() produces.
     seen = {}
     monkeypatch.setattr(flow.discovery, "build_start_url", lambda: "start-url")
-    monkeypatch.setattr(flow, "_open_browser", lambda url: seen.setdefault("url", url))
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: seen.setdefault("url", url))
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -123,7 +123,7 @@ def test_run_login_flow_opens_the_discovery_start_url(monkeypatch):
 
 
 def test_run_login_flow_rejects_wrong_token_type(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="something_else")
     )
@@ -134,7 +134,7 @@ def test_run_login_flow_rejects_wrong_token_type(monkeypatch):
 
 def test_run_login_flow_happy_path(monkeypatch):
     opened = {}
-    monkeypatch.setattr(flow, "_open_browser", lambda url: opened.setdefault("url", url))
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: opened.setdefault("url", url))
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -159,7 +159,7 @@ def test_run_login_flow_happy_path(monkeypatch):
 
 
 def test_run_login_flow_timeout_raises_auth_typed_error(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(monkeypatch, loopback.CallbackResult(error="timeout"))
     with pytest.raises(NotAuthenticated) as exc:
         flow.run_login_flow()
@@ -203,7 +203,7 @@ def test_find_or_create_creates_when_existing_token_has_no_api_key(monkeypatch):
 def test_run_login_flow_uses_exchange_account(monkeypatch):
     # The signed-in account comes from exchange()'s response; the flow must not make a
     # second round-trip to fetch it.
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -232,7 +232,7 @@ def test_run_login_flow_uses_exchange_account(monkeypatch):
 
 
 def test_run_login_flow_multi_org_notes_selection(monkeypatch, capsys):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -262,7 +262,7 @@ def test_run_login_flow_multi_org_notes_selection(monkeypatch, capsys):
 def test_open_browser_prints_fallback_to_stderr(monkeypatch, capsys):
     monkeypatch.setattr(flow.webbrowser, "open", lambda _url: (_ for _ in ()).throw(OSError()))
 
-    flow._open_browser("https://login.example")
+    flow._open_browser("https://login.example", json_mode=False)
 
     err = capsys.readouterr().err
     assert "https://login.example" in err
@@ -270,7 +270,7 @@ def test_open_browser_prints_fallback_to_stderr(monkeypatch, capsys):
 
 
 def test_run_login_flow_missing_session_token_raises_api_error(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -284,7 +284,7 @@ def test_run_login_flow_missing_session_token_raises_api_error(monkeypatch):
 
 
 def test_run_login_flow_org_missing_id_raises_api_error(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -301,7 +301,7 @@ def test_run_login_flow_org_missing_id_raises_api_error(monkeypatch):
 
 
 def test_run_login_flow_zero_orgs_raises(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -319,7 +319,7 @@ def test_run_login_flow_zero_orgs_raises(monkeypatch):
 
 
 def test_run_login_flow_returns_session_material(monkeypatch):
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch,
         loopback.CallbackResult(token="tok", token_type="discovery_oauth", error=None),
@@ -379,7 +379,7 @@ def test_run_login_flow_binds_loopback_before_opening_browser(monkeypatch):
         )
 
     monkeypatch.setattr(flow, "_start_capture", fake_start)
-    monkeypatch.setattr(flow, "_open_browser", lambda url: order.append("browser"))
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: order.append("browser"))
     _stub_ams_happy_path(monkeypatch)
 
     assert flow.run_login_flow().api_key == "sk_final"
@@ -392,7 +392,7 @@ def test_run_login_flow_bind_failure_never_opens_browser(monkeypatch):
 
     monkeypatch.setattr(flow, "_start_capture", fail_start)
     opened = []
-    monkeypatch.setattr(flow, "_open_browser", lambda url: opened.append(url))
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: opened.append(url))
 
     with pytest.raises(APIError, match="callback server"):
         flow.run_login_flow()
@@ -402,7 +402,7 @@ def test_run_login_flow_bind_failure_never_opens_browser(monkeypatch):
 def test_run_login_flow_prints_waiting_hint(monkeypatch, capsys):
     # Headless/slow logins must not sit in 120s of silence: the flow says it is
     # waiting and names the non-browser alternative.
-    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    monkeypatch.setattr(flow, "_open_browser", lambda url, **_: None)
     _fake_start_capture(
         monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
     )
@@ -412,3 +412,83 @@ def test_run_login_flow_prints_waiting_hint(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "Waiting up to 2 minutes" in err
     assert "assembly login --api-key" in err
+    assert '"hint"' not in err  # json_mode defaults to False: prose, not JSON objects
+
+
+def test_open_browser_warns_when_open_returns_false(monkeypatch, capsys):
+    # webbrowser.open returns False — without raising — on headless boxes; the user
+    # must still get the manual-URL fallback rather than 120s of silence.
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: False)
+    flow._open_browser("https://login.example", json_mode=False)
+    err = capsys.readouterr().err
+    assert "Could not open a browser" in err
+    assert "https://login.example" in err
+
+
+def test_open_browser_no_fallback_when_open_succeeds(monkeypatch, capsys):
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: True)
+    flow._open_browser("https://login.example", json_mode=False)
+    err = capsys.readouterr().err
+    assert "Opening your browser" in err
+    assert "Could not open a browser" not in err
+
+
+def test_open_browser_json_mode_emits_structured_hints(monkeypatch, capsys):
+    import json
+
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: False)
+    flow._open_browser("https://login.example", json_mode=True)
+    lines = [json.loads(line) for line in capsys.readouterr().err.strip().splitlines()]
+    assert len(lines) == 2  # every stderr line is machine-readable
+    assert "browser" in lines[0]["hint"]
+    assert lines[0]["url"] == "https://login.example"
+    assert "Could not open a browser" in lines[1]["hint"]
+    assert lines[1]["url"] == "https://login.example"
+
+
+def test_run_login_flow_json_mode_keeps_stderr_machine_readable(monkeypatch, capsys):
+    import json
+
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: True)
+    _fake_start_capture(
+        monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
+    )
+    _stub_ams_happy_path(monkeypatch)
+
+    assert flow.run_login_flow(json_mode=True).api_key == "sk_final"
+    lines = [json.loads(line) for line in capsys.readouterr().err.strip().splitlines()]
+    waiting = next(obj for obj in lines if "Waiting up to 2 minutes" in obj["hint"])
+    assert "assembly login --api-key" in waiting["hint"]
+    assert "url" not in waiting  # the url field only ships on the browser-open notes
+    opening = next(obj for obj in lines if "Opening your browser" in obj["hint"])
+    assert opening["url"].startswith("https://")
+
+
+def test_run_login_flow_multi_org_json_note(monkeypatch, capsys):
+    import json
+
+    monkeypatch.setattr(flow.webbrowser, "open", lambda _url: True)
+    _fake_start_capture(
+        monkeypatch, loopback.CallbackResult(token="tok", token_type="discovery_oauth")
+    )
+    monkeypatch.setattr(
+        flow.ams,
+        "discover",
+        lambda token: {
+            "organizations": [
+                {"organization_id": "org_1", "organization_name": "Acme"},
+                {"organization_id": "org_2", "organization_name": "Beta"},
+            ],
+            "intermediate_session_token": "ist",
+        },
+    )
+    monkeypatch.setattr(
+        flow.ams,
+        "exchange",
+        lambda ist, org: {"account": {"id": 9}, "session_jwt": "jwt", "session_token": "t"},
+    )
+    monkeypatch.setattr(flow, "find_or_create_cli_key", lambda acct, jwt: "sk_final")
+
+    assert flow.run_login_flow(json_mode=True).api_key == "sk_final"
+    lines = [json.loads(line) for line in capsys.readouterr().err.strip().splitlines()]
+    assert any("Acme" in obj["hint"] for obj in lines)  # the chosen org is still named

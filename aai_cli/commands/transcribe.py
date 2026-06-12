@@ -83,7 +83,9 @@ def transcribe(
     temperature: float | None = typer.Option(
         None,
         "--temperature",
-        help="Speech model temperature.",
+        help="Speech model temperature (0 most deterministic, 1 least).",
+        min=0.0,
+        max=1.0,
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     prompt: str | None = typer.Option(
@@ -253,7 +255,11 @@ def transcribe(
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     audio_end: int | None = typer.Option(
-        None, "--audio-end", help="End offset in ms.", rich_help_panel=help_panels.OPT_CUSTOMIZATION
+        None,
+        "--audio-end",
+        help="End offset in ms.",
+        min=0,
+        rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     download_sections: list[str] | None = typer.Option(
         None,
@@ -354,8 +360,7 @@ def transcribe(
     transcribe many sources concurrently. Each source gets a .aai.json sidecar
     with the full result, and a re-run skips sources already transcribed.
 
-    Curated flags cover common features; --config KEY=VALUE and --config-file reach
-    every other field. Analysis (summary, chapters, ...) renders in human mode.
+    Curated flags cover common features; --config KEY=VALUE and --config-file reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -409,6 +414,8 @@ def transcribe(
         flags.update(config_builder.auth_header_flags(webhook_auth_header))
 
         transcribe_exec.validate_out_with_llm(out, llm_prompt)
+        transcribe_exec.validate_out_path(out)
+        transcribe_exec.validate_json_with_output(output_field, json_mode=json_mode)
 
         merged = config_builder.merge_transcribe_config(
             flags=flags, overrides=config_kv, config_file=config_file
@@ -457,6 +464,7 @@ def transcribe(
 
         # A typo'd path must read as "file not found", not trigger a login.
         transcribe_exec.check_source_exists(source, sample=sample)
+        transcribe_exec.warn_unrecognized_extension(source, json_mode=json_mode, quiet=state.quiet)
 
         api_key = config.resolve_api_key(profile=state.profile)
         with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):

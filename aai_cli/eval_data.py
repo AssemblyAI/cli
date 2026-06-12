@@ -22,19 +22,13 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import re
 from dataclasses import dataclass
-from http import HTTPStatus
 from pathlib import Path
 
-import httpx2 as httpx
-
-from aai_cli import der, jsonshape, wer
+from aai_cli import der, eval_hf_api, jsonshape, wer
 from aai_cli.errors import APIError, CLIError, UsageError
 
-_DATASETS_SERVER = "https://datasets-server.huggingface.co"
-_TIMEOUT = 30.0  # pragma: no mutate (request timeout; nothing observable to assert)
 _MANIFEST_SUFFIXES = (".csv", ".jsonl")
 # Hub ids are `name` or `namespace/name`; rejecting anything else keeps a typo'd
 # local path from being sent to the hub as if it were a dataset id.
@@ -157,8 +151,10 @@ def _pick_column(
     for candidate in candidates:
         if candidate in available:
             return candidate
+    noun = candidates[0]
+    article = "an" if noun[0] in "aeiou" else "a"
     raise UsageError(
-        f"Could not find a {candidates[0]} column (columns: {', '.join(available)}).",
+        f"Could not find {article} {noun} column (columns: {', '.join(available)}).",
         suggestion=f"Name it with {flag}.",
     )
 
@@ -261,6 +257,13 @@ def _load_manifest(
             exit_code=2,
             suggestion="Pass a .csv/.jsonl manifest path, or a Hugging Face dataset id.",
         )
+    if path.suffix not in _MANIFEST_SUFFIXES:
+        # Other suffixes (.parquet, .txt, …) would be parsed as JSONL and fail with a
+        # confusing "line 1 is not valid JSON" — name the real constraint instead.
+        raise UsageError(
+            f"Manifests must be .csv or .jsonl; got '{path.name}'.",
+            suggestion="Convert the manifest, or pass a Hugging Face dataset id.",
+        )
     rows = _manifest_rows(path)
     if not rows:
         raise UsageError(f"Manifest {path.name} has no rows.")
@@ -315,100 +318,6 @@ def _manifest_item(
 # ------------------------------------------------------- Hugging Face datasets
 
 
-def _error_detail(resp: httpx.Response) -> str:
-    try:
-        body: object = resp.json()
-    except ValueError:
-        return resp.text
-    mapping = jsonshape.as_mapping(body)
-    if mapping is not None and "error" in mapping:
-        return str(mapping["error"])
-    return resp.text
-
-
-def _checked_payload(resp: httpx.Response, *, dataset: str) -> dict[str, object]:
-    if resp.status_code in (401, 403):
-        raise APIError(
-            f"Hugging Face denied access to '{dataset}' (HTTP {resp.status_code}).",
-            suggestion="Gated or private dataset? Set HF_TOKEN to a token that has access.",
-        )
-    if resp.status_code == HTTPStatus.NOT_FOUND:
-        raise UsageError(
-            f"Hugging Face dataset '{dataset}' was not found: {_error_detail(resp)}",
-            suggestion="Check the dataset id, e.g. 'distil-whisper/meanwhile'.",
-        )
-    if resp.status_code != HTTPStatus.OK:
-        raise APIError(
-            f"Hugging Face datasets server error (HTTP {resp.status_code}): {_error_detail(resp)}"
-        )
-    try:
-        data: object = resp.json()
-    except ValueError as exc:
-        raise APIError("Hugging Face datasets server returned invalid JSON.") from exc
-    mapping = jsonshape.as_mapping(data)
-    if mapping is None:
-        raise APIError(
-            "Hugging Face datasets server returned unexpected JSON (expected an object)."
-        )
-    return mapping
-
-
-def _fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> dict[str, object]:
-    token = os.environ.get("HF_TOKEN")
-    headers = {"authorization": f"Bearer {token}"} if token else {}
-    try:
-        with httpx.Client(base_url=_DATASETS_SERVER, timeout=_TIMEOUT, headers=headers) as client:
-            resp = client.get(endpoint, params=params)
-    except httpx.HTTPError as exc:
-        raise APIError(f"Could not reach the Hugging Face datasets server: {exc}") from exc
-    return _checked_payload(resp, dataset=dataset)
-
-
-def _split_entries(dataset: str) -> list[dict[str, object]]:
-    payload = _fetch_json("/splits", {"dataset": dataset}, dataset=dataset)
-    entries = jsonshape.mapping_list(payload.get("splits"))
-    if not entries:
-        raise APIError(f"Hugging Face reports no splits for '{dataset}'.")
-    return entries
-
-
-def _pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: str) -> str:
-    configs = list(dict.fromkeys(str(entry.get("config")) for entry in entries))
-    if subset is not None:
-        if subset in configs:
-            return subset
-        raise UsageError(f"'{dataset}' has no subset '{subset}' (subsets: {', '.join(configs)}).")
-    if len(configs) == 1:
-        return configs[0]
-    if "default" in configs:
-        return "default"
-    raise UsageError(
-        f"'{dataset}' has multiple subsets: {', '.join(configs)}.",
-        suggestion="Pick one with --subset.",
-    )
-
-
-def _pick_split(
-    entries: list[dict[str, object]], config: str, split: str | None, dataset: str
-) -> str:
-    splits = [str(entry.get("split")) for entry in entries if str(entry.get("config")) == config]
-    if split is not None:
-        if split in splits:
-            return split
-        raise UsageError(
-            f"'{dataset}' has no '{split}' split in subset '{config}' "
-            f"(splits: {', '.join(splits)})."
-        )
-    if "test" in splits:
-        return "test"
-    if len(splits) == 1:
-        return splits[0]
-    raise UsageError(
-        f"'{dataset}' has several splits in subset '{config}': {', '.join(splits)}.",
-        suggestion="Pick one with --split (eval sets usually score 'test').",
-    )
-
-
 def _audio_source(cell: object, *, column: str, item_id: str) -> str:
     """The audio URL out of a datasets-server cell: a bare string, or the first
     ``src`` of the ``[{"src": …, "type": …}]`` shape audio columns render as."""
@@ -457,10 +366,10 @@ def _load_hf(
             f"'{dataset}' is neither a local .csv/.jsonl manifest nor a Hugging Face dataset id.",
             suggestion="Pass a manifest path, or an id like 'distil-whisper/meanwhile'.",
         )
-    entries = _split_entries(dataset)
-    config = _pick_subset(entries, subset, dataset)
-    split_name = _pick_split(entries, config, split, dataset)
-    payload = _fetch_json(
+    entries = eval_hf_api.split_entries(dataset)
+    config = eval_hf_api.pick_subset(entries, subset, dataset)
+    split_name = eval_hf_api.pick_split(entries, config, split, dataset)
+    payload = eval_hf_api.fetch_json(
         "/rows",
         {"dataset": dataset, "config": config, "split": split_name, "offset": 0, "length": limit},
         dataset=dataset,
