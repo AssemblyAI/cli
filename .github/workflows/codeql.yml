@@ -25,7 +25,7 @@ concurrency:
 jobs:
   analyze:
     name: analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
       security-events: write  # upload SARIF results to code scanning
@@ -36,8 +36,24 @@ jobs:
       matrix:
         # python: the CLI itself; actions: the workflows in .github/workflows;
         # javascript-typescript: the committed `assembly init` template JS.
-        # All three are interpreted languages, so build-mode none suffices.
-        language: [python, actions, javascript-typescript]
+        # Those three are interpreted languages, so build-mode none suffices.
+        # swift: the macOS system-audio helper. Swift is compiled, so CodeQL
+        # must observe a real build — and autobuild can't discover a bare
+        # helper script with no Xcode/SwiftPM project, so the build is manual
+        # (the same swiftc invocation scripts/check.sh uses) on a macOS runner.
+        include:
+          - language: python
+            os: ubuntu-latest
+            build-mode: none
+          - language: actions
+            os: ubuntu-latest
+            build-mode: none
+          - language: javascript-typescript
+            os: ubuntu-latest
+            build-mode: none
+          - language: swift
+            os: macos-latest
+            build-mode: manual
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -47,7 +63,17 @@ jobs:
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           languages: ${{ matrix.language }}
-          build-mode: none
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build Swift audio helper
+        if: matrix.build-mode == 'manual'
+        run: |
+          swiftc -parse-as-library aai_cli/streaming/macos_system_audio.swift \
+            -framework ScreenCaptureKit \
+            -framework AVFoundation \
+            -framework CoreMedia \
+            -framework CoreGraphics \
+            -o /tmp/aai-macos-audio-codeql
 
       - name: Analyze
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
