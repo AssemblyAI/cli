@@ -139,7 +139,7 @@ def test_get_malformed_id_is_rejected_before_auth(monkeypatch, mocker):
     # No key configured: the cheap local id check must win over auth, so the user
     # is told to fix the id instead of being sent through login first.
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    login = mocker.patch("aai_cli.context.run_login_flow", side_effect=AssertionError("no login"))
+    login = mocker.patch("aai_cli.auth.run_login_flow", side_effect=AssertionError("no login"))
     get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
     result = runner.invoke(app, ["transcripts", "get", "not-a-real-id!!"])
     assert result.exit_code == 2
@@ -167,7 +167,7 @@ def test_list_renders_rows(mocker):
 
 def test_list_unauthenticated_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     rows = [{"id": "t1", "status": "completed"}]
     list_ = mocker.patch(
         "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=rows

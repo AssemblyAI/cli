@@ -40,7 +40,7 @@ def test_balance_formats_dollars(monkeypatch, mocker):
 
 def test_balance_without_session_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     get_balance = mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
         autospec=True,
@@ -347,7 +347,7 @@ def test_usage_invalid_date_fails_before_session_resolution(monkeypatch, mocker)
         raise AssertionError("login flow must not start for an invalid date")
 
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _no_login)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _no_login)
     get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
     result = runner.invoke(app, ["usage", "--end", "not-a-date"])
     assert result.exit_code == 2
@@ -407,7 +407,7 @@ def test_usage_rejects_end_before_start(monkeypatch, mocker):
     # any AMS call — even when not logged in.
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
     )
     get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
@@ -433,7 +433,7 @@ def test_usage_rejects_unknown_window(monkeypatch, mocker):
     # client-side, before session resolution or any AMS call.
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
     )
     get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)

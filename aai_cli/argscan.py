@@ -9,13 +9,18 @@ callers can't drift on which flag forms count.
 
 from __future__ import annotations
 
+# The standalone "give me JSON" flag spellings. Shared with main's misplaced-flag
+# hint (which recognizes a `--json`/`-j` passed at the root level), so the two
+# can't drift on which forms count.
+JSON_FLAGS = ("--json", "-j")
+
 
 def requests_json(raw_args: list[str]) -> bool:
     """Whether the token list opts into JSON output: ``--json``, ``-j``,
     ``-o json``, ``--output json``, or their glued forms (``--output=json``,
     ``-ojson``)."""
     for index, token in enumerate(raw_args):
-        if token in ("--json", "-j", "--output=json", "-ojson"):
+        if token in (*JSON_FLAGS, "--output=json", "-ojson"):
             return True
         if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
             return True

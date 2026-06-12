@@ -68,10 +68,6 @@ def validate_profile(name: str) -> None:
     fail fast on a typo'd ``--profile`` before any network work, instead of only
     tripping over it at keyring-write time.
     """
-    _validate_profile(name)
-
-
-def _validate_profile(name: str) -> None:
     if not _PROFILE_RE.match(name):
         from aai_cli.errors import CLIError
 
@@ -213,7 +209,7 @@ def _keyring_restore(username: str, prior: str | None) -> None:
 
 
 def set_api_key(profile: str, api_key: str) -> None:
-    _validate_profile(profile)
+    validate_profile(profile)
     _keyring_set(profile, api_key)
     cfg = _load()
     cfg.profiles.setdefault(profile, Profile())
@@ -262,7 +258,7 @@ def get_profile_env(profile: str) -> str | None:
 
 def set_profile_env(profile: str, env: str) -> None:
     """Bind a backend environment to a profile so its key and hosts stay matched."""
-    _validate_profile(profile)
+    validate_profile(profile)
     cfg = _load()
     cfg.profiles.setdefault(profile, Profile()).env = env
     _dump(cfg)
@@ -288,7 +284,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
     AMS self-service endpoints authenticate with this session cookie, not the API
     key. The JWT is short-lived; an expired session surfaces as NotAuthenticated.
     """
-    _validate_profile(profile)
+    validate_profile(profile)
     _keyring_set(
         _session_username(profile),
         StoredSession(jwt=session_jwt, token=session_token).model_dump_json(),
@@ -344,7 +340,7 @@ def persist_login(
     is rewritten verbatim in one atomic dump, and the two keyring entries are
     restored best-effort.
     """
-    _validate_profile(profile)
+    validate_profile(profile)
     prior_api_key = _keyring_get(profile)
     prior_session = _keyring_get(_session_username(profile))
     prior_cfg = _load()

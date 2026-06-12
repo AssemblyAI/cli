@@ -1,39 +1,26 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import typer
 
 from aai_cli import choices, help_panels, llm_exec, options, output
 from aai_cli import llm as gateway
-from aai_cli.context import AppState, run_command
+from aai_cli.context import run_command
 from aai_cli.errors import UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
 
-def _emit_model_list(_state: AppState, json_mode: bool) -> None:
-    """--list-models body, routed through run_command so --json yields a
-    machine-readable array instead of the human list; needs no auth."""
+def _list_models(output_field: choices.TextOrJson | None, json_mode: bool) -> None:
+    """The --list-models body, routed through run_command so --json yields a
+    machine-readable array instead of the human list; needs no auth. Rejects -o
+    (it only applies to one-shot mode, mirroring how --follow rejects it)."""
+    if output_field is not None:
+        raise UsageError(
+            "--output applies to one-shot mode; --list-models prints the plain "
+            "list (use --json for a machine-readable array)."
+        )
     output.emit(list(gateway.KNOWN_MODELS), "\n".join, json_mode=json_mode)
-
-
-def _list_models_body(
-    output_field: choices.TextOrJson | None,
-) -> Callable[[AppState, bool], None]:
-    """The --list-models command body: rejects -o (it only applies to one-shot
-    mode, mirroring how --follow rejects it) before printing the known models."""
-
-    def body(state: AppState, json_mode: bool) -> None:
-        if output_field is not None:
-            raise UsageError(
-                "--output applies to one-shot mode; --list-models prints the plain "
-                "list (use --json for a machine-readable array)."
-            )
-        _emit_model_list(state, json_mode)
-
-    return body
 
 
 @app.command(
@@ -94,7 +81,9 @@ def llm(
     """
 
     if list_models:
-        run_command(ctx, _list_models_body(output_field), json=json_out)
+        run_command(
+            ctx, lambda _state, json_mode: _list_models(output_field, json_mode), json=json_out
+        )
         return
 
     opts = llm_exec.LlmOptions(

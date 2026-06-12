@@ -240,7 +240,7 @@ def test_llm_missing_prompt_exits_2(monkeypatch):
 
 def test_llm_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
 
     def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
         raise AssertionError(f"LLM request should not run after auto-login: {api_key}")

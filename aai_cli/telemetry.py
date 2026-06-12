@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-import subprocess
 import sys
 import time
 from collections.abc import Generator, Mapping
@@ -27,7 +26,7 @@ from contextlib import contextmanager
 
 import typer
 
-from aai_cli import __version__, argscan, config
+from aai_cli import __version__, argscan, config, procs
 from aai_cli.errors import CLIError
 
 ENV_DISABLED = "AAI_TELEMETRY_DISABLED"
@@ -187,13 +186,7 @@ def dispatch(event: Mapping[str, object]) -> None:
     env disables telemetry so a flush can never spawn another flusher.
     """
     payload = json.dumps({"url": intake_url(), "token": client_token(), "event": event})
-    subprocess.Popen(
-        [sys.executable, "-m", "aai_cli", "telemetry", "flush", payload],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        env={**os.environ, ENV_DISABLED: "1"},
-    )
+    procs.spawn_detached(["telemetry", "flush", payload], disable_env_var=ENV_DISABLED)
 
 
 def flush_payload(raw: str) -> None:

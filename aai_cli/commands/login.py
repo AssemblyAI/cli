@@ -5,7 +5,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from aai_cli import client, config, environments, help_panels, options, output
-from aai_cli.context import AppState, persist_browser_login, resolve_profile, run_command
+from aai_cli.context import AppState, persist_browser_login, run_command
 from aai_cli.errors import APIError, CLIError, UsageError
 from aai_cli.help_text import examples_epilog
 
@@ -29,7 +29,7 @@ def login(
     """Authenticate via your browser; stores a CLI API key."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        profile = resolve_profile(state)
+        profile = state.resolve_profile()
         env = environments.active().name
         if api_key is not None and not api_key.strip():
             # An explicitly-passed empty/whitespace key (e.g. --api-key "$UNSET_VAR")
@@ -120,7 +120,7 @@ def logout(
     """Clear stored credentials for the active profile."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        profile = resolve_profile(state)
+        profile = state.resolve_profile()
         # Look before clearing so the report is truthful: "Signed out" on a fresh
         # machine (or a typo'd --profile) would claim something happened when
         # nothing was stored. Still exit 0 either way — logout is idempotent.
@@ -161,7 +161,7 @@ def whoami(
     """Show the active profile and whether its key is usable."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        profile = resolve_profile(state)
+        profile = state.resolve_profile()
         # The full env -> keyring chain (raises NotAuthenticated when empty), so a CI
         # box authenticated via ASSEMBLYAI_API_KEY can use whoami as a preflight check.
         key = state.resolve_api_key()
