@@ -33,7 +33,7 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
     def fake_run_session(api_key, *, renderer, player, mic, config):
         called["ran"] = True
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--list-voices"])
     assert result.exit_code == 0
     assert "ivy" in result.output
@@ -44,7 +44,7 @@ def test_list_voices_prints_and_exits_without_connecting(monkeypatch):
 
 def test_list_voices_json_emits_machine_readable_array(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.commands.agent.run_session",
+        "aai_cli.agent_exec.run_session",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not connect")),
     )
     result = runner.invoke(app, ["agent", "--list-voices", "--json"])
@@ -59,12 +59,12 @@ def test_list_voices_json_emits_machine_readable_array(monkeypatch):
 def test_agent_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", lambda src: f"filesrc:{src}")
 
     def fake_run_session(api_key, *, renderer, player, mic, config):
         raise AssertionError(f"agent session should not run after auto-login: {api_key}")
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--sample", "--json"])
     assert result.exit_code == 4
     assert config.get_api_key("default") == "sk_from_oauth"
@@ -79,7 +79,7 @@ def test_agent_drives_renderer_json(monkeypatch):
         renderer.user_final("hello agent")
         renderer.agent_transcript("hello human", interrupted=False)
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--json"])
     assert result.exit_code == 0
     lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
@@ -96,7 +96,7 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
         seen["prompt"] = config.system_prompt
         seen["full_duplex"] = config.full_duplex
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     prompt_file = tmp_path / "p.txt"
     prompt_file.write_text("be a pirate")
     result = runner.invoke(
@@ -120,7 +120,7 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
 def test_agent_headphones_notice_in_human_mode(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
     assert "headphones" in result.output.lower()  # mic stays open -> warn to use headphones
@@ -132,21 +132,21 @@ def test_agent_ctrl_c_exits_cleanly(monkeypatch):
     def raise_kbd(*a, **k):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", raise_kbd)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", raise_kbd)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
 
 
 def test_agent_unknown_voice_exits_2(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent", "--voice", "not-a-voice"])
     assert result.exit_code == 2
 
 
 def test_agent_prompt_file_not_found_exits_2(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     result = runner.invoke(
         app, ["agent", "--system-prompt-file", "/tmp/no_such_file_xyz_voiceagent.txt"]
     )
@@ -160,7 +160,7 @@ def _capture_run_session(monkeypatch):
     def fake_run_session(api_key, *, renderer, player, mic, config):
         seen.update(renderer=renderer, player=player, mic=mic, config=config)
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     return seen
 
 
@@ -169,7 +169,7 @@ def test_agent_file_source_streams_clip_and_exits_after_reply(monkeypatch, tmp_p
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")  # FileSource is faked below; contents don't matter
 
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: f"filesrc:{src}")
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", lambda src: f"filesrc:{src}")
     seen = _capture_run_session(monkeypatch)
 
     result = runner.invoke(app, ["agent", str(wav)])
@@ -192,7 +192,7 @@ def test_agent_sample_uses_hosted_clip(monkeypatch):
         captured["src"] = src
         return "filesrc"
 
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", fake_file_source)
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", fake_file_source)
     seen = _capture_run_session(monkeypatch)
 
     result = runner.invoke(app, ["agent", "--sample"])
@@ -203,7 +203,7 @@ def test_agent_sample_uses_hosted_clip(monkeypatch):
 
 def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav), "--device", "1"])
@@ -213,8 +213,8 @@ def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
 def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav)])
@@ -225,12 +225,12 @@ def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
 def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", lambda src: "filesrc")
 
     def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.connected()  # session.ready arrives even for a file-driven run
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     wav = tmp_path / "say.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["agent", str(wav)])
@@ -255,12 +255,12 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr("aai_cli.commands.agent.DuplexAudio", FakeDuplex)
+    monkeypatch.setattr("aai_cli.agent_exec.DuplexAudio", FakeDuplex)
 
     def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.connected()
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
     assert "start talking" in result.output.lower()  # live mic -> prompt the user to speak
@@ -269,7 +269,7 @@ def test_agent_mic_shows_start_talking_notice(monkeypatch):
 def test_agent_show_code_prints_without_session(monkeypatch):
     # Print-only: emits the agent script, never starts a session or opens audio, no auth.
     called = []
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: called.append(True))
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: called.append(True))
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code"])
     assert result.exit_code == 0
     assert called == []  # never ran a session
@@ -284,7 +284,7 @@ def test_agent_show_code_file_source_warns_on_stderr(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("must not run a session")
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", _boom)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", _boom)
     result = _invoke_split(["agent", "clip.wav", "--show-code"])
     assert result.exit_code == 0
     assert "uses the microphone" in result.stderr
@@ -319,7 +319,7 @@ def test_agent_headphones_notice_routes_to_stderr(monkeypatch):
     # default human mode the notice goes to stderr, stdout stays transcript-only.
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", lambda *a, **k: None)
     result = _invoke_split(["agent"])
     assert result.exit_code == 0
     assert "headphones" in result.stderr.lower()
@@ -331,7 +331,7 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
         raise AssertionError("must not run a session")
 
     monkeypatch.setattr(
-        "aai_cli.commands.agent.run_session",
+        "aai_cli.agent_exec.run_session",
         _boom,
     )
     result = runner.invoke(app, ["agent", "--voice", "ivy", "--show-code", "--json"])
@@ -342,13 +342,13 @@ def test_agent_show_code_ignores_json_flag(monkeypatch):
 def test_agent_output_text_emits_plain_transcript(monkeypatch):
     # `-o text` -> plain you:/agent: lines on stdout (pipe into assembly llm).
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.agent.FileSource", lambda src: "filesrc")
+    monkeypatch.setattr("aai_cli.agent_exec.FileSource", lambda src: "filesrc")
 
     def fake_run_session(api_key, *, renderer, player, mic, config):
         renderer.user_final("hello there")
         renderer.agent_transcript("hi, how can I help?", interrupted=False)
 
-    monkeypatch.setattr("aai_cli.commands.agent.run_session", fake_run_session)
+    monkeypatch.setattr("aai_cli.agent_exec.run_session", fake_run_session)
     result = runner.invoke(app, ["agent", "--sample", "-o", "text"])
     assert result.exit_code == 0
     assert "you: hello there" in result.output
@@ -370,11 +370,11 @@ def test_resolve_system_prompt_unreadable_file_raises_clierror(tmp_path):
 
     import pytest
 
-    from aai_cli.commands import agent
+    from aai_cli import agent_exec
     from aai_cli.errors import CLIError
 
     missing = Path(tmp_path) / "does-not-exist.txt"
     with pytest.raises(CLIError) as exc:
-        agent._resolve_system_prompt("fallback prompt", missing)
+        agent_exec._resolve_system_prompt("fallback prompt", missing)
     assert exc.value.exit_code == 2
     assert "system-prompt-file" in exc.value.message

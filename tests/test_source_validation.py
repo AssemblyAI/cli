@@ -46,7 +46,7 @@ def test_resolve_audio_source_source_plus_sample_rejected_even_without_checks():
 
 def test_transcribe_source_plus_sample_exits_2(mocker, tmp_path):
     # No key configured: the conflict must fail before credential resolution.
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     clip = tmp_path / "clip.mp3"
     clip.write_bytes(b"fake")
     result = runner.invoke(app, ["transcribe", str(clip), "--sample"])
@@ -69,7 +69,7 @@ def test_resolve_audio_source_rejects_directory(tmp_path):
 def test_transcribe_directory_source_fails_before_credentials(mocker, tmp_path):
     # No key configured: a directory is batch mode, and an empty one must read as
     # "no audio files", never trigger a login (or an upload attempt).
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", str(tmp_path)])
     assert result.exit_code == 2
     # Rich may wrap the long tmp path mid-token (even inside a word), so compare with
@@ -122,7 +122,7 @@ def test_transcripts_get_rejects_path_traversal_id():
 def test_transcribe_missing_file_fails_before_credentials(mocker):
     # No key is configured: the path check must fire first, so the user sees
     # "file not found" instead of a login prompt (or a keyring error).
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "missing.wav"])
     assert result.exit_code == 2
     assert "File not found: missing.wav" in result.output
@@ -145,7 +145,7 @@ def test_transcribe_empty_stdin_exits_2():
 def test_stream_missing_file_fails_before_credentials(monkeypatch):
     called = {"stream": False}
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda *a, **k: called.__setitem__("stream", True),
     )
     result = runner.invoke(app, ["stream", "missing.wav"])

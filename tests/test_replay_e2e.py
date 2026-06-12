@@ -35,7 +35,7 @@ def test_transcribe_sample_renders_real_transcript(monkeypatch, mocker):
     _with_api_key()
     _human(monkeypatch)
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=rf.transcript("transcribe_sample"),
     )
