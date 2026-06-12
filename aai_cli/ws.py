@@ -53,7 +53,7 @@ def handshake_status(exc: object) -> int | None:
     return None
 
 
-def is_rejected_key(exc: Exception) -> bool:
+def is_rejected_key(exc: object) -> bool:
     """Is this connect/session failure auth-shaped (the key itself was rejected)?
 
     Mirrors how `stream` classifies handshake failures: a plain HTTP 403 on the
@@ -68,7 +68,7 @@ def is_rejected_key(exc: Exception) -> bool:
     return is_auth_failure(exc)
 
 
-def auth_or_api_error(exc: Exception, message: str) -> CLIError:
+def auth_or_api_error(exc: object, message: str) -> CLIError:
     """Map a connect/session exception to the right CLIError: a rejected key becomes
     auth_failure(), anything else becomes APIError(f"{message}: {exc}")."""
     if is_rejected_key(exc):

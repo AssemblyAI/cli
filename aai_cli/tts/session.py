@@ -139,7 +139,6 @@ def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
     A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
     (whoami / environment / network); anything else keeps the wsutil mapping.
     """
-    message = "Could not connect to the TTS service"
     try:
         return connect(
             url,
@@ -147,12 +146,11 @@ def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
             max_size=None,
         )
     except Exception as exc:
-        rejected = diagnostics.handshake_error(
-            exc, message, host=environments.active().streaming_tts_host
-        )
-        if rejected is not None:
-            raise rejected from exc
-        raise wsutil.auth_or_api_error(exc, message) from exc
+        raise diagnostics.classify_error(
+            exc,
+            "Could not connect to the TTS service",
+            host=environments.active().streaming_tts_host,
+        ) from exc
 
 
 def _run_protocol(
