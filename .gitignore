@@ -12,6 +12,9 @@ build/
 coverage.xml
 htmlcov/
 
+# macOS Finder metadata
+.DS_Store
+
 # Editor/agent local artifacts: keep personal settings local, but track the
 # team-shared bits (.claude/settings.json, agents/, skills/).
 .claude/settings.local.json
