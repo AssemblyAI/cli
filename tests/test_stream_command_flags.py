@@ -18,7 +18,7 @@ def test_stream_maps_turn_detection_flags(monkeypatch):
     def fake_stream_audio(api_key, source, *, params, **kw):
         captured["params"] = params
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
 
     runner.invoke(
         app,
@@ -41,7 +41,7 @@ def test_stream_config_escape_hatch(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda api_key, source, *, params, **kw: captured.update(params=params),
     )
 
@@ -53,7 +53,7 @@ def test_stream_maps_webhook_auth_header(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda api_key, source, *, params, **kw: captured.update(params=params),
     )
 
@@ -77,7 +77,7 @@ def test_stream_format_turns_tristate(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}
     monkeypatch.setattr(
-        "aai_cli.commands.stream.client.stream_audio",
+        "aai_cli.stream_exec.client.stream_audio",
         lambda api_key, source, *, params, **kw: captured.update(params=params),
     )
 
@@ -131,7 +131,7 @@ def test_stream_file_source_with_sample_rejected(monkeypatch, tmp_path):
     def _boom(*a, **k):
         raise AssertionError("must not stream a conflicting source")
 
-    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", _boom)
+    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", _boom)
     wav = tmp_path / "a.wav"
     wav.write_bytes(b"RIFF")
     result = runner.invoke(app, ["stream", str(wav), "--sample"])

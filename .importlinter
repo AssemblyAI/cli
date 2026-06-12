@@ -29,6 +29,7 @@ source_modules =
     aai_cli.output
     aai_cli.render
     aai_cli.stdio
+    aai_cli.stream_exec
     aai_cli.streaming
     aai_cli.telemetry
     aai_cli.theme

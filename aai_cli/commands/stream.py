@@ -1,79 +1,17 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import typer
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
-from aai_cli import (
-    choices,
-    client,
-    code_gen,
-    config_builder,
-    help_panels,
-    llm,
-    options,
-    output,
-    youtube,
-)
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
-from aai_cli.follow import FollowRenderer
+from aai_cli import choices, help_panels, llm, options, stream_exec
+from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
-from aai_cli.microphone import MicrophoneSource
-from aai_cli.streaming.macos import MacSystemAudioSource
-from aai_cli.streaming.render import StreamRenderer
-from aai_cli.streaming.session import (
-    SourceOptions,
-    StreamSession,
-    validate_output_flags,
-    validate_sources,
-)
-from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 
 app = typer.Typer()
 
 DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
-
-
-def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
-    """Open the right audio source(s) for the flags and stream them."""
-    if opts.from_system_audio:
-        system = MacSystemAudioSource(on_open=session.on_open)
-        if opts.system_audio_only:
-            session.run(system, system.sample_rate, source_label="system")
-        else:
-            mic = MicrophoneSource(
-                target_rate=TARGET_RATE,
-                device=opts.device,
-                capture_rate=opts.sample_rate,
-                on_open=session.on_open,
-            )
-            session.run_parallel(
-                [("system", system, system.sample_rate), ("you", mic, mic.sample_rate)]
-            )
-    elif opts.from_stdin:
-        # Raw PCM16 mono piped on stdin (e.g. `ffmpeg … -f s16le - | assembly stream -`).
-        stdin_src = StdinSource(sample_rate=opts.sample_rate or TARGET_RATE)
-        session.run(stdin_src, stdin_src.sample_rate)
-    elif opts.source and youtube.is_downloadable_url(opts.source):
-        # Fetch the audio first, then stream the local file in real time.
-        with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(opts.source, Path(td))
-            session.run(FileSource(str(local)), TARGET_RATE)
-    elif opts.from_file:
-        file_audio = FileSource(client.resolve_audio_source(opts.source, sample=opts.sample))
-        session.run(file_audio, file_audio.sample_rate)
-    else:
-        # Capture at the device's native rate (or --sample-rate override) and tell the
-        # streaming API that rate, rather than forcing one the device may reject.
-        # "Listening…" is announced once the device is open (see StreamSession.on_open),
-        # not when the session opens — so early speech isn't lost in the gap.
-        mic = MicrophoneSource(
-            device=opts.device, capture_rate=opts.sample_rate, on_open=session.on_open
-        )
-        session.run(mic, mic.sample_rate)
 
 
 @app.command(
@@ -348,102 +286,47 @@ def stream(
     in-process, refreshing the answer on every finalized turn; for a separate step
     instead, pipe the text out with -o text | assembly llm -f "…".
     """
-
-    def body(state: AppState, json_mode: bool) -> None:
-        validate_output_flags(json_mode=json_mode, output_field=output_field)
-        text_mode, json_mode = output.stream_output_modes(output_field, json_mode=json_mode)
-        opts = SourceOptions(
-            source=source,
-            sample=sample,
-            sample_rate=sample_rate,
-            device=device,
-            system_audio=system_audio,
-            system_audio_only=system_audio_only,
-        )
-        # Every streaming flag except sample_rate, which is set per source at stream time.
-        base_flags: dict[str, object] = {
-            "speech_model": config_builder.enum_value(speech_model),
-            "format_turns": format_turns if format_turns is not None else True,
-            "encoding": config_builder.enum_value(encoding),
-            "language_detection": language_detection,
-            "domain": domain,
-            "end_of_turn_confidence_threshold": end_of_turn_confidence_threshold,
-            "min_turn_silence": min_turn_silence,
-            "max_turn_silence": max_turn_silence,
-            "vad_threshold": vad_threshold,
-            "include_partial_turns": include_partial_turns,
-            "keyterms_prompt": list(keyterms_prompt) if keyterms_prompt else None,
-            "filter_profanity": filter_profanity,
-            "speaker_labels": speaker_labels,
-            "max_speakers": max_speakers,
-            "voice_focus": config_builder.enum_value(voice_focus),
-            "voice_focus_threshold": voice_focus_threshold,
-            "redact_pii": redact_pii,
-            "redact_pii_policies": config_builder.split_csv(redact_pii_policy),
-            "redact_pii_sub": redact_pii_sub,
-            "inactivity_timeout": inactivity_timeout,
-            "webhook_url": webhook_url,
-            "prompt": prompt,
-        }
-        base_flags.update(config_builder.auth_header_flags(webhook_auth_header))
-
-        if show_code:
-            # Print-only: emit a script faithful to the requested source — mic
-            # (default), stdin (-), or a file/URL — and exit without opening audio or
-            # authenticating. Raw stdout so `--show-code > script.py` is runnable.
-            # The same source validation as a real run, so e.g. a file + --sample-rate
-            # conflict errors here too instead of silently generating mic code.
-            validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
-            if opts.from_system_audio:
-                raise UsageError("--show-code does not support macOS system audio capture yet.")
-            if opts.source and youtube.is_downloadable_url(opts.source):
-                raise UsageError(
-                    "--show-code does not support downloaded sources (YouTube, podcast pages) yet.",
-                    suggestion="Download the audio first (e.g. yt-dlp) and pass the local file.",
-                )
-            code_source: str | None = None
-            if opts.from_stdin:
-                code_source = "-"
-            elif opts.from_file:
-                # check_local=False: generating code for a file you don't have yet is fine.
-                code_source = client.resolve_audio_source(
-                    opts.source, sample=opts.sample, check_local=False
-                )
-            merged = config_builder.merge_streaming_params(
-                # sample_rate precedence: --sample-rate (None is dropped by the merge)
-                # beats --config/--config-file, which beat the 16 kHz default below —
-                # so an explicit `--config sample_rate=…` is honored, not overridden.
-                flags=base_flags | {"sample_rate": opts.sample_rate},
-                overrides=config_kv,
-                config_file=config_file,
-            )
-            merged.setdefault("sample_rate", TARGET_RATE)
-            gateway = code_gen.gateway_options(
-                list(llm_prompt or []), model, max_tokens, interval=llm_interval
-            )
-            output.print_code(code_gen.stream(merged, llm=gateway, source=code_source))
-            return
-
-        # Validate the requested sources (including that a local file exists) before
-        # credentials, so a typo'd path reads as "file not found" — not as a login.
-        validate_sources(opts, has_llm=bool(llm_prompt), text_mode=text_mode)
-        if opts.from_file and not opts.from_stdin:
-            client.resolve_audio_source(opts.source, sample=opts.sample)
-        api_key = state.resolve_api_key()
-
-        llm_prompts = list(llm_prompt or [])
-        session = StreamSession(
-            api_key=api_key,
-            base_flags=base_flags,
-            overrides=config_kv,
-            config_file=config_file,
-            renderer=StreamRenderer(json_mode=json_mode, text_mode=text_mode),
-            follow=FollowRenderer(json_mode=json_mode) if llm_prompts else None,
-            llm_prompts=llm_prompts,
-            model=model,
-            max_tokens=max_tokens,
-            llm_interval=llm_interval,
-        )
-        _dispatch(session, opts)
-
-    run_command(ctx, body, json=json_out)
+    opts = stream_exec.StreamOptions(
+        source=source,
+        sample=sample,
+        sample_rate=sample_rate,
+        device=device,
+        system_audio=system_audio,
+        system_audio_only=system_audio_only,
+        speech_model=speech_model,
+        encoding=encoding,
+        language_detection=language_detection,
+        domain=domain,
+        prompt=prompt,
+        keyterms_prompt=keyterms_prompt,
+        end_of_turn_confidence_threshold=end_of_turn_confidence_threshold,
+        min_turn_silence=min_turn_silence,
+        max_turn_silence=max_turn_silence,
+        vad_threshold=vad_threshold,
+        format_turns=format_turns,
+        include_partial_turns=include_partial_turns,
+        speaker_labels=speaker_labels,
+        max_speakers=max_speakers,
+        voice_focus=voice_focus,
+        voice_focus_threshold=voice_focus_threshold,
+        inactivity_timeout=inactivity_timeout,
+        filter_profanity=filter_profanity,
+        redact_pii=redact_pii,
+        redact_pii_policy=redact_pii_policy,
+        redact_pii_sub=redact_pii_sub,
+        webhook_url=webhook_url,
+        webhook_auth_header=webhook_auth_header,
+        llm_prompt=llm_prompt,
+        llm_interval=llm_interval,
+        model=model,
+        max_tokens=max_tokens,
+        config_kv=config_kv,
+        config_file=config_file,
+        output_field=output_field,
+        show_code=show_code,
+    )
+    run_command(
+        ctx,
+        lambda state, json_mode: stream_exec.run_stream(opts, state, json_mode=json_mode),
+        json=json_out,
+    )
