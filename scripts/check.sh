@@ -209,10 +209,18 @@ fi
 echo "==> no new static-analysis escape hatches"
 # Existing escape hatches are tolerated for now; new ones must be refactored away or
 # justified by changing this gate deliberately. Broad noqa/type-ignore/no-cover are
-# checked by added diff lines. `Any` and `cast(` are count-gated against origin/main
-# so mechanical edits to existing uses don't fail, but net-new uses do.
+# checked by added diff lines. `Any` and `cast(` are count-gated against the
+# merge-base with origin/main so mechanical edits to existing uses don't fail, but
+# net-new uses do.
 if git rev-parse --verify --quiet origin/main >/dev/null; then
-  escape_hatches="$(git diff -U0 origin/main -- aai_cli tests \
+  # Diff and count against the MERGE-BASE, not the origin/main tip (which the
+  # mutation gate and diff-cover already do). With many concurrent branches,
+  # main moves constantly: a tip-based baseline makes this gate fail on a branch
+  # the moment an unrelated merge lowers the count (e.g. removes an `Any`), even
+  # though the branch itself added nothing. The merge-base only moves when the
+  # branch itself rebases.
+  gate_base="$(git merge-base origin/main HEAD || echo origin/main)"
+  escape_hatches="$(git diff -U0 "$gate_base" -- aai_cli tests \
     | rg '^\+.*(# type: ignore|# noqa|pragma: no cover)' || true)"
   if [[ -n "$escape_hatches" ]]; then
     printf '%s\n' "$escape_hatches"
@@ -226,7 +234,7 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   # env-gated marker suites (e2e/install) and live on origin/main, so they aren't
   # added diff lines and don't trip this; a genuinely-needed new one must update this
   # gate deliberately. Scoped to tests/ — production sleeps are fine.
-  test_shortcuts="$(git diff -U0 origin/main -- tests \
+  test_shortcuts="$(git diff -U0 "$gate_base" -- tests \
     | rg '^\+.*(pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\()' || true)"
   if [[ -n "$test_shortcuts" ]]; then
     printf '%s\n' "$test_shortcuts"
@@ -234,17 +242,17 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
     exit 1
   fi
 
-  base_any_count="$({ git grep -n "Any" origin/main -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  base_any_count="$({ git grep -n "Any" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   work_any_count="$({ rg -n "Any" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   if (( work_any_count > base_any_count )); then
-    echo "New Any usage found: ${work_any_count} current vs ${base_any_count} on origin/main."
+    echo "New Any usage found: ${work_any_count} current vs ${base_any_count} at the merge-base with origin/main."
     exit 1
   fi
 
-  base_cast_count="$({ git grep -n "cast(" origin/main -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  base_cast_count="$({ git grep -n "cast(" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   work_cast_count="$({ rg -n "cast\\(" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
   if (( work_cast_count > base_cast_count )); then
-    echo "New cast() usage found: ${work_cast_count} current vs ${base_cast_count} on origin/main."
+    echo "New cast() usage found: ${work_cast_count} current vs ${base_cast_count} at the merge-base with origin/main."
     exit 1
   fi
 else
