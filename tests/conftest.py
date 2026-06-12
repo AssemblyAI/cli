@@ -155,6 +155,23 @@ def neutralize_shipped_token(monkeypatch):
     return original
 
 
+@pytest.fixture
+def memory_fs():
+    """fsspec's in-process memory filesystem, reset afterwards.
+
+    Lets remote-source tests (memory:// URLs) exercise real fsspec glob/find/
+    download code paths while pytest-socket stays armed. The reset matters:
+    MemoryFileSystem state is process-global (class attributes), so leftover
+    files would leak across randomly-ordered tests.
+    """
+    import fsspec
+    from fsspec.implementations.memory import MemoryFileSystem
+
+    yield fsspec.filesystem("memory")
+    MemoryFileSystem.store.clear()
+    MemoryFileSystem.pseudo_dirs[:] = [""]
+
+
 @pytest.fixture(autouse=True)
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"

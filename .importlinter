@@ -35,6 +35,7 @@ source_modules =
     aai_cli.options
     aai_cli.output
     aai_cli.procs
+    aai_cli.remotefs
     aai_cli.render
     aai_cli.speak_exec
     aai_cli.stdio
@@ -95,6 +96,7 @@ source_modules =
     aai_cli.eval_data
     aai_cli.hotkey
     aai_cli.llm
+    aai_cli.remotefs
     aai_cli.sync_stt
     aai_cli.telemetry
     aai_cli.wer
