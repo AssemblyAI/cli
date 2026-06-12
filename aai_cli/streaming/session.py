@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 
 from aai_cli import choices, client, config_builder, llm, output
-from aai_cli.errors import APIError, CLIError, UsageError
+from aai_cli.errors import APIError, CLIError, UsageError, mutually_exclusive
 from aai_cli.follow import FollowRenderer
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 
@@ -57,19 +57,25 @@ def validate_output_flags(*, json_mode: bool, output_field: choices.TextOrJson |
     Same precedent as --llm + -o text: contradictory output shapes are a clean
     usage error, not a silent coin-flip between plain text and NDJSON.
     """
-    if json_mode and output_field is choices.TextOrJson.text:
-        raise UsageError("--json can't be combined with -o text; pick one output format.")
+    mutually_exclusive(
+        ("--json", json_mode),
+        ("-o text", output_field is choices.TextOrJson.text),
+        suggestion="Pick one output format.",
+    )
 
 
 def validate_sources(opts: SourceOptions, *, has_llm: bool, text_mode: bool) -> None:
     """Reject flag combinations that can't be honored, before any audio is opened."""
-    if opts.system_audio and opts.system_audio_only:
-        raise UsageError("Use either --system-audio or --system-audio-only, not both.")
+    mutually_exclusive(
+        ("--system-audio", opts.system_audio),
+        ("--system-audio-only", opts.system_audio_only),
+    )
     _validate_input_source(opts)
-    if has_llm and text_mode:
-        raise UsageError(
-            "--llm renders a live panel (or NDJSON when piped); it can't be combined with -o text."
-        )
+    mutually_exclusive(
+        ("--llm", has_llm),
+        ("-o text", text_mode),
+        suggestion="--llm renders a live panel (or NDJSON when piped).",
+    )
 
 
 def _validate_input_source(opts: SourceOptions) -> None:

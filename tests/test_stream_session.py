@@ -446,7 +446,7 @@ def test_stream_system_audio_rejects_both_modes():
     config.set_api_key("default", "sk_live")
     result = runner.invoke(app, ["stream", "--system-audio", "--system-audio-only"])
     assert result.exit_code == 2
-    assert "either --system-audio" in result.output
+    assert "--system-audio and --system-audio-only can't be combined." in result.output
 
 
 def test_stream_show_code_rejects_system_audio():

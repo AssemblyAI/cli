@@ -311,7 +311,7 @@ def test_agent_json_with_text_output_is_usage_error():
     # Contradictory output shapes (--json + -o text) are rejected like stream's.
     result = runner.invoke(app, ["agent", "--json", "-o", "text"])
     assert result.exit_code == 2
-    assert "can't be combined with -o text" in result.output
+    assert "--json and -o text can't be combined." in result.output
 
 
 def test_agent_headphones_notice_routes_to_stderr(monkeypatch):

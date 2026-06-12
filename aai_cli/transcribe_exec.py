@@ -17,7 +17,7 @@ import assemblyai as aai
 from rich.markup import escape
 
 from aai_cli import choices, client, llm, output, stdio, transcribe_render, youtube
-from aai_cli.errors import UsageError
+from aai_cli.errors import UsageError, mutually_exclusive
 
 # The PII policy strings the SDK accepts, validated client-side so a typo'd
 # --redact-pii-policy fails before any upload — mirroring how an unknown --config
@@ -33,11 +33,11 @@ def validate_pii_policies(policies: list[str] | None) -> None:
 
 
 def validate_language_flags(language_code: str | None, *, language_detection: bool | None) -> None:
-    if language_code and language_detection:
-        raise UsageError(
-            "--language-code and --language-detection can't be combined.",
-            suggestion="Force a language or auto-detect it, not both.",
-        )
+    mutually_exclusive(
+        ("--language-code", language_code),
+        ("--language-detection", language_detection),
+        suggestion="Force a language or auto-detect it, not both.",
+    )
 
 
 def validate_speakers_expected(merged: dict[str, object]) -> None:
@@ -50,12 +50,12 @@ def validate_speakers_expected(merged: dict[str, object]) -> None:
 
 
 def validate_out_with_llm(out: Path | None, llm_prompts: list[str] | None) -> None:
-    if out is not None and llm_prompts:
-        # --out captures the transcript itself; an LLM transform is a separate step.
-        raise UsageError(
-            "--out can't be combined with --llm.",
-            suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
-        )
+    # --out captures the transcript itself; an LLM transform is a separate step.
+    mutually_exclusive(
+        ("--out", out),
+        ("--llm", llm_prompts),
+        suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
+    )
 
 
 def validate_out_path(out: Path | None) -> None:
@@ -80,11 +80,13 @@ def validate_json_with_output(
 ) -> None:
     """``--json`` promises the full JSON payload (same as ``-o json``); any other
     ``-o`` field contradicts it rather than silently winning."""
-    if json_mode and output_field is not None and output_field is not choices.TranscriptOutput.json:
-        raise UsageError(
-            f"--json conflicts with -o {output_field.value}.",
-            suggestion="Drop --json, or use -o json for the full JSON payload.",
-        )
+    if output_field is None or output_field is choices.TranscriptOutput.json:
+        return
+    mutually_exclusive(
+        ("--json", json_mode),
+        (f"-o {output_field.value}", output_field),
+        suggestion="Drop --json, or use -o json for the full JSON payload.",
+    )
 
 
 def warn_unrecognized_extension(source: str | None, *, json_mode: bool, quiet: bool) -> None:
