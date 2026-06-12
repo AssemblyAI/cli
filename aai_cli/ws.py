@@ -36,6 +36,14 @@ def silence_websockets_logging() -> None:
         logging.getLogger(name).setLevel(logging.CRITICAL)
 
 
+def _as_int_status(value: object) -> int | None:
+    """Best-effort conversion of a status-like value to int, else None."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def handshake_status(exc: object) -> int | None:
     """The HTTP status of a rejected WebSocket handshake (401/403), else None.
 
@@ -44,12 +52,12 @@ def handshake_status(exc: object) -> int | None:
     ``.response.status_code`` — never the message text. The single classifier for
     every realtime path (stream, agent, speak), so 401-vs-403 handling can't drift.
     """
-    code = getattr(exc, "code", None)
+    code = _as_int_status(getattr(exc, "code", None))
     if code in _HANDSHAKE_AUTH_STATUSES:
-        return int(code)
-    status = getattr(getattr(exc, "response", None), "status_code", None)
+        return code
+    status = _as_int_status(getattr(getattr(exc, "response", None), "status_code", None))
     if status in _HANDSHAKE_AUTH_STATUSES:
-        return int(status)
+        return status
     return None
 
 
