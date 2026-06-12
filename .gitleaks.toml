@@ -20,6 +20,12 @@ regexes = [
   # committing it is deliberate (the Supabase-CLI model). Only this exact value is
   # allowlisted -- any other real-looking token still fails the gate.
   '''pub0d633113b9f7d22faff215fefaf30b43''',
+  # generic-api-key false positive: a keyword-argument expression in the
+  # `--show-code` gateway builder (aai_cli/stream_exec.py), not a credential. Some
+  # gitleaks versions' entropy heuristic flags `interval=opts.llm_interval`;
+  # allowlist the exact expression so the gate is version-stable. Anything else in
+  # that file is still scanned.
+  '''interval=opts\.llm_interval''',
 ]
 # `gitleaks dir` scans the working tree regardless of .gitignore, so high-entropy values
 # in a developer's gitignored `.claude/settings.local.json` (a personal Claude Code file
