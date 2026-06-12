@@ -12,9 +12,7 @@ runner = CliRunner()
 
 
 def _capture_source(seen):
-    def fake(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None, **_kwargs
-    ):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         seen["source"] = source
         seen["rate"] = params.sample_rate
 
@@ -112,7 +110,9 @@ def test_stream_system_audio_uses_macos_source(monkeypatch) -> None:
                 mic_on_open[0]()
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, on_begin=None, on_turn=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         source_type = type(source).__name__
         source_types.append(source_type)
         rates.append(params.sample_rate)
@@ -190,7 +190,9 @@ def test_stream_system_audio_forwards_mic_device_flags(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         list(source)
 
     monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
@@ -222,7 +224,9 @@ def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, on_turn=None, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript=type(source).__name__, end_of_turn=True))
@@ -261,7 +265,9 @@ def test_stream_system_audio_speaker_labels_only_diarizes_system(monkeypatch):
         def __iter__(self):
             return iter([b"mic"])
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         chunk = next(iter(source))
         speaker_labels_by_chunk[chunk] = params.speaker_labels
 
@@ -308,7 +314,9 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
         def join(self, timeout=None):
             return None
 
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         raise APIError(f"{type(source).__name__} failed")
 
     monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)

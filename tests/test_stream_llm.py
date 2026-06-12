@@ -13,7 +13,7 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {"texts": []}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hola", end_of_turn=True))
             on_turn(types.SimpleNamespace(transcript="mundo", end_of_turn=True))
@@ -59,7 +59,7 @@ def test_stream_llm_chains_multiple_prompts(monkeypatch):
     config.set_api_key("default", "sk_live")
     seen = {}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
@@ -90,11 +90,11 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
     config.set_api_key("default", "sk_live")
     called = {"ran": False}
 
-    def fake(api_key, source, *, params, on_turn=None, **kwargs):
+    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_turn:
             on_turn(types.SimpleNamespace(transcript="hi", end_of_turn=True))
 
-    def fake_run_chain(*a, **k):
+    def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
         called["ran"] = True
         return "x"
 
