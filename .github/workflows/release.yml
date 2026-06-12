@@ -81,6 +81,10 @@ jobs:
         run: |
           set -euo pipefail
           brew tap-new --no-git assembly/local
+          # Homebrew >=5.1.15 ignores formulae from untrusted non-official taps,
+          # which includes this just-created local tap; trust it or the install
+          # below fails ("tap trust is required").
+          brew trust assembly/local
           tap_formula="$(brew --repository assembly/local)/Formula/assembly.rb"
           cp Formula/assembly.rb "$tap_formula"
           brew install --build-bottle --formula assembly/local/assembly
