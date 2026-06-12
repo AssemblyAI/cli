@@ -45,11 +45,12 @@ cd "$root"
 # With hatch-vcs the git tag IS the version; there is no file to read. Default
 # to the next patch above the latest vX.Y.Z tag; an explicit arg overrides.
 latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
-[ -n "$latest" ] || err "no existing vX.Y.Z tag found; pass an explicit version."
 
 if [ -n "${EXPLICIT_VERSION:-}" ]; then
   version="$EXPLICIT_VERSION"
 else
+  # Auto-bump needs a tag to bump from; an explicit version does not.
+  [ -n "$latest" ] || err "no existing vX.Y.Z tag found; pass an explicit version."
   base="${latest#v}"
   major="$(echo "$base" | cut -d. -f1)"
   minor="$(echo "$base" | cut -d. -f2)"
@@ -59,7 +60,11 @@ fi
 echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
   err "version '$version' is not a plain MAJOR.MINOR.PATCH triple."
 tag="v${version}"
-info "Latest tag ${latest}; releasing ${tag}."
+if [ -n "$latest" ]; then
+  info "Latest tag ${latest}; releasing ${tag}."
+else
+  info "No prior tags; releasing ${tag}."
+fi
 
 # --- Safety gates ----------------------------------------------------------
 [ -f .github/workflows/release.yml ] ||
