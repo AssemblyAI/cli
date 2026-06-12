@@ -32,6 +32,14 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
 
 `speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices. (`speak` is sandbox-only today, hence `--sandbox`.)
 
+**Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video:
+
+```sh
+assembly --sandbox dub talk.mp4 --lang de
+```
+
+The video stream is copied untouched; each dubbed line lands at its original start time. (Sandbox-only, like `speak`.)
+
 **Turn a podcast into audio** — Apple and Spotify podcast pages work too (yt-dlp ingestion):
 
 ```sh
@@ -174,6 +182,7 @@ assembly init                  # scaffold a starter app
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
 - **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`).
+- **Dubbing**: `assembly dub` re-voices an audio/video file in another language (`assembly --sandbox dub talk.mp4 --lang de`): diarized transcription, per-utterance LLM translation, streaming TTS per speaker, and an ffmpeg track-swap that leaves the video untouched. Sandbox-only today, like `speak`.
 - **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset (with built-in aliases for common benchmarks: `assembly eval tedlium`) or a local `.csv`/`.jsonl` manifest and scores WER against its references — handy for picking a speech model.
 - **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`); `assembly dev` runs it, `assembly share` exposes it on a public URL, and `assembly deploy` ships it to Vercel, Railway, or Fly.io.
 - **Webhook testing**: `assembly webhooks listen` opens a public dev URL (cloudflared quick tunnel) that prints webhook deliveries as they arrive and can forward them to your local app with `--forward-to`.

@@ -146,6 +146,68 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[dub]
+  '''
+  
+   Usage: assembly dub [OPTIONS] MEDIA
+  
+   Dub a video or audio file into another language (sandbox only).
+  
+   The whole platform in one command: the media is transcribed with diarized
+   utterance timestamps, each utterance is translated by an LLM Gateway model,
+   the translations are synthesized with streaming TTS (one voice per
+   speaker), and ffmpeg lays the new audio over the original — video copied
+   untouched. Streaming TTS only exists in the sandbox today — run it as
+   'assembly --sandbox dub' (--sandbox goes before the subcommand). Requires
+   ffmpeg.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    media      TEXT  Local audio/video file to dub (the video stream is     │
+  │                       copied untouched).                                     │
+  │                       [required]                                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ *  --lang           -l      TEXT  Target language: an ISO code (de, fr, es,  │
+  │                                   …) or a language name (German).            │
+  │                                   [required]                                 │
+  │    --transcript-id  -t      TEXT  Reuse an existing diarized transcript of   │
+  │                                   this media instead of transcribing it      │
+  │                                   again.                                     │
+  │    --voice                  TEXT  Voice id for every speaker (e.g. jane,     │
+  │                                   michael, paul), or SPEAKER=VOICE to pin a  │
+  │                                   diarized speaker (repeatable, e.g. --voice │
+  │                                   A=jane).                                   │
+  │    --out                    PATH  Output file (default:                      │
+  │                                   <name>.dub.<lang><ext> next to the input). │
+  │    --json           -j            Emit JSON describing the dubbed file.      │
+  │    --help                         Show this message and exit.                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --model             TEXT     LLM Gateway model that translates the           │
+  │                              utterances.                                     │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens per utterance translation.           │
+  │                              [default: 1000]                                 │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Dub a talk into German (sandbox only)
+   $ assembly --sandbox dub talk.mp4 --lang de
+   Use a language name instead of a code
+   $ assembly --sandbox dub talk.mp4 -l Spanish
+   Dub every speaker with one voice
+   $ assembly --sandbox dub talk.mp4 -l fr --voice paul
+   Pin a voice per diarized speaker
+   $ assembly --sandbox dub panel.mp4 -l de --voice A=jane --voice B=paul
+   Reuse a finished transcript instead of re-transcribing
+   $ assembly --sandbox dub talk.mp4 -l de -t TRANSCRIPT_ID
+   Choose the output file
+   $ assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[eval]
   '''
   
