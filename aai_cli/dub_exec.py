@@ -10,9 +10,10 @@ transcribed with diarized utterance timestamps, each utterance is translated to
 the target language by an LLM Gateway model, each translation is synthesized
 with streaming TTS (one voice per speaker), the segments are laid out on a
 silence timeline at their original start times, and ffmpeg swaps the new track
-over the original media (video stream copied untouched). Streaming TTS only
-exists in the sandbox today, so — like `assembly speak` — the command is
-sandbox-only.
+over the original media (video stream copied untouched). A YouTube/media-page
+URL is downloaded first — audio only, or the full video with ``--video`` so the
+dub keeps the picture. Streaming TTS only exists in the sandbox today, so —
+like `assembly speak` — the command is sandbox-only.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from pathlib import Path
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import client, environments, jsonshape, output
+from aai_cli import client, environments, jsonshape, output, youtube
 from aai_cli import llm as gateway
 from aai_cli.context import AppState
 from aai_cli.errors import APIError, CLIError, UsageError
@@ -80,6 +81,7 @@ class DubOptions:
     model: str
     max_tokens: int
     out: Path | None
+    video: bool
 
 
 def resolve_language(value: str) -> str:
@@ -371,12 +373,52 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly dub` invocation from already-parsed flags."""
     language = resolve_language(opts.language)
     _require_sandbox()
+    youtube.validate_video_flag(opts.media, video=opts.video)
+    if youtube.is_downloadable_url(opts.media):
+        # A media-page URL (YouTube, podcast page, …) is downloaded once — the
+        # audio track by default, the full video with --video so the dub keeps
+        # the picture — and dubbed locally. ffmpeg is checked before the
+        # download so a missing dependency fails before any fetch.
+        ffmpeg = _require_ffmpeg()
+        downloading = "Downloading video…" if opts.video else "Downloading audio…"
+        with tempfile.TemporaryDirectory(prefix="aai-dub-src-") as td:
+            with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
+                local = youtube.download_media(opts.media, Path(td), video=opts.video)
+            # The download dir is temporary, so the default output lands in the
+            # current directory — never next to the temp file.
+            out = (
+                opts.out
+                if opts.out is not None
+                else Path.cwd() / default_out_path(local, language).name
+            )
+            _validate_out(out, local)
+            _dub_and_emit(opts, local, out, language, ffmpeg, state, json_mode=json_mode)
+        return
+    if opts.media.startswith(("http://", "https://")):
+        raise UsageError(
+            "assembly dub can't fetch this URL; it dubs a local file or a "
+            "media-page URL yt-dlp can download (YouTube, podcasts, …).",
+            suggestion="Download the media first, then dub the local copy.",
+        )
     media = Path(opts.media)
     _validate_media(media)
     out = opts.out if opts.out is not None else default_out_path(media, language)
     _validate_out(out, media)
     ffmpeg = _require_ffmpeg()
+    _dub_and_emit(opts, media, out, language, ffmpeg, state, json_mode=json_mode)
 
+
+def _dub_and_emit(
+    opts: DubOptions,
+    media: Path,
+    out: Path,
+    language: str,
+    ffmpeg: str,
+    state: AppState,
+    *,
+    json_mode: bool,
+) -> None:
+    """Dub an already-local media file into ``out`` and report the result."""
     transcript = _resolve_transcript(opts, media, state, json_mode=json_mode)
     transcript_id = str(getattr(transcript, "id", ""))
     utterances = _utterances_of(transcript)

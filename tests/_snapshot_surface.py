@@ -33,6 +33,7 @@ HELP_GROUPS: dict[str, frozenset[str]] = {
             "llm",
             "clip",
             "dub",
+            "caption",
             "eval",
             "webhooks",
         }

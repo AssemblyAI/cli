@@ -10,6 +10,7 @@ source_modules =
     aai_cli.agent_exec
     aai_cli.argscan
     aai_cli.auth
+    aai_cli.caption_exec
     aai_cli.client
     aai_cli.clip_exec
     aai_cli.clip_select
@@ -61,6 +62,7 @@ modules =
     aai_cli.commands.account
     aai_cli.commands.agent
     aai_cli.commands.audit
+    aai_cli.commands.caption
     aai_cli.commands.clip
     aai_cli.commands.deploy
     aai_cli.commands.dev

@@ -271,7 +271,7 @@ def test_stream_youtube_url_downloads_then_streams(monkeypatch, tmp_path):
         w.setsampwidth(2)
         w.setframerate(16000)
         w.writeframes(b"\x00\x01" * 100)
-    monkeypatch.setattr("aai_cli.stream_exec.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr("aai_cli.stream_exec.youtube.download_media", lambda url, d: fake)
     seen = {}
 
     def fake_stream(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
@@ -295,7 +295,7 @@ def test_stream_podcast_page_url_downloads_then_streams(monkeypatch, tmp_path):
         w.setsampwidth(2)
         w.setframerate(16000)
         w.writeframes(b"\x00\x01" * 100)
-    monkeypatch.setattr("aai_cli.stream_exec.youtube.download_audio", lambda url, d: fake)
+    monkeypatch.setattr("aai_cli.stream_exec.youtube.download_media", lambda url, d: fake)
     seen = {}
 
     def fake_stream(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
@@ -317,7 +317,7 @@ def test_stream_downloadable_url_resolves_credentials_before_downloading(monkeyp
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: False)
     downloads = []
     monkeypatch.setattr(
-        "aai_cli.stream_exec.youtube.download_audio",
+        "aai_cli.stream_exec.youtube.download_media",
         lambda url, dest: downloads.append(url),
     )
     monkeypatch.setattr(

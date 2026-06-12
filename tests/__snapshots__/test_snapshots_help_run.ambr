@@ -67,6 +67,62 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[caption]
+  '''
+  
+   Usage: assembly caption [OPTIONS] MEDIA
+  
+   Burn always-visible captions into a video.
+  
+   The video is transcribed (or an existing transcript is reused with
+   --transcript-id), the transcript's SRT captions are fetched, and ffmpeg
+   (which must be installed) burns them into the picture as open captions —
+   the audio stream is copied untouched. A YouTube/media-page URL is
+   downloaded first (always the full video); its output lands in --out or
+   the current directory.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    media      TEXT  Video to caption: a local file, or a                   │
+  │                       YouTube/media-page URL (the full video is downloaded   │
+  │                       via yt-dlp).                                           │
+  │                       [required]                                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --transcript-id      -t      TEXT                  Reuse an existing         │
+  │                                                    transcript of this media  │
+  │                                                    instead of transcribing   │
+  │                                                    it again.                 │
+  │ --chars-per-caption          INTEGER RANGE [x>=1]  Max characters per        │
+  │                                                    caption line.             │
+  │ --font-size                  INTEGER RANGE [x>=1]  Font size of the          │
+  │                                                    burned-in captions        │
+  │                                                    (ffmpeg's default styling │
+  │                                                    when omitted).            │
+  │ --out                        PATH                  Output file (default:     │
+  │                                                    <name>.captioned<ext>     │
+  │                                                    next to the input).       │
+  │ --json               -j                            Emit JSON describing the  │
+  │                                                    captioned file.           │
+  │ --help                                             Show this message and     │
+  │                                                    exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Burn captions into a video
+   $ assembly caption talk.mp4
+   Caption a YouTube video (downloaded via yt-dlp)
+   $ assembly caption "https://youtube.com/watch?v=ID"
+   Reuse a finished transcript instead of re-transcribing
+   $ assembly caption talk.mp4 -t TRANSCRIPT_ID
+   Shorter caption lines in a bigger font
+   $ assembly caption talk.mp4 --chars-per-caption 32 --font-size 28
+   Choose the output file
+   $ assembly caption talk.mp4 --out talk-captioned.mp4
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[clip]
   '''
   
@@ -80,7 +136,8 @@
    boundaries snap into nearby silence so cuts don't land mid-word (--no-snap
    disables), and each surviving segment is written as <name>.clipNN<ext>
    using ffmpeg (which must be installed). A YouTube/media-page source is
-   downloaded first; its clips land in --out-dir or the current directory.
+   downloaded first (audio only, or the full video with --video); its clips
+   land in --out-dir or the current directory.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    media      TEXT  Audio/video to cut clips from: a local file, or a      │
@@ -125,6 +182,14 @@
   │ --out-dir                         PATH                  Directory for the    │
   │                                                         clip files (default: │
   │                                                         next to the input).  │
+  │ --video                                                 Download the full    │
+  │                                                         video (not just the  │
+  │                                                         audio track) for a   │
+  │                                                         URL source, so the   │
+  │                                                         clips are cut from   │
+  │                                                         the video. Local     │
+  │                                                         files keep their     │
+  │                                                         video already.       │
   │ --json           -j                                     Emit JSON describing │
   │                                                         the clips written.   │
   │ --help                                                  Show this message    │
@@ -152,6 +217,9 @@
    $ assembly clip meeting.mp4 --llm "the three strongest customer objections"
    Clip a YouTube video's audio with an LLM
    $ assembly clip "https://youtube.com/watch?v=ID" --llm "the best quote"
+   Cut video clips from the full YouTube video
+   $ assembly clip "https://youtube.com/watch?v=ID" --video --llm "the best
+   quote"
    Reuse a finished transcript instead of re-transcribing
    $ assembly clip meeting.mp4 -t TRANSCRIPT_ID --speaker B
    Pipe transcribe straight into clip
@@ -225,13 +293,15 @@
    utterance timestamps, each utterance is translated by an LLM Gateway model,
    the translations are synthesized with streaming TTS (one voice per
    speaker), and ffmpeg lays the new audio over the original — video copied
-   untouched. Streaming TTS only exists in the sandbox today — run it as
-   'assembly --sandbox dub' (--sandbox goes before the subcommand). Requires
-   ffmpeg.
+   untouched. A YouTube/media-page URL is downloaded first (audio only, or
+   the full video with --video). Streaming TTS only exists in the sandbox
+   today — run it as 'assembly --sandbox dub' (--sandbox goes before the
+   subcommand). Requires ffmpeg.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    media      TEXT  Local audio/video file to dub (the video stream is     │
-  │                       copied untouched).                                     │
+  │ *    media      TEXT  Audio/video to dub: a local file (the video stream is  │
+  │                       copied untouched), or a YouTube/media-page URL         │
+  │                       (downloaded via yt-dlp).                               │
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
@@ -247,6 +317,10 @@
   │                                   A=jane).                                   │
   │    --out                    PATH  Output file (default:                      │
   │                                   <name>.dub.<lang><ext> next to the input). │
+  │    --video                        Download the full video (not just the      │
+  │                                   audio track) for a URL source, so the dub  │
+  │                                   keeps the picture. Local files keep their  │
+  │                                   video already.                             │
   │    --json           -j            Emit JSON describing the dubbed file.      │
   │    --help                         Show this message and exit.                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -263,6 +337,8 @@
    $ assembly --sandbox dub talk.mp4 --lang de
    Use a language name instead of a code
    $ assembly --sandbox dub talk.mp4 -l Spanish
+   Dub the full video from YouTube
+   $ assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video
    Dub every speaker with one voice
    $ assembly --sandbox dub talk.mp4 -l fr --voice paul
    Pin a voice per diarized speaker

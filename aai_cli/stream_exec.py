@@ -186,7 +186,7 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
     elif opts.source and youtube.is_downloadable_url(opts.source):
         # Fetch the audio first, then stream the local file in real time.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(opts.source, Path(td))
+            local = youtube.download_media(opts.source, Path(td))
             session.run(FileSource(str(local)), TARGET_RATE)
     elif opts.from_file:
         file_audio = FileSource(client.resolve_audio_source(opts.source, sample=opts.sample))

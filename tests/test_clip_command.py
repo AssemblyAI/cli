@@ -63,6 +63,7 @@ def test_clip_parses_every_flag_into_options(monkeypatch, tmp_path):
             "--no-snap",
             "--out-dir",
             str(tmp_path),
+            "--video",
             "--json",
         ],
     )
@@ -79,6 +80,7 @@ def test_clip_parses_every_flag_into_options(monkeypatch, tmp_path):
         padding=0.5,
         snap=False,
         out_dir=tmp_path,
+        video=True,
     )
     assert captured["json_mode"] is True
 
@@ -99,6 +101,7 @@ def test_clip_defaults_when_only_media_is_given(monkeypatch):
         padding=0.0,
         snap=True,
         out_dir=None,
+        video=False,
     )
     assert captured["json_mode"] is False
 

@@ -44,7 +44,7 @@ def test_is_downloadable_url_passes_direct_and_local_sources_through():
 
 
 def test_is_downloadable_url_without_ytdlp_still_matches_youtube(monkeypatch):
-    # With yt-dlp unimportable, YouTube still matches by URL shape (so download_audio
+    # With yt-dlp unimportable, YouTube still matches by URL shape (so download_media
     # can raise its install hint); extractor-matched hosts degrade to API pass-through.
     monkeypatch.setitem(sys.modules, "yt_dlp", None)  # force ImportError
     monkeypatch.setitem(sys.modules, "yt_dlp.extractor", None)
@@ -62,7 +62,7 @@ def _fake_ytdlp(monkeypatch, ydl_cls):
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
 
 
-def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
+def test_download_media_returns_prepared_path(tmp_path, monkeypatch):
     created = tmp_path / "vid123.m4a"
     captured = {}
 
@@ -85,7 +85,7 @@ def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
             return str(created)
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    out = youtube.download_audio("https://youtu.be/vid123", tmp_path)
+    out = youtube.download_media("https://youtu.be/vid123", tmp_path)
     assert out == created
     assert out.is_file()
     # yt-dlp is driven quietly (no console noise) and actually downloads the media.
@@ -93,9 +93,92 @@ def test_download_audio_returns_prepared_path(tmp_path, monkeypatch):
     assert captured["opts"]["no_warnings"] is True
     assert captured["opts"]["noprogress"] is True
     assert captured["download"] is True
+    # The default fetches only the audio track — no video download, no merging.
+    assert captured["opts"]["format"] == "bestaudio/best"
+    assert "merge_output_format" not in captured["opts"]
 
 
-def test_download_audio_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypatch, capsys):
+def test_download_media_video_fetches_merged_video(tmp_path, monkeypatch):
+    # video=True must request the full video (best video+audio) merged into one
+    # mp4 container, so the result is playable/clippable everywhere.
+    captured = {}
+
+    class FakeYDL:
+        def __init__(self, opts):
+            captured["opts"] = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            (tmp_path / "x.mp4").write_bytes(b"video")
+            return {"id": "x", "ext": "mp4"}
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "x.mp4")
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    out = youtube.download_media("https://youtu.be/x", tmp_path, video=True)
+    assert out == tmp_path / "x.mp4"
+    assert captured["opts"]["format"] == "bestvideo*+bestaudio/best"
+    assert captured["opts"]["merge_output_format"] == "mp4"
+
+
+def test_download_media_video_errors_name_the_video(tmp_path, monkeypatch):
+    # With video=True the failure messages say "video", not "audio".
+    _fake_ytdlp(monkeypatch, _raising_ydl("network down"))
+    with pytest.raises(CLIError) as exc:
+        youtube.download_media("https://youtu.be/x", tmp_path, video=True)
+    assert exc.value.message == "Could not download video from https://youtu.be/x: network down"
+
+
+def test_download_media_video_no_file_produced_names_the_video(tmp_path, monkeypatch):
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            return {"id": "x"}  # writes no file
+
+        def prepare_filename(self, info):
+            return str(tmp_path / "guessed.mp4")  # doesn't exist
+
+    _fake_ytdlp(monkeypatch, FakeYDL)
+    with pytest.raises(CLIError) as exc:
+        youtube.download_media("https://youtu.be/x", tmp_path, video=True)
+    assert "no video file" in exc.value.message
+
+
+def test_validate_video_flag_accepts_downloadable_urls():
+    youtube.validate_video_flag("https://youtu.be/abc123", video=True)  # no exception
+
+
+@pytest.mark.parametrize("source", ["talk.mp4", "https://example.com/episode.mp3"])
+def test_validate_video_flag_rejects_non_downloadable_sources(source):
+    # --video only changes what a media-page download fetches; a local file (or a
+    # direct URL the API fetches itself) already carries its video, so the flag
+    # would be silently dropped — and a requested flag is never dropped silently.
+    with pytest.raises(UsageError) as exc:
+        youtube.validate_video_flag(source, video=True)
+    assert "--video only applies to a downloadable URL source" in exc.value.message
+    assert "drop --video" in (exc.value.suggestion or "")
+
+
+@pytest.mark.parametrize("source", ["talk.mp4", "https://youtu.be/abc123"])
+def test_validate_video_flag_without_video_is_a_no_op(source):
+    youtube.validate_video_flag(source, video=False)  # no exception
+
+
+def test_download_media_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypatch, capsys):
     # yt-dlp's default logger writes its own "ERROR: …" line to stderr before the CLI's
     # clean error, duplicating the message; the passed logger must swallow everything.
     import logging
@@ -120,7 +203,7 @@ def test_download_audio_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypat
             return str(tmp_path / "x.m4a")
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    youtube.download_audio("https://youtu.be/x", tmp_path)
+    youtube.download_media("https://youtu.be/x", tmp_path)
     logger = captured["opts"]["logger"]
     # Structurally quiet: no propagation to root, only swallow-everything handlers.
     assert logger.name == "aai_cli.youtube.yt_dlp"
@@ -136,7 +219,7 @@ def test_download_audio_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypat
     assert out.out == ""
 
 
-def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
+def test_download_media_falls_back_to_landed_file(tmp_path, monkeypatch):
     landed = tmp_path / "actual.webm"
 
     class FakeYDL:
@@ -157,10 +240,10 @@ def test_download_audio_falls_back_to_landed_file(tmp_path, monkeypatch):
             return str(tmp_path / "guessed.m4a")  # wrong extension; file doesn't exist
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    assert youtube.download_audio("https://youtu.be/x", tmp_path) == landed
+    assert youtube.download_media("https://youtu.be/x", tmp_path) == landed
 
 
-def test_download_audio_falls_back_to_largest_file(tmp_path, monkeypatch):
+def test_download_media_falls_back_to_largest_file(tmp_path, monkeypatch):
     # yt-dlp can leave sidecars (thumbnail, .info.json) next to the audio track;
     # the fallback must pick the audio (largest), not an arbitrary iterdir() entry.
     audio = tmp_path / "actual.webm"
@@ -185,10 +268,10 @@ def test_download_audio_falls_back_to_largest_file(tmp_path, monkeypatch):
             return str(tmp_path / "guessed.m4a")  # wrong extension; file doesn't exist
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    assert youtube.download_audio("https://youtu.be/x", tmp_path) == audio
+    assert youtube.download_media("https://youtu.be/x", tmp_path) == audio
 
 
-def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
+def test_download_media_no_file_produced_raises(tmp_path, monkeypatch):
     # prepare_filename points at a missing file and nothing landed in dest_dir.
     class FakeYDL:
         def __init__(self, opts):
@@ -208,7 +291,7 @@ def test_download_audio_no_file_produced_raises(tmp_path, monkeypatch):
 
     _fake_ytdlp(monkeypatch, FakeYDL)
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
     assert exc.value.exit_code == 1
     assert "no audio file" in exc.value.message
@@ -234,10 +317,10 @@ def _raising_ydl(message):
     return FakeYDL
 
 
-def test_download_audio_error_raises_cli_error(tmp_path, monkeypatch):
+def test_download_media_error_raises_cli_error(tmp_path, monkeypatch):
     _fake_ytdlp(monkeypatch, _raising_ydl("network down"))
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
     assert exc.value.exit_code == 1
     # A message without boilerplate passes through untouched.
@@ -250,13 +333,13 @@ _YTDLP_BOILERPLATE = (
 )
 
 
-def test_download_audio_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch):
+def test_download_media_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch):
     # yt-dlp appends report-a-bug boilerplate to extractor errors; only the
     # meaningful part should reach the user, without the "ERROR: " prefix.
     message = f"ERROR: [youtube] abc: Video unavailable; {_YTDLP_BOILERPLATE}"
     _fake_ytdlp(monkeypatch, _raising_ydl(message))
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.message == (
         "Could not download audio from https://youtu.be/x: [youtube] abc: Video unavailable"
     )
@@ -264,19 +347,19 @@ def test_download_audio_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch
     assert "latest version" not in exc.value.message
 
 
-def test_download_audio_all_boilerplate_message_falls_back_to_raw_text(tmp_path, monkeypatch):
+def test_download_media_all_boilerplate_message_falls_back_to_raw_text(tmp_path, monkeypatch):
     # When trimming would leave nothing, keep the original message over an empty error.
     message = _YTDLP_BOILERPLATE[0].upper() + _YTDLP_BOILERPLATE[1:]
     _fake_ytdlp(monkeypatch, _raising_ydl(message))
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert message in exc.value.message
 
 
-def test_download_audio_missing_ytdlp_raises(tmp_path, monkeypatch):
+def test_download_media_missing_ytdlp_raises(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "yt_dlp", None)  # force ImportError on `import yt_dlp`
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "ytdlp_missing"
     assert exc.value.exit_code == 2
 
@@ -284,7 +367,7 @@ def test_download_audio_missing_ytdlp_raises(tmp_path, monkeypatch):
 def test_missing_ytdlp_suggests_install(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "yt_dlp", None)  # force ImportError on `import yt_dlp`
     with pytest.raises(CLIError) as exc:
-        youtube.download_audio("https://youtu.be/x", tmp_path)
+        youtube.download_media("https://youtu.be/x", tmp_path)
     assert "yt-dlp" in exc.value.message
     assert "pip install yt-dlp" in (exc.value.suggestion or "")
 
@@ -337,7 +420,7 @@ def test_parse_download_sections_rejects_malformed(spec, needle):
     assert exc.value.exit_code == 2
 
 
-def test_download_audio_with_sections_sets_download_ranges(tmp_path, monkeypatch):
+def test_download_media_with_sections_sets_download_ranges(tmp_path, monkeypatch):
     # --download-sections must reach yt-dlp as download_ranges + force_keyframes_at_cuts
     # (exact cuts, not the nearest keyframe).
     captured = {}
@@ -360,7 +443,7 @@ def test_download_audio_with_sections_sets_download_ranges(tmp_path, monkeypatch
             return str(tmp_path / "x.m4a")
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    youtube.download_audio(
+    youtube.download_media(
         "https://youtu.be/x", tmp_path, download_sections=["*0:00-5:00", "intro"]
     )
     download_ranges = captured["opts"]["download_ranges"]
@@ -370,7 +453,7 @@ def test_download_audio_with_sections_sets_download_ranges(tmp_path, monkeypatch
     assert captured["opts"]["force_keyframes_at_cuts"] is True
 
 
-def test_download_audio_without_sections_omits_download_ranges(tmp_path, monkeypatch):
+def test_download_media_without_sections_omits_download_ranges(tmp_path, monkeypatch):
     # The default path must not set download_ranges (downloads the whole track).
     captured = {}
 
@@ -392,6 +475,6 @@ def test_download_audio_without_sections_omits_download_ranges(tmp_path, monkeyp
             return str(tmp_path / "x.m4a")
 
     _fake_ytdlp(monkeypatch, FakeYDL)
-    youtube.download_audio("https://youtu.be/x", tmp_path)
+    youtube.download_media("https://youtu.be/x", tmp_path)
     assert "download_ranges" not in captured["opts"]
     assert "force_keyframes_at_cuts" not in captured["opts"]

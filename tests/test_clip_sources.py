@@ -34,17 +34,18 @@ def fake_ffmpeg(monkeypatch):
 
 @pytest.fixture
 def fake_download(monkeypatch):
-    """Stand in for yt-dlp: 'download' a fixed audio file into the temp dir."""
+    """Stand in for yt-dlp: 'download' a fixed media file into the temp dir."""
     seen: dict[str, object] = {}
 
-    def download(url, dest_dir):
+    def download(url, dest_dir, *, video=False):
         seen["url"] = url
-        path = dest_dir / "vid123.m4a"
-        path.write_bytes(b"\x00audio")
+        seen["video"] = video
+        path = dest_dir / ("vid123.mp4" if video else "vid123.m4a")
+        path.write_bytes(b"\x00media")
         seen["path"] = path
         return path
 
-    monkeypatch.setattr(clip_exec.youtube, "download_audio", download)
+    monkeypatch.setattr(clip_exec.youtube, "download_media", download)
     return seen
 
 
@@ -112,7 +113,40 @@ def test_run_clip_youtube_download_status_message(
     monkeypatch.setattr(clip_exec.output, "status", fake_status)
     opts = dataclasses.replace(DEFAULTS, media=YT_URL, ranges=["1-2"])
     clip_exec.run_clip(opts, AppState(), json_mode=False)
+    # Without --video only the audio track is fetched.
+    assert fake_download["video"] is False
     assert messages == ["Downloading audio…", "Detecting silence…", "Cutting 1 clip(s)…"]
+
+
+def test_run_clip_video_downloads_the_full_video(
+    tmp_path, fake_ffmpeg, fake_download, capsys, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    messages: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_status(message, *, json_mode, quiet):
+        messages.append(message)
+        yield
+
+    monkeypatch.setattr(clip_exec.output, "status", fake_status)
+    opts = dataclasses.replace(DEFAULTS, media=YT_URL, ranges=["1-2"], video=True)
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    # --video fetches the full video, and the clips carry its container/extension.
+    assert fake_download["video"] is True
+    assert messages[0] == "Downloading video…"
+    assert fake_ffmpeg[1][-1] == str(tmp_path / "vid123.clip01.mp4")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["clips"][0]["path"] == str(tmp_path / "vid123.clip01.mp4")
+
+
+def test_run_clip_video_requires_a_url_source(media, fake_ffmpeg):
+    # A local file already carries its video into every clip, so --video would be
+    # a silent no-op — it is rejected instead.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"], video=True)
+    with pytest.raises(UsageError) as exc:
+        clip_exec.run_clip(opts, AppState(), json_mode=False)
+    assert "--video only applies to a downloadable URL source" in exc.value.message
 
 
 # --- transcript piped on stdin (-t -) -------------------------------------------
