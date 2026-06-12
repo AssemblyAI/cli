@@ -8,12 +8,15 @@ import contextlib
 import dataclasses
 import json
 import re
+import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config, eval_data
+from aai_cli.commands import evaluate
 from aai_cli.errors import APIError
 from aai_cli.main import app
 
@@ -172,6 +175,10 @@ def test_speaker_labels_scores_der_only_when_dataset_has_no_text(tmp_path, mocke
     assert tx.call_args.kwargs["config"].speaker_labels is True
     assert "DER" in result.output
     assert "8.33%" in result.output  # 1.5/18 under the default 1s collar
+    # The summary names each DER component; here the error is pure confusion.
+    assert "missed 0.00%" in result.output
+    assert "false alarm 0.00%" in result.output
+    assert "confusion 8.33%" in result.output
     assert "WER" not in result.output
     assert "WORDS" not in result.output
 
@@ -185,6 +192,7 @@ def test_speaker_labels_with_text_scores_both_metrics(tmp_path, mocker):
     payload = _payload_of(result)
     assert payload["wer"] == 0.0
     assert payload["der"] == 1.5 / 18  # default 1s collar
+    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.0, "confusion": 1.5 / 18}
     assert payload["rows"][0]["wer"] == 0.0
     assert payload["rows"][0]["der"] == 1.5 / 18
 
@@ -214,7 +222,30 @@ def test_der_counts_leading_speech_the_model_missed(tmp_path, mocker):
     utterances = [SimpleNamespace(speaker="A", start=1000, end=10000)]
     _mock_transcribe(mocker, [_transcript("x", utterances)])
     result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
-    assert _payload_of(result)["der"] == 0.1
+    payload = _payload_of(result)
+    assert payload["der"] == 0.1
+    # All missed detection — distinguishes the breakdown keys from one another.
+    assert payload["der_breakdown"] == {"missed": 0.1, "false_alarm": 0.0, "confusion": 0.0}
+
+
+def test_der_counts_trailing_hypothesis_speech_as_false_alarm(tmp_path, mocker):
+    _auth()
+    (tmp_path / "a.wav").write_bytes(b"fake-audio")
+    row = {
+        "audio": "a.wav",
+        "speakers": ["alice"],
+        "timestamps_start": [0.0],
+        "timestamps_end": [10.0],
+    }
+    (tmp_path / "m.jsonl").write_text(json.dumps(row), encoding="utf-8")
+    # The hypothesis keeps "speaking" 5s past the 10s reference: 5s of false
+    # alarm over 10s of reference speech, scored without collar forgiveness.
+    utterances = [SimpleNamespace(speaker="A", start=0, end=15000)]
+    _mock_transcribe(mocker, [_transcript("x", utterances)])
+    result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
+    payload = _payload_of(result)
+    assert payload["der"] == 0.5
+    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.5, "confusion": 0.0}
 
 
 def _assign(obj, attribute, value):
@@ -318,6 +349,74 @@ def test_progress_status_counts_items(tmp_path, mocker, monkeypatch):
     monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
     assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
     assert seen == ["[1/2] Transcribing a.wav…", "[2/2] Transcribing b.wav…"]
+
+
+def test_concurrency_runs_items_at_once_and_keeps_dataset_order(tmp_path, mocker):
+    # With concurrency 2 and two items, both transcriptions must be in flight at
+    # once (the barrier times out otherwise), and the rows stay in dataset order
+    # no matter which finishes first.
+    _auth()
+    _write_wer_manifest(tmp_path)
+    barrier = threading.Barrier(2, timeout=10)
+    texts = {"a.wav": "hello there", "b.wav": "goodbye cow"}
+
+    def fake_transcribe(api_key, audio, *, config):
+        barrier.wait()
+        return _transcript(texts[Path(audio).name])
+
+    mocker.patch(
+        "aai_cli.commands.evaluate.client.transcribe", autospec=True, side_effect=fake_transcribe
+    )
+    result = runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2", "--json"])
+    assert result.exit_code == 0
+    payload = _payload_of(result)
+    assert [row["item"] for row in payload["rows"]] == ["a.wav", "b.wav"]
+    assert payload["rows"][0]["wer"] == 0.0
+    assert payload["rows"][1]["wer"] == 0.5
+
+
+def test_concurrency_shows_one_pooled_status(tmp_path, mocker, monkeypatch):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    seen = []
+
+    @contextlib.contextmanager
+    def fake_status(message, *, json_mode, quiet):
+        seen.append(message)
+        yield
+
+    monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
+    assert runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2"]).exit_code == 0
+    assert seen == ["Transcribing 2 items (concurrency 2)…"]
+
+
+def test_concurrent_failure_drops_queued_items_and_fails_cleanly(tmp_path, mocker, monkeypatch):
+    # The abort path must shut the pool down with cancel_futures=True — that's what
+    # keeps one failure from burning an API call per queued item. Asserted on the
+    # shutdown call because which queued futures actually get dropped is a race
+    # (the test_transcribe_batch.py pattern).
+    _auth()
+    _write_wer_manifest(tmp_path)
+    seen = {}
+    real = evaluate.ThreadPoolExecutor
+
+    class Capture(real):
+        def shutdown(self, wait=True, *, cancel_futures=False):
+            seen.setdefault("cancel_futures", cancel_futures)  # first call wins
+            super().shutdown(wait=wait, cancel_futures=cancel_futures)
+
+    monkeypatch.setattr(evaluate, "ThreadPoolExecutor", Capture)
+    _mock_transcribe(mocker, [APIError("rate limited"), APIError("rate limited")])
+    result = runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2"])
+    assert result.exit_code == 1
+    assert "rate limited" in result.output
+    assert seen["cancel_futures"] is True
+
+
+def test_concurrency_below_one_is_a_usage_error(tmp_path):
+    result = runner.invoke(app, ["eval", "org/ds", "--concurrency", "0"])
+    assert result.exit_code == 2
 
 
 def test_api_error_mid_run_fails_cleanly(tmp_path, mocker):
