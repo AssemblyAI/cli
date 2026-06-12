@@ -5,6 +5,8 @@ pytest-socket stays armed; local-manifest paths live in
 test_eval_data_manifest.py.
 """
 
+import dataclasses
+
 import httpx2 as httpx
 import pytest
 
@@ -272,3 +274,92 @@ def test_hf_empty_reference_text_rejected(monkeypatch):
     with pytest.raises(UsageError) as exc:
         eval_data.load("org/ds", limit=1)
     assert "test[0]" in exc.value.message and "empty reference" in exc.value.message
+
+
+# ----------------------------------------------------------- benchmark aliases
+
+
+@pytest.mark.parametrize(
+    ("alias", "expected"),
+    [
+        ("librispeech", eval_data.Alias("openslr/librispeech_asr", subset="clean")),
+        ("librispeech-other", eval_data.Alias("openslr/librispeech_asr", subset="other")),
+        ("tedlium", eval_data.Alias("sanchit-gandhi/tedlium-data")),
+        ("earnings22", eval_data.Alias("sanchit-gandhi/earnings22_robust_split")),
+        ("spgispeech", eval_data.Alias("kensho/spgispeech", subset="test")),
+        ("ami", eval_data.Alias("edinburghcstr/ami", subset="ihm")),
+        ("ami-sdm", eval_data.Alias("edinburghcstr/ami", subset="sdm")),
+        ("gigaspeech", eval_data.Alias("fixie-ai/gigaspeech", subset="dev", split="dev")),
+        ("peoples", eval_data.Alias("fixie-ai/peoples_speech", subset="clean")),
+        ("commonvoice", eval_data.Alias("fixie-ai/common_voice_17_0", subset="en")),
+        ("voxpopuli", eval_data.Alias("facebook/voxpopuli", subset="en")),
+        ("switchboard", eval_data.Alias("hhoangphuoc/switchboard", split="validation")),
+        ("expresso", eval_data.Alias("ylacombe/expresso")),
+        (
+            "loquacious",
+            eval_data.Alias("speechbrain/LoquaciousSet", subset="small", audio_column="wav"),
+        ),
+        ("callhome", eval_data.Alias("talkbank/callhome", subset="eng")),
+    ],
+)
+def test_alias_table_pins_each_benchmark(alias, expected):
+    assert eval_data.ALIASES[alias] == expected
+
+
+def test_alias_table_has_no_unpinned_entries():
+    # Every entry is asserted exactly in the parametrized test above.
+    assert len(eval_data.ALIASES) == 15
+
+
+def _assign(obj, attribute, value):
+    setattr(obj, attribute, value)
+
+
+def test_alias_entries_are_immutable():
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _assign(eval_data.ALIASES["tedlium"], "dataset", "org/other")
+
+
+def test_alias_expands_to_hub_id_and_defaults(monkeypatch):
+    seen = []
+    splits = [{"config": "dev", "split": "dev"}, {"config": "dev", "split": "test"}]
+    _hf_handler(monkeypatch, splits=splits, rows=[_hf_row()], seen=seen)
+    data = eval_data.load("gigaspeech", limit=1)
+    assert data.label == "fixie-ai/gigaspeech · dev/dev"
+    assert seen[0].url.params["dataset"] == "fixie-ai/gigaspeech"
+    params = seen[1].url.params
+    assert params["config"] == "dev"
+    assert params["split"] == "dev"  # the alias split beats the usual 'test' preference
+
+
+def test_alias_audio_column_beats_autodetect(monkeypatch):
+    # The row also carries an 'audio' column (the auto-detect favorite); the
+    # alias's audio_column must still win.
+    row = _hf_row(wav=_audio_cell("https://hf.example/from-wav.wav"))
+    splits = [{"config": "small", "split": "test"}]
+    _hf_handler(monkeypatch, splits=splits, rows=[row])
+    item = eval_data.load("loquacious", limit=1).items[0]
+    assert item.audio == "https://hf.example/from-wav.wav"
+
+
+def test_explicit_audio_column_overrides_alias(monkeypatch):
+    row = _hf_row(wav=_audio_cell("https://hf.example/from-wav.wav"))
+    splits = [{"config": "small", "split": "test"}]
+    _hf_handler(monkeypatch, splits=splits, rows=[row])
+    item = eval_data.load("loquacious", audio_column="audio", limit=1).items[0]
+    assert item.audio == "https://hf.example/audio/0.wav"
+
+
+def test_explicit_subset_and_split_override_alias(monkeypatch):
+    seen = []
+    splits = [
+        {"config": "en", "split": "test"},
+        {"config": "fr", "split": "test"},
+        {"config": "fr", "split": "validation"},
+    ]
+    _hf_handler(monkeypatch, splits=splits, rows=[_hf_row()], seen=seen)
+    eval_data.load("commonvoice", subset="fr", split="validation", limit=1)
+    params = seen[1].url.params
+    assert params["dataset"] == "fixie-ai/common_voice_17_0"
+    assert params["config"] == "fr"
+    assert params["split"] == "validation"
