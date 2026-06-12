@@ -62,3 +62,18 @@ def handshake_error(error: object, message: str, *, host: str) -> CLIError | Non
             rejected_key=True,
         )
     return APIError(f"{message}: {error}", suggestion=handshake_suggestion(host))
+
+
+def classify_error(error: object, message: str, *, host: str) -> CLIError:
+    """The one CLIError classification for a realtime WebSocket failure.
+
+    Shared by every realtime path (stream, agent, speak) for connect failures and
+    recorded stream Error events alike, so they can't drift: a rejected handshake
+    (HTTP 401/403) carries the actionable suggestion via ``handshake_error``;
+    anything else keeps the ``aai_cli.ws`` mapping — a rejected key becomes
+    ``auth_failure()``, the rest ``APIError(f"{message}: …")``.
+    """
+    rejected = handshake_error(error, message, host=host)
+    if rejected is not None:
+        return rejected
+    return wsutil.auth_or_api_error(error, message)
