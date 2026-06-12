@@ -5,7 +5,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import config, help_panels, options, output
+from aai_cli import help_panels, options, output
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, UsageError
 from aai_cli.help_text import examples_epilog
@@ -231,7 +231,7 @@ def speak(
                 "(--sandbox goes before the command; or use --env sandbox000).",
             )
         spoken = _read_text(text)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         bare_voice, overrides = dialogue.parse_voice_overrides(voice)
         if dialogue.looks_like_speaker_labeled(spoken):
             _speak_dialogue(

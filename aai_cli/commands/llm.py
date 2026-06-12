@@ -5,7 +5,7 @@ from collections.abc import Callable
 import typer
 from rich.markup import escape
 
-from aai_cli import choices, client, config, help_panels, options, output, stdio
+from aai_cli import choices, client, help_panels, options, output, stdio
 from aai_cli import llm as gateway
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -151,7 +151,7 @@ def llm(
 
     def follow_body(state: AppState, json_mode: bool) -> None:
         prompt_text = _validate_follow_args(prompt, output_field, transcript_id)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
 
         def ask(transcript_text: str) -> str:
             messages = gateway.build_messages(
@@ -185,7 +185,7 @@ def llm(
             )
         prompt_text = prompt
         stdin_text = _stdin_transcript_text(state, json_mode, transcript_id)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         messages = gateway.build_messages(
             prompt_text, system=system, transcript_id=transcript_id, transcript_text=stdin_text
         )

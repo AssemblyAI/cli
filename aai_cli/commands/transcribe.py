@@ -9,7 +9,6 @@ from aai_cli import (
     choices,
     client,
     code_gen,
-    config,
     config_builder,
     help_panels,
     llm,
@@ -429,7 +428,7 @@ def transcribe(
                 out=out, output_field=output_field, llm_prompt=llm_prompt, show_code=show_code
             )
             transcribe_batch.run_batch(
-                config.resolve_api_key(profile=state.profile),
+                state.resolve_api_key(),
                 sources,
                 transcription_config=config_builder.construct_transcription_config(merged),
                 concurrency=concurrency,
@@ -466,7 +465,7 @@ def transcribe(
         transcribe_exec.check_source_exists(source, sample=sample)
         transcribe_exec.warn_unrecognized_extension(source, json_mode=json_mode, quiet=state.quiet)
 
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
             transcript = transcribe_exec.run_transcription(
                 api_key,

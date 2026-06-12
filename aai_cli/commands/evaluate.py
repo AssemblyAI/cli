@@ -16,7 +16,7 @@ import assemblyai as aai
 import typer
 from rich.console import RenderableType
 
-from aai_cli import client, config, der, eval_data, help_panels, jsonshape, options, output, wer
+from aai_cli import client, der, eval_data, help_panels, jsonshape, options, output, wer
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, NotAuthenticated, UsageError
 from aai_cli.help_text import examples_epilog
@@ -345,7 +345,7 @@ def evaluate(
             )
         # Resolve credentials before any dataset download: a signed-out user must
         # not pull the whole dataset only to fail at the first transcription.
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         data = eval_data.load(
             dataset,
             split=split,

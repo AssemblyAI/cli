@@ -18,7 +18,7 @@ from aai_cli.errors import APIError, CLIError, NotAuthenticated
 @dataclass
 class AppState:
     """Request-scoped CLI state (the global --profile / --env) and the single place
-    that turns it into a concrete profile, environment, or session.
+    that turns it into a concrete profile, environment, session, or API key.
 
     Centralizing resolution here keeps the precedence rules in one spot instead of
     being re-derived per command. The module-level ``resolve_*`` functions below are
@@ -45,6 +45,11 @@ class AppState:
         """The backend environment: --env > AAI_ENV > the profile's stored env > default."""
         profile_env = config.get_profile_env(self.resolve_profile())
         return environments.resolve(self.env, profile_env)
+
+    def resolve_api_key(self) -> str:
+        """The API key for SDK/gateway calls: ASSEMBLYAI_API_KEY, else the profile's
+        keyring entry. Raises NotAuthenticated when neither is set."""
+        return config.resolve_api_key(profile=self.profile)
 
     def resolve_session(self) -> tuple[int, str]:
         """Account id + Stytch session JWT for AMS self-service commands.

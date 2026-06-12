@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import choices, client, config, options, output, theme, timeparse
+from aai_cli import choices, client, options, output, theme, timeparse
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
@@ -36,7 +36,7 @@ def list_(
     """List recent transcripts."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         rows = client.list_transcripts(api_key, limit=limit)
 
         def render(data: list[dict[str, object]]) -> object:
@@ -83,7 +83,7 @@ def get(
         # Cheap local id validation first: a malformed id is a usage error whether
         # or not the user is signed in, so it must not trigger auth/login first.
         client.validate_transcript_id(transcript_id)
-        api_key = config.resolve_api_key(profile=state.profile)
+        api_key = state.resolve_api_key()
         transcript = client.get_transcript(api_key, transcript_id)
         if client.status_str(transcript) == "error":
             raise APIError(

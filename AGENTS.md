@@ -93,7 +93,7 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
   patch it must accept it or the call `TypeError`s.
 - **`--json` / `-j` is a per-command flag, not a root flag**: `assembly --json transcribe …` fails
   with "No such option"; it's `assembly transcribe … --json`. (The root callback still sniffs the
-  whole token list via `_command_line_requests_json`, so a callback-level failure like a bad
+  whole token list via `argscan.requests_json`, so a callback-level failure like a bad
   `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
 
 ### Manual QA / running the CLI in sandboxed sessions
