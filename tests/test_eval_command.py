@@ -7,9 +7,9 @@ temp manifests so the command exercises the loader end to end.
 import contextlib
 import dataclasses
 import json
+import re
 from types import SimpleNamespace
 
-import assemblyai as aai
 import pytest
 from typer.testing import CliRunner
 
@@ -123,24 +123,43 @@ def test_json_payload_shape(tmp_path, mocker):
     assert payload["rows"][1] == {"item": "b.wav", "words": 2, "errors": 1, "wer": 0.5}
 
 
-def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker):
+@pytest.mark.parametrize("model", ["universal-3-pro", "universal-2"])
+def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker, model):
     _auth()
     _write_wer_manifest(tmp_path)
     tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
-    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal", "--json"])
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model, "--json"])
     assert result.exit_code == 0
-    assert _payload_of(result)["speech_model"] == "universal"
+    assert _payload_of(result)["speech_model"] == model
     tx_config = tx.call_args.kwargs["config"]
-    assert tx_config.speech_model == aai.SpeechModel.universal
+    assert tx_config.speech_models == [model]
     assert tx_config.speaker_labels is None  # not requested -> omitted, not False
+
+
+def test_no_speech_model_leaves_speech_models_unset(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
+    assert tx.call_args.kwargs["config"].speech_models is None
+
+
+@pytest.mark.parametrize("model", ["best", "nano", "slam-1", "universal"])
+def test_legacy_models_are_a_usage_error(model):
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model])
+    assert result.exit_code == 2
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "Invalid value for '--speech-model'" in plain
 
 
 def test_speech_model_named_in_human_header(tmp_path, mocker):
     _auth()
     _write_wer_manifest(tmp_path)
     _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
-    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal"])
-    assert "universal" in result.output
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal-3-pro"])
+    assert "universal-3-pro" in result.output
     assert "default model" not in result.output
 
 
