@@ -39,6 +39,13 @@ assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speak
   | assembly --sandbox speak --out episode.wav
 ```
 
+**Burn karaoke subtitles into a music video** — `-o srt` prints captions to stdout, and `--chars-per-caption` keeps the lines short so they flip with the vocals; ffmpeg renders them onto the video (`-f srt -i pipe:` muxes a toggleable soft-subtitle track instead, no re-encode):
+
+```sh
+assembly transcribe video.mp4 -o srt --chars-per-caption 24 > lyrics.srt
+ffmpeg -i video.mp4 -vf "subtitles=lyrics.srt:force_style='Fontsize=28,PrimaryColour=&H00FFFF&'" karaoke.mp4
+```
+
 **Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
 
 ```sh
