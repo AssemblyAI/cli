@@ -97,6 +97,34 @@ def fixed_render_size(monkeypatch):
     monkeypatch.setenv("LINES", "40")
 
 
+@pytest.fixture
+def preserve_logging_state():
+    # Logging is process-global: root handlers and level, plus per-logger levels.
+    # A test that enables verbose diagnostics (debuglog.enable) or trips the
+    # realtime silencers would otherwise leak that state into unrelated tests —
+    # an order dependence pytest-randomly only exposes on some seeds (it cost a
+    # red CI round on PR #125). Named (not autouse): modules that touch global
+    # logging opt in. The websockets wire loggers are reset to NOTSET up front
+    # so a CRITICAL clamp left by an earlier test can't swallow records the
+    # opting test asserts on.
+    import logging
+
+    from aai_cli import ws as wsutil
+
+    root = logging.getLogger()
+    previous_handlers = list(root.handlers)
+    previous_level = root.level
+    wire_loggers = [logging.getLogger(name) for name in wsutil.WEBSOCKETS_LOGGERS]
+    previous_wire_levels = [logger.level for logger in wire_loggers]
+    for logger in wire_loggers:
+        logger.setLevel(logging.NOTSET)
+    yield
+    root.handlers[:] = previous_handlers
+    root.setLevel(previous_level)
+    for logger, level in zip(wire_loggers, previous_wire_levels, strict=True):
+        logger.setLevel(level)
+
+
 @pytest.fixture(autouse=True)
 def reset_active_environment():
     # The active environment is a process-global (set at CLI startup); pin it to

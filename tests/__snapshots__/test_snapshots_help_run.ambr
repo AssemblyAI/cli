@@ -76,10 +76,11 @@
   
    --speaker and --search select from a diarized transcript (made on the fly,
    or reused with --transcript-id); --llm has an LLM Gateway model pick the
-   windows; --range adds explicit ones. Overlapping selections merge, and each
-   surviving segment is written as <name>.clipNN<ext> using ffmpeg (which must
-   be installed). A YouTube/media-page source is downloaded first; its clips
-   land in --out-dir or the current directory.
+   windows; --range adds explicit ones. Overlapping selections merge, clip
+   boundaries snap into nearby silence so cuts don't land mid-word (--no-snap
+   disables), and each surviving segment is written as <name>.clipNN<ext>
+   using ffmpeg (which must be installed). A YouTube/media-page source is
+   downloaded first; its clips land in --out-dir or the current directory.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    media      TEXT  Audio/video to cut clips from: a local file, or a      │
@@ -87,30 +88,47 @@
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --transcript-id  -t      TEXT                  Reuse an existing transcript  │
-  │                                                of this media instead of      │
-  │                                                transcribing it again: an id, │
-  │                                                or '-' to read an id or       │
-  │                                                'transcribe --json' output    │
-  │                                                from stdin.                   │
-  │ --speaker                TEXT                  Keep segments spoken by this  │
-  │                                                diarized speaker label        │
-  │                                                (repeatable, e.g. --speaker   │
-  │                                                A).                           │
-  │ --search                 TEXT                  Keep segments whose text      │
-  │                                                contains this                 │
-  │                                                (case-insensitive).           │
-  │ --range                  TEXT                  Keep an explicit START-END    │
-  │                                                window (seconds or            │
-  │                                                [HH:]MM:SS; repeatable).      │
-  │ --padding                FLOAT RANGE [x>=0.0]  Seconds of padding to add     │
-  │                                                around each clip.             │
-  │                                                [default: 0.0]                │
-  │ --out-dir                PATH                  Directory for the clip files  │
-  │                                                (default: next to the input). │
-  │ --json           -j                            Emit JSON describing the      │
-  │                                                clips written.                │
-  │ --help                                         Show this message and exit.   │
+  │ --transcript-id  -t               TEXT                  Reuse an existing    │
+  │                                                         transcript of this   │
+  │                                                         media instead of     │
+  │                                                         transcribing it      │
+  │                                                         again: an id, or '-' │
+  │                                                         to read an id or     │
+  │                                                         'transcribe --json'  │
+  │                                                         output from stdin.   │
+  │ --speaker                         TEXT                  Keep segments spoken │
+  │                                                         by this diarized     │
+  │                                                         speaker label        │
+  │                                                         (repeatable, e.g.    │
+  │                                                         --speaker A).        │
+  │ --search                          TEXT                  Keep segments whose  │
+  │                                                         text contains this   │
+  │                                                         (case-insensitive).  │
+  │ --range                           TEXT                  Keep an explicit     │
+  │                                                         START-END window     │
+  │                                                         (seconds or          │
+  │                                                         [HH:]MM:SS;          │
+  │                                                         repeatable).         │
+  │ --padding                         FLOAT RANGE [x>=0.0]  Seconds of padding   │
+  │                                                         to add around each   │
+  │                                                         clip.                │
+  │                                                         [default: 0.0]       │
+  │ --snap               --no-snap                          Snap clip boundaries │
+  │                                                         into nearby silence  │
+  │                                                         (detected with       │
+  │                                                         ffmpeg) so cuts      │
+  │                                                         don't land mid-word; │
+  │                                                         --no-snap cuts at    │
+  │                                                         the exact selected   │
+  │                                                         times.               │
+  │                                                         [default: snap]      │
+  │ --out-dir                         PATH                  Directory for the    │
+  │                                                         clip files (default: │
+  │                                                         next to the input).  │
+  │ --json           -j                                     Emit JSON describing │
+  │                                                         the clips written.   │
+  │ --help                                                  Show this message    │
+  │                                                         and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Let an LLM Gateway model pick the windows to    │

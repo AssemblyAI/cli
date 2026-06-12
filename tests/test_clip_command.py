@@ -60,6 +60,7 @@ def test_clip_parses_every_flag_into_options(monkeypatch, tmp_path):
             "1:30-2:00",
             "--padding",
             "0.5",
+            "--no-snap",
             "--out-dir",
             str(tmp_path),
             "--json",
@@ -76,6 +77,7 @@ def test_clip_parses_every_flag_into_options(monkeypatch, tmp_path):
         max_tokens=64,
         ranges=["5-10", "1:30-2:00"],
         padding=0.5,
+        snap=False,
         out_dir=tmp_path,
     )
     assert captured["json_mode"] is True
@@ -95,6 +97,7 @@ def test_clip_defaults_when_only_media_is_given(monkeypatch):
         max_tokens=llm.DEFAULT_MAX_TOKENS,
         ranges=[],
         padding=0.0,
+        snap=True,
         out_dir=None,
     )
     assert captured["json_mode"] is False
@@ -138,7 +141,8 @@ def test_clip_end_to_end_range_cut_via_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(clip_exec, "_run_ffmpeg", fake_run)
     result = runner.invoke(app, ["clip", str(media), "--range", "1-2", "--json"])
     assert result.exit_code == 0, result.output
-    assert calls[0][-1] == str(tmp_path / "talk.clip01.mp3")
+    # calls[0] is the silencedetect pass; calls[1] the cut.
+    assert calls[1][-1] == str(tmp_path / "talk.clip01.mp3")
     payload = json.loads(result.output.strip().splitlines()[-1])
     assert payload["clips"][0]["duration"] == 1.0
 

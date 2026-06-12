@@ -141,6 +141,18 @@ def test_run_clip_range_only_cuts_and_emits_json(media, fake_ffmpeg, capsys):
         [
             "/usr/bin/ffmpeg",
             "-hide_banner",
+            "-nostats",
+            "-i",
+            str(media),
+            "-af",
+            "silencedetect=noise=-30dB:d=0.2",
+            "-f",
+            "null",
+            "-",
+        ],
+        [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
             "-loglevel",
             "error",
             "-y",
@@ -151,7 +163,7 @@ def test_run_clip_range_only_cuts_and_emits_json(media, fake_ffmpeg, capsys):
             "-to",
             "12.500",
             str(dest),
-        ]
+        ],
     ]
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
@@ -182,7 +194,7 @@ def test_run_clip_human_mode_prints_one_line_per_clip(tmp_path, fake_ffmpeg, cap
 def test_run_clip_applies_padding_to_explicit_ranges(media, fake_ffmpeg, capsys):
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["5-10"], padding=1.0)
     clip_exec.run_clip(opts, AppState(), json_mode=True)
-    assert fake_ffmpeg[0][7:11] == ["-ss", "4.000", "-to", "11.000"]
+    assert fake_ffmpeg[1][7:11] == ["-ss", "4.000", "-to", "11.000"]
     clips = json.loads(capsys.readouterr().out)["clips"]
     assert (clips[0]["start"], clips[0]["end"]) == (4.0, 11.0)
 
@@ -207,8 +219,61 @@ def test_run_clip_honors_out_dir(media, tmp_path, fake_ffmpeg, capsys):
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"], out_dir=out_dir)
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     dest = out_dir / "meeting.clip01.mp4"
-    assert fake_ffmpeg[0][-1] == str(dest)
+    assert fake_ffmpeg[1][-1] == str(dest)
     assert json.loads(capsys.readouterr().out)["clips"][0]["path"] == str(dest)
+
+
+# --- silence snapping ---------------------------------------------------------
+
+DETECT_LOG = (
+    "[silencedetect @ 0x1] silence_start: 4\n"
+    "[silencedetect @ 0x1] silence_end: 4.6 | silence_duration: 0.6\n"
+    "[silencedetect @ 0x1] silence_start: 13\n"
+    "[silencedetect @ 0x1] silence_end: 14 | silence_duration: 1.0\n"
+)
+
+
+def test_run_clip_snaps_boundaries_into_detected_silence(media, capsys, monkeypatch):
+    # Both 5.0 and 12.5 land on speech: the start snaps back into the 4.0-4.6
+    # silence (0.25 before speech resumes at 4.6), the end snaps forward into
+    # the 13.0-14.0 silence (0.25 past where speech stops at 13.0).
+    calls = record_ffmpeg(monkeypatch, detect_log=DETECT_LOG)
+    opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["5-12.5"])
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    assert calls[1][7:11] == ["-ss", "4.350", "-to", "13.250"]
+    clips = json.loads(capsys.readouterr().out)["clips"]
+    assert (clips[0]["start"], clips[0]["end"]) == (4.35, 13.25)
+
+
+def test_run_clip_failed_silence_detection_cuts_at_selected_times(media, capsys, monkeypatch):
+    # Snapping is best-effort: a broken silencedetect pass must not fail (or
+    # shift) the cut.
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
+
+    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        if "-af" in args:
+            return subprocess.CompletedProcess(
+                args=args, returncode=1, stdout="", stderr=DETECT_LOG
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(clip_exec, "_run_ffmpeg", run)
+    opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["5-12.5"])
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    clips = json.loads(capsys.readouterr().out)["clips"]
+    assert (clips[0]["start"], clips[0]["end"]) == (5.0, 12.5)
+
+
+def test_run_clip_no_snap_skips_detection(media, capsys, monkeypatch):
+    calls = record_ffmpeg(monkeypatch, detect_log=DETECT_LOG)
+    opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["5-12.5"], snap=False)
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    # Exactly one ffmpeg call: the cut, at the exact selected times.
+    assert len(calls) == 1
+    assert "-af" not in calls[0]
+    assert calls[0][7:11] == ["-ss", "5.000", "-to", "12.500"]
+    clips = json.loads(capsys.readouterr().out)["clips"]
+    assert (clips[0]["start"], clips[0]["end"]) == (5.0, 12.5)
 
 
 def test_run_clip_surfaces_ffmpeg_failure(media, monkeypatch):
@@ -282,8 +347,8 @@ def test_run_clip_transcribes_with_speaker_labels(media, fake_ffmpeg, capsys, mo
     assert payload["transcript_id"] == "tr_123"
     # Speaker A's two utterances: 1.5-2.5s and 5-6s.
     assert [(c["start"], c["end"]) for c in payload["clips"]] == [(1.5, 2.5), (5.0, 6.0)]
-    assert fake_ffmpeg[0][-1] == str(media.parent / "meeting.clip01.mp4")
-    assert fake_ffmpeg[1][-1] == str(media.parent / "meeting.clip02.mp4")
+    assert fake_ffmpeg[1][-1] == str(media.parent / "meeting.clip01.mp4")
+    assert fake_ffmpeg[2][-1] == str(media.parent / "meeting.clip02.mp4")
 
 
 def test_run_clip_reuses_transcript_by_id(media, fake_ffmpeg, capsys, monkeypatch):
@@ -359,4 +424,8 @@ def test_run_clip_status_messages(media, fake_ffmpeg, monkeypatch):
     monkeypatch.setattr(clip_exec.output, "status", fake_status)
     opts = dataclasses.replace(DEFAULTS, media=str(media), speakers=["A"])
     clip_exec.run_clip(opts, AppState(), json_mode=False)
-    assert messages == ["Transcribing for clip selection…", "Cutting 2 clip(s)…"]
+    assert messages == [
+        "Transcribing for clip selection…",
+        "Detecting silence…",
+        "Cutting 2 clip(s)…",
+    ]
