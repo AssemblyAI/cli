@@ -93,7 +93,7 @@ def test_listen_human_mode_prints_hint_and_event_line():
     assert "--webhook-url" in result.output  # the copy-paste hint
     assert "t_9" in result.output
     assert "status=error" in result.output
-    assert "{" not in result.output.replace('{"ok": true}', "")  # no NDJSON in human mode
+    assert not any(line.startswith("{") for line in result.output.splitlines())  # no NDJSON in human mode
 
 
 # --- forwarding --------------------------------------------------------------------
