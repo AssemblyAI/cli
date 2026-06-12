@@ -73,7 +73,10 @@ def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> lis
     """
     if from_stdin:
         return _stdin_sources(source, sample=sample)
-    if source is None or sample or source == "-" or source.startswith(_URL_PREFIXES):
+    if not source or sample or source == "-" or source.startswith(_URL_PREFIXES):
+        # `not source` also catches "": Path("") is ".", which would otherwise scan the
+        # whole working directory. An empty source belongs on the single-source path,
+        # where it reads as "Provide an audio path or URL."
         return None
     path = Path(source)
     if path.is_dir():

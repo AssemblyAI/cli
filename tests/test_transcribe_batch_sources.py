@@ -152,9 +152,25 @@ def test_from_stdin_rejects_sample():
     assert "--from-stdin reads sources from stdin" in result.output
 
 
-@pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None])
+@pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None, ""])
 def test_non_batch_sources_return_none(source):
+    # An empty string is not a batch source: Path("") resolves to ".", so without
+    # this guard it would silently scan the whole working directory recursively.
     assert transcribe_batch.expand_sources(source, from_stdin=False, sample=False) is None
+
+
+def test_empty_source_argument_does_not_batch_the_working_directory(monkeypatch):
+    _auth()
+    # A loud canary: if "" ever reaches directory scanning again, every audio file
+    # under cwd gets queued. rglob must never run for an empty source.
+    monkeypatch.setattr(
+        transcribe_batch.Path,
+        "rglob",
+        lambda self, pattern: pytest.fail("empty source must not scan the directory"),
+    )
+    result = runner.invoke(app, ["transcribe", ""])
+    assert result.exit_code == 2
+    assert "Provide an audio path or URL." in result.output
 
 
 def test_sample_returns_none_even_without_source():
