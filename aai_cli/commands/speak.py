@@ -217,7 +217,8 @@ def speak(
     --out. Speaker-labeled input (from 'assembly transcribe
     --speaker-labels') is detected automatically: the labels are stripped
     and each speaker gets a different voice. This feature only exists in
-    the sandbox today — run it as 'assembly --sandbox speak'.
+    the sandbox today — run it as 'assembly --sandbox speak' (--sandbox
+    goes before the subcommand).
     """
 
     def body(state: AppState, json_mode: bool) -> None:

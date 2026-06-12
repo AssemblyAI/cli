@@ -9,7 +9,7 @@
     {
       "definition": {
         "type": "note",
-        "content": "# AssemblyAI CLI — Usage & Reliability\nBuilt on anonymous usage telemetry (`source:aai-cli`). **Each log line = one command run.** Count tiles work out of the box; the grouped tiles (top commands, outcomes, percentiles, distributions) need facets on `@command`, `@outcome`, `@device_id`, `@duration_ms` (measure), `@os`, `@cli_version`, `@python_version`, `@exit_code`, `@ci`. Failures ship `status:error` + the reserved `@error.kind` (= the anonymous error type, **no message or stack trace**), so they also feed **Error Tracking** — the error tiles below filter on `status:error`. Events take ~1–2 min to index.",
+        "content": "# AssemblyAI CLI — Usage & Reliability\nBuilt on anonymous usage telemetry (`source:aai-cli`). **Each log line = one command run.** Count tiles work out of the box; the grouped tiles (top commands, outcomes, percentiles, distributions) need facets on `@command`, `@outcome`, `@device_id`, `@duration_ms` (measure), `@os`, `@cli_version`, `@python_version`, `@exit_code`, `@ci`, `@error.message`. Failures ship `status:error` + the reserved `@error.kind` (= the anonymous error type) and `@error.message` (the one-line message the user saw, capped at 500 chars — **no stack trace**), so they also feed **Error Tracking** — the error tiles below filter on `status:error`. Events take ~1–2 min to index.",
         "background_color": "purple",
         "font_size": "14",
         "text_align": "left",
@@ -802,6 +802,105 @@
               "width": 12,
               "height": 5
             }
+          },
+          {
+            "definition": {
+              "title": "Top error messages",
+              "type": "toplist",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "name": "errors",
+                      "data_source": "logs",
+                      "search": {
+                        "query": "source:aai-cli status:error"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "group_by": [
+                        {
+                          "facet": "@error.message",
+                          "limit": 15,
+                          "sort": {
+                            "aggregation": "count",
+                            "order": "desc"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "errors"
+                    }
+                  ]
+                }
+              ]
+            },
+            "layout": {
+              "x": 0,
+              "y": 13,
+              "width": 5,
+              "height": 4
+            }
+          },
+          {
+            "definition": {
+              "title": "Recent errors",
+              "type": "list_stream",
+              "requests": [
+                {
+                  "response_format": "event_list",
+                  "columns": [
+                    {
+                      "field": "status_line",
+                      "width": "auto"
+                    },
+                    {
+                      "field": "timestamp",
+                      "width": "auto"
+                    },
+                    {
+                      "field": "@command",
+                      "width": "auto"
+                    },
+                    {
+                      "field": "@error.kind",
+                      "width": "auto"
+                    },
+                    {
+                      "field": "@error.message",
+                      "width": "full"
+                    },
+                    {
+                      "field": "@cli_version",
+                      "width": "auto"
+                    }
+                  ],
+                  "query": {
+                    "data_source": "logs_stream",
+                    "query_string": "source:aai-cli status:error",
+                    "indexes": [],
+                    "sort": {
+                      "column": "timestamp",
+                      "order": "desc"
+                    }
+                  }
+                }
+              ]
+            },
+            "layout": {
+              "x": 5,
+              "y": 13,
+              "width": 7,
+              "height": 4
+            }
           }
         ]
       },
@@ -809,7 +908,7 @@
         "x": 0,
         "y": 12,
         "width": 12,
-        "height": 14
+        "height": 18
       }
     },
     {
@@ -959,7 +1058,7 @@
       },
       "layout": {
         "x": 0,
-        "y": 26,
+        "y": 30,
         "width": 12,
         "height": 5
       }
@@ -1170,7 +1269,7 @@
       },
       "layout": {
         "x": 0,
-        "y": 31,
+        "y": 35,
         "width": 12,
         "height": 5
       }

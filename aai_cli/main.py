@@ -297,6 +297,17 @@ def _command_line_requests_json(raw_args: list[str]) -> bool:
     return False
 
 
+def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
+    """A warning when ``--sandbox`` and a contradictory ``--env`` are both passed.
+
+    Credentials are environment-bound, so the conflict must not be resolved silently:
+    ``--env`` wins, and the warning names the loser so the user can drop a flag.
+    """
+    if sandbox and env is not None and env != "sandbox000":
+        return f"--sandbox ignored: --env {env} takes precedence."
+    return None
+
+
 def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     """No subcommand given: offer guided setup to a credential-less, interactive user;
     otherwise print help. Never prompts in a non-interactive session, and never on
@@ -353,21 +364,12 @@ def main(
     ),
 ) -> None:
     # The command's own --json flag isn't parsed yet, so sniff the pending command line:
-    # a root-callback failure (a bad --env, a --sandbox/--env conflict) still emits the
-    # JSON error shape when the invocation opted into JSON, and renders human text
-    # on stderr otherwise.
+    # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
+    # invocation opted into JSON, and renders human text on stderr otherwise.
     raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
     json_mode = output.resolve_json(explicit=_command_line_requests_json(raw_args))
-    if sandbox and env is not None and env != "sandbox000":
-        # Resolving the disagreement silently (to either side) would send credentials
-        # to an environment the user didn't expect, so refuse the contradiction.
-        conflict = UsageError(
-            f"--sandbox conflicts with --env {env}: --sandbox is shorthand for --env sandbox000.",
-            suggestion="Drop --sandbox, or pass --env sandbox000.",
-        )
-        output.emit_error(conflict, json_mode=json_mode)
-        raise typer.Exit(code=conflict.exit_code)
-    if sandbox:
+    conflict_warning = _sandbox_conflict_warning(sandbox, env)
+    if sandbox and env is None:
         env = "sandbox000"
     state = AppState(profile=profile, env=env, quiet=quiet)
     ctx.obj = state
@@ -376,11 +378,11 @@ def main(
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
-    warning = env_override_warning(state)
-    if warning and not quiet:
-        # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets a
-        # machine-readable hint instead of an unexplained downstream auth failure.
-        output.emit_warning(warning, json_mode=json_mode)
+    for warning in (conflict_warning, env_override_warning(state)):
+        if warning and not quiet:
+            # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets
+            # a machine-readable hint instead of an unexplained downstream auth failure.
+            output.emit_warning(warning, json_mode=json_mode)
     if ctx.invoked_subcommand is None:
         _offer_or_help(ctx, state)
 

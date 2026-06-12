@@ -776,7 +776,8 @@
    --out. Speaker-labeled input (from 'assembly transcribe
    --speaker-labels') is detected automatically: the labels are stripped
    and each speaker gets a different voice. This feature only exists in
-   the sandbox today — run it as 'assembly --sandbox speak'.
+   the sandbox today — run it as 'assembly --sandbox speak' (--sandbox
+   goes before the subcommand).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │

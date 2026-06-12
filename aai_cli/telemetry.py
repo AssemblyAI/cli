@@ -1,7 +1,8 @@
 """Anonymous usage telemetry, modeled on the Supabase CLI's design.
 
 One allow-listed event per command run (command path, outcome, duration — never
-arguments, file paths, ids, or account data) is shipped to the Datadog logs
+arguments, ids, or account data; a failure also carries the error message,
+capped at 500 chars) is shipped to the Datadog logs
 intake using a write-only *client* token (``pub…``), the credential class
 Datadog designs to be embedded in client apps. ``SHIPPED_CLIENT_TOKEN`` carries
 it (it is public by design — never put an API key there);
@@ -46,6 +47,10 @@ SHIPPED_CLIENT_TOKEN = "pub0d633113b9f7d22faff215fefaf30b43"
 DEFAULT_INTAKE_URL = "https://browser-intake-datadoghq.com/api/v2/logs"
 
 _SEND_TIMEOUT_SECONDS = 5.0
+
+# Cap on the error message shipped with a failure event: enough for any CLI
+# error line, while bounding the payload if an upstream message embeds a body.
+_ERROR_MESSAGE_MAX_CHARS = 500
 
 
 def client_token() -> str:
@@ -131,7 +136,12 @@ def _maybe_emit_first_run_notice() -> None:
 
 
 def build_event(
-    command: str, *, outcome: str, exit_code: int, duration_ms: int
+    command: str,
+    *,
+    outcome: str,
+    exit_code: int,
+    duration_ms: int,
+    error_message: str | None = None,
 ) -> dict[str, object]:
     """One invocation event, shaped for the Datadog logs intake.
 
@@ -141,10 +151,11 @@ def build_event(
     hostname ever rides along.
 
     A failure additionally sets ``status: error`` and the reserved
-    ``error.kind`` so the event feeds Datadog **Error Tracking** (issue
-    grouping), not just log search. ``error.kind`` reuses the anonymous
-    ``outcome`` (the ``CLIError.error_type``) — the error *message* and stack
-    trace are deliberately omitted, so no free text or PII ever rides along.
+    ``error.kind``/``error.message`` so the event feeds Datadog **Error
+    Tracking** (issue grouping), not just log search. ``error.kind`` reuses the
+    anonymous ``outcome`` (the ``CLIError.error_type``); ``error.message`` is
+    the one-line message the user saw (capped at ``_ERROR_MESSAGE_MAX_CHARS``).
+    Stack traces are still deliberately omitted.
     """
     succeeded = outcome == "success"
     event: dict[str, object] = {
@@ -164,7 +175,10 @@ def build_event(
         "device_id": config.get_device_id(),
     }
     if not succeeded:
-        event["error"] = {"kind": outcome}
+        error: dict[str, object] = {"kind": outcome}
+        if error_message:
+            error["message"] = error_message[:_ERROR_MESSAGE_MAX_CHARS]
+        event["error"] = error
     return event
 
 
@@ -210,11 +224,24 @@ def flush_payload(raw: str) -> None:
         )
 
 
-def _safe_dispatch(command: str, started: float, *, outcome: str, exit_code: int) -> None:
+def _safe_dispatch(
+    command: str,
+    started: float,
+    *,
+    outcome: str,
+    exit_code: int,
+    error_message: str | None = None,
+) -> None:
     duration_ms = int((time.monotonic() - started) * 1000)
     try:
         dispatch(
-            build_event(command, outcome=outcome, exit_code=exit_code, duration_ms=duration_ms)
+            build_event(
+                command,
+                outcome=outcome,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+                error_message=error_message,
+            )
         )
     except (OSError, CLIError):
         # Best-effort by contract: a config/spawn failure while *recording* a command
@@ -239,14 +266,22 @@ def track(command: str) -> Generator[None]:
     try:
         yield
     except CLIError as err:
-        _safe_dispatch(command, started, outcome=err.error_type, exit_code=err.exit_code)
+        _safe_dispatch(
+            command,
+            started,
+            outcome=err.error_type,
+            exit_code=err.exit_code,
+            error_message=err.message,
+        )
         raise
     except typer.Exit as exc:
         code = exc.exit_code
         outcome = "success" if code == 0 else "error"
         _safe_dispatch(command, started, outcome=outcome, exit_code=code)
         raise
-    except BaseException:
-        _safe_dispatch(command, started, outcome="internal_error", exit_code=1)
+    except BaseException as exc:
+        _safe_dispatch(
+            command, started, outcome="internal_error", exit_code=1, error_message=str(exc)
+        )
         raise
     _safe_dispatch(command, started, outcome="success", exit_code=0)
