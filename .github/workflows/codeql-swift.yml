@@ -1,0 +1,78 @@
+name: CodeQL Swift
+
+# The Swift analysis is split out of codeql.yml because it is two orders of
+# magnitude slower than the interpreted-language scans: CodeQL must observe a
+# real `swiftc` build (autobuild can't discover a bare helper script with no
+# Xcode/SwiftPM project), and the traced build of the macOS system-audio
+# helper takes ~25 minutes on a macOS runner.
+#
+# Triggers are deliberately narrower than codeql.yml:
+#   - path-filtered to the Swift source (and this workflow), so the ~25 macOS
+#     runner-minutes are only spent when Swift code can actually change the
+#     result;
+#   - no merge_group: the merge-queue ref is deleted the moment the PR merges,
+#     so any scan slower than the queue fails its SARIF upload with
+#     "ref not found" (this failed on 7 consecutive queued PRs). The push run
+#     on main scans the identical merge result instead;
+#   - the weekly sweep keeps the default-branch baseline fresh when new
+#     queries ship between Swift changes.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.swift"
+      - ".github/workflows/codeql-swift.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/*.swift"
+      - ".github/workflows/codeql-swift.yml"
+  schedule:
+    - cron: "29 15 * * 2"
+
+# Least privilege at the workflow level; the analyze job opts into the extra
+# scopes CodeQL needs. Actions are pinned to commit SHAs (a moved tag can't
+# silently change what runs); Dependabot keeps them current.
+permissions:
+  contents: read
+
+# Cancel superseded runs when new commits land on a PR/branch, but never cancel
+# a main run (don't drop the scan that updates the default-branch baseline).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: analyze (swift)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      security-events: write  # upload SARIF results to code scanning
+      actions: read           # workflow metadata for run context on private repos
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false  # no job pushes; don't leave the token in .git/config
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          languages: swift
+          build-mode: manual
+
+      # The same swiftc invocation scripts/check.sh uses.
+      - name: Build Swift audio helper
+        run: |
+          swiftc -parse-as-library aai_cli/streaming/macos_system_audio.swift \
+            -framework ScreenCaptureKit \
+            -framework AVFoundation \
+            -framework CoreMedia \
+            -framework CoreGraphics \
+            -o /tmp/aai-macos-audio-codeql
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          category: /language:swift
