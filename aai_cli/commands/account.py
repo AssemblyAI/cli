@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
 
 import typer
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from rich.markup import escape
 from rich.text import Text
 
@@ -43,67 +44,85 @@ def _format_usage_number(value: object) -> str:
     return f"{number:,.6f}".rstrip("0").rstrip(".")
 
 
-def _usage_items(data: Mapping[str, object]) -> list[dict[str, object]]:
-    return jsonshape.mapping_list(data.get("usage_items"))
-
-
 def _format_dollars(cents: float) -> str:
     return f"${cents / 100:,.2f}"
 
 
-def _window_total_cents(item: Mapping[str, object]) -> float:
-    """Sum a window's spend (cents) from its ``line_items``.
+# The product/feature label keys a usage line item may carry, in preference order.
+_LABEL_KEYS = ("name", "product", "service", "feature", "model", "type", "description")
 
-    The AMS usage endpoint returns ``total: 0.0`` on every window; the real
-    spend lives in each window's ``line_items[].price`` (cents, like
-    ``balance_in_cents``), so the window total is derived from them rather than
-    the dead top-level ``total``.
+# AMS payload shapes drift, so the usage models are deliberately tolerant: unknown
+# fields are ignored, a junk price falls back to 0.0, and a non-list/non-object
+# never raises — `assembly usage` must degrade gracefully, not crash. They are
+# parse-side only: `--json` passes the raw AMS dict through untouched.
+_MappingList = BeforeValidator(jsonshape.mapping_list)
+
+
+class _LineItem(BaseModel):
+    """One usage line item: a ``price`` in cents plus whichever label key AMS used."""
+
+    model_config = ConfigDict(extra="allow")
+
+    price: Annotated[float, BeforeValidator(jsonshape.as_float)] = 0.0
+
+    @property
+    def label(self) -> str:
+        """The product/feature label for the item, or ``""`` if it carries none."""
+        extra = self.model_extra or {}
+        return next((str(value) for key in _LABEL_KEYS if (value := extra.get(key))), "")
+
+
+class _Window(BaseModel):
+    """One usage window.
+
+    The AMS usage endpoint returns ``total: 0.0`` on every window; the real spend
+    lives in each window's ``line_items[].price`` (cents, like ``balance_in_cents``),
+    so the window total is derived from them rather than the dead top-level ``total``.
     """
-    return sum(
-        jsonshape.as_float(line_item.get("price"))
-        for line_item in jsonshape.mapping_list(item.get("line_items"))
-    )
+
+    start_timestamp: object = None
+    end_timestamp: object = None
+    line_items: Annotated[list[_LineItem], _MappingList] = Field(default_factory=list[_LineItem])
+
+    @property
+    def total_cents(self) -> float:
+        return sum(item.price for item in self.line_items)
+
+    @property
+    def label(self) -> str:
+        start = timeparse.parse_iso_utc(self.start_timestamp)
+        end = timeparse.parse_iso_utc(self.end_timestamp)
+        if start is None or end is None:
+            return timeparse.format_utc_day(self.start_timestamp)
+        if end.date() == start.date() + timedelta(days=1):
+            return start.date().isoformat()
+        return f"{start.date().isoformat()} to {end.date().isoformat()}"
+
+    @property
+    def breakdown(self) -> str:
+        """Per-product spend for the window, in dollars, aggregated by product and
+        ordered biggest-first.
+
+        Both this and ``total_cents`` derive from ``line_items[].price`` (cents), so
+        the breakdown is shown in the same unit as the ``total`` column and the
+        products sum to that total — they reconcile, instead of mixing dollars with
+        raw quantities. Products are aggregated by label (the AMS endpoint can return
+        several rows for one product), a row with no recognizable product is grouped
+        under ``other``, and zero-dollar products are dropped as noise (they don't
+        affect the reconciliation).
+        """
+        totals: dict[str, float] = {}
+        for item in self.line_items:
+            name = item.label or "other"
+            totals[name] = totals.get(name, 0.0) + item.price
+        ordered = sorted(((n, c) for n, c in totals.items() if c), key=lambda nc: (-nc[1], nc[0]))
+        return ", ".join(f"{name}: {_format_dollars(cents)}" for name, cents in ordered)
 
 
-def _window_label(item: Mapping[str, object]) -> str:
-    start = timeparse.parse_iso_utc(item.get("start_timestamp"))
-    end = timeparse.parse_iso_utc(item.get("end_timestamp"))
-    if start is None or end is None:
-        return timeparse.format_utc_day(item.get("start_timestamp"))
-    if end.date() == start.date() + timedelta(days=1):
-        return start.date().isoformat()
-    return f"{start.date().isoformat()} to {end.date().isoformat()}"
+class _Usage(BaseModel):
+    """The AMS usage response: just the windows; everything else is passthrough."""
 
-
-def _line_item_name(line_item: Mapping[str, object]) -> str:
-    """The product/feature label for a usage line item, or ``""`` if it carries none."""
-    return next(
-        (
-            str(value)
-            for key in ("name", "product", "service", "feature", "model", "type", "description")
-            if (value := line_item.get(key))
-        ),
-        "",
-    )
-
-
-def _line_items_summary(item: Mapping[str, object]) -> str:
-    """Per-product spend for a window, in dollars, aggregated by product and ordered
-    biggest-first.
-
-    Both this and the window total derive from ``line_items[].price`` (cents), so the
-    breakdown is shown in the same unit as the ``total`` column and the products sum to
-    that total — they reconcile, instead of mixing dollars with raw quantities. Products
-    are aggregated by name (the AMS endpoint can return several rows for one product),
-    a row with no recognizable product is grouped under ``other``, and zero-dollar
-    products are dropped as noise (they don't affect the reconciliation).
-    """
-    totals: dict[str, float] = {}
-    for line_item in jsonshape.mapping_list(item.get("line_items")):
-        name = _line_item_name(line_item) or "other"
-        totals[name] = totals.get(name, 0.0) + jsonshape.as_float(line_item.get("price"))
-    ordered = sorted(((n, c) for n, c in totals.items() if c), key=lambda nc: (-nc[1], nc[0]))
-    return ", ".join(f"{name}: {_format_dollars(cents)}" for name, cents in ordered)
+    usage_items: Annotated[list[_Window], _MappingList] = Field(default_factory=list[_Window])
 
 
 app = typer.Typer(help="Account billing, usage, and limits.")
@@ -192,7 +211,7 @@ def usage(
         data = ams.get_usage(jwt, start_date, end_date, window)
 
         def render(d: dict[str, object]) -> object:
-            windows = [(item, _window_total_cents(item)) for item in _usage_items(d)]
+            windows = [(item, item.total_cents) for item in _Usage.model_validate(d).usage_items]
             shown = windows if include_zero else [w for w in windows if w[1]]
             total = sum(cents for _, cents in windows)
             range_label = (
@@ -211,9 +230,7 @@ def usage(
                 )
                 return output.stack(summary, output.muted(message))
 
-            shown_with_breakdown = [
-                (item, cents, _line_items_summary(item)) for item, cents in shown
-            ]
+            shown_with_breakdown = [(item, cents, item.breakdown) for item, cents in shown]
             show_breakdown = any(breakdown for _, _, breakdown in shown_with_breakdown)
             table = (
                 output.data_table("period", "total", "breakdown")
@@ -222,10 +239,7 @@ def usage(
             )
             hidden_count = len(windows) - len(shown)
             for item, cents, breakdown in shown_with_breakdown:
-                row = [
-                    escape(_window_label(item)),
-                    _format_dollars(cents),
-                ]
+                row = [escape(item.label), _format_dollars(cents)]
                 if show_breakdown:
                     row.append(escape(breakdown))
                 table.add_row(*row)
