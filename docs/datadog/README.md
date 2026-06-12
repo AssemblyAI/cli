@@ -18,6 +18,16 @@ dashboard shows data, add these in **Logs → Configuration → Facets** (or exp
 `@device_id` (unique-device counts) and `@duration_ms` (latency percentiles) are the
 two that matter most.
 
+## Error Tracking
+
+Failures ship with `status:error` and the reserved `@error.kind` attribute (set to the
+anonymous error type — the same value as `@outcome`, e.g. `api_error`, `not_authenticated`),
+so they feed Datadog **Error Tracking** (issue grouping, first-/last-seen, regression
+detection, alerting), not just log search. `error.kind` is enough to enable tracking on
+its own. The error message and stack trace are **deliberately omitted** — no free text or
+PII ever leaves the machine — so issues group by error *type × command*, not by stack.
+The error tiles on the dashboard filter on `status:error`.
+
 ## Import
 
 UI: **Dashboards → New Dashboard → ⚙️ → Import dashboard JSON**, paste the file.
@@ -33,9 +43,9 @@ curl -X POST "https://api.datadoghq.com/api/v1/dashboard" \
 
 ## Notes
 
-- "Error rate" counts any `@outcome != success` — that includes expected user errors
-  (e.g. `auth_failure`), not just crashes. Filter to `@outcome:internal_error` for a
-  crash-only view.
+- "Error rate" counts any `status:error` (every non-success outcome) — that includes
+  expected user errors (e.g. `not_authenticated`), not just crashes. Filter to
+  `@error.kind:internal_error` for a crash-only view.
 - `@device_id` is a per-machine random UUID, so it approximates installs, not people.
 - Events take ~1–2 minutes to index; a fresh `source:aai-cli` search can look empty
   for a minute even when delivery succeeded.
