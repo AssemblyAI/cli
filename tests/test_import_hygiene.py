@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import textwrap
 
-_PROBE = """
-import sys
-import aai_cli.main
-heavy = {"jiwer", "rapidfuzz"}
-loaded = sorted(heavy & {name.split(".")[0] for name in sys.modules})
-assert not loaded, f"CLI import eagerly loaded: {loaded}"
-"""
+_PROBE = textwrap.dedent(
+    """
+    import sys
+    import aai_cli.main
+    heavy = {"jiwer", "rapidfuzz"}
+    loaded = sorted(heavy & {name.split(".")[0] for name in sys.modules})
+    assert not loaded, f"CLI import eagerly loaded: {loaded}"
+    """
+).strip()
 
 
 def test_cli_import_does_not_load_eval_scoring_stack():
