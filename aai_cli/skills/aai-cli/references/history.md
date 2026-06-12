@@ -32,8 +32,9 @@ Fetch a past transcript by id and print its text.
 
 Key options:
 
-- `-o/--output text|id|status|utterances|srt|json` — print one field; omit for
-  the default human view.
+- `-o/--output text|id|status|utterances|srt|vtt|json` — print one field; omit
+  for the default human view. `--chars-per-caption N` caps caption line length
+  for the srt/vtt exports.
 - `--json` — full raw JSON.
 
 Examples:

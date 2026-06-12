@@ -70,6 +70,7 @@ TRANSCRIBE_DEFAULTS = transcribe_exec.TranscribeOptions(
     model=llm.DEFAULT_MODEL,
     max_tokens=llm.DEFAULT_MAX_TOKENS,
     output_field=None,
+    chars_per_caption=None,
     out=None,
     show_code=False,
 )

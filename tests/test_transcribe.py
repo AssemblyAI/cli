@@ -126,7 +126,55 @@ def test_transcribe_output_srt_field(mocker):
     result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "srt"])
     assert result.exit_code == 0
     assert "00:00:00,000 --> 00:00:02,000" in result.output  # SRT body, pipe-friendly
-    t.export_subtitles_srt.assert_called_once()
+    t.export_subtitles_srt.assert_called_once_with(chars_per_caption=None)
+
+
+def test_transcribe_output_vtt_field(mocker):
+    _auth()
+    t = _fake_transcript(mocker)
+    t.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello world\n"
+    mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "vtt"])
+    assert result.exit_code == 0
+    assert "WEBVTT" in result.output  # VTT body, pipe-friendly
+    t.export_subtitles_vtt.assert_called_once_with(chars_per_caption=None)
+
+
+def test_transcribe_chars_per_caption_forwarded_to_export(mocker):
+    _auth()
+    t = _fake_transcript(mocker)
+    t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello\nworld\n"
+    mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    result = runner.invoke(
+        app, ["transcribe", "audio.mp3", "-o", "srt", "--chars-per-caption", "42"]
+    )
+    assert result.exit_code == 0
+    t.export_subtitles_srt.assert_called_once_with(chars_per_caption=42)
+
+
+def test_transcribe_chars_per_caption_forwarded_through_out_file(tmp_path, mocker):
+    # --out routes through out_payload, a separate path from the stdout emit.
+    _auth()
+    t = _fake_transcript(mocker)
+    t.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello\n"
+    mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    out = tmp_path / "captions.vtt"
+    result = runner.invoke(
+        app,
+        ["transcribe", "audio.mp3", "-o", "vtt", "--chars-per-caption", "42", "--out", str(out)],
+    )
+    assert result.exit_code == 0
+    assert out.read_text().startswith("WEBVTT")
+    t.export_subtitles_vtt.assert_called_once_with(chars_per_caption=42)
+
+
+def test_transcribe_chars_per_caption_requires_subtitle_output(mocker):
+    _auth()
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--chars-per-caption", "42"])
+    assert result.exit_code == 2
+    assert "--chars-per-caption only applies to subtitle output" in result.output
+    tx.assert_not_called()  # rejected before any upload
 
 
 def test_transcribe_output_invalid_exits_2(mocker):

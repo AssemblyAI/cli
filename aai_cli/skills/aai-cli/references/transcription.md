@@ -25,7 +25,8 @@ High-value flags (run `assembly transcribe --help` for the full set):
   `--config-file config.json`.
 - Post-process: `--llm "PROMPT"` (repeatable; chains over the transcript via LLM
   Gateway), `--translate-to es` (repeatable).
-- Output: `-o text|id|status|utterances|srt|json`, `--json`, `--show-code`.
+- Output: `-o text|id|status|utterances|srt|vtt|json`, `--chars-per-caption N`
+  (caption line length, with `-o srt`/`-o vtt`), `--json`, `--show-code`.
 
 Examples:
 

@@ -19,6 +19,17 @@ def json_option(help_text: str = "Output raw JSON.") -> bool:
     return flag
 
 
+def chars_per_caption_option() -> int | None:
+    """The ``--chars-per-caption`` knob for the ``-o srt``/``-o vtt`` subtitle exports."""
+    value: int | None = typer.Option(
+        None,
+        "--chars-per-caption",
+        min=1,
+        help="Max characters per caption line (only with -o srt or -o vtt).",
+    )
+    return value
+
+
 # Batch-mode flags for `transcribe` (see transcribe_batch.py). Defined here because
 # this module owns the FBT003 carve-out for Typer's boolean positional defaults.
 

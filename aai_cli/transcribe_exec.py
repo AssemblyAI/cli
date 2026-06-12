@@ -135,12 +135,15 @@ def out_payload(
     transcript: aai.Transcript,
     output_field: choices.TranscriptOutput | None,
     *,
+    chars_per_caption: int | None,
     json_mode: bool,
 ) -> str:
     """The text to write for ``--out``: the chosen ``-o`` field, the ``--json`` payload,
     or the plain transcript text — the same content stdout would get, as a file artifact."""
     if output_field is not None:
-        return client.select_transcript_field(transcript, output_field)
+        return client.select_transcript_field(
+            transcript, output_field, chars_per_caption=chars_per_caption
+        )
     if json_mode:
         return json.dumps(client.transcript_json_payload(transcript), default=str)
     return client.select_transcript_field(transcript, choices.TranscriptOutput.text)
@@ -197,6 +200,7 @@ def deliver_result(
     api_key: str,
     out: Path | None,
     output_field: choices.TranscriptOutput | None,
+    chars_per_caption: int | None,
     transform: TransformOptions,
     json_mode: bool,
     quiet: bool,
@@ -206,14 +210,23 @@ def deliver_result(
     if out is not None:
         # Write a clean file artifact and confirm on stderr; stdout stays empty.
         # The path itself was validated up front by validate_out_path.
-        out.write_text(out_payload(transcript, output_field, json_mode=json_mode) + "\n")
+        out.write_text(
+            out_payload(
+                transcript, output_field, chars_per_caption=chars_per_caption, json_mode=json_mode
+            )
+            + "\n"
+        )
         if not quiet:
             output.error_console.print(output.success(f"Saved to {escape(str(out))}"))
         return
 
     if output_field is not None:
         # Raw single-field output for pipelines (overrides --json and analysis render).
-        output.emit_text(client.select_transcript_field(transcript, output_field))
+        output.emit_text(
+            client.select_transcript_field(
+                transcript, output_field, chars_per_caption=chars_per_caption
+            )
+        )
         return
 
     if transform.prompts:
@@ -295,6 +308,7 @@ class TranscribeOptions:
     model: str
     max_tokens: int
     output_field: choices.TranscriptOutput | None
+    chars_per_caption: int | None
     out: Path | None
     show_code: bool
 
@@ -366,6 +380,7 @@ def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None
             audio,
             llm_gateway=gateway,
             output=opts.output_field,
+            chars_per_caption=opts.chars_per_caption,
             download_sections=list(opts.download_sections or []),
         )
     )
@@ -384,6 +399,7 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     validate_out_with_llm(opts.out, opts.llm_prompt)
     validate_out_path(opts.out)
     validate_json_with_output(opts.output_field, json_mode=json_mode)
+    client.validate_chars_per_caption(opts.chars_per_caption, opts.output_field)
 
     merged = config_builder.merge_transcribe_config(
         flags=flags, overrides=opts.config_kv, config_file=opts.config_file
@@ -438,6 +454,7 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
         api_key=api_key,
         out=opts.out,
         output_field=opts.output_field,
+        chars_per_caption=opts.chars_per_caption,
         transform=TransformOptions(
             prompts=list(opts.llm_prompt or []), model=opts.model, max_tokens=opts.max_tokens
         ),

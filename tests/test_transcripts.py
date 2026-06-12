@@ -68,6 +68,32 @@ def test_get_output_id_prints_id(mocker):
     assert result.output.strip() == "t_42"
 
 
+def test_get_output_vtt_forwards_chars_per_caption(mocker):
+    config.set_api_key("default", "sk_live")
+    fake = mocker.MagicMock()
+    fake.id = "t_42"
+    fake.status = "completed"
+    fake.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhi\n"
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.get_transcript", autospec=True, return_value=fake
+    )
+    result = runner.invoke(
+        app, ["transcripts", "get", "t_42", "-o", "vtt", "--chars-per-caption", "42"]
+    )
+    assert result.exit_code == 0
+    assert "WEBVTT" in result.output
+    fake.export_subtitles_vtt.assert_called_once_with(chars_per_caption=42)
+
+
+def test_get_chars_per_caption_requires_subtitle_output(mocker):
+    config.set_api_key("default", "sk_live")
+    get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
+    result = runner.invoke(app, ["transcripts", "get", "t_42", "--chars-per-caption", "42"])
+    assert result.exit_code == 2
+    assert "--chars-per-caption only applies to subtitle output" in result.output
+    get.assert_not_called()  # rejected before any fetch
+
+
 def test_get_json_emits_full_payload(mocker):
     config.set_api_key("default", "sk_live")
     fake = mocker.MagicMock()

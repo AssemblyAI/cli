@@ -62,6 +62,7 @@ def list_(
             ("Fetch a transcript's text by id", "assembly transcripts get 5551234-abcd"),
             ("Speaker-labeled turns", "assembly transcripts get 5551234-abcd -o utterances"),
             ("Save SRT subtitles", "assembly transcripts get 5551234-abcd -o srt > captions.srt"),
+            ("Save VTT subtitles", "assembly transcripts get 5551234-abcd -o vtt > captions.vtt"),
             ("Get the raw JSON", "assembly transcripts get 5551234-abcd --json"),
         ]
     )
@@ -75,14 +76,16 @@ def get(
         "--output",
         help="Print one field of the result.",
     ),
+    chars_per_caption: int | None = options.chars_per_caption_option(),
     json_out: bool = options.json_option(),
 ) -> None:
     """Fetch a past transcript by id and print its text."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        # Cheap local id validation first: a malformed id is a usage error whether
-        # or not the user is signed in, so it must not trigger auth/login first.
+        # Cheap local validation first: a malformed id or flag conflict is a usage
+        # error whether or not the user is signed in, so it must not trigger auth.
         client.validate_transcript_id(transcript_id)
+        client.validate_chars_per_caption(chars_per_caption, output_field)
         api_key = state.resolve_api_key()
         transcript = client.get_transcript(api_key, transcript_id)
         if client.status_str(transcript) == "error":
@@ -92,7 +95,11 @@ def get(
             )
         if output_field is not None:
             # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
-            output.emit_text(client.select_transcript_field(transcript, output_field))
+            output.emit_text(
+                client.select_transcript_field(
+                    transcript, output_field, chars_per_caption=chars_per_caption
+                )
+            )
             return
         if json_mode:
             # The full SDK payload, identical to `assembly transcribe … --json`, so the

@@ -423,24 +423,30 @@
   │                         directory/glob (batch mode).                         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                                         Use the hosted              │
-  │                                                  wildfires.mp3 sample.       │
-  │ --json       -j                                  Output the full result as   │
-  │                                                  JSON. Text stays the        │
-  │                                                  default even when piped;    │
-  │                                                  opt in here (same as -o     │
-  │                                                  json).                      │
-  │ --output     -o      [text|id|status|utterances  Print one field: text, id,  │
-  │                      |srt|json]                  status, utterances, srt     │
-  │                                                  (captions), or json.        │
-  │ --out                FILE                        Save the result to a file   │
-  │                                                  instead of printing it      │
-  │                                                  (clean text; pairs with     │
-  │                                                  -o).                        │
-  │ --show-code                                      Print the equivalent Python │
-  │                                                  SDK code and exit (does not │
-  │                                                  transcribe).                │
-  │ --help                                           Show this message and exit. │
+  │ --sample                                             Use the hosted          │
+  │                                                      wildfires.mp3 sample.   │
+  │ --json               -j                              Output the full result  │
+  │                                                      as JSON. Text stays the │
+  │                                                      default even when       │
+  │                                                      piped; opt in here      │
+  │                                                      (same as -o json).      │
+  │ --output             -o      [text|id|status|uttera  Print one field: text,  │
+  │                              nces|srt|vtt|json]      id, status, utterances, │
+  │                                                      srt or vtt (captions),  │
+  │                                                      or json.                │
+  │ --chars-per-caption          INTEGER RANGE [x>=1]    Max characters per      │
+  │                                                      caption line (only with │
+  │                                                      -o srt or -o vtt).      │
+  │ --out                        FILE                    Save the result to a    │
+  │                                                      file instead of         │
+  │                                                      printing it (clean      │
+  │                                                      text; pairs with -o).   │
+  │ --show-code                                          Print the equivalent    │
+  │                                                      Python SDK code and     │
+  │                                                      exit (does not          │
+  │                                                      transcribe).            │
+  │ --help                                               Show this message and   │
+  │                                                      exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Batch ──────────────────────────────────────────────────────────────────────╮
   │ --from-stdin                               Batch mode: read audio paths/URLs │
