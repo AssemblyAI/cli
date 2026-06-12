@@ -314,7 +314,8 @@
   │    --voice                  TEXT  Voice id for every speaker (e.g. jane,     │
   │                                   michael, paul), or SPEAKER=VOICE to pin a  │
   │                                   diarized speaker (repeatable, e.g. --voice │
-  │                                   A=jane).                                   │
+  │                                   A=jane). Default: the target language's    │
+  │                                   native voice(s).                           │
   │    --out                    PATH  Output file (default:                      │
   │                                   <name>.dub.<lang><ext> next to the input). │
   │    --video                        Download the full video (not just the      │
@@ -502,7 +503,10 @@
   │                                              SPEAKER=VOICE for diarized      │
   │                                              input (repeatable, e.g. --voice │
   │                                              A=jane).                        │
-  │ --language             TEXT                  Language of the text.           │
+  │ --language             TEXT                  Language of the text. The       │
+  │                                              default voice follows it (e.g.  │
+  │                                              --language Italian speaks with  │
+  │                                              giovanni).                      │
   │                                              [default: English]              │
   │ --sample-rate          INTEGER RANGE [x>=1]  Output sample rate in Hz        │
   │                                              (positive). Server default if   │
@@ -517,8 +521,8 @@
    Examples
    Speak text aloud (sandbox only)
    $ assembly --sandbox speak "Hello there, friend."
-   Pick a voice and language
-   $ assembly --sandbox speak "Bonjour" --voice jane --language French
+   Pick a language (its native voice is selected automatically)
+   $ assembly --sandbox speak "Bonjour" --language French
    Speak a diarized transcript, one voice per speaker
    $ assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak
    Override a speaker's voice

@@ -32,7 +32,7 @@ from aai_cli import client, environments, jsonshape, output, youtube
 from aai_cli import llm as gateway
 from aai_cli.context import AppState
 from aai_cli.errors import APIError, CLIError, UsageError
-from aai_cli.tts import audio, dialogue, session
+from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.tts.session import SpeakConfig
 
 # ISO-639-1 codes accepted by --lang, mapped to the language *name* both the
@@ -351,15 +351,18 @@ def _assign_voices(
     utterances: list[_Utterance],
     translations: list[str],
     voice_values: list[str],
+    language: str,
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
     """Resolve each translated utterance to ``(voice, text)`` plus the speaker→voice map.
 
     A bare ``--voice`` dubs every speaker with that one voice; ``SPEAKER=VOICE``
-    mappings pin individual speakers; everyone else takes the rotation in
-    first-appearance order (the same rules as `assembly speak`).
+    mappings pin individual speakers; everyone else takes the target language's
+    rotation in first-appearance order (the same rules as `assembly speak`) —
+    each voice speaks one language, so a non-English dub switches to that
+    language's native voice(s).
     """
     bare_voice, overrides = dialogue.parse_voice_overrides(voice_values)
-    rotation = (bare_voice,) if bare_voice is not None else dialogue.DEFAULT_VOICE_ROTATION
+    rotation = (bare_voice,) if bare_voice is not None else voices.rotation_for(language)
     segments = [
         dialogue.Segment(utterance.speaker, translated)
         # strict=True is an invariant guard only: _translate returns exactly one
@@ -426,7 +429,7 @@ def _dub_and_emit(
     translations = _translate(
         api_key, utterances, language, opts, json_mode=json_mode, quiet=state.quiet
     )
-    resolved, speakers = _assign_voices(utterances, translations, opts.voice)
+    resolved, speakers = _assign_voices(utterances, translations, opts.voice, language)
     pcm_segments, sample_rate = _synthesize(
         api_key, resolved, language, json_mode=json_mode, quiet=state.quiet
     )
