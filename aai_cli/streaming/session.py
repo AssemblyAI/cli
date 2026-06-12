@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 
 from aai_cli import choices, client, config_builder, llm, output
-from aai_cli.errors import CLIError, UsageError, mutually_exclusive
+from aai_cli.errors import APIError, CLIError, UsageError, mutually_exclusive
 from aai_cli.follow import FollowRenderer
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 
@@ -290,7 +290,15 @@ class StreamSession:
 
         def worker(source_label: str, audio: Iterable[bytes], rate: int) -> None:
             try:
-                self.stream_one(audio, rate, source_label=source_label)
+                try:
+                    self.stream_one(audio, rate, source_label=source_label)
+                except (CLIError, BrokenPipeError):
+                    raise
+                except Exception as exc:
+                    # A non-CLIError here is a bug, but it must still fail the run:
+                    # uncaught, it dies with this daemon thread and the command
+                    # exits 0 for a stream that actually failed.
+                    raise APIError(f"Streaming worker ({source_label}) failed: {exc}") from exc
             except (CLIError, BrokenPipeError) as exc:
                 errors.put(exc)
 

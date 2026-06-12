@@ -20,7 +20,7 @@ class _WebSocket(Protocol):
     """The slice of a websockets sync connection this module drives — named as a
     Protocol so the untyped library boundary is structurally typed, not opaque."""
 
-    def recv(self) -> str | bytes: ...
+    def recv(self, timeout: float | None = None) -> str | bytes: ...
     def send(self, data: str, /) -> None: ...  # positional-only: matches ws send(message)
     def close(self) -> None: ...
 
@@ -37,6 +37,11 @@ _DEFAULT_SAMPLE_RATE = 24000
 
 # Pause inserted between speaker turns in a multi-voice dialogue, for natural pacing.
 _INTER_TURN_SILENCE_SECONDS = 0.25
+
+# Bound on the wait for each protocol frame. The server streams frames continuously
+# while a synthesis is in flight, so a gap this long means it went silent mid-session;
+# without a bound, `assembly speak` would hang forever instead of failing cleanly.
+_RECV_TIMEOUT_SECONDS = 60.0
 
 
 @dataclass(frozen=True)
@@ -100,6 +105,18 @@ def _decode_audio_frame(msg: dict[str, object]) -> bytes:
         raise APIError(f"TTS service sent an Audio frame that is not valid base64: {exc}") from exc
 
 
+def _recv_raw(ws: _WebSocket) -> str | bytes:
+    """One frame off the socket, with a bounded wait: a server that goes silent
+    mid-session (e.g. never sends the final Audio frame) must fail the command,
+    not hang it forever on an unbounded recv()."""
+    try:
+        return ws.recv(timeout=_RECV_TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        raise APIError(
+            f"TTS service stopped responding (no frame for {_RECV_TIMEOUT_SECONDS:g}s)."
+        ) from exc
+
+
 def _default_connect(
     url: str, *, additional_headers: dict[str, str], max_size: int | None
 ) -> _WebSocket:
@@ -135,7 +152,7 @@ def _run_protocol(
     ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
 ) -> SpeakResult:
     """Send Generate + ForceFlushTextBuffer, collect Audio until is_final, then Terminate."""
-    begin = json.loads(ws.recv())
+    begin = json.loads(_recv_raw(ws))
     if begin.get("type") != "Begin":
         raise APIError(f"TTS service did not start the session (got {begin.get('type')!r}).")
     sample_rate = int(begin.get("configuration", {}).get("sample_rate", _DEFAULT_SAMPLE_RATE))
@@ -145,7 +162,7 @@ def _run_protocol(
 
     pcm = bytearray()
     while True:
-        msg = json.loads(ws.recv())
+        msg = json.loads(_recv_raw(ws))
         mtype = msg.get("type")
         if mtype == "Audio":
             pcm.extend(_decode_audio_frame(msg))

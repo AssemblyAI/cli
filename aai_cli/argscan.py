@@ -20,3 +20,8 @@ def requests_json(raw_args: list[str]) -> bool:
         if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
             return True
     return False
+
+
+def requests_quiet(raw_args: list[str]) -> bool:
+    """Whether the token list asked for quiet output: ``--quiet`` or ``-q``."""
+    return any(token in ("--quiet", "-q") for token in raw_args)

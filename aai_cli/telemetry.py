@@ -106,7 +106,7 @@ def _notice_suppressed(raw_args: list[str]) -> bool:
     ``--quiet`` run nor pollute the machine-readable stderr a ``--json`` (or
     ``-o json``) pipeline relies on.
     """
-    return any(token in ("--quiet", "-q") for token in raw_args) or argscan.requests_json(raw_args)
+    return argscan.requests_quiet(raw_args) or argscan.requests_json(raw_args)
 
 
 def _maybe_emit_first_run_notice() -> None:

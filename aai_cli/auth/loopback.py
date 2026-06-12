@@ -43,6 +43,7 @@ class CallbackCapture:
     done: threading.Event
     server: HTTPServer
     thread: threading.Thread
+    lock: threading.Lock
 
     def wait(
         self,
@@ -55,7 +56,15 @@ class CallbackCapture:
         """
         try:
             if not self.done.wait(timeout):
-                self.result.error = "timeout"
+                # Claim the capture under the lock: the handler thread may be
+                # processing a callback that arrived right at the deadline. If it
+                # already claimed (done set), its token result stands; otherwise the
+                # timeout claims it, and a late callback can no longer mutate the
+                # result this method is about to hand to the caller.
+                with self.lock:
+                    if not self.done.is_set():
+                        self.result.error = "timeout"
+                        self.done.set()
         finally:
             self.server.shutdown()  # stop serve_forever()
             self.thread.join(timeout=5)  # pragma: no mutate (cleanup grace period only)
@@ -71,9 +80,13 @@ def start_capture() -> CallbackCapture:
     before opening the browser. Only a callback to the registered path that carries
     a `token` is accepted; any other request (a different path, or no token) gets a
     4xx and the server keeps waiting, so a stray request can't end the capture early.
+    The first matching callback wins: a duplicate (browser reload/double-click, or
+    anything else hitting the loopback port afterwards) is acknowledged but can never
+    overwrite the captured token.
     """
     result = CallbackResult()
     done = threading.Event()
+    lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # stdlib API name
@@ -91,13 +104,19 @@ def start_capture() -> CallbackCapture:
                 self.send_response(400)
                 self.end_headers()
                 return
-            result.token = token
-            result.token_type = next(iter(qs.get("stytch_token_type", [])), None)
+            # First claim wins: once the capture is done (a prior callback, or the
+            # timeout in wait()), the result is already in the caller's hands, so a
+            # late or duplicate callback must not mutate it. The lock pairs with
+            # wait()'s timeout claim so the two threads can't interleave mid-write.
+            with lock:
+                if not done.is_set():
+                    result.token = token
+                    result.token_type = next(iter(qs.get("stytch_token_type", [])), None)
+                    done.set()
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
             self.wfile.write(_SUCCESS_HTML)
-            done.set()
 
         def log_message(self, format: str, *args: object) -> None:  # silence stderr logging
             pass
@@ -113,7 +132,7 @@ def start_capture() -> CallbackCapture:
         ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    return CallbackCapture(result=result, done=done, server=server, thread=thread)
+    return CallbackCapture(result=result, done=done, server=server, thread=thread, lock=lock)
 
 
 def capture_callback(
