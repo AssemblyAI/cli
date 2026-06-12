@@ -81,6 +81,41 @@ def test_registered_secrets_are_masked_in_every_record(capsys):
     assert "authorization: [redacted]" in err
 
 
+def test_binary_frame_hex_is_collapsed_to_byte_count(capsys):
+    debuglog.enable(2)
+    logging.getLogger("websockets.client").debug(
+        "> BINARY fb ff fe ff fb ff f5 ff ef ff 00 00 fd ff fd ff "
+        "... 0d 00 f7 ff 01 00 0c 00 [9600 bytes]"
+    )
+    err = capsys.readouterr().err
+    assert "[websockets.client] > BINARY [9600 bytes]" in err
+    assert "fb ff" not in err
+
+
+def test_real_websockets_binary_frame_rendering_is_collapsed(capsys):
+    # Pin the regex to the library's actual frame format: a Frame's __str__ is
+    # what websockets interpolates into its DEBUG records, elision and all.
+    from websockets.frames import OP_BINARY, OP_CONT, Frame
+
+    debuglog.enable(2)
+    log = logging.getLogger("websockets.client")
+    log.debug("> %s", Frame(OP_BINARY, bytes(9600), fin=False))
+    log.debug("> %s", Frame(OP_CONT, b"\xfb\xff\x0d\x00"))
+    err = capsys.readouterr().err
+    assert "> BINARY [9600 bytes, continued]" in err
+    assert "> CONT [binary, 4 bytes]" in err
+    assert "00 00" not in err
+
+
+def test_text_frames_and_other_loggers_keep_their_payload(capsys):
+    debuglog.enable(2)
+    logging.getLogger("websockets.client").debug("> TEXT '{\"audio\": true}' [16 bytes]")
+    logging.getLogger("httpx").debug("> BINARY fb ff 0d 00 [4 bytes]")
+    err = capsys.readouterr().err
+    assert "> TEXT '{\"audio\": true}' [16 bytes]" in err
+    assert "[httpx] > BINARY fb ff 0d 00 [4 bytes]" in err
+
+
 def test_register_secret_ignores_empty_values():
     debuglog.register_secret(None)
     debuglog.register_secret("")

@@ -67,6 +67,85 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[clip]
+  '''
+  
+   Usage: assembly clip [OPTIONS] MEDIA
+  
+   Cut clips out of a media file by speaker, text match, LLM pick, or time range.
+  
+   --speaker and --search select from a diarized transcript (made on the fly,
+   or reused with --transcript-id); --llm has an LLM Gateway model pick the
+   windows; --range adds explicit ones. Overlapping selections merge, and each
+   surviving segment is written as <name>.clipNN<ext> using ffmpeg (which must
+   be installed). A YouTube/media-page source is downloaded first; its clips
+   land in --out-dir or the current directory.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    media      TEXT  Audio/video to cut clips from: a local file, or a      │
+  │                       YouTube/media-page URL (audio downloaded via yt-dlp).  │
+  │                       [required]                                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --transcript-id  -t      TEXT                  Reuse an existing transcript  │
+  │                                                of this media instead of      │
+  │                                                transcribing it again: an id, │
+  │                                                or '-' to read an id or       │
+  │                                                'transcribe --json' output    │
+  │                                                from stdin.                   │
+  │ --speaker                TEXT                  Keep segments spoken by this  │
+  │                                                diarized speaker label        │
+  │                                                (repeatable, e.g. --speaker   │
+  │                                                A).                           │
+  │ --search                 TEXT                  Keep segments whose text      │
+  │                                                contains this                 │
+  │                                                (case-insensitive).           │
+  │ --range                  TEXT                  Keep an explicit START-END    │
+  │                                                window (seconds or            │
+  │                                                [HH:]MM:SS; repeatable).      │
+  │ --padding                FLOAT RANGE [x>=0.0]  Seconds of padding to add     │
+  │                                                around each clip.             │
+  │                                                [default: 0.0]                │
+  │ --out-dir                PATH                  Directory for the clip files  │
+  │                                                (default: next to the input). │
+  │ --json           -j                            Emit JSON describing the      │
+  │                                                clips written.                │
+  │ --help                                         Show this message and exit.   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --llm               TEXT     Let an LLM Gateway model pick the windows to    │
+  │                              clip from the timestamped transcript (e.g.      │
+  │                              --llm "the funniest moments"). Composes with    │
+  │                              --speaker/--search.                             │
+  │ --model             TEXT     LLM Gateway model for --llm.                    │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens for the --llm selection reply.       │
+  │                              [default: 1000]                                 │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Clip everything speaker A says
+   $ assembly clip meeting.mp4 --speaker A
+   Clip the sentences that mention a topic
+   $ assembly clip call.mp3 --search "pricing"
+   Cut an explicit time range
+   $ assembly clip talk.mp4 --range 1:30-2:45
+   Let an LLM pick the moments worth clipping
+   $ assembly clip meeting.mp4 --llm "the three strongest customer objections"
+   Clip a YouTube video's audio with an LLM
+   $ assembly clip "https://youtube.com/watch?v=ID" --llm "the best quote"
+   Reuse a finished transcript instead of re-transcribing
+   $ assembly clip meeting.mp4 -t TRANSCRIPT_ID --speaker B
+   Pipe transcribe straight into clip
+   $ assembly transcribe meeting.mp4 --speaker-labels --json | assembly clip
+   meeting.mp4 -t - --llm "the funniest exchange"
+   Pad each clip and collect them in a directory
+   $ assembly clip meeting.mp4 --speaker A --padding 0.5 --out-dir clips
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[dictate]
   '''
   
