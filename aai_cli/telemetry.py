@@ -69,9 +69,65 @@ def consent_granted() -> bool:
     return config.get_telemetry_enabled() is not False
 
 
+def consent_source() -> str:
+    """Which layer decided :func:`consent_granted`, in the order that layer wins:
+    an env kill-switch (``env:AAI_TELEMETRY_DISABLED`` / ``env:DO_NOT_TRACK``), the
+    choice persisted by ``assembly telemetry enable/disable`` (``config``), or the
+    opt-out ``default``."""
+    if os.environ.get(ENV_DISABLED):
+        return f"env:{ENV_DISABLED}"
+    if os.environ.get(ENV_DO_NOT_TRACK):
+        return f"env:{ENV_DO_NOT_TRACK}"
+    if config.get_telemetry_enabled() is not None:
+        return "config"
+    return "default"
+
+
 def is_enabled() -> bool:
     """Telemetry runs only with both a token to send with and consent to send."""
     return bool(client_token()) and consent_granted()
+
+
+FIRST_RUN_NOTICE = (
+    "Anonymous usage data is collected to improve the CLI; opt out with "
+    "'assembly telemetry disable' (or DO_NOT_TRACK=1)."
+)
+
+
+def _notice_suppressed(raw_args: list[str]) -> bool:
+    """Whether the invocation asked for quiet or machine-readable output.
+
+    The one-time disclosure is human-facing chrome: it must not decorate a
+    ``--quiet`` run nor pollute the machine-readable stderr a ``--json`` (or
+    ``-o json``) pipeline relies on. Mirrors ``main._command_line_requests_json``
+    (telemetry can't import main without a cycle) plus the quiet flags.
+    """
+    for index, token in enumerate(raw_args):
+        if token in ("--quiet", "-q", "--json", "-j", "--output=json", "-ojson"):
+            return True
+        if token in ("-o", "--output") and raw_args[index + 1 : index + 2] == ["json"]:
+            return True
+    return False
+
+
+def _maybe_emit_first_run_notice() -> None:
+    """Disclose collection once, when the anonymous device id is first minted.
+
+    Printed to stderr so stdout stays pipeline-clean. Minting the id here makes the
+    disclosure at-most-once-ever: every later run sees the persisted id and stays
+    silent (including when the first run suppressed the line via --quiet/--json).
+    Wrapped like every other telemetry side effect — a config failure must never
+    break the command being recorded.
+    """
+    try:
+        if config.has_device_id():
+            return
+        config.get_device_id()
+        if _notice_suppressed(sys.argv[1:]):
+            return
+        sys.stderr.write(FIRST_RUN_NOTICE + "\n")
+    except (OSError, CLIError):
+        return
 
 
 def build_event(
@@ -167,6 +223,7 @@ def track(command: str) -> Generator[None]:
     if not is_enabled():
         yield
         return
+    _maybe_emit_first_run_notice()
     started = time.monotonic()
     try:
         yield

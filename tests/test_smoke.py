@@ -55,6 +55,43 @@ def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
     assert "may be rejected" in json.loads(warning_line)["warning"]
 
 
+def test_sandbox_alone_targets_sandbox():
+    from aai_cli import environments
+
+    result = runner.invoke(app, ["--sandbox"])
+    assert result.exit_code == 0
+    assert environments.active().name == "sandbox000"
+
+
+def test_sandbox_with_agreeing_env_is_fine():
+    from aai_cli import environments
+
+    result = runner.invoke(app, ["--sandbox", "--env", "sandbox000"])
+    assert result.exit_code == 0
+    assert environments.active().name == "sandbox000"
+
+
+def test_sandbox_with_conflicting_env_errors():
+    # Silently resolving the contradiction (either way) would send credentials to an
+    # environment the user didn't expect; refuse with a usage error instead.
+    result = runner.invoke(app, ["--sandbox", "--env", "production"])
+    assert result.exit_code == 2
+    assert "conflicts with --env production" in result.output
+    assert "Suggestion: Drop --sandbox, or pass --env sandbox000." in result.output
+
+
+def test_sandbox_env_conflict_is_structured_in_json_mode():
+    import json
+
+    result = runner.invoke(app, ["--sandbox", "--env", "production", "whoami", "--json"])
+    assert result.exit_code == 2
+    line = next(line for line in result.output.splitlines() if line.startswith("{"))
+    error = json.loads(line)["error"]
+    assert error["type"] == "usage_error"
+    assert "conflicts" in error["message"]
+    assert "--env sandbox000" in error["suggestion"]
+
+
 def test_shell_completion_is_available(monkeypatch):
     # add_completion=True ships `--show-completion` (and --install-completion), the
     # discoverability affordance gh/kubectl/docker users reach for. Typer detects the

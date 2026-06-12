@@ -366,6 +366,13 @@ def persist_login(
             _dump(prior_cfg)
 
 
+def has_device_id() -> bool:
+    """Whether the anonymous telemetry device id has been minted yet, without
+    minting one — lets telemetry detect the true first run for its one-time
+    collection disclosure."""
+    return _load().device_id is not None
+
+
 def get_device_id() -> str:
     """A stable anonymous install id for telemetry: a random UUID minted locally on
     first use and persisted in config.toml. Carries nothing derivable from the

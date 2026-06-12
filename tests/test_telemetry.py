@@ -72,7 +72,42 @@ def test_is_enabled_requires_token_and_consent(monkeypatch):
     assert telemetry.is_enabled() is False
 
 
+# --- consent source -------------------------------------------------------------
+
+
+def test_consent_source_default():
+    assert telemetry.consent_source() == "default"
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_consent_source_persisted_choice(enabled):
+    config.set_telemetry_enabled(enabled=enabled)
+    assert telemetry.consent_source() == "config"
+
+
+@pytest.mark.parametrize("var", ["AAI_TELEMETRY_DISABLED", "DO_NOT_TRACK"])
+def test_consent_source_env_kill_switch_wins_over_config(monkeypatch, var):
+    config.set_telemetry_enabled(enabled=True)  # the env switch outranks the choice
+    monkeypatch.setenv(var, "1")
+    assert telemetry.consent_source() == f"env:{var}"
+
+
+def test_consent_source_env_ordering_matches_consent_granted(monkeypatch):
+    monkeypatch.setenv("AAI_TELEMETRY_DISABLED", "1")
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    assert telemetry.consent_source() == "env:AAI_TELEMETRY_DISABLED"
+
+
 # --- config-backed telemetry state -------------------------------------------
+
+
+def test_has_device_id_probes_without_minting(tmp_config):
+    assert config.has_device_id() is False
+    # Probing must not itself mint/persist an id.
+    config_file = tmp_config / "config.toml"
+    assert not config_file.exists() or "device_id" not in config_file.read_text()
+    config.get_device_id()
+    assert config.has_device_id() is True
 
 
 def test_telemetry_enabled_roundtrip():
@@ -297,3 +332,76 @@ def test_track_send_failures_never_break_the_command(monkeypatch, exc):
     monkeypatch.setattr(telemetry, "dispatch", explode)
     with telemetry.track("aai doctor"):
         pass  # must not raise
+
+
+# --- first-run disclosure -------------------------------------------------------
+
+
+def test_first_run_notice_prints_once_on_device_id_mint(events, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["assembly", "doctor"])
+    with telemetry.track("assembly doctor"):
+        pass
+    err = capsys.readouterr().err
+    assert "Anonymous usage data is collected" in err
+    assert "'assembly telemetry disable'" in err
+    assert "DO_NOT_TRACK=1" in err
+    assert err.count("Anonymous usage data") == 1
+    # The device id persists, so a second run stays silent — at most once ever.
+    with telemetry.track("assembly doctor"):
+        pass
+    assert "Anonymous usage data" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["assembly", "-q", "doctor"], ["assembly", "transcribe", "x.wav", "--json"]],
+    ids=["quiet", "json"],
+)
+def test_first_run_notice_suppressed_for_quiet_and_json(events, monkeypatch, capsys, argv):
+    monkeypatch.setattr(sys, "argv", argv)
+    with telemetry.track("assembly doctor"):
+        pass
+    assert "Anonymous usage data" not in capsys.readouterr().err
+    # Suppression still consumes the one-time mint; the disclosure never shows up later.
+    assert config.has_device_id() is True
+
+
+def test_first_run_notice_not_minted_while_telemetry_inert(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["assembly", "doctor"])
+    with telemetry.track("assembly doctor"):  # no token -> inert, nothing collected
+        pass
+    assert "Anonymous usage data" not in capsys.readouterr().err
+    assert config.has_device_id() is False
+
+
+@pytest.mark.parametrize("exc", [OSError("disk full"), CLIError("corrupt config")])
+def test_first_run_notice_failures_never_break_the_command(events, monkeypatch, exc):
+    def explode():
+        raise exc
+
+    monkeypatch.setattr(config, "has_device_id", explode)
+    with telemetry.track("assembly doctor"):
+        pass  # must not raise
+
+
+@pytest.mark.parametrize(
+    ("raw_args", "suppressed"),
+    [
+        (["--quiet"], True),
+        (["-q", "doctor"], True),
+        (["transcribe", "x.wav", "--json"], True),
+        (["-j"], True),
+        (["-o", "json"], True),
+        (["-o", "json", "extra"], True),
+        (["--output", "json"], True),
+        (["--output=json"], True),
+        (["-ojson"], True),
+        (["-o", "text"], False),
+        (["-o"], False),
+        (["transcribe", "x.wav"], False),
+        ([], False),
+    ],
+    ids=repr,
+)
+def test_notice_suppression_matches_quiet_and_json_forms(raw_args, suppressed):
+    assert telemetry._notice_suppressed(raw_args) is suppressed

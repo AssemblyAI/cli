@@ -71,7 +71,13 @@ def test_doctor_rejected_key_fails(healthy, monkeypatch):
     monkeypatch.setattr("aai_cli.commands.doctor.client.validate_key", lambda _key: False)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 1
-    assert _checks(result)["api-key"]["status"] == "fail"
+    api = _checks(result)["api-key"]
+    assert api["status"] == "fail"
+    # validate_key collapses every auth-shaped failure (401, 403, proxy "forbidden")
+    # to False, so the detail must not claim a status code that was never observed.
+    assert api["detail"] == "API key was rejected by the server."
+    assert "401" not in api["detail"]
+    assert "assembly login" in api["fix"]
 
 
 def test_doctor_network_error_is_a_failure(healthy, monkeypatch):
