@@ -70,5 +70,10 @@ replace_in_file() {
 replace_in_file pyproject.toml "s/^version = \"${version}\"/version = \"${new_version}\"/"
 replace_in_file aai_cli/__init__.py "s/__version__ = \"${version}\"/__version__ = \"${new_version}\"/"
 
-info "Updated pyproject.toml and aai_cli/__init__.py to ${new_version}."
+# Refresh uv.lock so the project version in the lockfile stays in sync; the gate
+# runs `uv lock --check` and would otherwise fail on the stale lock.
+info "Refreshing uv.lock."
+uv lock || err "uv lock failed."
+
+info "Updated pyproject.toml, aai_cli/__init__.py, and uv.lock to ${new_version}."
 info "Next: commit the change, open + merge the PR, then run ./scripts/cut_release.sh on main."
