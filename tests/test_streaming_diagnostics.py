@@ -9,6 +9,7 @@ import types
 
 import pytest
 
+from aai_cli import debuglog
 from aai_cli.errors import APIError, NotAuthenticated
 from aai_cli.streaming.diagnostics import (
     SDK_STREAMING_LOGGER,
@@ -65,6 +66,15 @@ def test_silence_streaming_logging_suppresses_the_sdk_client_logger():
         assert len(spy.records) == 1  # …and nothing new after
     finally:
         root.removeHandler(spy)
+
+
+@pytest.mark.usefixtures("reset_levels")
+def test_silence_streaming_logging_stands_down_in_verbose_mode(monkeypatch):
+    # Library logs are the requested output under -v/-vv; nothing gets clamped.
+    monkeypatch.setattr(debuglog, "_verbosity", 1)
+    silence_streaming_logging()
+    for name in (SDK_STREAMING_LOGGER, *WEBSOCKETS_LOGGERS):
+        assert logging.getLogger(name).level == logging.NOTSET
 
 
 def test_sdk_streaming_logger_is_the_assemblyai_parent():

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from aai_cli import debuglog
 from aai_cli import ws as wsutil
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
@@ -30,9 +31,13 @@ def silence_streaming_logging() -> None:
     """Silence the library loggers that would dirty stderr during a realtime run.
 
     Extends the shared websockets silencing (``aai_cli.ws``) with the assemblyai
-    SDK's streaming logger, which only the `stream` path uses. Idempotent.
+    SDK's streaming logger, which only the `stream` path uses. Idempotent. Stands
+    down (like ``aai_cli.ws``) under the root ``-v/--verbose`` flag, where library
+    logs are the requested output.
     """
     wsutil.silence_websockets_logging()
+    if debuglog.active():
+        return
     logging.getLogger(SDK_STREAMING_LOGGER).setLevel(logging.CRITICAL)
 
 

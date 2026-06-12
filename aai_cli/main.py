@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, argscan, environments, help_panels, output, stdio, theme
+from aai_cli import __version__, argscan, debuglog, environments, help_panels, output, stdio, theme
 from aai_cli.commands import (
     account,
     agent,
@@ -286,6 +287,8 @@ def _profile_has_key(state: AppState) -> bool:
 # honor the request.
 _RAW_ARGS_META_KEY = "aai_raw_args"
 
+_LOG = logging.getLogger("aai_cli")
+
 
 def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
     """A warning when ``--sandbox`` and a contradictory ``--env`` are both passed.
@@ -341,6 +344,13 @@ def main(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
     ),
+    verbose: int = typer.Option(
+        0,
+        "--verbose",
+        "-v",
+        count=True,
+        help="Log diagnostics to stderr (-v: requests, -vv: wire-level detail).",
+    ),
     # Underscore name: the eager callback does the work, so the parameter is intentionally
     # unused in the body (avoids ARG001 without a `del`).
     _version: bool = typer.Option(
@@ -358,6 +368,9 @@ def main(
     # The command's own --json flag isn't parsed yet, so sniff the pending command line:
     # a root-callback failure (e.g. bad --env) still emits the JSON error shape when the
     # invocation opted into JSON, and renders human text on stderr otherwise.
+    # Enabled before anything else runs so even environment/profile resolution
+    # failures can be diagnosed with -v.
+    debuglog.enable(verbose)
     raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
     json_mode = output.resolve_json(explicit=argscan.requests_json(raw_args))
     conflict_warning = _sandbox_conflict_warning(sandbox, env)
@@ -370,6 +383,8 @@ def main(
     except CLIError as err:
         output.emit_error(err, json_mode=json_mode)
         raise typer.Exit(code=err.exit_code) from None
+    active_env = environments.active()
+    _LOG.debug("environment: %s (%s)", active_env.name, active_env.api_base)
     for warning in (conflict_warning, state.env_override_warning()):
         if warning and not quiet:
             # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import types
 
+from aai_cli import debuglog
 from aai_cli.errors import APIError, NotAuthenticated
 from aai_cli.ws import (
     WEBSOCKETS_LOGGERS,
@@ -93,6 +94,23 @@ def test_silence_websockets_logging_raises_both_loggers_to_critical():
         for lg in loggers:
             assert lg.level == logging.CRITICAL
             assert not lg.isEnabledFor(logging.ERROR)
+    finally:
+        for lg, level in zip(loggers, previous, strict=True):
+            lg.setLevel(level)
+
+
+def test_silence_websockets_logging_stands_down_in_verbose_mode(monkeypatch):
+    # -vv exists to show wire-level frames, so the silencer must leave the
+    # websockets loggers untouched while verbose mode is active.
+    monkeypatch.setattr(debuglog, "_verbosity", 2)
+    loggers = [logging.getLogger(name) for name in WEBSOCKETS_LOGGERS]
+    previous = [lg.level for lg in loggers]
+    try:
+        for lg in loggers:
+            lg.setLevel(logging.NOTSET)
+        silence_websockets_logging()
+        for lg in loggers:
+            assert lg.level == logging.NOTSET
     finally:
         for lg, level in zip(loggers, previous, strict=True):
             lg.setLevel(level)
