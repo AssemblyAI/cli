@@ -149,6 +149,15 @@ def muted(text: str) -> Text:
     return Text(text, style="aai.muted")
 
 
+def hidden_note(count: int, noun: str, flag: str) -> Text | None:
+    """The muted "Hidden: N <noun>(s). Use <flag> to show them." footnote, or None
+    when nothing was hidden (so it drops out of a `stack`). Pins the phrasing once
+    for the listing commands that elide rows behind an --include-* flag."""
+    if not count:
+        return None
+    return muted(f"Hidden: {count} {noun}(s). Use {flag} to show them.")
+
+
 def stack(*items: RenderableType | None) -> RenderableType:
     """Stack renderables top-to-bottom, dropping any ``None``.
 

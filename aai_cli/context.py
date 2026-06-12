@@ -10,7 +10,6 @@ import keyring.errors
 import typer
 
 from aai_cli import config, environments, output, telemetry, update_check
-from aai_cli.auth import run_login_flow
 from aai_cli.environments import Environment
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
@@ -21,8 +20,7 @@ class AppState:
     that turns it into a concrete profile, environment, session, or API key.
 
     Centralizing resolution here keeps the precedence rules in one spot instead of
-    being re-derived per command. The module-level ``resolve_*`` functions below are
-    thin adapters retained for existing call sites and tests.
+    being re-derived per command.
     """
 
     profile: str | None = None
@@ -102,28 +100,17 @@ class AppState:
         )
 
 
-def resolve_profile(state: AppState) -> str:
-    return state.resolve_profile()
-
-
-def resolve_environment(state: AppState) -> Environment:
-    return state.resolve_environment()
-
-
-def resolve_session(state: AppState) -> tuple[int, str]:
-    return state.resolve_session()
-
-
-def env_override_warning(state: AppState) -> str | None:
-    return state.env_override_warning()
-
-
 def persist_browser_login(profile: str, env: str, *, json_mode: bool = False) -> None:
     """Run the browser login flow and persist its credentials for `profile`/`env`.
 
     ``json_mode`` keeps the flow's stderr progress notes machine-readable under
     ``--json`` (each becomes a ``{"hint": …}`` object instead of prose).
     """
+    # Imported here, not at module top: context is on every command's import path,
+    # and the auth package (httpx, Stytch discovery, loopback server) is only needed
+    # when a browser login actually starts.
+    from aai_cli.auth import run_login_flow
+
     result = run_login_flow(json_mode=json_mode)
     config.persist_login(
         profile,
@@ -139,20 +126,11 @@ def _persist_browser_login(state: AppState, *, json_mode: bool) -> None:
     persist_browser_login(state.resolve_profile(), environments.active().name, json_mode=json_mode)
 
 
-def _login_persistence_error(exc: object) -> APIError:
-    return APIError(
-        f"Signed in, but could not save the credentials locally: {exc}",
-        suggestion="Run 'assembly login' again, or check your keyring/config permissions.",
-    )
-
-
-def _rerun_after_login_error() -> CLIError:
-    return CLIError(
-        "Signed in. Run the command again to continue.",
-        error_type="login_required",
-        exit_code=4,
-        suggestion="Run the same command again.",
-    )
+def _fail(err: CLIError, *, json_mode: bool) -> NoReturn:
+    """Emit a CLIError and exit with its code — the one error-exit shape every
+    failure path in this module shares."""
+    output.emit_error(err, json_mode=json_mode)
+    raise typer.Exit(code=err.exit_code) from None
 
 
 def _interactive_session() -> bool:
@@ -190,17 +168,26 @@ def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
             )
         _persist_browser_login(state, json_mode=json_mode)
     except CLIError as login_err:
-        output.emit_error(login_err, json_mode=json_mode)
-        raise typer.Exit(code=login_err.exit_code) from None
+        _fail(login_err, json_mode=json_mode)
     except (OSError, RuntimeError, TypeError, keyring.errors.KeyringError) as exc:
         # TypeError covers a value the TOML writer can't serialize: the login itself
         # succeeded, so the user must see "could not save", not "unexpected error".
-        persistence_err = _login_persistence_error(exc)
-        output.emit_error(persistence_err, json_mode=json_mode)
-        raise typer.Exit(code=persistence_err.exit_code) from None
-    rerun_err = _rerun_after_login_error()
-    output.emit_error(rerun_err, json_mode=json_mode)
-    raise typer.Exit(code=rerun_err.exit_code) from None
+        _fail(
+            APIError(
+                f"Signed in, but could not save the credentials locally: {exc}",
+                suggestion="Run 'assembly login' again, or check your keyring/config permissions.",
+            ),
+            json_mode=json_mode,
+        )
+    _fail(
+        CLIError(
+            "Signed in. Run the command again to continue.",
+            error_type="login_required",
+            exit_code=4,
+            suggestion="Run the same command again.",
+        ),
+        json_mode=json_mode,
+    )
 
 
 def run_command(
@@ -221,12 +208,10 @@ def run_command(
         update_check.maybe_notify(json_mode=json_mode)
     except NotAuthenticated as err:
         if not auto_login or not _should_auto_login(err):
-            output.emit_error(err, json_mode=json_mode)
-            raise typer.Exit(code=err.exit_code) from None
+            _fail(err, json_mode=json_mode)
         _auto_login_and_exit(state, json_mode=json_mode)
     except CLIError as err:
-        output.emit_error(err, json_mode=json_mode)
-        raise typer.Exit(code=err.exit_code) from None
+        _fail(err, json_mode=json_mode)
     except (typer.Exit, typer.Abort, BrokenPipeError):
         # Deliberate control flow (and the closed-pipe contract handled in main.run);
         # these must reach Click/the entry point untouched.
@@ -243,4 +228,6 @@ def run_command(
             ),
         )
         output.emit_error(internal, json_mode=json_mode)
+        # `from exc`, unlike _fail's `from None`: the original exception is a bug
+        # worth keeping on the chain for anyone re-raising with tracebacks enabled.
         raise typer.Exit(code=internal.exit_code) from exc

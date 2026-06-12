@@ -86,7 +86,7 @@ def test_keys_create_rejects_default_project_without_int_id(mocker):
 
 def test_keys_list_without_session_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     list_projects = mocker.patch(
         "aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=[]
     )
@@ -214,7 +214,7 @@ def test_keys_create_rejects_empty_name(monkeypatch, mocker):
     # not logged in (no login flow may start for a request that can never be valid).
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
     )
     create = mocker.patch("aai_cli.commands.keys.ams.create_token", autospec=True)

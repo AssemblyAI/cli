@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import sys
-
 import typer
 
-from aai_cli import help_panels, options, output
-from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli import help_panels, options, output, stdio
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
 from aai_cli.onboard import wizard
@@ -20,7 +18,7 @@ def build_prompter(*, non_interactive: bool = False) -> Prompter:
     otherwise never block for input."""
     if non_interactive:
         return NonInteractivePrompter()
-    if sys.stdin.isatty() and sys.stdout.isatty():
+    if stdio.interactive_stdio():
         return InteractivePrompter()
     return NonInteractivePrompter()
 
@@ -45,7 +43,7 @@ def onboard(
     """Guided setup: sign in, run your first transcription, and start building."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        profile = resolve_profile(state)
+        profile = state.resolve_profile()
         wiz_ctx = WizardContext(state=state, profile=profile, json_mode=json_mode)
         # --json also forces non-interactive: a machine-output run can't block on
         # prompts, and the interactive prompter would write prose onto the JSON stdout.

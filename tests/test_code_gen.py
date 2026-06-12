@@ -248,6 +248,21 @@ def test_transcribe_render_output_field_generates_matching_code(field, fragment)
     assert fragment in code
 
 
+def test_output_field_maps_cover_every_transcript_output_choice():
+    # Both the run path's renderer map and the snippet map silently fall back to
+    # plain transcript text for unknown fields, so an exact key-set check is what
+    # turns "added a TranscriptOutput member, forgot a map" into a test failure
+    # instead of silently-wrong output.
+    from aai_cli import client
+    from aai_cli.choices import TranscriptOutput
+    from aai_cli.code_gen.transcribe import _OUTPUT_SNIPPETS
+
+    values = {member.value for member in TranscriptOutput}
+    assert set(_OUTPUT_SNIPPETS) == values
+    # `text` is the run path's documented fallback; every other choice is explicit.
+    assert set(client._FIELD_RENDERERS) == values - {"text"}
+
+
 def test_transcribe_render_output_json_imports_json_only_when_needed():
     assert "import json" in render_transcribe_code({}, "audio.mp3", output="json")
     assert "import json" not in render_transcribe_code({}, "audio.mp3", output="srt")

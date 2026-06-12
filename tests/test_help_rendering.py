@@ -121,8 +121,12 @@ def test_root_level_json_flag_points_at_subcommand_placement():
     [
         (["doctor", "-q"], "assembly -q doctor"),
         (["speak", "hi", "--sandbox"], "assembly --sandbox speak"),
+        # --version is declared on the root callback like any other global flag; the
+        # hint set is derived from those declarations, so it gets the hint too (the
+        # old hand-maintained list missed it).
+        (["doctor", "--version"], "assembly --version doctor"),
     ],
-    ids=["-q", "--sandbox"],
+    ids=["-q", "--sandbox", "--version"],
 )
 def test_global_flag_on_subcommand_points_at_root_placement(argv, expected):
     result = runner.invoke(app, argv, env={"COLUMNS": "300"})

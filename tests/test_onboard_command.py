@@ -180,19 +180,19 @@ def test_onboard_sorts_first_in_quick_start() -> None:
     assert result.output.index("onboard") < result.output.index("init")
 
 
-def test_interactive_session_requires_both_ends_tty(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli import main as main_mod
+def test_interactive_stdio_requires_both_ends_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aai_cli import stdio
 
     # Both TTY -> interactive.
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-    assert main_mod._interactive_session() is True
+    assert stdio.interactive_stdio() is True
     # Only one end a TTY -> NOT interactive. An `or` mutant would call this interactive.
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-    assert main_mod._interactive_session() is False
+    assert stdio.interactive_stdio() is False
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-    assert main_mod._interactive_session() is False
+    assert stdio.interactive_stdio() is False
 
 
 def test_bare_aai_with_key_shows_help_no_offer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,10 +221,9 @@ def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_bare_aai_offers_wizard_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli import main as main_mod
     from aai_cli.onboard.sections import WizardContext
 
-    monkeypatch.setattr(main_mod, "_interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
     monkeypatch.setattr("aai_cli.main.typer.confirm", lambda *a, **k: True)
     captured: dict[str, object] = {}
 
@@ -244,9 +243,7 @@ def test_bare_aai_offers_wizard_when_no_key(monkeypatch: pytest.MonkeyPatch) -> 
 def test_bare_aai_empty_confirm_defaults_to_yes(monkeypatch: pytest.MonkeyPatch) -> None:
     # The offer prompt defaults to Yes: an empty <Enter> answer runs the wizard.
     # A `default=False` mutant would instead decline and print help.
-    from aai_cli import main as main_mod
-
-    monkeypatch.setattr(main_mod, "_interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
     ran = {"called": False}
 
     def _fake_run(prompter: object, ctx: object) -> int:
@@ -262,11 +259,9 @@ def test_bare_aai_empty_confirm_defaults_to_yes(monkeypatch: pytest.MonkeyPatch)
 def test_bare_aai_interactive_with_key_shows_help_no_offer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aai_cli import main as main_mod
-
     # Interactive session but a key is already present: _profile_has_key returns True,
     # so the wizard is never offered and help is printed instead.
-    monkeypatch.setattr(main_mod, "_interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     called = {"confirm": False}
     monkeypatch.setattr(
@@ -279,9 +274,7 @@ def test_bare_aai_interactive_with_key_shows_help_no_offer(
 
 
 def test_bare_aai_declined_offer_shows_help(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli import main as main_mod
-
-    monkeypatch.setattr(main_mod, "_interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
     monkeypatch.setattr("aai_cli.main.typer.confirm", lambda *a, **k: False)
     called = {"v": False}
 

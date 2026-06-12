@@ -24,6 +24,15 @@ def silence_stdout() -> None:
             os.close(devnull_fd)
 
 
+def interactive_stdio() -> bool:
+    """True only when stdin and stdout are both real TTYs — i.e. a human can answer
+    a prompt and see it. The shared "may we prompt here?" predicate for the bare-`assembly`
+    setup offer, the onboarding prompter, and the `assembly init` template picker, so the
+    three can't drift on what counts as interactive.
+    """
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def stdin_is_piped() -> bool:
     """True when stdin is a pipe/redirect rather than an interactive terminal."""
     stream = sys.stdin

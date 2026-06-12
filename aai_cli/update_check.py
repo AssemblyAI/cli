@@ -2,15 +2,14 @@
 
 Best-effort and never-blocking, in the style of npm's update-notifier / Vercel:
 the notice always renders from a ``config.toml`` cache (zero latency), and the
-cache is refreshed by a detached ``assembly _update-check`` process — the same
-detached-spawn shape as ``telemetry.dispatch`` (see ``aai_cli/telemetry.py``).
+cache is refreshed by a detached ``assembly _update-check`` process — the shared
+detached-spawn recipe in ``aai_cli/procs.py``, same as ``telemetry.dispatch``.
 Every failure is swallowed: the notice must never delay or break a command.
 """
 
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import time
 
@@ -19,7 +18,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
-from aai_cli import __version__, config, output
+from aai_cli import __version__, config, output, procs
 from aai_cli.errors import CLIError
 
 ENV_DISABLED = "AAI_NO_UPDATE_CHECK"
@@ -86,17 +85,10 @@ def fetch_and_cache() -> None:
 def spawn_refresh() -> None:
     """Spawn the detached ``assembly _update-check`` child to refresh the cache.
 
-    Own session + discarded stdio so the user's command never waits; the child's
-    env disables the notifier so a refresh can never spawn another (mirrors
-    ``telemetry.dispatch``). S603 is ignored project-wide for the CLI's own shell-outs.
+    The shared recipe (own session, discarded stdio, self-disabling env) keeps the
+    user's command from ever waiting and a refresh from spawning another.
     """
-    subprocess.Popen(
-        [sys.executable, "-m", "aai_cli", "_update-check"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        env={**os.environ, ENV_DISABLED: "1"},
-    )
+    procs.spawn_detached(["_update-check"], disable_env_var=ENV_DISABLED)
 
 
 def _should_notify(*, json_mode: bool) -> bool:

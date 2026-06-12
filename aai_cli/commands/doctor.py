@@ -10,7 +10,7 @@ import typer
 from rich.markup import escape
 
 from aai_cli import client, coding_agent, config, environments, help_panels, options, output, theme
-from aai_cli.context import AppState, resolve_profile, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
 
@@ -232,6 +232,22 @@ def _check_coding_agent() -> Check:
     )
 
 
+def render_check_lines(checks: list[Check]) -> list[str]:
+    """The per-check report lines (glyph, name — detail, indented fix hint).
+
+    Shared with the onboarding wizard's environment section (which renders the same
+    checks with its own summary line), so the two renders can't drift."""
+    lines: list[str] = []
+    for c in checks:
+        symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
+        lines.append(
+            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
+        )
+        if c["fix"]:
+            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
+    return lines
+
+
 def render(data: DoctorResult) -> str:
     checks = data["checks"]
     lines = [output.heading("Environment check")]
@@ -240,13 +256,7 @@ def render(data: DoctorResult) -> str:
         lines.append(
             "  " + output.hint(f"profile: {escape(profile)} · environment: {escape(environment)}")
         )
-    for c in checks:
-        symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
-        lines.append(
-            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
-        )
-        if c["fix"]:
-            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
+    lines.extend(render_check_lines(checks))
     if data["ok"]:
         lines.append("  " + output.success("Everything looks good."))
         # Only the real `assembly doctor` carries profile context; the onboarding wizard
@@ -277,7 +287,7 @@ def doctor(
     """Check that your environment is ready to use AssemblyAI."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        profile = resolve_profile(state)
+        profile = state.resolve_profile()
         checks = [
             check_python(),
             _check_credentials(profile),

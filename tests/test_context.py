@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 from aai_cli import config, environments
 from aai_cli.auth.flow import LoginResult
-from aai_cli.context import AppState, _interactive_session, env_override_warning, run_command
+from aai_cli.context import AppState, _interactive_session, run_command
 from aai_cli.errors import APIError, NotAuthenticated, auth_failure
 
 runner = CliRunner()
@@ -63,7 +63,7 @@ def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
     # session: no browser login may start (it would bind a port and block 120s),
     # and the ORIGINAL NotAuthenticated must surface with its actionable suggestion.
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
     )
 
@@ -80,7 +80,7 @@ def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
 
 def test_run_command_not_interactive_json_keeps_clean_error_shape(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
     )
 
@@ -101,7 +101,7 @@ def test_run_command_auto_login_notice_suppressed_in_json_mode(monkeypatch):
     # shape is emitted.
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: LoginResult(
             api_key="sk_auto", session_jwt="j", session_token="t", account_id=1
         ),
@@ -128,7 +128,7 @@ def test_run_command_maps_cli_error_to_exit_code():
 def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: LoginResult(
             api_key="sk_auto",
             session_jwt="jwt_auto",
@@ -156,7 +156,7 @@ def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
 def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: LoginResult(
             api_key="sk_auto",
             session_jwt="jwt_auto",
@@ -184,7 +184,7 @@ def test_run_command_auto_login_persistence_type_error_is_clean(monkeypatch):
     # message — not the generic "Unexpected error" internal-bug line.
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: LoginResult(
             api_key="sk_auto",
             session_jwt="jwt_auto",
@@ -212,7 +212,7 @@ def test_run_command_auto_login_failure_is_clean(monkeypatch):
     def fail_login(**_kwargs):
         raise APIError("Login failed: the server returned an unexpected response.")
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fail_login)
 
     def body(state, json_mode):
         raise NotAuthenticated()
@@ -230,7 +230,7 @@ def test_run_command_auto_login_timeout_maps_to_auth_error(monkeypatch):
     def fail_login(**_kwargs):
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fail_login)
 
     def body(state, json_mode):
         raise NotAuthenticated()
@@ -246,7 +246,7 @@ def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setenv(config.ENV_API_KEY, "sk_bad")
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("env key retry cannot be fixed")),
     )
 
@@ -270,21 +270,21 @@ def test_run_command_runs_body_on_success():
 
 def test_env_override_warning_when_flag_contradicts_profile():
     config.set_profile_env("default", "sandbox000")
-    assert env_override_warning(AppState(env="production")) is not None
+    assert AppState(env="production").env_override_warning() is not None
 
 
 def test_env_override_warning_none_when_flag_matches_profile():
     config.set_profile_env("default", "sandbox000")
-    assert env_override_warning(AppState(env="sandbox000")) is None
+    assert AppState(env="sandbox000").env_override_warning() is None
 
 
 def test_env_override_warning_none_without_explicit_flag():
     config.set_profile_env("default", "sandbox000")
-    assert env_override_warning(AppState(env=None)) is None
+    assert AppState(env=None).env_override_warning() is None
 
 
 def test_env_override_warning_none_when_profile_has_no_env():
-    assert env_override_warning(AppState(env="production")) is None
+    assert AppState(env="production").env_override_warning() is None
 
 
 def test_env_override_warning_when_aai_env_contradicts_profile(monkeypatch):
@@ -292,7 +292,7 @@ def test_env_override_warning_when_aai_env_contradicts_profile(monkeypatch):
     # does, so it must warn too — and name AAI_ENV as the source.
     config.set_profile_env("default", "sandbox000")
     monkeypatch.setenv("AAI_ENV", "production")
-    warning = env_override_warning(AppState(env=None))
+    warning = AppState(env=None).env_override_warning()
     assert warning is not None
     assert "AAI_ENV" in warning
     # The warning now ends with an actionable remediation naming how to fix it.
@@ -303,7 +303,7 @@ def test_env_override_warning_flag_beats_aai_env(monkeypatch):
     # An explicit --env wins precedence and is the named source, not AAI_ENV.
     config.set_profile_env("default", "sandbox000")
     monkeypatch.setenv("AAI_ENV", "sandbox000")
-    warning = env_override_warning(AppState(env="production"))
+    warning = AppState(env="production").env_override_warning()
     assert warning is not None
     assert "--env" in warning
     assert "Drop --env" in warning
@@ -312,15 +312,15 @@ def test_env_override_warning_flag_beats_aai_env(monkeypatch):
 def test_env_override_warning_none_when_aai_env_matches_profile(monkeypatch):
     config.set_profile_env("default", "sandbox000")
     monkeypatch.setenv("AAI_ENV", "sandbox000")
-    assert env_override_warning(AppState(env=None)) is None
+    assert AppState(env=None).env_override_warning() is None
 
 
 def test_resolve_session_returns_account_and_jwt():
     from aai_cli import config
-    from aai_cli.context import AppState, resolve_session
+    from aai_cli.context import AppState
 
     config.set_session("default", session_jwt="jwt_1", session_token="tok_1", account_id=42)
-    account_id, jwt = resolve_session(AppState())
+    account_id, jwt = AppState().resolve_session()
     assert account_id == 42
     assert jwt == "jwt_1"
 
@@ -328,11 +328,11 @@ def test_resolve_session_returns_account_and_jwt():
 def test_resolve_session_raises_when_no_session():
     import pytest
 
-    from aai_cli.context import AppState, resolve_session
+    from aai_cli.context import AppState
     from aai_cli.errors import NotAuthenticated
 
     with pytest.raises(NotAuthenticated):
-        resolve_session(AppState())
+        AppState().resolve_session()
 
 
 def test_resolve_session_raises_when_only_account_id_missing(monkeypatch):
@@ -341,26 +341,26 @@ def test_resolve_session_raises_when_only_account_id_missing(monkeypatch):
     # fall through and return a None account id instead of failing cleanly).
     import pytest
 
-    from aai_cli.context import AppState, resolve_session
+    from aai_cli.context import AppState
     from aai_cli.errors import NotAuthenticated
 
     monkeypatch.setattr(config, "get_session", lambda _profile: {"jwt": "j", "token": "t"})
     monkeypatch.setattr(config, "get_account_id", lambda _profile: None)
     with pytest.raises(NotAuthenticated):
-        resolve_session(AppState())
+        AppState().resolve_session()
 
 
 def test_resolve_session_raises_when_only_jwt_missing(monkeypatch):
     # The mirror case: an account id but no stored session must also raise.
     import pytest
 
-    from aai_cli.context import AppState, resolve_session
+    from aai_cli.context import AppState
     from aai_cli.errors import NotAuthenticated
 
     monkeypatch.setattr(config, "get_session", lambda _profile: None)
     monkeypatch.setattr(config, "get_account_id", lambda _profile: 42)
     with pytest.raises(NotAuthenticated):
-        resolve_session(AppState())
+        AppState().resolve_session()
 
 
 def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(monkeypatch):
@@ -375,7 +375,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
         ran["login"] += 1
         return LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=7)
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", fake_login)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fake_login)
 
     def body(state, json_mode):
         raise NotAuthenticated()  # rejected_key is False: not a key rejection
@@ -387,14 +387,12 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
 
 
 def test_appstate_methods_are_the_single_source_of_truth():
-    # The module-level resolve_* helpers are thin adapters over the AppState methods;
-    # both must agree, and the precedence (default profile + default env) must hold.
+    # The precedence (default profile + default env) must hold.
     config.set_profile_env("default", "sandbox000")
     state = AppState(env="production")
 
     assert state.resolve_profile() == "default"
     assert state.resolve_environment().name == "production"  # --env wins over profile
-    assert state.env_override_warning() == env_override_warning(state)
     assert state.env_override_warning() is not None  # production contradicts sandbox000
 
 
@@ -446,10 +444,8 @@ def test_resolve_session_suggestion_never_offers_api_key_env_var():
     # never satisfy AMS session commands (they authenticate with the browser-session
     # JWT, not the API key). The session-specific suggestion must say what actually
     # works and drop the dead-end env-var advice.
-    from aai_cli.context import resolve_session
-
     with pytest.raises(NotAuthenticated) as exc:
-        resolve_session(AppState())
+        AppState().resolve_session()
     assert exc.value.suggestion is not None
     assert "browser" in exc.value.suggestion
     assert "API key alone" in exc.value.suggestion
@@ -480,7 +476,7 @@ def test_persist_browser_login_passes_json_mode_to_flow(monkeypatch):
         seen["json_mode"] = json_mode
         return LoginResult(api_key="sk", session_jwt="j", session_token="t", account_id=1)
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", fake)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fake)
     persist_browser_login("default", "production")
     assert seen["json_mode"] is False  # human prose stays the default
     persist_browser_login("default", "production", json_mode=True)

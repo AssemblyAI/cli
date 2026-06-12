@@ -6,9 +6,8 @@ from pathlib import Path
 
 import assemblyai as aai
 import typer
-from rich.markup import escape
 
-from aai_cli import config, environments, output, theme, transcribe_exec, transcribe_render
+from aai_cli import config, environments, output, transcribe_exec, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
@@ -100,14 +99,6 @@ _BUILD_CHOICES = [
 ]
 
 
-# Status -> (glyph, style) for the wizard's environment render (same look as doctor's).
-_CHECK_SYMBOLS = {
-    "ok": (theme.SYMBOL_SUCCESS, "aai.success"),
-    "warn": (theme.SYMBOL_WARN, "aai.warn"),
-    "fail": (theme.SYMBOL_ERROR, "aai.error"),
-}
-
-
 def _environment_summary(checks: list[doctor_cmd.Check]) -> str:
     """The closing line, computed from the actual statuses: doctor.render's
     all-or-nothing `ok` flag can't say "warnings only", which previously put
@@ -124,16 +115,9 @@ def _environment_summary(checks: list[doctor_cmd.Check]) -> str:
 
 
 def _render_environment(checks: list[doctor_cmd.Check]) -> str:
-    """The wizard's render of the doctor checks: doctor-style per-check lines, with
+    """The wizard's render of the doctor checks: doctor's own per-check lines, with
     the summary derived from what the checks actually reported."""
-    lines = [output.heading("Environment check")]
-    for c in checks:
-        symbol, style = _CHECK_SYMBOLS[c["status"]]
-        lines.append(
-            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
-        )
-        if c["fix"]:
-            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
+    lines = [output.heading("Environment check"), *doctor_cmd.render_check_lines(checks)]
     lines.append("  " + _environment_summary(checks))
     return "\n".join(lines)
 

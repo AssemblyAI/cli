@@ -67,7 +67,7 @@ def test_whoami_human_render_shows_detail_rows(monkeypatch, mocker):
 
 def test_whoami_unauthenticated_runs_login(monkeypatch, mocker):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     validate = mocker.patch(
         "aai_cli.commands.login.client.validate_key", autospec=True, return_value=True
     )
@@ -87,14 +87,14 @@ def test_logout_clears_key():
 
 
 def test_login_oauth_flow_stores_returned_key(monkeypatch):
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"
 
 
 def test_login_oauth_persists_session(monkeypatch):
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert config.get_session("default") == {"jwt": "jwt_x", "token": "tok_x"}
@@ -120,7 +120,7 @@ def test_login_api_key_flag_warns_account_commands_need_browser_login(mocker):
 
 def test_login_browser_path_has_no_api_key_only_note(monkeypatch):
     # The browser login DOES create a session, so the api-key-only caveat must not show.
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 0
     assert "Signed in as default" in result.output
@@ -155,7 +155,7 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
     def boom(**_kwargs):
         raise APIError("Login failed: the server returned an unexpected response.")
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", boom)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", boom)
     result = runner.invoke(app, ["login"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
@@ -168,7 +168,7 @@ def test_login_timeout_is_auth_typed_with_exit_4(monkeypatch):
     def timed_out(**_kwargs):
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
-    monkeypatch.setattr("aai_cli.context.run_login_flow", timed_out)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", timed_out)
     result = runner.invoke(app, ["login", "--json"])
     assert result.exit_code == 4
     payload = json.loads(result.output)
@@ -180,7 +180,7 @@ def test_login_empty_api_key_flag_is_usage_error(monkeypatch):
     # `--api-key "$UNSET_VAR"` (an explicit empty value) must not silently fall
     # into the browser flow.
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(
             AssertionError("empty --api-key must not start a browser")
         ),
@@ -193,7 +193,7 @@ def test_login_empty_api_key_flag_is_usage_error(monkeypatch):
 
 def test_login_whitespace_api_key_flag_is_usage_error(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(
             AssertionError("blank --api-key must not start a browser")
         ),
@@ -213,7 +213,7 @@ def test_login_empty_api_key_flag_json_error_shape():
 
 def test_login_api_key_flag_still_bypasses_oauth(monkeypatch, mocker):
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("OAuth must not run with --api-key")),
     )
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
@@ -223,7 +223,7 @@ def test_login_api_key_flag_still_bypasses_oauth(monkeypatch, mocker):
 
 
 def test_login_binds_env_to_profile(monkeypatch):
-    monkeypatch.setattr("aai_cli.context.run_login_flow", _fake_login_result)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     result = runner.invoke(app, ["--env", "sandbox000", "login"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_from_oauth"
@@ -232,7 +232,7 @@ def test_login_binds_env_to_profile(monkeypatch):
 
 def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow", lambda *, json_mode=False: _login_result("sk_x")
+        "aai_cli.auth.run_login_flow", lambda *, json_mode=False: _login_result("sk_x")
     )
     result = runner.invoke(app, ["--sandbox", "login"])
     assert result.exit_code == 0
@@ -412,7 +412,7 @@ def test_login_failure_never_auto_logs_in_again(monkeypatch):
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
-    monkeypatch.setattr("aai_cli.context.run_login_flow", timed_out)
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", timed_out)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 4
     assert calls["n"] == 1  # the command's own attempt only; no auto-login retry
@@ -425,7 +425,7 @@ def test_logout_never_auto_logs_in(monkeypatch):
 
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr(
-        "aai_cli.context.run_login_flow",
+        "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("logout must never start a login")),
     )
     monkeypatch.setattr(

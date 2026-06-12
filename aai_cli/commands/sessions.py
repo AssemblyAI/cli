@@ -8,7 +8,7 @@ from rich.table import Table
 
 from aai_cli import jsonshape, options, output, theme, timeparse
 from aai_cli.auth import ams
-from aai_cli.context import AppState, resolve_session, run_command
+from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Browse your past streaming (real-time) sessions.", no_args_is_help=True)
@@ -70,7 +70,7 @@ def list_(
     """List recent streaming sessions."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        _, jwt = resolve_session(state)
+        _, jwt = state.resolve_session()
         payload = ams.list_streaming(
             jwt, limit=limit, status=None if status is None else status.value
         )
@@ -124,7 +124,7 @@ def get(
     """Show details for one streaming session."""
 
     def body(state: AppState, json_mode: bool) -> None:
-        _, jwt = resolve_session(state)
+        _, jwt = state.resolve_session()
         data = ams.get_streaming(session_id, jwt)
 
         def render(d: dict[str, object]) -> Table:

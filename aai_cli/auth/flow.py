@@ -141,24 +141,27 @@ def _reusable_cli_key(token: _Token) -> str | None:
     return None
 
 
+def _no_project_error() -> APIError:
+    """The one failure mode behind both guards in ``find_or_create_cli_key``:
+    nowhere to mint a key (no project entries at all, or an entry without a project)."""
+    return APIError(
+        "Your account has no project to create an API key in.",
+        suggestion="Create a project in the AssemblyAI dashboard, then run 'assembly login' again.",
+    )
+
+
 def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     """Return the existing 'AssemblyAI CLI' key, or create one in the first project."""
     projects = _parse(_PROJECT_LIST, ams.list_projects(account_id, session_jwt))
     if not projects:
-        raise APIError(
-            "Your account has no project to create an API key in.",
-            suggestion="Create a project in the AssemblyAI dashboard, then run 'assembly login' again.",
-        )
+        raise _no_project_error()
     for entry in projects:
         for token in entry.tokens:
             if key := _reusable_cli_key(token):
                 return key
     project = projects[0].project
     if project is None:
-        raise APIError(
-            "Your account has no project to create an API key in.",
-            suggestion="Create a project in the AssemblyAI dashboard, then run 'assembly login' again.",
-        )
+        raise _no_project_error()
     created = ams.create_token(account_id, project.id, endpoints.CLI_TOKEN_NAME, session_jwt)
     return _parse(_CREATED_TOKEN, created).api_key
 
