@@ -1,0 +1,215 @@
+# serializer version: 1
+# name: test_command_help_matches_snapshot[_update-check]
+  '''
+  
+   Usage: assembly _update-check [OPTIONS]
+  
+   Internal: refresh the cached latest version (spawned detached). Hidden.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Internal plumbing, spawned by the CLI itself
+   $ assembly _update-check
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[doctor]
+  '''
+  
+   Usage: assembly doctor [OPTIONS]
+  
+   Check that your environment is ready to use AssemblyAI.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Check your environment is ready
+   $ assembly doctor
+   Output results as JSON
+   $ assembly doctor --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_install]
+  '''
+  
+   Usage: assembly setup install [OPTIONS]
+  
+   Set up your coding agent for AssemblyAI (docs MCP server + skills).
+  
+   Installs three things: the assemblyai-docs MCP server (live API docs, via
+   `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the
+   bundled
+   aai-cli skill (copied from this package, no network). Each step is idempotent
+   and skipped if already present unless --force.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --scope          [user|project|local]  Config scope to register the MCP      │
+  │                                        under. Presence is detected across    │
+  │                                        all scopes.                           │
+  │                                        [default: user]                       │
+  │ --force                                Reinstall even if already present.    │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Set up your coding agent for AssemblyAI
+   $ assembly setup install
+   Install for the current project only
+   $ assembly setup install --scope project
+   Reinstall everything even if already present
+   $ assembly setup install --force
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_remove]
+  '''
+  
+   Usage: assembly setup remove [OPTIONS]
+  
+   Remove the AssemblyAI MCP server and skills from your coding agent.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --scope          [user|project|local]  Only remove the MCP from this scope.  │
+  │                                        Default: remove from whichever scope  │
+  │                                        it exists in.                         │
+  │ --json   -j                            Output raw JSON.                      │
+  │ --help                                 Show this message and exit.           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Remove the AssemblyAI MCP server and skills
+   $ assembly setup remove
+   Remove only from the project scope
+   $ assembly setup remove --scope project
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[setup_status]
+  '''
+  
+   Usage: assembly setup status [OPTIONS]
+  
+   Show whether the AssemblyAI MCP server and skills are set up in your coding
+   agent.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show what's set up
+   $ assembly setup status
+   Print status as JSON
+   $ assembly setup status --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_disable]
+  '''
+  
+   Usage: assembly telemetry disable [OPTIONS]
+  
+   Opt out of anonymous usage telemetry for this machine.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Opt out of telemetry
+   $ assembly telemetry disable
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_enable]
+  '''
+  
+   Usage: assembly telemetry enable [OPTIONS]
+  
+   Re-enable anonymous usage telemetry for this machine.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Re-enable telemetry
+   $ assembly telemetry enable
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_flush]
+  '''
+  
+   Usage: assembly telemetry flush [OPTIONS] PAYLOAD
+  
+   Deliver one serialized telemetry event to the intake (internal).
+  
+   This is the detached flusher `telemetry.dispatch` spawns so user commands
+   never
+   wait on the network — an explicit, reviewable entry point rather than inline
+   code. Hidden from help; runs with stdio discarded, so it neither needs nor
+   produces output.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    payload      TEXT  Serialized telemetry payload (internal). [required]  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --help          Show this message and exit.                                  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Internal plumbing, spawned by the CLI itself
+   $ assembly telemetry flush '<payload-json>'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[telemetry_status]
+  '''
+  
+   Usage: assembly telemetry status [OPTIONS]
+  
+   Show whether anonymous usage telemetry is active, and why.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show whether telemetry is active
+   $ assembly telemetry status
+   As JSON for scripting
+   $ assembly telemetry status --json
+  
+  
+  
+  '''
+# ---

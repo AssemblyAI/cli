@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [main]
     types: [opened, reopened, ready_for_review, synchronize]
+  merge_group:                # Merge-queue runs: validate the queued merge result so two
+                              # PRs that are each green against an older main can't land a
+                              # semantic conflict together.
   push:
     branches: [main]          # PRs are covered by pull_request (incl. synchronize);
                               # scoping push to main avoids double-running every PR commit.

@@ -1,0 +1,175 @@
+# serializer version: 1
+# name: test_command_help_matches_snapshot[deploy]
+  '''
+  
+   Usage: assembly deploy [OPTIONS]
+  
+   Deploy the current project to Vercel (default), Railway, or Fly.io.
+  
+   Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
+   `railway up`, or `fly launch`). Requires that target's CLI to be installed.
+   (Render deploys from a connected Git repo — see the project README.)
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --prod               Deploy to production (Vercel only).                     │
+  │ --vercel             Deploy to Vercel (the default).                         │
+  │ --railway            Deploy to Railway.                                      │
+  │ --fly                Deploy to Fly.io.                                       │
+  │ --yes      -y        Skip the confirmation prompt.                           │
+  │ --json     -j        Output raw JSON.                                        │
+  │ --help               Show this message and exit.                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Deploy a preview to Vercel (asks first)
+   $ assembly deploy
+   Deploy to production on Vercel
+   $ assembly deploy --prod --yes
+   Deploy to Railway
+   $ assembly deploy --railway
+   Deploy to Fly.io
+   $ assembly deploy --fly
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[dev]
+  '''
+  
+   Usage: assembly dev [OPTIONS]
+  
+   Launch the dev server for the app in the current directory.
+  
+   Run this from inside a project created by `assembly init`. It installs
+   dependencies
+   if needed, then starts the FastAPI server with live reload and opens the
+   browser.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --host                TEXT     Interface to bind. Loopback by default; pass  │
+  │                                0.0.0.0 to expose on your network.            │
+  │                                [default: 127.0.0.1]                          │
+  │ --no-open                      Launch, but don't open the browser.           │
+  │ --no-install                   Skip dependency install; launch directly.     │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Launch the app in the current directory
+   $ assembly dev
+   Use a specific port
+   $ assembly dev --port 8000
+   Launch without opening a browser
+   $ assembly dev --no-open
+   Skip the dependency install step
+   $ assembly dev --no-install
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[init]
+  '''
+  
+   Usage: assembly init [OPTIONS] [TEMPLATE] [DIRECTORY]
+  
+   Scaffold a new project from a template, then launch it.
+  
+   This is the starting point for creating an app — including a voice agent app
+   ('assembly init voice-agent'). The 'assembly agent' command only runs a live
+   mic
+   conversation and writes no code.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   template       [TEMPLATE]   Template to scaffold: audio-transcription,     │
+  │                               live-captions, voice-agent (omit to pick       │
+  │                               interactively).                                │
+  │   directory      [DIRECTORY]  Target directory (default: <template>).        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --no-install                   Scaffold only; don't install or launch.       │
+  │ --no-open                      Install + launch, but don't open the browser. │
+  │ --force                        Overwrite a non-empty target directory        │
+  │                                (overlays the template; files not in the      │
+  │                                template are kept).                           │
+  │ --here                         Scaffold into the current directory.          │
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Scaffold a new app interactively
+   $ assembly init
+   Scaffold an audio transcription app into ./my-app
+   $ assembly init audio-transcription my-app
+   Scaffold a voice agent app
+   $ assembly init voice-agent
+   Scaffold into the current directory
+   $ assembly init audio-transcription --here
+   Scaffold only, without installing or launching
+   $ assembly init audio-transcription --no-install
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[onboard]
+  '''
+  
+   Usage: assembly onboard [OPTIONS]
+  
+   Guided setup: sign in, run your first transcription, and start building.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json             -j        Output raw JSON.                                │
+  │ --non-interactive            Run without interactive prompts (default when   │
+  │                              agent detected).                                │
+  │ --help                       Show this message and exit.                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Run the guided setup
+   $ assembly onboard
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[share]
+  '''
+  
+   Usage: assembly share [OPTIONS]
+  
+   Boot the app and expose it on a public URL via a cloudflared tunnel.
+  
+   Run this from inside a project created by `assembly init`. It starts the dev
+   server and
+   opens a cloudflared quick tunnel, printing a shareable
+   https://*.trycloudflare.com
+   URL. Requires cloudflared (macOS: `brew install cloudflared`; other platforms:
+   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+   downloads/).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --port                INTEGER  Local server port. [default: 3000]            │
+  │ --no-install                   Skip dependency install; launch directly.     │
+  │ --json        -j               Output raw JSON.                              │
+  │ --help                         Show this message and exit.                   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Share the running app on a public URL
+   $ assembly share
+   Use a specific local port
+   $ assembly share --port 8000
+   Skip the dependency install step
+   $ assembly share --no-install
+  
+  
+  
+  '''
+# ---

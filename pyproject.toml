@@ -285,4 +285,5 @@ DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
 # coverage is read by scripts/mutation_gate.py and click by
 # scripts/generated_code_compile_gate.py (dev-only gates run from check.sh, never
 # shipped in the wheel), so deptry sees dev deps imported from non-test code.
-DEP004 = ["fastapi", "httpx", "hypothesis", "pytest", "coverage", "click"]
+# syrupy is imported by tests/_snapshot_surface.py (typing the snapshot fixture).
+DEP004 = ["fastapi", "httpx", "hypothesis", "pytest", "coverage", "click", "syrupy"]

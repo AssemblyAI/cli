@@ -1,0 +1,65 @@
+# serializer version: 1
+# name: test_error_human_render_matches_snapshot[api_no_suggestion]
+  '''
+  Error: Transcription request failed: boom.
+  
+  '''
+# ---
+# name: test_error_human_render_matches_snapshot[not_authenticated]
+  '''
+  Error: You're not signed in.
+  Suggestion: Run 'assembly onboard' for guided setup, 'assembly login' if you
+  have an account, or set ASSEMBLYAI_API_KEY.
+  
+  '''
+# ---
+# name: test_error_human_render_matches_snapshot[plain_no_suggestion]
+  '''
+  Error: Something went wrong.
+  
+  '''
+# ---
+# name: test_error_human_render_matches_snapshot[rejected_key]
+  '''
+  Error: Your API key was rejected.
+  Suggestion: Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY.
+  
+  '''
+# ---
+# name: test_error_human_render_matches_snapshot[usage_with_suggestion]
+  '''
+  Error: Unknown voice 'nope'.
+  Suggestion: Run 'assembly agent --list-voices' to see the options.
+  
+  '''
+# ---
+# name: test_error_json_render_matches_snapshot[api_no_suggestion]
+  '''
+  {"error": {"type": "api_error", "message": "Transcription request failed: boom."}}
+  
+  '''
+# ---
+# name: test_error_json_render_matches_snapshot[not_authenticated]
+  '''
+  {"error": {"type": "not_authenticated", "message": "You're not signed in.", "suggestion": "Run 'assembly onboard' for guided setup, 'assembly login' if you have an account, or set ASSEMBLYAI_API_KEY."}}
+  
+  '''
+# ---
+# name: test_error_json_render_matches_snapshot[plain_no_suggestion]
+  '''
+  {"error": {"type": "error", "message": "Something went wrong."}}
+  
+  '''
+# ---
+# name: test_error_json_render_matches_snapshot[rejected_key]
+  '''
+  {"error": {"type": "not_authenticated", "message": "Your API key was rejected.", "suggestion": "Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY."}}
+  
+  '''
+# ---
+# name: test_error_json_render_matches_snapshot[usage_with_suggestion]
+  '''
+  {"error": {"type": "usage_error", "message": "Unknown voice 'nope'.", "suggestion": "Run 'assembly agent --list-voices' to see the options."}}
+  
+  '''
+# ---

@@ -1,0 +1,251 @@
+# serializer version: 1
+# name: test_command_help_matches_snapshot[audit]
+  '''
+  
+   Usage: assembly audit [OPTIONS]
+  
+   List recent audit-log entries for your account.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --limit                   INTEGER RANGE [x>=1]  How many entries to show.    │
+  │                                                 [default: 20]                │
+  │ --action                  TEXT                  Filter by raw action name.   │
+  │ --resource                TEXT                  Filter by raw resource type. │
+  │ --include-logins                                Show successful login        │
+  │                                                 events.                      │
+  │ --json            -j                            Output raw JSON.             │
+  │ --help                                          Show this message and exit.  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Recent audit-log entries
+   $ assembly audit
+   Show more entries
+   $ assembly audit --limit 100
+   Include login events
+   $ assembly audit --include-logins
+   Filter by action
+   $ assembly audit --action token.create
+   Filter by resource, as JSON
+   $ assembly audit --resource token --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[balance]
+  '''
+  
+   Usage: assembly balance [OPTIONS]
+  
+   Show your remaining account balance.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show your remaining balance
+   $ assembly balance
+   Get the raw cents for scripting
+   $ assembly balance --json | jq '.balance_in_cents'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_create]
+  '''
+  
+   Usage: assembly keys create [OPTIONS]
+  
+   Create a new API key. Prints the key value once — copy it now.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ *  --name             TEXT     A label for the new key. [required]           │
+  │    --project          INTEGER  Project id to create the key in (defaults to  │
+  │                                your first).                                  │
+  │    --json     -j               Output raw JSON.                              │
+  │    --help                      Show this message and exit.                   │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Create a key in your default project
+   $ assembly keys create --name ci-pipeline
+   Create a key in a specific project
+   $ assembly keys create --name prod --project 7
+   Capture the new key into an env var
+   $ export ASSEMBLYAI_API_KEY=$(assembly keys create --name ci --json | jq -r
+   '.api_key')
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_list]
+  '''
+  
+   Usage: assembly keys list [OPTIONS]
+  
+   List API keys across your projects (keys shown masked).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   List your API keys (masked)
+   $ assembly keys list
+   As JSON for scripting
+   $ assembly keys list --json
+   Get key ids to use with rename
+   $ assembly keys list --json | jq '.[].id'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[keys_rename]
+  '''
+  
+   Usage: assembly keys rename [OPTIONS] TOKEN_ID NEW_NAME
+  
+   Rename an existing API key.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    token_id      INTEGER  The key id (see `assembly keys list`).           │
+  │                             [required]                                       │
+  │ *    new_name      TEXT     The new label. [required]                        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Relabel a key (id from `assembly keys list`)
+   $ assembly keys rename 123 "prod"
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[limits]
+  '''
+  
+   Usage: assembly limits [OPTIONS]
+  
+   Show your account's rate limits per service.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show rate limits per service
+   $ assembly limits
+   As JSON for scripting
+   $ assembly limits --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[login]
+  '''
+  
+   Usage: assembly login [OPTIONS]
+  
+   Authenticate via your browser; stores a CLI API key.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --api-key          TEXT  Provide key non-interactively.                      │
+  │ --json     -j            Output raw JSON.                                    │
+  │ --help                   Show this message and exit.                         │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Log in with your browser
+   $ assembly login
+   Log in non-interactively (CI)
+   $ assembly login --api-key sk_...
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[logout]
+  '''
+  
+   Usage: assembly logout [OPTIONS]
+  
+   Clear stored credentials for the active profile.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Clear stored credentials for the active profile
+   $ assembly logout
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[usage]
+  '''
+  
+   Usage: assembly usage [OPTIONS]
+  
+   Show usage over a date range (defaults to the last 30 days).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --start                       TEXT  Start date (YYYY-MM-DD). Default: 30d    │
+  │                                     ago.                                     │
+  │ --end                         TEXT  End date (YYYY-MM-DD). Default: today.   │
+  │ --window                      TEXT  Window size: 'day', 'week', or 'month'.  │
+  │ --include-zero,--all                Include zero-usage windows (matches      │
+  │                                     --include-logins on `assembly audit`).   │
+  │ --json                -j            Output raw JSON.                         │
+  │ --help                              Show this message and exit.              │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Usage over the last 30 days
+   $ assembly usage
+   A specific date range
+   $ assembly usage --start 2026-05-01 --end 2026-06-01
+   Break spend down by month
+   $ assembly usage --window month
+   Total spend in cents for scripting
+   $ assembly usage --json | jq '[.usage_items[].line_items[].price] | add'
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[whoami]
+  '''
+  
+   Usage: assembly whoami [OPTIONS]
+  
+   Show the active profile and whether its key is usable.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show the active profile and whether its key works
+   $ assembly whoami
+  
+  
+  
+  '''
+# ---

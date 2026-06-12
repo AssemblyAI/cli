@@ -20,11 +20,12 @@ regexes = [
   # committing it is deliberate (the Supabase-CLI model). Only this exact value is
   # allowlisted -- any other real-looking token still fails the gate.
   '''pub0d633113b9f7d22faff215fefaf30b43''',
-  # generic-api-key false positive: a keyword-argument expression in the
-  # `--show-code` gateway builder (aai_cli/stream_exec.py), not a credential. Some
-  # gitleaks versions' entropy heuristic flags `interval=opts.llm_interval`;
-  # allowlist the exact expression so the gate is version-stable. Anything else in
-  # that file is still scanned.
+  # Not a secret: pure attribute access in aai_cli/stream_exec.py. gitleaks >= 8.30's
+  # generic-api-key rule is keyword-greedy -- `max_tokens` contains "token", so it reads
+  # `opts.max_tokens, interval=opts.llm_interval` as a key=value pair and flags the
+  # "value" (`interval=opts.llm_interval`), which holds no literal. The pinned gitleaks
+  # (scripts/gate_tool_pins.sh) doesn't match it, but allowlist the exact expression so
+  # the gate also passes under newer gitleaks run locally or after a pin bump.
   '''interval=opts\.llm_interval''',
 ]
 # `gitleaks dir` scans the working tree regardless of .gitignore, so high-entropy values

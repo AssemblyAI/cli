@@ -3,6 +3,8 @@ name: CodeQL
 on:
   pull_request:
     branches: [main]
+  merge_group:                # Merge-queue runs, so a required CodeQL check doesn't
+                              # block queued merges (mirrors ci.yml).
   push:
     branches: [main]          # PRs are covered by pull_request; scoping push to main
                               # avoids double-running every PR commit (mirrors ci.yml).
