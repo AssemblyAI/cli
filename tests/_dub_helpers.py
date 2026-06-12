@@ -8,6 +8,7 @@ fakes, and boundary recorders they share live here.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import wave
 from pathlib import Path
@@ -32,6 +33,14 @@ DEFAULTS = DubOptions(
 )
 
 SAMPLE_RATE = 100  # tiny rate keeps the timeline byte math exact and readable
+
+_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    """Strip SGR color codes (CI forces color on, splitting flags like --lang
+    with style sequences) for substring assertions."""
+    return _ANSI_SGR.sub("", text)
 
 
 def utterance(start, speaker, text):

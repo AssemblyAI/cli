@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from aai_cli import dub_exec, llm
 from aai_cli.main import app
+from tests._dub_helpers import plain
 
 runner = CliRunner()
 
@@ -32,16 +33,17 @@ def captured_run(monkeypatch: pytest.MonkeyPatch):
 def test_lang_is_required():
     result = runner.invoke(app, ["dub", "talk.mp4"])
     assert result.exit_code == 2
-    assert "--lang" in result.output
+    assert "--lang" in plain(result.output)
 
 
 def test_production_env_is_rejected_with_sandbox_hint():
     result = runner.invoke(app, ["dub", "talk.mp4", "--lang", "de"])  # default = production
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
+    output = plain(result.output)
+    assert "only available in the sandbox" in output
     # The suggestion spells out the exact corrected invocation: --sandbox is a root
     # flag, so it must go before the command, not after it.
-    assert "Re-run as: assembly --sandbox dub" in result.output
+    assert "Re-run as: assembly --sandbox dub" in output
 
 
 def test_defaults_map_to_options(captured_run):

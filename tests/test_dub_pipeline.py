@@ -27,6 +27,7 @@ from tests._dub_helpers import (
     enable_sandbox,
     fake_transcript,
     patch_api_key,
+    plain,
     record_ffmpeg,
     record_synthesize,
     record_transcribe,
@@ -150,7 +151,9 @@ def test_run_dub_human_summary(
     # mid-word and these substring asserts would depend on where the break lands.
     opts = dataclasses.replace(DEFAULTS, media=str(media), out=Path("dub.de.mp4"))
     _run(opts, json_mode=False)
-    out = capsys.readouterr().out
+    # plain(): under FORCE_COLOR (CI) Rich's repr highlighter interleaves style
+    # codes inside the line ("(2 utterances" renders with the 2 colored).
+    out = plain(capsys.readouterr().out)
     assert "dub.de.mp4" in out
     assert "dubbed to German" in out
     assert "2 utterances" in out
