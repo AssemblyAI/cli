@@ -192,7 +192,9 @@ def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
     except CLIError as login_err:
         output.emit_error(login_err, json_mode=json_mode)
         raise typer.Exit(code=login_err.exit_code) from None
-    except (OSError, RuntimeError, keyring.errors.KeyringError) as exc:
+    except (OSError, RuntimeError, TypeError, keyring.errors.KeyringError) as exc:
+        # TypeError covers a value the TOML writer can't serialize: the login itself
+        # succeeded, so the user must see "could not save", not "unexpected error".
         persistence_err = _login_persistence_error(exc)
         output.emit_error(persistence_err, json_mode=json_mode)
         raise typer.Exit(code=persistence_err.exit_code) from None

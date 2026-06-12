@@ -87,11 +87,14 @@ def list_(
                 "model",
             )
             for s in data:
+                # `is None`, not truthiness: 0 is a legitimate duration (a session
+                # that connected but streamed no audio) and must render as "0".
+                duration = s.get("audio_duration_sec")
                 table.add_row(
                     escape(str(s["session_id"])),
                     theme.status_text(str(s["status"])),
                     escape(timeparse.format_utc_datetime(s.get("created_at"))),
-                    escape(str(s.get("audio_duration_sec") or "")),
+                    escape("" if duration is None else str(duration)),
                     escape(str(s.get("speech_model") or "")),
                 )
             return table
