@@ -42,6 +42,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "click" },
     { name = "coverage" },
     { name = "deptry" },
     { name = "diff-cover" },
@@ -93,6 +94,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "click", specifier = ">=8.1" },
     { name = "coverage", specifier = ">=7.0" },
     { name = "deptry", specifier = ">=0.23.0" },
     { name = "diff-cover", specifier = ">=9.0.0" },

@@ -105,6 +105,7 @@ dev = [
     "import-linter>=2.3",
     "zizmor>=1.10",
     "coverage>=7.0",
+    "click>=8.1",
 ]
 
 [tool.uv]
@@ -274,6 +275,7 @@ audioop-lts = "audioop"
 # The CLI templates carry their own requirements and are dependency-checked by
 # dedicated install tests, not by the root package metadata.
 DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
-# coverage is read by scripts/mutation_gate.py (a dev-only gate run from check.sh,
-# never shipped in the wheel), so deptry sees a dev dep imported from non-test code.
-DEP004 = ["fastapi", "httpx", "hypothesis", "pytest", "coverage"]
+# coverage is read by scripts/mutation_gate.py and click by
+# scripts/generated_code_compile_gate.py (dev-only gates run from check.sh, never
+# shipped in the wheel), so deptry sees dev deps imported from non-test code.
+DEP004 = ["fastapi", "httpx", "hypothesis", "pytest", "coverage", "click"]

@@ -223,7 +223,7 @@ def _load_manifest(
             suggestion="Pass a .csv/.jsonl manifest path, or a Hugging Face dataset id.",
         )
     if path.suffix not in _MANIFEST_SUFFIXES:
-        # Anything else (.parquet, .txt, …) would be parsed as JSONL and fail with a
+        # Other suffixes (.parquet, .txt, …) would be parsed as JSONL and fail with a
         # confusing "line 1 is not valid JSON" — name the real constraint instead.
         raise UsageError(
             f"Manifests must be .csv or .jsonl; got '{path.name}'.",

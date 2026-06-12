@@ -56,7 +56,7 @@ def run_onboarding(prompter: Prompter, ctx: WizardContext) -> int:
 def _final_code(results: dict[str, str], code: int) -> tuple[list[str], int]:
     """The failed section names, and the exit code they imply.
 
-    Any failed section turns a would-be-0 exit into 1; a harder failure (the auth
+    Each failed section turns a would-be-0 exit into 1; a harder failure (the auth
     stop's 4) keeps its own code.
     """
     failed = [name for name, value in results.items() if value == SectionResult.FAILED.value]
