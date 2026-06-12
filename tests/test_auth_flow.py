@@ -265,7 +265,7 @@ def test_open_browser_prints_fallback_to_stderr(monkeypatch, capsys):
     flow._open_browser("https://login.example", json_mode=False)
 
     err = capsys.readouterr().err
-    assert "https://login.example" in err
+    assert "  https://login.example" in err
     assert "Could not open a browser" in err
 
 
@@ -422,7 +422,7 @@ def test_open_browser_warns_when_open_returns_false(monkeypatch, capsys):
     flow._open_browser("https://login.example", json_mode=False)
     err = capsys.readouterr().err
     assert "Could not open a browser" in err
-    assert "https://login.example" in err
+    assert "  https://login.example" in err
 
 
 def test_open_browser_no_fallback_when_open_succeeds(monkeypatch, capsys):

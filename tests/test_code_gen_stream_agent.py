@@ -46,7 +46,7 @@ def test_agent_render_parses_and_injects_session_fields():
     assert '"voice": "ivy"' in code
     assert "Be terse." in code
     assert "Hi there" in code
-    assert "agents.assemblyai.com" in code
+    assert "wss://agents.assemblyai.com/v1/ws" in code
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
 
 
@@ -94,7 +94,7 @@ def test_stream_show_code_includes_llm_follow_loop():
     )
     ast.parse(code)
     assert "from openai import OpenAI" in code
-    assert "llm-gateway.assemblyai.com" in code
+    assert "https://llm-gateway.assemblyai.com/v1" in code
     # Both prompts appear, in order, for the chain.
     assert code.index("summarize") < code.index("translate to french")
     # Still streams from the mic, refreshing the answer on the interval.

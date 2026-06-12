@@ -84,7 +84,7 @@ def test_transcribe_show_code_includes_llm_gateway_without_running(monkeypatch):
         ["transcribe", "--sample", "--llm", "translate to spanish", "--show-code"],
     )
     assert result.exit_code == 0
-    assert "llm-gateway.assemblyai.com" in result.output
+    assert "https://llm-gateway.assemblyai.com/v1" in result.output
     assert "translate to spanish" in result.output
     assert '"transcript_id": transcript.id' in result.output
 

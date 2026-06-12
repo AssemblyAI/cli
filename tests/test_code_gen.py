@@ -295,7 +295,7 @@ def test_transcribe_show_code_includes_llm_gateway_transform():
     )
     ast.parse(code)
     assert "from openai import OpenAI" in code
-    assert "llm-gateway.assemblyai.com" in code
+    assert "https://llm-gateway.assemblyai.com/v1" in code
     assert "translate to spanish" in code
     assert "{{ transcript }}" in code  # gateway injects the transcript at this tag
     assert '"transcript_id": transcript.id' in code

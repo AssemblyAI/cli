@@ -182,7 +182,7 @@ def test_stream_audio_handshake_403_event_carries_suggestion(monkeypatch):
     assert "assembly whoami" in exc.value.suggestion
     assert "--sandbox" in exc.value.suggestion
     # The suggestion names the active environment's streaming host (production here).
-    assert "streaming.assemblyai.com" in exc.value.suggestion
+    assert "access to streaming.assemblyai.com." in exc.value.suggestion
 
 
 def test_stream_audio_handshake_401_event_is_not_authenticated_with_suggestion(monkeypatch):
