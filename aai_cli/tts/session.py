@@ -133,26 +133,6 @@ def _default_connect(
     return connect(url, additional_headers=additional_headers, max_size=max_size)
 
 
-def _open_ws(connect: _Connect, api_key: str, url: str) -> _WebSocket:
-    """Open the TTS socket, mapping a connect failure to a clean CLIError.
-
-    A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
-    (whoami / environment / network); anything else keeps the wsutil mapping.
-    """
-    try:
-        return connect(
-            url,
-            additional_headers={"Authorization": f"Bearer {api_key}"},
-            max_size=None,
-        )
-    except Exception as exc:
-        raise diagnostics.classify_error(
-            exc,
-            "Could not connect to the TTS service",
-            host=environments.active().streaming_tts_host,
-        ) from exc
-
-
 def _run_protocol(
     ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
 ) -> SpeakResult:
@@ -202,7 +182,14 @@ def synthesize(
     if connect is None:
         connect = _default_connect
 
-    ws = _open_ws(connect, api_key, ws_url(config.query_params()))
+    ws = diagnostics.open_authorized_ws(
+        connect,
+        api_key,
+        ws_url(config.query_params()),
+        message="Could not connect to the TTS service",
+        host=environments.active().streaming_tts_host,
+        max_size=None,  # no frame cap: a synthesis's Audio frames can exceed the 1 MiB default
+    )
     try:
         return _run_protocol(ws, config, on_warning)
     except (CLIError, KeyboardInterrupt, BrokenPipeError):

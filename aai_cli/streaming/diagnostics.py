@@ -10,6 +10,7 @@ instead of a bare status line.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from aai_cli import ws as wsutil
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
@@ -77,3 +78,26 @@ def classify_error(error: object, message: str, *, host: str) -> CLIError:
     if rejected is not None:
         return rejected
     return wsutil.auth_or_api_error(error, message)
+
+
+def open_authorized_ws[T](
+    connect: Callable[..., T],
+    api_key: str,
+    url: str,
+    *,
+    message: str,
+    host: str,
+    **connect_kwargs: object,
+) -> T:
+    """Open a Bearer-authorized WebSocket, mapping a connect failure via ``classify_error``.
+
+    The one connect path for the raw-websocket sessions (agent, speak), so a
+    rejected handshake (HTTP 401/403) carries the same actionable suggestion in
+    both and everything else keeps the shared classification.
+    """
+    try:
+        return connect(
+            url, additional_headers={"Authorization": f"Bearer {api_key}"}, **connect_kwargs
+        )
+    except Exception as exc:
+        raise classify_error(exc, message, host=host) from exc

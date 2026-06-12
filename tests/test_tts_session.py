@@ -139,6 +139,8 @@ def test_synthesize_drives_the_full_protocol():
     assert result.audio_duration_seconds == pytest.approx(6 / 2 / 24000)
     # Auth header carries the key as a Bearer token.
     assert captured["kwargs"]["additional_headers"]["Authorization"] == "Bearer k"
+    # The frame-size cap is lifted: Audio frames can exceed websockets' 1 MiB default.
+    assert captured["kwargs"]["max_size"] is None
     assert ws.closed is True
 
 
@@ -280,6 +282,8 @@ def test_synthesize_maps_rejected_key_on_connect_to_not_authenticated():
 
 
 def test_synthesize_maps_forbidden_connect_to_api_error():
+    _use_env("sandbox000")
+
     class Resp:
         status_code = 403
 
@@ -292,10 +296,11 @@ def test_synthesize_maps_forbidden_connect_to_api_error():
     with pytest.raises(APIError) as exc:
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=_connect)
     assert "Could not connect to the TTS service" in exc.value.message
-    # The rejected handshake carries the actionable next steps.
+    # The rejected handshake carries the actionable next steps, env host included.
     assert exc.value.suggestion is not None
     assert "assembly whoami" in exc.value.suggestion
     assert "--sandbox" in exc.value.suggestion
+    assert "streaming-tts.sandbox000" in exc.value.suggestion
 
 
 def test_synthesize_handshake_401_is_not_authenticated_with_suggestion():
@@ -340,7 +345,8 @@ def test_synthesize_maps_unexpected_protocol_error_to_api_error():
 def test_synthesize_without_connect_uses_real_client_and_fails_cleanly():
     # No `connect` provided: synthesize imports websockets' real sync client and
     # attempts a connection. pytest-socket blocks socket creation, so this must
-    # surface as a clean CLIError (mapped in _open_ws), never a raw socket error.
+    # surface as a clean CLIError (mapped in diagnostics.open_authorized_ws),
+    # never a raw socket error.
     _use_env("sandbox000")
     with pytest.raises(CLIError):
         session.synthesize("k", session.SpeakConfig(text="hi"))
