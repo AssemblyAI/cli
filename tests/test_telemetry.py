@@ -114,6 +114,7 @@ def test_build_event_is_allowlisted_and_exact(monkeypatch):
         "service": "aai-cli",
         "ddtags": f"version:{__version__}",
         "message": "aai transcribe success",
+        "status": "info",
         "command": "aai transcribe",
         "outcome": "success",
         "exit_code": 0,
@@ -126,12 +127,24 @@ def test_build_event_is_allowlisted_and_exact(monkeypatch):
     }
 
 
-def test_build_event_marks_ci(monkeypatch):
+def test_build_event_success_is_info_with_no_error_attribute():
+    # A success stays an info log and carries no `error` namespace, so it never
+    # lands in Datadog Error Tracking.
+    event = telemetry.build_event("aai transcribe", outcome="success", exit_code=0, duration_ms=1)
+    assert event["status"] == "info"
+    assert "error" not in event
+
+
+def test_build_event_failure_feeds_error_tracking(monkeypatch):
     monkeypatch.setenv("CI", "true")
     event = telemetry.build_event("aai stream", outcome="api_error", exit_code=1, duration_ms=5)
     assert event["ci"] is True
     assert event["outcome"] == "api_error"
     assert event["exit_code"] == 1
+    # status:error + the reserved error.kind are what promote it into Error Tracking;
+    # error.kind mirrors the anonymous outcome, and no message/stack ever rides along.
+    assert event["status"] == "error"
+    assert event["error"] == {"kind": "api_error"}
 
 
 # --- dispatch (detached flusher handoff) ------------------------------------
