@@ -15,6 +15,9 @@ from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 # covers WAF/region/plan blocks) — mirrors how `stream` classifies handshakes.
 _HTTP_FORBIDDEN = 403
 
+# Handshake statuses that mean the server refused the connection outright.
+_HANDSHAKE_AUTH_STATUSES = (401, 403)
+
 # The sync websockets client logs through these; both are silenced for a session
 # (the parent covers any future child logger, the client logger is the one that fires).
 WEBSOCKETS_LOGGERS = ("websockets", "websockets.client")
@@ -33,6 +36,23 @@ def silence_websockets_logging() -> None:
         logging.getLogger(name).setLevel(logging.CRITICAL)
 
 
+def handshake_status(exc: object) -> int | None:
+    """The HTTP status of a rejected WebSocket handshake (401/403), else None.
+
+    Reads the two structured shapes only — the assemblyai SDK's StreamingError
+    carries the status on ``.code``; websockets' InvalidStatus carries it on
+    ``.response.status_code`` — never the message text. The single classifier for
+    every realtime path (stream, agent, speak), so 401-vs-403 handling can't drift.
+    """
+    code = getattr(exc, "code", None)
+    if code in _HANDSHAKE_AUTH_STATUSES:
+        return int(code)
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status in _HANDSHAKE_AUTH_STATUSES:
+        return int(status)
+    return None
+
+
 def is_rejected_key(exc: Exception) -> bool:
     """Is this connect/session failure auth-shaped (the key itself was rejected)?
 
@@ -43,8 +63,7 @@ def is_rejected_key(exc: Exception) -> bool:
     Agent's 1008 policy-violation close, or an explicitly auth-worded message
     (`is_auth_failure`'s text hints) count as a rejected key.
     """
-    status = getattr(getattr(exc, "response", None), "status_code", None)
-    if status == _HTTP_FORBIDDEN:
+    if handshake_status(exc) == _HTTP_FORBIDDEN:
         return False
     return is_auth_failure(exc)
 

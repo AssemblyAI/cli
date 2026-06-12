@@ -15,7 +15,9 @@ def test_stream_maps_turn_detection_flags(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}
 
-    def fake_stream_audio(api_key, source, *, params, **kw):
+    def fake_stream_audio(
+        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
+    ):
         captured["params"] = params
 
     monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
@@ -113,7 +115,8 @@ def test_stream_json_with_text_output_is_usage_error():
     # credentials, like the --llm + -o text precedent.
     result = runner.invoke(app, ["stream", "--json", "-o", "text"])
     assert result.exit_code == 2
-    assert "can't be combined with -o text" in result.output
+    assert "--json and -o text can't be combined." in result.output
+    assert "Pick one output format." in result.output
 
 
 def test_stream_stdin_with_sample_rejected():

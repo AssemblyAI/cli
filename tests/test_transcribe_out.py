@@ -97,6 +97,8 @@ def test_transcribe_out_with_llm_is_a_usage_error(tmp_path):
             app, ["transcribe", "audio.mp3", "--llm", "summarize", "--out", str(out)]
         )
     assert result.exit_code == 2
+    assert "--out and --llm can't be combined." in result.output
+    assert "Pipe the transform instead" in result.output
     assert not out.exists()
 
 

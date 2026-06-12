@@ -1,0 +1,55 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]          # PRs are covered by pull_request; scoping push to main
+                              # avoids double-running every PR commit (mirrors ci.yml).
+  schedule:
+    - cron: "29 14 * * 2"    # weekly off-PR sweep so new queries shipped by GitHub
+                              # still scan the default branch between code changes
+
+# Least privilege at the workflow level; the analyze job opts into the extra
+# scopes CodeQL needs. Actions are pinned to commit SHAs (a moved tag can't
+# silently change what runs); Dependabot keeps them current.
+permissions:
+  contents: read
+
+# Cancel superseded runs when new commits land on a PR/branch, but never cancel
+# a main run (don't drop the scan that updates the default-branch baseline).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write  # upload SARIF results to code scanning
+      actions: read           # workflow metadata for run context on private repos
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # python: the CLI itself; actions: the workflows in .github/workflows;
+        # javascript-typescript: the committed `assembly init` template JS.
+        # All three are interpreted languages, so build-mode none suffices.
+        language: [python, actions, javascript-typescript]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false  # no job pushes; don't leave the token in .git/config
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          category: /language:${{ matrix.language }}

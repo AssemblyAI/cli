@@ -270,7 +270,7 @@ def test_filesource_url_skips_local_check_and_streams_via_ffmpeg(monkeypatch):
         def wait(self):
             pass
 
-    def fake_popen(cmd, **kwargs):
+    def fake_popen(cmd, *, stdout, stderr):
         captured["cmd"] = cmd
         return FakeProc()
 

@@ -71,8 +71,10 @@ class FakeWS:
         self._incoming = list(incoming)
         self.sent: list[dict[str, object]] = []
         self.closed = False
+        self.recv_timeouts: list[float | None] = []
 
-    def recv(self) -> str:
+    def recv(self, timeout: float | None = None) -> str:
+        self.recv_timeouts.append(timeout)
         return self._incoming.pop(0)
 
     def send(self, data: str) -> None:
@@ -200,6 +202,38 @@ def test_synthesize_maps_error_frame_to_api_error():
     )
     with pytest.raises(APIError, match="boom"):
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
+def test_synthesize_bounds_every_recv_with_the_frame_timeout():
+    # Each frame wait is bounded (60s): an unbounded recv() would hang the command
+    # forever if the server went silent mid-session.
+    ws = FakeWS([_begin_frame(), _audio_frame(b"\x01\x02", final=True)])
+    session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert ws.recv_timeouts == [60.0, 60.0]
+
+
+def test_synthesize_maps_silent_server_to_clean_api_error():
+    # websockets' sync recv raises TimeoutError when the bound expires; that must
+    # surface as a clean APIError naming the stall, not a hang or a raw traceback.
+    class SilentWS(FakeWS):
+        def recv(self, timeout: float | None = None) -> str:
+            raise TimeoutError
+
+    ws = SilentWS([])
+    with pytest.raises(APIError, match="stopped responding"):
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert ws.closed is True
+
+
+def test_synthesize_silent_server_error_names_the_timeout_window():
+    class SilentWS(FakeWS):
+        def recv(self, timeout: float | None = None) -> str:
+            raise TimeoutError
+
+    with pytest.raises(APIError, match="no frame for 60s"):
+        session.synthesize(
+            "k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: SilentWS([])
+        )
 
 
 def test_synthesize_invokes_on_warning_then_continues():

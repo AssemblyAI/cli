@@ -254,10 +254,32 @@ def test_build_path_scaffolds(ctx: WizardContext, monkeypatch: pytest.MonkeyPatc
     calls = 0
     seen: dict[str, object] = {}
 
-    def _fake_run_init(*a: object, **k: object) -> Path:
+    def _fake_run_init(
+        state: object,
+        *,
+        template: str | None,
+        directory: str | None,
+        no_install: bool,
+        no_open: bool,
+        force: bool,
+        here: bool,
+        port: int,
+        json_mode: bool,
+        launch: bool = True,
+    ) -> Path:
         nonlocal calls
         calls += 1
-        seen.update(k)
+        seen.update(
+            template=template,
+            directory=directory,
+            no_install=no_install,
+            no_open=no_open,
+            force=force,
+            here=here,
+            port=port,
+            json_mode=json_mode,
+            launch=launch,
+        )
         return Path("/scaffolded/app")
 
     monkeypatch.setattr(init_cmd, "run_init", _fake_run_init)
@@ -354,9 +376,11 @@ def _spy_launch(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     """Replace init's launch_app with a recorder; returns the captured target + kwargs."""
     captured: dict[str, object] = {}
 
-    def _fake_launch(target: Path, **k: object) -> None:
+    def _fake_launch(
+        target: Path, *, port: int, use_uv: bool, no_open: bool, json_mode: bool
+    ) -> None:
         captured["target"] = target
-        captured.update(k)
+        captured.update(port=port, use_uv=use_uv, no_open=no_open, json_mode=json_mode)
 
     monkeypatch.setattr(init_cmd, "launch_app", _fake_launch)
     return captured
