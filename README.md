@@ -32,10 +32,10 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
 
 `speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices. (`speak` is sandbox-only today, hence `--sandbox`.)
 
-**Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video:
+**Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video. A great demo is the first YouTube video ever, "Me at the zoo" — it's 19 seconds long, a single clear English speaker, and instantly recognizable, so the dub finishes fast and the before/after is obvious:
 
 ```sh
-assembly --sandbox dub talk.mp4 --lang de
+assembly --sandbox dub "https://www.youtube.com/watch?v=jNQXAC9IVRw" -l de --video
 ```
 
 The video stream is copied untouched; each dubbed line lands at its original start time. (Sandbox-only, like `speak`.)
@@ -47,19 +47,18 @@ assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speak
   | assembly --sandbox speak --out episode.wav
 ```
 
-**Cut the highlight reel from a speech** — `clip` downloads the audio, transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):
+**Cut the highlight reel from a speech** — `clip` downloads the video (`--video`; omit it for audio-only clips), transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):
 
 ```sh
-assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" \
+assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" --video \
   --llm "the most quotable 20-40 seconds from each of the stories" \
   --padding 0.5 --out-dir .
 ```
 
-**Burn karaoke subtitles into a music video** — `-o srt` prints captions to stdout, and `--chars-per-caption` keeps the lines short so they flip with the vocals; ffmpeg renders them onto the video (`-f srt -i pipe:` muxes a toggleable soft-subtitle track instead, no re-encode):
+**Burn karaoke subtitles into a music video** — `caption` transcribes the video and burns the captions straight into the picture with ffmpeg; `--chars-per-caption` keeps the lines short so they flip with the vocals:
 
 ```sh
-assembly transcribe video.mp4 -o srt --chars-per-caption 24 > lyrics.srt
-ffmpeg -i video.mp4 -vf "subtitles=lyrics.srt:force_style='Fontsize=28,PrimaryColour=&H00FFFF&'" karaoke.mp4
+assembly caption video.mp4 --chars-per-caption 24 --font-size 28
 ```
 
 **Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
@@ -190,8 +189,9 @@ assembly init                  # scaffold a starter app
 - **Dictation**: `assembly dictate` is push-to-talk for your terminal — press Enter to record, Enter again to get the utterance back instantly from the Sync API (up to 120 s per utterance).
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
-- **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`). Clip boundaries snap into nearby silence (ffmpeg `silencedetect`) so cuts don't land mid-word; `--no-snap` cuts at the exact selected times.
-- **Dubbing**: `assembly dub` re-voices an audio/video file in another language (`assembly --sandbox dub talk.mp4 --lang de`): diarized transcription, per-utterance LLM translation, streaming TTS per speaker, and an ffmpeg track-swap that leaves the video untouched. Sandbox-only today, like `speak`.
+- **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL — add `--video` to download the full video so the clips keep the picture) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`). Clip boundaries snap into nearby silence (ffmpeg `silencedetect`) so cuts don't land mid-word; `--no-snap` cuts at the exact selected times.
+- **Dubbing**: `assembly dub` re-voices an audio/video file or URL in another language (`assembly --sandbox dub talk.mp4 -l de`): diarized transcription, per-utterance LLM translation, streaming TTS per speaker, and an ffmpeg track-swap that leaves the video untouched. Sandbox-only today, like `speak`.
+- **Captioning**: `assembly caption` burns always-visible captions into a video (`assembly caption talk.mp4`) — it transcribes the file (or reuses a transcript with `-t ID`), fetches the SRT export, and renders it into the picture with ffmpeg, leaving the audio untouched; `--chars-per-caption` and `--font-size` shape the captions.
 - **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset (with built-in aliases for common benchmarks: `assembly eval tedlium`) or a local `.csv`/`.jsonl` manifest and scores WER against its references — handy for picking a speech model.
 - **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`); `assembly dev` runs it, `assembly share` exposes it on a public URL, and `assembly deploy` ships it to Vercel, Railway, or Fly.io.
 - **Webhook testing**: `assembly webhooks listen` opens a public dev URL (cloudflared quick tunnel) that prints webhook deliveries as they arrive and can forward them to your local app with `--forward-to`.
