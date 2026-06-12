@@ -146,6 +146,87 @@ def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
     assert "{{ transcript }}" in seen["content"]
 
 
+def test_llm_invalid_transcript_id_exits_2_without_network(monkeypatch):
+    # Same cheap local validation as `transcripts get`: a malformed id never
+    # reaches the gateway.
+    _auth()
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.gateway.complete",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call the gateway")),
+    )
+    result = runner.invoke(app, ["llm", "summarize", "--transcript-id", "not-a-real-id!!"])
+    assert result.exit_code == 2
+    assert "doesn't look like a transcript id" in result.output
+
+
+def test_llm_max_tokens_must_be_at_least_one(monkeypatch):
+    # min=1 on --max-tokens: 0 and negatives are rejected client-side.
+    _auth()
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.gateway.complete",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call the gateway")),
+    )
+    for bad in ("0", "-5"):
+        result = runner.invoke(app, ["llm", "hi", "--max-tokens", bad])
+        assert result.exit_code == 2
+        assert "max-tokens" in result.output.lower()
+
+
+def test_llm_transcript_id_warns_about_ignored_stdin(monkeypatch):
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("s"))
+    result = runner.invoke(
+        app, ["llm", "summarize", "--transcript-id", "t_9"], input="ignored stdin"
+    )
+    assert result.exit_code == 0
+    assert "Ignoring piped stdin; --transcript-id takes priority." in result.output
+
+
+def test_llm_transcript_id_stdin_warning_is_machine_readable_in_json_mode(monkeypatch):
+    # In --json mode the warning must ship as its own {"warning": …} line (like the
+    # env-mismatch warning), keeping stderr machine-readable.
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("s"))
+    result = runner.invoke(app, ["llm", "summarize", "--transcript-id", "t_9", "--json"], input="x")
+    assert result.exit_code == 0
+    objs = [json.loads(line) for line in result.output.splitlines() if line.strip()]
+    warning = next(o for o in objs if "warning" in o)
+    assert warning == {"warning": "Ignoring piped stdin; --transcript-id takes priority."}
+    payload = next(o for o in objs if "output" in o)
+    assert payload["output"] == "s"
+
+
+def test_llm_transcript_id_stdin_warning_suppressed_by_quiet(monkeypatch):
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("s"))
+    result = runner.invoke(
+        app, ["--quiet", "llm", "summarize", "--transcript-id", "t_9"], input="x"
+    )
+    assert result.exit_code == 0
+    assert "Ignoring piped stdin" not in result.output
+
+
+def test_llm_transcript_id_no_warning_when_stdin_is_a_terminal(monkeypatch):
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm.stdio.stdin_is_piped", lambda: False)
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("s"))
+    result = runner.invoke(app, ["llm", "summarize", "--transcript-id", "t_9"])
+    assert result.exit_code == 0
+    assert "Ignoring piped stdin" not in result.output
+
+
+def test_llm_list_models_rejects_output_flag(monkeypatch):
+    # -o selects a field of a one-shot result; in --list-models mode it would be
+    # silently ignored, so reject it (mirrors how --follow rejects -o).
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.gateway.complete",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call the gateway")),
+    )
+    result = runner.invoke(app, ["llm", "--list-models", "-o", "json"])
+    assert result.exit_code == 2
+    assert "one-shot" in result.output
+
+
 def test_llm_missing_prompt_exits_2(monkeypatch):
     _auth()
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())

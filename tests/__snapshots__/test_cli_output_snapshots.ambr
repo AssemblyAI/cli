@@ -474,26 +474,30 @@
   │   prompt      [PROMPT]  The prompt to send to the model.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model                  TEXT         LLM Gateway model.                     │
-  │                                       [default: claude-haiku-4-5-20251001]   │
-  │ --transcript-id          TEXT         Inject this transcript's text into the │
-  │                                       prompt.                                │
-  │ --system                 TEXT         Optional system prompt.                │
-  │ --follow         -f                   Re-run the prompt over a growing       │
-  │                                       transcript piped on stdin, refreshing  │
-  │                                       the answer in place on every finalized │
-  │                                       turn (e.g. assembly stream -o text |   │
-  │                                       assembly llm -f "summarize action      │
-  │                                       items as I talk"). Ctrl-C to stop.     │
-  │ --output         -o      [text|json]  Print one field of the result: text    │
-  │                                       (just the answer, pipe-friendly) or    │
-  │                                       json.                                  │
-  │ --max-tokens             INTEGER      Max tokens to generate.                │
-  │                                       [default: 1000]                        │
-  │ --list-models                         Print known models and exit.           │
-  │ --json           -j                   Output raw JSON (one object per turn   │
-  │                                       in --follow mode).                     │
-  │ --help                                Show this message and exit.            │
+  │ --model                  TEXT                  LLM Gateway model.            │
+  │                                                [default:                     │
+  │                                                claude-haiku-4-5-20251001]    │
+  │ --transcript-id          TEXT                  Inject this transcript's text │
+  │                                                into the prompt.              │
+  │ --system                 TEXT                  Optional system prompt.       │
+  │ --follow         -f                            Re-run the prompt over a      │
+  │                                                growing transcript piped on   │
+  │                                                stdin, refreshing the answer  │
+  │                                                in place on every finalized   │
+  │                                                turn (e.g. assembly stream -o │
+  │                                                text | assembly llm -f        │
+  │                                                "summarize action items as I  │
+  │                                                talk"). Ctrl-C to stop.       │
+  │ --output         -o      [text|json]           Print one field of the        │
+  │                                                result: text (just the        │
+  │                                                answer, pipe-friendly) or     │
+  │                                                json.                         │
+  │ --max-tokens             INTEGER RANGE [x>=1]  Max tokens to generate.       │
+  │                                                [default: 1000]               │
+  │ --list-models                                  Print known models and exit.  │
+  │ --json           -j                            Output raw JSON (one object   │
+  │                                                per turn in --follow mode).   │
+  │ --help                                         Show this message and exit.   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -612,10 +616,12 @@
    List recent streaming sessions.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit           INTEGER  How many sessions to show. [default: 10]          │
-  │ --status          TEXT     Filter: created, completed, or error.             │
-  │ --json    -j               Output raw JSON.                                  │
-  │ --help                     Show this message and exit.                       │
+  │ --limit           INTEGER RANGE [x>=1]       How many sessions to show.      │
+  │                                              [default: 10]                   │
+  │ --status          [created|completed|error]  Only show sessions with this    │
+  │                                              status.                         │
+  │ --json    -j                                 Output raw JSON.                │
+  │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

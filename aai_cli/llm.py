@@ -73,6 +73,31 @@ def _client(api_key: str) -> OpenAI:
     return OpenAI(api_key=api_key, base_url=environments.active().llm_gateway_base)
 
 
+# Lowercased substrings that mark a gateway 401/403 as a plan-entitlement block
+# rather than a bad key or an intercepting proxy. "no access" is the gateway's own
+# phrasing for accounts without the LLM Gateway entitlement.
+_ENTITLEMENT_HINTS = ("entitle", "plan", "upgrade", "billing", "no access")
+
+_PAID_PLAN_SUGGESTION = (
+    "The LLM Gateway requires a paid plan — check your plan at "
+    "https://www.assemblyai.com/dashboard."
+)
+_ACCESS_DENIED_SUGGESTION = (
+    "Check your API key ('assembly login') and that your network/proxy allows the "
+    "LLM Gateway, then try again."
+)
+
+
+def _denial_suggestion(exc: object) -> str:
+    """Pick the suggestion for a gateway 401/403: point at billing only when the
+    response actually mentions the plan entitlement, otherwise at key/network —
+    a corporate-proxy 403 must not send users to the billing page."""
+    text = f"{exc} {getattr(exc, 'body', None) or ''}".lower()
+    if any(hint in text for hint in _ENTITLEMENT_HINTS):
+        return _PAID_PLAN_SUGGESTION
+    return _ACCESS_DENIED_SUGGESTION
+
+
 def complete(
     api_key: str,
     *,
@@ -99,14 +124,13 @@ def complete(
             extra_body=extra_body,
         )
     except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
-        # The gateway returns 401/403 for both an invalid key and a plan
-        # entitlement block ("no access to LLM Gateway"), so surface its actual
-        # message rather than a generic "run assembly login" that misleads unpaid
-        # accounts (the key is fine; the feature requires a paid plan).
+        # The gateway returns 401/403 for an invalid key, a proxy block, and a
+        # plan entitlement block ("no access to LLM Gateway"), so surface its
+        # actual message and pick the suggestion from what it says — only an
+        # entitlement message should point at billing.
         raise APIError(
             f"LLM Gateway access denied: {exc}",
-            suggestion="The LLM Gateway requires a paid plan — check your plan at "
-            "https://www.assemblyai.com/dashboard.",
+            suggestion=_denial_suggestion(exc),
         ) from exc
     except openai.OpenAIError as exc:
         raise APIError(

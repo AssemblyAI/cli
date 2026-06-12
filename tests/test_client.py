@@ -121,6 +121,43 @@ def test_list_transcripts_supports_pydantic_v1_items(mocker):
     assert rows == [{"id": "t2", "status": "queued"}]
 
 
+def test_list_transcripts_error_is_clean_without_request_repr_or_doubled_prefix(mocker):
+    # The generic _sdk_errors wrap must compact the httpx repr ("Request: <…>")
+    # and drop the SDK's own "failed to retrieve transcripts:" preamble, which
+    # doubled up with the wrapper's "Could not list transcripts:" prefix.
+    raw = (
+        "failed to retrieve transcripts: \n"
+        "Reason: Host not in allowlist\n"
+        "Request: <Request('GET', 'https://api.assemblyai.com/v2/transcript?limit=10')>"
+    )
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(raw)
+    with pytest.raises(APIError) as exc:
+        client.list_transcripts("sk")
+    assert exc.value.message == "Could not list transcripts: Reason: Host not in allowlist"
+    assert exc.value.suggestion == "Check your network and try again."
+
+
+def test_get_transcript_error_strips_id_bearing_sdk_preamble(mocker):
+    mocker.patch.object(
+        client.aai.Transcript,
+        "get_by_id",
+        side_effect=RuntimeError("failed to retrieve transcript t_x: server exploded"),
+    )
+    with pytest.raises(APIError) as exc:
+        client.get_transcript("sk", "t_x")
+    assert exc.value.message == "Could not fetch transcript t_x: server exploded"
+
+
+def test_sdk_error_without_preamble_keeps_reason_verbatim(mocker):
+    # Reasons that don't carry the SDK's preamble pass through unchanged.
+    T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
+    T.return_value.list_transcripts.side_effect = ValueError("connection reset by peer")
+    with pytest.raises(APIError) as exc:
+        client.list_transcripts("sk")
+    assert exc.value.message == "Could not list transcripts: connection reset by peer"
+
+
 def test_list_transcripts_auth_error_becomes_apierror(mocker):
     T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
     T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError("nope")

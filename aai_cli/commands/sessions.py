@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import enum
+
 import typer
 from rich.markup import escape
 from rich.table import Table
@@ -30,6 +32,16 @@ def _session_rows(value: object) -> list[dict[str, object]]:
     return jsonshape.mapping_list(value)
 
 
+class SessionStatus(enum.StrEnum):
+    """Closed value set for ``sessions list --status`` (the API's lifecycle states),
+    so a typo is rejected with Typer's choices error instead of silently filtering
+    nothing (mirrors the ``choices.TranscriptOutput`` pattern)."""
+
+    created = "created"
+    completed = "completed"
+    error = "error"
+
+
 @app.command(
     name="list",
     epilog=examples_epilog(
@@ -49,9 +61,9 @@ def _session_rows(value: object) -> list[dict[str, object]]:
 )
 def list_(
     ctx: typer.Context,
-    limit: int = typer.Option(10, "--limit", help="How many sessions to show."),
-    status: str | None = typer.Option(
-        None, "--status", help="Filter: created, completed, or error."
+    limit: int = typer.Option(10, "--limit", help="How many sessions to show.", min=1),
+    status: SessionStatus | None = typer.Option(
+        None, "--status", help="Only show sessions with this status."
     ),
     json_out: bool = options.json_option(),
 ) -> None:
@@ -59,7 +71,9 @@ def list_(
 
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = resolve_session(state)
-        payload = ams.list_streaming(jwt, limit=limit, status=status)
+        payload = ams.list_streaming(
+            jwt, limit=limit, status=None if status is None else status.value
+        )
         rows = _session_rows(payload.get("data"))
 
         def render(data: list[dict[str, object]]) -> object:

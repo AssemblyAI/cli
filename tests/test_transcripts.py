@@ -15,6 +15,16 @@ def _login_result():
     )
 
 
+def test_transcripts_help_lists_list_before_get():
+    # Subcommand order matches `assembly sessions --help`: list first, then get.
+    result = runner.invoke(app, ["transcripts", "--help"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    list_idx = next(i for i, line in enumerate(lines) if "List recent transcripts" in line)
+    get_idx = next(i for i, line in enumerate(lines) if "Fetch a past transcript" in line)
+    assert list_idx < get_idx
+
+
 def test_get_prints_transcript_text(mocker):
     config.set_api_key("default", "sk_live")
     fake = mocker.MagicMock()
@@ -123,6 +133,19 @@ def test_list_empty_shows_human_empty_state(monkeypatch, mocker):
     result = runner.invoke(app, ["transcripts", "list"])
     assert result.exit_code == 0
     assert "No transcripts yet." in result.output
+
+
+def test_get_malformed_id_is_rejected_before_auth(monkeypatch, mocker):
+    # No key configured: the cheap local id check must win over auth, so the user
+    # is told to fix the id instead of being sent through login first.
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    login = mocker.patch("aai_cli.context.run_login_flow", side_effect=AssertionError("no login"))
+    get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
+    result = runner.invoke(app, ["transcripts", "get", "not-a-real-id!!"])
+    assert result.exit_code == 2
+    assert "doesn't look like a transcript id" in result.output
+    get.assert_not_called()
+    login.assert_not_called()
 
 
 def test_get_output_invalid_field_exits_2():

@@ -72,17 +72,56 @@ def test_complete_auth_error_surfaces_gateway_message(monkeypatch):
     _fake_client(monkeypatch, error=err)
     with pytest.raises(APIError, match="access denied") as exc:
         llm.complete("sk", model="m", messages=[])
-    # Access-denied is usually a plan entitlement block, so the hint names the cause.
+    # Nothing in "bad key" mentions the plan entitlement, so the hint points at the
+    # key/network, not billing.
+    assert exc.value.suggestion is not None
+    assert "paid plan" not in exc.value.suggestion
+    assert "API key" in exc.value.suggestion and "network" in exc.value.suggestion
+
+
+def test_complete_entitlement_denial_suggests_paid_plan(monkeypatch):
+    # The gateway's own entitlement block ("no access to LLM Gateway") is the one
+    # 401/403 where pointing at billing is right.
+    err = openai.PermissionDeniedError(
+        "Your account has no access to the LLM Gateway.",
+        response=httpx.Response(403, request=_REQUEST),
+        body=None,
+    )
+    _fake_client(monkeypatch, error=err)
+    with pytest.raises(APIError, match="access denied") as exc:
+        llm.complete("sk", model="m", messages=[])
     assert exc.value.suggestion is not None and "paid plan" in exc.value.suggestion
 
 
-def test_complete_permission_error_surfaces_gateway_message(monkeypatch):
+def test_complete_proxy_denial_does_not_suggest_paid_plan(monkeypatch):
+    # A corporate-proxy 403 says nothing about plans; sending the user to billing
+    # would mislead — they need to look at their key/network instead.
     err = openai.PermissionDeniedError(
-        "forbidden", response=httpx.Response(403, request=_REQUEST), body=None
+        "Host not in allowlist", response=httpx.Response(403, request=_REQUEST), body=None
     )
     _fake_client(monkeypatch, error=err)
-    with pytest.raises(APIError, match="access denied"):
+    with pytest.raises(APIError, match="access denied") as exc:
         llm.complete("sk", model="m", messages=[])
+    assert exc.value.suggestion == llm._ACCESS_DENIED_SUGGESTION
+
+
+@pytest.mark.parametrize("hint", ["entitlement", "plan", "upgrade", "billing", "no access"])
+def test_denial_suggestion_matches_each_entitlement_hint(hint):
+    assert (
+        llm._denial_suggestion(Exception(f"denied: {hint} required")) == llm._PAID_PLAN_SUGGESTION
+    )
+
+
+class _DenialWithBody(Exception):
+    def __init__(self, message: str, body: object) -> None:
+        super().__init__(message)
+        self.body = body
+
+
+def test_denial_suggestion_reads_the_response_body_too():
+    # The entitlement marker can live in the structured body rather than str(exc).
+    exc = _DenialWithBody("403 Forbidden", body={"error": "upgrade your plan"})
+    assert llm._denial_suggestion(exc) == llm._PAID_PLAN_SUGGESTION
 
 
 def test_complete_bad_request_maps_to_api_error(monkeypatch):

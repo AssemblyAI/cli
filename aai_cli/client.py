@@ -104,7 +104,14 @@ def _sdk_errors(message: str) -> Generator[None]:
     except Exception as exc:
         if is_auth_failure(exc):
             raise auth_failure() from exc
-        raise APIError(f"{message}: {exc}") from exc
+        # Compact the reason (httpx-backed SDK errors embed a multi-line
+        # `Request: <…>` repr) and drop the SDK's own "failed to …" preamble when
+        # `message` already says the same thing, so the error reads once, cleanly.
+        reason = _SDK_PREAMBLE_RE.sub("", _compact_reason(exc))
+        raise APIError(
+            f"{message}: {reason}",
+            suggestion="Check your network and try again.",
+        ) from exc
 
 
 def _list_transcript_params(limit: int) -> aai.ListTranscriptParameters:
@@ -123,6 +130,13 @@ def _list_transcript_params(limit: int) -> aai.ListTranscriptParameters:
 
 # httpx-backed SDK errors embed a multi-line repr ("…\nReason: …\nRequest: <Request(…)>").
 _REQUEST_REPR_RE = re.compile(r"Request: <[^>]*>")
+
+# The SDK prefixes transcript-history errors with its own "failed to retrieve
+# transcript(s) …:" preamble, doubling up with the wrapper's message ("Could not
+# list transcripts: failed to retrieve transcripts: …"). Strip just that known
+# preamble; transcript ids are url-safe tokens, so the optional id segment can
+# never swallow a colon-bearing reason (e.g. a URL).
+_SDK_PREAMBLE_RE = re.compile(r"^failed to retrieve transcripts?(?: [A-Za-z0-9_-]+)?: ")
 
 
 def _compact_reason(exc: object) -> str:
