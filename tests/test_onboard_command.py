@@ -111,7 +111,8 @@ def test_build_prompter_forced_noninteractive_on_tty(monkeypatch: pytest.MonkeyP
     assert isinstance(onboard_cmd.build_prompter(non_interactive=True), NonInteractivePrompter)
 
 
-def _spy_forced(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+@pytest.fixture
+def spy_forced(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     """Capture the `non_interactive` value the command hands `build_prompter`.
 
     Spying on the argument (rather than the prompter type) is what pins the
@@ -131,25 +132,25 @@ def _spy_forced(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
 
 def test_onboard_non_interactive_flag_forces_noninteractive(
     monkeypatch: pytest.MonkeyPatch,
+    spy_forced: dict[str, object],
 ) -> None:
     # `--non-interactive` forces non-interactive mode even when no agent is detected.
     monkeypatch.setattr("aai_cli.output.is_agentic", lambda: False)
-    captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard", "--non-interactive"])
     assert result.exit_code == 0, result.output
-    assert captured["forced"] is True
+    assert spy_forced["forced"] is True
 
 
 def test_onboard_defaults_to_noninteractive_when_agent_detected(
     monkeypatch: pytest.MonkeyPatch,
+    spy_forced: dict[str, object],
 ) -> None:
     # No flag, but an agent is detected: the wizard still defaults to non-interactive.
     # A mutant dropping the `is_agentic()` term would leave `forced` False here.
     monkeypatch.setattr("aai_cli.output.is_agentic", lambda: True)
-    captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard"])
     assert result.exit_code == 0, result.output
-    assert captured["forced"] is True
+    assert spy_forced["forced"] is True
 
 
 def test_onboard_stays_interactive_without_flag_or_agent(
