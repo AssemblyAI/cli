@@ -63,8 +63,11 @@ def is_rejected_key(exc: object) -> bool:
     Agent's 1008 policy-violation close, or an explicitly auth-worded message
     (`is_auth_failure`'s text hints) count as a rejected key.
     """
-    if handshake_status(exc) == _HTTP_FORBIDDEN:
+    status = handshake_status(exc)
+    if status == _HTTP_FORBIDDEN:
         return False
+    if status == 401:
+        return True
     return is_auth_failure(exc)
 
 
