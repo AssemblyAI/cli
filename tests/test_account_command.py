@@ -109,53 +109,68 @@ def test_usage_renders_table_human(monkeypatch, mocker):
     assert "2026-05-01" in result.output and "$12.50" in result.output
 
 
-def test_usage_helpers_format_windows_and_line_items():
-    assert account._usage_items({"usage_items": "bad"}) == []
-    assert account._usage_items({"usage_items": [{"total": 1}, "bad"]}) == [{"total": 1}]
+def _window(payload):
+    return account._Window.model_validate(payload)
+
+
+def _line_item(payload):
+    return account._LineItem.model_validate(payload)
+
+
+def test_usage_models_tolerate_junk_shapes():
+    # A non-list `usage_items` and non-object windows degrade to nothing, not a crash.
+    assert account._Usage.model_validate({"usage_items": "bad"}).usage_items == []
+    kept = account._Usage.model_validate({"usage_items": [{"total": 1}, "bad"]}).usage_items
+    assert kept == [account._Window()]  # the object survives; the junk item is dropped
+    assert _window({"line_items": "bad"}).breakdown == ""
+    # A line item without a price counts as zero spend (pins the 0.0 field default).
+    assert _window({"line_items": [{"name": "x"}]}).total_cents == 0.0
+    assert _line_item({"price": "junk"}).price == 0.0
+
+
+def test_usage_models_format_windows_and_line_items():
     # Window total is the sum of line-item `price` (cents); the dead top-level
     # `total` field the AMS endpoint returns is ignored.
     assert (
-        account._window_total_cents(
-            {"total": 0.0, "line_items": [{"price": 1250.0}, {"price": 0.5}]}
-        )
+        _window({"total": 0.0, "line_items": [{"price": 1250.0}, {"price": 0.5}]}).total_cents
         == 1250.5
     )
-    assert account._window_total_cents({"total": 99.0, "line_items": []}) == 0.0
-    assert account._window_label({"start_timestamp": "bad"}) == "bad"
+    assert _window({"total": 99.0, "line_items": []}).total_cents == 0.0
+    assert _window({"start_timestamp": "bad"}).label == "bad"
     assert (
-        account._window_label(
+        _window(
             {
                 "start_timestamp": "2026-01-01T00:00:00Z",
                 "end_timestamp": "2026-01-03T00:00:00Z",
             }
-        )
+        ).label
         == "2026-01-01 to 2026-01-03"
     )
     # Exactly one parseable bound falls back to the single start-day label (pins the
     # `start is None or end is None` guard; an `and` would dereference the None end).
-    assert account._window_label({"start_timestamp": "2026-01-01T00:00:00Z"}) == "2026-01-01"
+    assert _window({"start_timestamp": "2026-01-01T00:00:00Z"}).label == "2026-01-01"
     # A one-day window (end == start + 1 day) collapses to a single day, not a range
     # (pins the `start.date() + timedelta(days=1)`).
     assert (
-        account._window_label(
+        _window(
             {
                 "start_timestamp": "2026-01-01T00:00:00Z",
                 "end_timestamp": "2026-01-02T00:00:00Z",
             }
-        )
+        ).label
         == "2026-01-01"
     )
     # Every recognized label key resolves (pins each entry in the lookup tuple).
     for key in ("name", "product", "service", "feature", "model", "type", "description"):
-        assert account._line_item_name({key: "X"}) == "X"
-    assert account._line_item_name({"name": "minutes", "total": "12.500"}) == "minutes"
-    assert account._line_item_name({"product": "streaming"}) == "streaming"
-    assert account._line_item_name({"quantity": 3}) == ""
-    assert account._line_item_name({}) == ""
+        assert _line_item({key: "X"}).label == "X"
+    assert _line_item({"name": "minutes", "total": "12.500"}).label == "minutes"
+    assert _line_item({"product": "streaming"}).label == "streaming"
+    assert _line_item({"quantity": 3}).label == ""
+    assert _line_item({}).label == ""
     # Breakdown aggregates by product and shows dollars (from `price` cents), biggest
     # first, so the line items sum to the window total and reconcile with it.
     assert (
-        account._line_items_summary(
+        _window(
             {
                 "line_items": [
                     {"name": "minutes", "price": 1000.0},
@@ -163,21 +178,20 @@ def test_usage_helpers_format_windows_and_line_items():
                     {"name": "minutes", "price": 250.0},
                 ]
             }
-        )
+        ).breakdown
         == "streaming: $25.00, minutes: $12.50"
     )
     # Equal-dollar products break the tie by name (pins the nc[0] secondary sort key).
     assert (
-        account._line_items_summary(
+        _window(
             {"line_items": [{"name": "zeta", "price": 500.0}, {"name": "alpha", "price": 500.0}]}
-        )
+        ).breakdown
         == "alpha: $5.00, zeta: $5.00"
     )
     # A line item with no recognizable product label is grouped under "other".
-    assert account._line_items_summary({"line_items": [{"price": 500.0}]}) == "other: $5.00"
+    assert _window({"line_items": [{"price": 500.0}]}).breakdown == "other: $5.00"
     # Zero-dollar products are dropped (they only add noise and still reconcile to 0).
-    assert account._line_items_summary({"line_items": [{"name": "free", "price": 0.0}]}) == ""
-    assert account._line_items_summary({"line_items": "bad"}) == ""
+    assert _window({"line_items": [{"name": "free", "price": 0.0}]}).breakdown == ""
 
 
 def test_usage_human_renders_breakdown(monkeypatch, mocker):
