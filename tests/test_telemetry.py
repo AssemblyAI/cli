@@ -342,9 +342,15 @@ def test_track_success(events, monkeypatch):
     assert event["duration_ms"] == 2000
 
 
+def _raise(exc: BaseException) -> None:
+    # Raising via a call (not a literal `raise` in the `with` body) keeps the
+    # assertions below visibly reachable to static analysis (CodeQL).
+    raise exc
+
+
 def test_track_cli_error_keeps_error_type_and_reraises(events):
     with pytest.raises(UsageError), telemetry.track("aai transcribe"):
-        raise UsageError("bad flag")
+        _raise(UsageError("bad flag"))
     (event,) = events
     assert event["outcome"] == "usage_error"
     assert event["exit_code"] == 2
@@ -357,7 +363,7 @@ def test_track_cli_error_keeps_error_type_and_reraises(events):
 )
 def test_track_typer_exit_maps_code(events, code, outcome):
     with pytest.raises(typer.Exit), telemetry.track("aai login"):
-        raise typer.Exit(code=code)
+        _raise(typer.Exit(code=code))
     (event,) = events
     assert event["outcome"] == outcome
     assert event["exit_code"] == code
@@ -367,7 +373,7 @@ def test_track_typer_exit_maps_code(events, code, outcome):
 
 def test_track_unexpected_exception_is_internal_error(events):
     with pytest.raises(RuntimeError), telemetry.track("aai stream"):
-        raise RuntimeError("boom")
+        _raise(RuntimeError("boom"))
     (event,) = events
     assert event["outcome"] == "internal_error"
     assert event["exit_code"] == 1

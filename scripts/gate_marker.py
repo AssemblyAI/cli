@@ -20,7 +20,8 @@ from typing import Protocol
 
 
 class _Digest(Protocol):
-    def update(self, data: bytes, /) -> None: ...
+    def update(self, data: bytes, /) -> None:
+        """Feed bytes into the hash."""
 
 
 MARKER_NAME = "aai-gate-pass"

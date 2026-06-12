@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Protocol
 
 import typer
@@ -19,13 +20,25 @@ class Prompter(Protocol):
     # the wizard reads this to skip steps that would otherwise hang a headless run.
     interactive: bool
 
-    def section(self, title: str) -> None: ...
-    def note(self, message: str) -> None: ...
-    def confirm(self, title: str, *, default: bool = True) -> bool: ...  # pragma: no mutate
+    def section(self, title: str) -> None:
+        """Print a step heading."""
+
+    def note(self, message: str) -> None:
+        """Print an informational line."""
+
+    @abstractmethod
+    def confirm(self, title: str, *, default: bool = True) -> bool:  # pragma: no mutate
+        """Ask a yes/no question."""
+
+    @abstractmethod
     def select(
         self, title: str, options: list[tuple[str, str]], *, default: str | None = None
-    ) -> str: ...
-    def text(self, title: str, *, default: str | None = None) -> str: ...
+    ) -> str:
+        """Pick one value from `options` (label, value) pairs."""
+
+    @abstractmethod
+    def text(self, title: str, *, default: str | None = None) -> str:
+        """Ask for a free-form line of text."""
 
 
 class InteractivePrompter:
