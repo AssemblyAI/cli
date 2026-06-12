@@ -14,6 +14,11 @@ in every rendered record. Masking must live in the formatter, not at call
 sites, because the leak comes from *library* logs — websockets logs the raw
 Authorization header at DEBUG during the handshake.
 
+Binary frames are summarized, not hex-dumped: a realtime session logs dozens of
+``> BINARY fb ff …`` lines per second whose payload is PCM audio — meaningless
+as hex — so the formatter collapses them to ``> BINARY [9600 bytes]``, keeping
+the direction and size that make ``-vv`` useful for debugging the wire.
+
 Stdlib-only on purpose: ``config`` (a Rich-free library layer) registers
 secrets here, so this module must not pull in Rich via ``output``/``theme``.
 """
@@ -21,6 +26,7 @@ secrets here, so this module must not pull in Rich via ``output``/``theme``.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 
 _MASK = "[redacted]"
@@ -28,14 +34,22 @@ _MASK = "[redacted]"
 _verbosity = 0
 _secrets: set[str] = set()
 
+# A websockets frame log's hex payload: opcode, hex byte pairs (possibly elided
+# with "..." by the library's own 75-char cap), then the "[N bytes]" metadata.
+# CONT is included because a fragmented binary message continues as CONT frames.
+_BINARY_FRAME_HEX = re.compile(r"\b(BINARY|CONT) [0-9a-f][0-9a-f. ]* \[")
+
 
 class _RedactingFormatter(logging.Formatter):
-    """Formats records normally, then masks every registered secret."""
+    """Formats records normally, then masks every registered secret and
+    collapses websockets binary-frame hex dumps to their byte count."""
 
     def format(self, record: logging.LogRecord) -> str:
         text = super().format(record)
         for secret in _secrets:
             text = text.replace(secret, _MASK)
+        if record.name.partition(".")[0] == "websockets":
+            text = _BINARY_FRAME_HEX.sub(r"\1 [", text)
         return text
 
 
