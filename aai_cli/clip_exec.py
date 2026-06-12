@@ -54,6 +54,7 @@ class ClipOptions:
     padding: float
     snap: bool
     out_dir: Path | None
+    video: bool
 
 
 def _llm_segments(
@@ -347,15 +348,19 @@ def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly clip` invocation from already-parsed flags."""
     _validate_out_dir(opts.out_dir)
     _validate_selection(opts)
+    youtube.validate_video_flag(opts.media, video=opts.video)
     explicit = [clip_select.parse_range(value) for value in opts.ranges]
     ffmpeg = _require_ffmpeg()
     if youtube.is_downloadable_url(opts.media):
-        # A media-page URL (YouTube, podcast page, …) is downloaded once and
-        # clipped locally. The download dir is temporary, so the clips land in
-        # --out-dir or the current directory — never next to the temp file.
+        # A media-page URL (YouTube, podcast page, …) is downloaded once — the
+        # audio track by default, the full video with --video so the clips carry
+        # video too — and clipped locally. The download dir is temporary, so the
+        # clips land in --out-dir or the current directory — never next to the
+        # temp file.
+        downloading = "Downloading video…" if opts.video else "Downloading audio…"
         with tempfile.TemporaryDirectory(prefix="aai-clip-") as td:
-            with output.status("Downloading audio…", json_mode=json_mode, quiet=state.quiet):
-                local = youtube.download_audio(opts.media, Path(td))
+            with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
+                local = youtube.download_media(opts.media, Path(td), video=opts.video)
             out_dir = opts.out_dir if opts.out_dir is not None else Path.cwd()
             _cut_and_emit(opts, local, out_dir, explicit, ffmpeg, state, json_mode=json_mode)
         return

@@ -187,7 +187,7 @@ def run_transcription(
     if youtube.is_downloadable_url(audio):
         # Fetch first; AssemblyAI can't read a YouTube/podcast page URL itself.
         with tempfile.TemporaryDirectory(prefix="aai-yt-") as td:
-            local = youtube.download_audio(audio, Path(td), download_sections=download_sections)
+            local = youtube.download_media(audio, Path(td), download_sections=download_sections)
             return client.transcribe(api_key, str(local), config=transcription_config)
     return client.transcribe(api_key, audio, config=transcription_config)
 

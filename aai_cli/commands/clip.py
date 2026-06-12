@@ -30,6 +30,10 @@ app = typer.Typer()
                 'assembly clip "https://youtube.com/watch?v=ID" --llm "the best quote"',
             ),
             (
+                "Cut video clips from the full YouTube video",
+                'assembly clip "https://youtube.com/watch?v=ID" --video --llm "the best quote"',
+            ),
+            (
                 "Reuse a finished transcript instead of re-transcribing",
                 "assembly clip meeting.mp4 -t TRANSCRIPT_ID --speaker B",
             ),
@@ -104,6 +108,12 @@ def clip(
     out_dir: Path | None = typer.Option(
         None, "--out-dir", help="Directory for the clip files (default: next to the input)."
     ),
+    video: bool = typer.Option(
+        False,
+        "--video",
+        help="Download the full video (not just the audio track) for a URL source, "
+        "so the clips are cut from the video. Local files keep their video already.",
+    ),
     json_out: bool = options.json_option("Emit JSON describing the clips written."),
 ) -> None:
     """Cut clips out of a media file by speaker, text match, LLM pick, or time range.
@@ -114,7 +124,8 @@ def clip(
     boundaries snap into nearby silence so cuts don't land mid-word (--no-snap
     disables), and each surviving segment is written as <name>.clipNN<ext>
     using ffmpeg (which must be installed). A YouTube/media-page source is
-    downloaded first; its clips land in --out-dir or the current directory.
+    downloaded first (audio only, or the full video with --video); its clips
+    land in --out-dir or the current directory.
     """
     opts = clip_exec.ClipOptions(
         media=media,
@@ -128,6 +139,7 @@ def clip(
         padding=padding,
         snap=snap,
         out_dir=out_dir,
+        video=video,
     )
     run_command(
         ctx,

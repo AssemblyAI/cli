@@ -334,7 +334,7 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, 
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
     monkeypatch.setattr(
-        "aai_cli.transcribe_exec.youtube.download_audio",
+        "aai_cli.transcribe_exec.youtube.download_media",
         lambda url, d, *, download_sections=None: fake,
     )
     tx = mocker.patch(
@@ -348,7 +348,7 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, 
 
 
 def test_transcribe_youtube_url_forwards_download_sections(monkeypatch, mocker, tmp_path):
-    # --download-sections must reach youtube.download_audio so only that slice is fetched.
+    # --download-sections must reach youtube.download_media so only that slice is fetched.
     _auth()
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
@@ -358,7 +358,7 @@ def test_transcribe_youtube_url_forwards_download_sections(monkeypatch, mocker, 
         seen["sections"] = download_sections
         return fake
 
-    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", _capture)
+    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_media", _capture)
     mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
@@ -379,7 +379,7 @@ def test_transcribe_podcast_page_url_downloads_then_transcribes(monkeypatch, moc
     fake = tmp_path / "episode.m4a"
     fake.write_bytes(b"x")
     monkeypatch.setattr(
-        "aai_cli.transcribe_exec.youtube.download_audio",
+        "aai_cli.transcribe_exec.youtube.download_media",
         lambda url, d, *, download_sections=None: fake,
     )
     tx = mocker.patch(
@@ -432,7 +432,7 @@ def test_transcribe_direct_audio_url_passes_through_without_download(monkeypatch
     def _no_download(url, d, *, download_sections=None):
         raise AssertionError("direct audio URLs must not be downloaded")
 
-    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_audio", _no_download)
+    monkeypatch.setattr("aai_cli.transcribe_exec.youtube.download_media", _no_download)
     tx = mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,

@@ -1,7 +1,9 @@
-"""Downloading audio from media-page URLs (YouTube, podcast pages, …) via yt-dlp.
+"""Downloading media from media-page URLs (YouTube, podcast pages, …) via yt-dlp.
 
 The AssemblyAI API fetches direct audio URLs itself; this module handles the URLs it
-can't — HTML pages whose audio yt-dlp knows how to extract.
+can't — HTML pages whose media yt-dlp knows how to extract. Downloads fetch the
+audio track by default (all the API needs); commands whose output is the media
+itself (clip/dub/caption) can fetch the full video instead.
 """
 
 from __future__ import annotations
@@ -59,10 +61,10 @@ def is_youtube_url(source: str | None) -> bool:
 
 
 def is_downloadable_url(source: str | None) -> bool:
-    """True if `source` is a media-page URL whose audio must be downloaded first.
+    """True if `source` is a media-page URL whose media must be downloaded first.
 
     YouTube is matched by shape alone — no yt-dlp import needed, so a missing yt-dlp
-    still routes to ``download_audio``'s install hint. Other http(s) URLs match when
+    still routes to ``download_media``'s install hint. Other http(s) URLs match when
     a dedicated yt-dlp extractor claims them (Apple Podcasts, Spreaker, SoundCloud,
     …). Direct audio URLs and unknown pages match only yt-dlp's catch-all ``Generic``
     extractor, which is excluded: those pass through untouched for the API to fetch.
@@ -142,32 +144,36 @@ def parse_download_sections(
     return chapters, ranges, from_url
 
 
-def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | None = None) -> Path:
-    """Download the best audio track of `url` into `dest_dir` and return its path.
+def validate_video_flag(source: str, *, video: bool) -> None:
+    """Reject ``--video`` for a source that isn't a downloadable URL.
 
-    Uses yt-dlp; the resulting container (m4a/webm/…) is decodable by ffmpeg
-    (streaming) and uploadable for transcription. `download_sections` accepts yt-dlp's
-    ``--download-sections`` specs (e.g. ``*0:00-5:00`` for the first five minutes), each
-    fetching only that part of the source.
+    The flag selects the full-video download for a media-page URL; a local file's
+    video stream is already operated on directly, so the flag would be a silent
+    no-op there — and a requested flag is never dropped silently.
     """
-    try:
-        import yt_dlp
-    except ImportError as exc:
-        raise CLIError(
-            "YouTube support needs yt-dlp.",
-            error_type="ytdlp_missing",
-            exit_code=2,
-            suggestion="Install it: pip install yt-dlp",
-        ) from exc
+    if video and not is_downloadable_url(source):
+        raise UsageError(
+            "--video only applies to a downloadable URL source (YouTube, media pages, …).",
+            suggestion="A local file's video is used directly already; drop --video.",
+        )
 
+
+def _ytdlp_options(
+    dest_dir: Path, *, video: bool, download_sections: list[str] | None
+) -> dict[str, object]:
+    """The yt-dlp options for one download (caller has already imported yt_dlp)."""
     options: dict[str, object] = {
-        "format": "bestaudio/best",
+        "format": "bestvideo*+bestaudio/best" if video else "bestaudio/best",
         "outtmpl": str(dest_dir / "%(id)s.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
         "logger": _YTDLP_LOGGER,
     }
+    if video:
+        # Separate video+audio streams (YouTube's norm) must merge into one
+        # container; mp4 keeps the result playable (and clippable) everywhere.
+        options["merge_output_format"] = "mp4"
     if download_sections:
         from yt_dlp.utils import download_range_func
 
@@ -181,6 +187,37 @@ def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | N
         )
         # Cut at exact timestamps rather than the nearest keyframe (yt-dlp's default).
         options["force_keyframes_at_cuts"] = True
+    return options
+
+
+def download_media(
+    url: str,
+    dest_dir: Path,
+    *,
+    video: bool = False,
+    download_sections: list[str] | None = None,
+) -> Path:
+    """Download the media of `url` into `dest_dir` and return its path.
+
+    Uses yt-dlp. The default fetches only the best audio track — all transcription
+    needs; the resulting container (m4a/webm/…) is decodable by ffmpeg (streaming)
+    and uploadable. ``video=True`` fetches the full video instead (best video+audio,
+    merged to mp4) for commands whose output is the media itself. `download_sections`
+    accepts yt-dlp's ``--download-sections`` specs (e.g. ``*0:00-5:00`` for the first
+    five minutes), each fetching only that part of the source.
+    """
+    noun = "video" if video else "audio"
+    try:
+        import yt_dlp
+    except ImportError as exc:
+        raise CLIError(
+            "YouTube support needs yt-dlp.",
+            error_type="ytdlp_missing",
+            exit_code=2,
+            suggestion="Install it: pip install yt-dlp",
+        ) from exc
+
+    options = _ytdlp_options(dest_dir, video=video, download_sections=download_sections)
     try:
         # yt-dlp types `params` as a private `_Params` TypedDict, but a plain options
         # dict is the documented public API; pyright can't reconcile the two.
@@ -189,7 +226,7 @@ def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | N
             path = Path(ydl.prepare_filename(info))
     except Exception as exc:  # yt-dlp raises many types; surface one clean CLI error
         raise CLIError(
-            f"Could not download audio from {url}: {_ytdlp_error_message(exc)}",
+            f"Could not download {noun} from {url}: {_ytdlp_error_message(exc)}",
             error_type="youtube_error",
             exit_code=1,
         ) from exc
@@ -198,11 +235,11 @@ def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | N
         # Post-processing can change the extension; fall back to whatever landed.
         # yt-dlp may also drop sidecars (thumbnail, .info.json, a leftover .part)
         # in dest_dir, and iterdir() order is arbitrary, so pick the largest file:
-        # the decoded audio track dwarfs any metadata sidecar.
+        # the decoded media track dwarfs any metadata sidecar.
         files = [p for p in dest_dir.iterdir() if p.is_file()]
         if not files:
             raise CLIError(
-                f"yt-dlp produced no audio file for {url}.",
+                f"yt-dlp produced no {noun} file for {url}.",
                 error_type="youtube_error",
                 exit_code=1,
             )
