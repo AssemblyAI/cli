@@ -159,6 +159,7 @@
   │ --railway            Deploy to Railway.                                      │
   │ --fly                Deploy to Fly.io.                                       │
   │ --yes      -y        Skip the confirmation prompt.                           │
+  │ --json     -j        Output raw JSON.                                        │
   │ --help               Show this message and exit.                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -338,7 +339,9 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --no-install                   Scaffold only; don't install or launch.       │
   │ --no-open                      Install + launch, but don't open the browser. │
-  │ --force                        Overwrite a non-empty target directory.       │
+  │ --force                        Overwrite a non-empty target directory        │
+  │                                (overlays the template; files not in the      │
+  │                                template are kept).                           │
   │ --here                         Scaffold into the current directory.          │
   │ --port                INTEGER  Local server port. [default: 3000]            │
   │ --json        -j               Output raw JSON.                              │

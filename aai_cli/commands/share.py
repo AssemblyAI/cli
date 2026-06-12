@@ -58,12 +58,13 @@ def _terminate(proc: subprocess.Popen[str] | None) -> None:
         proc.terminate()
 
 
-def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
+def run_share(*, port: int, no_install: bool, json_mode: bool, quiet: bool) -> None:
     """Boot the app and expose it on a public cloudflared quick-tunnel URL."""
     target = Path.cwd()
     use_uv = runner.has_uv()
 
     chosen_port = runner.find_free_port(port)
+    devserver.notify_port_change(port, chosen_port, json_mode=json_mode, quiet=quiet)
     env = {**os.environ, "PORT": str(chosen_port)}
     web = procfile.web_argv(target, env=env)  # validates we're in a scaffolded project
     _require_cloudflared()
@@ -77,6 +78,8 @@ def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
 
     server = runner.spawn(devserver.dev_command(target, web, use_uv=use_uv), cwd=target, env=env)
     proxy: subprocess.Popen[str] | None = None
+    log_path: Path | None = None
+    keep_log = False
     try:
         if not runner.wait_for_port(chosen_port):
             raise CLIError(
@@ -95,10 +98,14 @@ def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
         )
         public = tunnel.await_url(log_path)
         if public is None:
+            # Keep the captured cloudflared output: it's the only evidence of why
+            # the tunnel never came up.
+            keep_log = True
             raise CLIError(
                 "cloudflared didn't report a tunnel URL in time.",
                 error_type="tunnel_error",
                 exit_code=1,
+                suggestion=f"cloudflared's output was kept at {log_path} — check it for errors.",
             )
         payload: dict[str, object] = {
             "url": public,
@@ -112,6 +119,8 @@ def run_share(*, port: int, no_install: bool, json_mode: bool) -> None:
     finally:
         _terminate(proxy)
         _terminate(server)
+        if log_path is not None and not keep_log:
+            log_path.unlink(missing_ok=True)
 
 
 @app.command(
@@ -140,7 +149,7 @@ def share(
     https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
     """
 
-    def body(_state: AppState, json_mode: bool) -> None:
-        run_share(port=port, no_install=no_install, json_mode=json_mode)
+    def body(state: AppState, json_mode: bool) -> None:
+        run_share(port=port, no_install=no_install, json_mode=json_mode, quiet=state.quiet)
 
     run_command(ctx, body, json=json_out)

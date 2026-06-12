@@ -17,12 +17,15 @@ from aai_cli.init import devserver, procfile, runner
 app = typer.Typer()
 
 
-def run_dev(*, port: int, host: str, no_install: bool, no_open: bool, json_mode: bool) -> None:
+def run_dev(
+    *, port: int, host: str, no_install: bool, no_open: bool, json_mode: bool, quiet: bool
+) -> None:
     """Boot the project's Procfile `web:` process locally, with live reload."""
     target = Path.cwd()
     use_uv = runner.has_uv()
 
     chosen_port = runner.find_free_port(port)
+    devserver.notify_port_change(port, chosen_port, json_mode=json_mode, quiet=quiet)
     env = {**os.environ, "PORT": str(chosen_port)}
     # Resolves the start command AND validates we're inside a scaffolded project.
     web = procfile.web_argv(target, env=env)
@@ -82,7 +85,14 @@ def dev(
     if needed, then starts the FastAPI server with live reload and opens the browser.
     """
 
-    def body(_state: AppState, json_mode: bool) -> None:
-        run_dev(port=port, host=host, no_install=no_install, no_open=no_open, json_mode=json_mode)
+    def body(state: AppState, json_mode: bool) -> None:
+        run_dev(
+            port=port,
+            host=host,
+            no_install=no_install,
+            no_open=no_open,
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
 
     run_command(ctx, body, json=json_out)

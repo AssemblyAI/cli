@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aai_cli import steps
+from aai_cli import output, steps
 from aai_cli.init import runner
 
 
@@ -19,6 +19,18 @@ def install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
             "detail": (setup.stderr or setup.stdout).strip()[:300],
         }
     return {"name": "install", "status": "installed", "detail": "uv" if use_uv else "venv + pip"}
+
+
+def notify_port_change(requested: int, chosen: int, *, json_mode: bool, quiet: bool) -> None:
+    """One stderr line when the requested port was busy and a neighbor was bound.
+
+    `assembly dev`/`assembly share` silently substituting a free port would leave the
+    user pointing tools at a dead port. Port 0 means "any free port", so no notice
+    there, and ``--quiet`` suppresses it.
+    """
+    if quiet or requested in (0, chosen):
+        return
+    output.emit_warning(f"Port {requested} is in use; using {chosen}.", json_mode=json_mode)
 
 
 # Local dev binds the loopback interface only. The template Procfile says

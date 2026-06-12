@@ -6,8 +6,9 @@ from pathlib import Path
 
 import assemblyai as aai
 import typer
+from rich.markup import escape
 
-from aai_cli import config, environments, output, transcribe_exec, transcribe_render
+from aai_cli import config, environments, output, theme, transcribe_exec, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
 from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
@@ -86,7 +87,8 @@ def first_request(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     except CLIError as exc:
         output.error_console.print(output.fail(f"Transcription failed: {exc.message}"))
         return SectionResult.FAILED
-    transcribe_render.render_transcript_result(transcript, output.console)
+    if not ctx.json_mode:  # --json owns stdout (the final summary); skip the human render
+        transcribe_render.render_transcript_result(transcript, output.console)
     return SectionResult.DONE
 
 
@@ -98,18 +100,59 @@ _BUILD_CHOICES = [
 ]
 
 
-def environment(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
+# Status -> (glyph, style) for the wizard's environment render (same look as doctor's).
+_CHECK_SYMBOLS = {
+    "ok": (theme.SYMBOL_SUCCESS, "aai.success"),
+    "warn": (theme.SYMBOL_WARN, "aai.warn"),
+    "fail": (theme.SYMBOL_ERROR, "aai.error"),
+}
+
+
+def _environment_summary(checks: list[doctor_cmd.Check]) -> str:
+    """The closing line, computed from the actual statuses: doctor.render's
+    all-or-nothing `ok` flag can't say "warnings only", which previously put
+    "Everything looks good." right under a warning."""
+    failed = sum(1 for c in checks if c["status"] == "fail")
+    warned = sum(1 for c in checks if c["status"] == "warn")
+    if failed:
+        noun = "problem" if failed == 1 else "problems"
+        return output.fail(f"{failed} {noun} found — see fixes above.")
+    if warned:
+        noun = "warning" if warned == 1 else "warnings"
+        return output.warn(f"Ready — {warned} {noun} (only affects streaming/agent).")
+    return output.success("Everything looks good.")
+
+
+def _render_environment(checks: list[doctor_cmd.Check]) -> str:
+    """The wizard's render of the doctor checks: doctor-style per-check lines, with
+    the summary derived from what the checks actually reported."""
+    lines = [output.heading("Environment check")]
+    for c in checks:
+        symbol, style = _CHECK_SYMBOLS[c["status"]]
+        lines.append(
+            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
+        )
+        if c["fix"]:
+            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
+    lines.append("  " + _environment_summary(checks))
+    return "\n".join(lines)
+
+
+def environment(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     checks = [
         doctor_cmd.check_python(),
         doctor_cmd.check_ffmpeg(),
         doctor_cmd.check_audio(),
     ]
-    # `render` already prints its own "Environment check" heading, so we don't call
-    # prompter.section here (that would show the title twice); just space it from the
-    # previous section with a blank line.
-    output.console.print()
-    output.console.print(doctor_cmd.render({"ok": True, "checks": checks}))
-    prompter.note("Warnings here only affect live streaming and the voice agent.")
+    if not ctx.json_mode:  # --json owns stdout (the final summary); skip the human render
+        # `_render_environment` prints its own "Environment check" heading, so we don't
+        # call prompter.section here (that would show the title twice); just space it
+        # from the previous section with a blank line.
+        output.console.print()
+        output.console.print(_render_environment(checks))
+        prompter.note("Warnings here only affect live streaming and the voice agent.")
+    if any(c["status"] == "fail" for c in checks):
+        return SectionResult.FAILED
     return SectionResult.DONE
 
 
@@ -157,11 +200,12 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     return SectionResult.DONE
 
 
-def next_steps(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
+def next_steps(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     prompter.section("You're set up")
-    output.console.print(output.hint("Transcribe a file:  assembly transcribe <file>"))
-    output.console.print(output.hint("Stream live audio:  assembly stream"))
-    output.console.print(output.hint("Build an app:       assembly init"))
+    if not ctx.json_mode:  # --json owns stdout (the final summary); hints are human-only
+        output.console.print(output.hint("Transcribe a file:  assembly transcribe <file>"))
+        output.console.print(output.hint("Stream live audio:  assembly stream"))
+        output.console.print(output.hint("Build an app:       assembly init"))
     return SectionResult.DONE
 
 

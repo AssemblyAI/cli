@@ -188,7 +188,40 @@ def test_deploy_confirm_no_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 0, result.output
     assert "Aborted" in result.output
+    # Human mode prints plain text, not the JSON shape.
+    assert '"status"' not in result.output
     assert _cmds(calls) == []
+
+
+def test_deploy_json_flag_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # deploy now has the standard --json flag like its init/dev/share siblings.
+    calls = _stub(monkeypatch, available=("vercel",))
+    result = runner.invoke(app, ["deploy", "--yes", "--json"])
+    assert result.exit_code == 0, result.output
+    assert "No such option" not in result.output
+    assert _cmds(calls) == [["vercel", "deploy"]]
+
+
+def test_deploy_json_abort_is_machine_readable(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    calls = _stub(monkeypatch, available=("vercel",), confirm=False)
+    result = runner.invoke(app, ["deploy", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"status": "aborted", "target": "Vercel"}
+    assert "Aborted." not in result.stdout
+    assert _cmds(calls) == []
+
+
+def test_deploy_json_error_is_enveloped(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    _stub(monkeypatch, available=())
+    result = runner.invoke(app, ["deploy", "--yes", "--json"])
+    assert result.exit_code == 1
+    err = json.loads(result.stderr)
+    assert err["error"]["type"] == "missing_dependency"
+    assert "Vercel CLI" in err["error"]["message"]
 
 
 def test_deploy_yes_skips_prompt(monkeypatch: pytest.MonkeyPatch) -> None:

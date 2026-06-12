@@ -153,3 +153,39 @@ def test_override_host_appends_when_absent():
 
 def test_local_host_constant_is_loopback():
     assert devserver.LOCAL_HOST == "127.0.0.1"
+
+
+def test_notify_port_change_emits_warning_with_both_ports(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "aai_cli.output.emit_warning",
+        lambda msg, *, json_mode: calls.append((msg, json_mode)),
+    )
+    devserver.notify_port_change(5000, 5001, json_mode=True, quiet=False)
+    # json_mode passes through so --json runs get the structured {"warning": ...} line.
+    assert calls == [("Port 5000 is in use; using 5001.", True)]
+
+
+def test_notify_port_change_silent_cases(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "aai_cli.output.emit_warning",
+        lambda msg, *, json_mode: calls.append(msg),
+    )
+    # Same port bound: nothing to announce.
+    devserver.notify_port_change(5000, 5000, json_mode=False, quiet=False)
+    # Port 0 means "any free port": the substitution is the requested behavior.
+    devserver.notify_port_change(0, 4242, json_mode=False, quiet=False)
+    # --quiet suppresses the notice.
+    devserver.notify_port_change(5000, 5001, json_mode=False, quiet=True)
+    assert calls == []
+
+
+def test_notify_port_change_human_mode_passthrough(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "aai_cli.output.emit_warning",
+        lambda msg, *, json_mode: calls.append(json_mode),
+    )
+    devserver.notify_port_change(5000, 5001, json_mode=False, quiet=False)
+    assert calls == [False]

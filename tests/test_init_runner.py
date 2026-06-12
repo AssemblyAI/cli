@@ -275,3 +275,45 @@ def test_run_server_passes_command_and_env(monkeypatch):
     assert captured["cmd"] == ["uvicorn", "x"]
     assert captured["env"] == {"PORT": "3000"}
     assert captured["cwd"] == Path("/proj")
+
+
+def _capture_stderr_prints(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        runner.output.error_console,
+        "print",
+        lambda *a, **k: printed.append(str(a[0]) if a else ""),
+    )
+    return printed
+
+
+def test_open_app_browser_hints_when_no_browser_can_launch(monkeypatch):
+    # webbrowser.open returns False on headless boxes; the user must be told where
+    # to point a browser instead of getting silence.
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: False)
+    printed = _capture_stderr_prints(monkeypatch)
+    runner.open_app_browser(4321)
+    assert any(
+        "Couldn't open a browser" in line and "http://localhost:4321" in line for line in printed
+    )
+
+
+def test_open_app_browser_silent_when_browser_opens(monkeypatch):
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: True)
+    printed = _capture_stderr_prints(monkeypatch)
+    runner.open_app_browser(4321)
+    assert printed == []
+
+
+def test_run_server_headless_browser_failure_prints_hint(monkeypatch):
+    # End to end through run_server: a False from webbrowser.open surfaces the hint.
+    proc = _FakeProc(returncode=0)
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
+    monkeypatch.setattr(runner.webbrowser, "open", lambda url: False)
+    printed = _capture_stderr_prints(monkeypatch)
+    rc = runner.run_server(
+        Path("/proj"), command=["uvicorn", "x"], port=3000, env=None, open_browser=True
+    )
+    assert rc == 0
+    assert any("Couldn't open a browser" in line for line in printed)
