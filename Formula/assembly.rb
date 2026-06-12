@@ -288,6 +288,14 @@ class Assembly < Formula
   end
 
   def install
+    # The GitHub source tarball has no .git, so hatch-vcs cannot derive the
+    # version. Feed it the formula's tag version (hatch-vcs delegates to
+    # setuptools-scm, which reads this env var); the build hook then writes the
+    # correct version into the installed aai_cli/_version.py.
+    # Note: the dist-specific form (SETUPTOOLS_SCM_PRETEND_VERSION_FOR_AAI_CLI)
+    # requires setuptools-scm to receive dist_name, which hatch-vcs 0.x does not
+    # forward; the generic form is the correct one here.
+    ENV["SETUPTOOLS_SCM_PRETEND_VERSION"] = version.to_s
     virtualenv_install_with_resources
   end
 
