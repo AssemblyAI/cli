@@ -142,9 +142,43 @@ def test_build_event_failure_feeds_error_tracking(monkeypatch):
     assert event["outcome"] == "api_error"
     assert event["exit_code"] == 1
     # status:error + the reserved error.kind are what promote it into Error Tracking;
-    # error.kind mirrors the anonymous outcome, and no message/stack ever rides along.
+    # error.kind mirrors the anonymous outcome. No message was provided, so none rides along.
     assert event["status"] == "error"
     assert event["error"] == {"kind": "api_error"}
+
+
+def test_build_event_failure_carries_error_message():
+    event = telemetry.build_event(
+        "aai transcribe",
+        outcome="api_error",
+        exit_code=1,
+        duration_ms=5,
+        error_message="Audio file not found: clip.wav",
+    )
+    # error.message is the reserved attribute Error Tracking groups/displays on.
+    assert event["error"] == {"kind": "api_error", "message": "Audio file not found: clip.wav"}
+
+
+def test_build_event_error_message_capped_at_500_chars():
+    # Exactly at the cap: untouched.
+    exact = "y" * 500
+    event = telemetry.build_event(
+        "aai stream", outcome="api_error", exit_code=1, duration_ms=5, error_message=exact
+    )
+    assert event["error"] == {"kind": "api_error", "message": exact}
+    # One over: truncated to exactly the cap.
+    event = telemetry.build_event(
+        "aai stream", outcome="api_error", exit_code=1, duration_ms=5, error_message="x" * 501
+    )
+    assert event["error"] == {"kind": "api_error", "message": "x" * 500}
+
+
+def test_build_event_blank_error_message_is_omitted():
+    # str(exc) can be "" (e.g. RuntimeError()); don't ship an empty message field.
+    event = telemetry.build_event(
+        "aai stream", outcome="internal_error", exit_code=1, duration_ms=5, error_message=""
+    )
+    assert event["error"] == {"kind": "internal_error"}
 
 
 # --- dispatch (detached flusher handoff) ------------------------------------
@@ -279,6 +313,8 @@ def test_track_cli_error_keeps_error_type_and_reraises(events):
     (event,) = events
     assert event["outcome"] == "usage_error"
     assert event["exit_code"] == 2
+    # The clean CLIError message the user saw rides along for Error Tracking.
+    assert event["error"] == {"kind": "usage_error", "message": "bad flag"}
 
 
 @pytest.mark.parametrize(
@@ -290,6 +326,8 @@ def test_track_typer_exit_maps_code(events, code, outcome):
     (event,) = events
     assert event["outcome"] == outcome
     assert event["exit_code"] == code
+    # A bare typer.Exit carries no message, so the failure event has only the kind.
+    assert event.get("error") == ({"kind": "error"} if code else None)
 
 
 def test_track_unexpected_exception_is_internal_error(events):
@@ -298,6 +336,7 @@ def test_track_unexpected_exception_is_internal_error(events):
     (event,) = events
     assert event["outcome"] == "internal_error"
     assert event["exit_code"] == 1
+    assert event["error"] == {"kind": "internal_error", "message": "boom"}
 
 
 @pytest.mark.parametrize("exc", [OSError("spawn failed"), CLIError("corrupt config")])
