@@ -256,6 +256,8 @@ max-statements = 40
 "aai_cli/output.py" = ["T201"]
 # The active environment is process-global startup state by design.
 "aai_cli/environments.py" = ["PLW0603"]
+# Verbosity is process-global startup state by design (mirrors environments.py).
+"aai_cli/debuglog.py" = ["PLW0603"]
 # BaseHTTPRequestHandler.log_message requires a parameter named `format`.
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.

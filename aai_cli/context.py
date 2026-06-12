@@ -9,7 +9,7 @@ from typing import NoReturn
 import keyring.errors
 import typer
 
-from aai_cli import config, environments, output, telemetry, update_check
+from aai_cli import config, debuglog, environments, output, telemetry, update_check
 from aai_cli.environments import Environment
 from aai_cli.errors import APIError, CLIError, NotAuthenticated
 
@@ -72,6 +72,9 @@ class AppState:
                     "can't access account commands."
                 ),
             )
+        # Registered like the API key in config.resolve_api_key: -v/-vv diagnostics
+        # must never print the session JWT in clear.
+        debuglog.register_secret(session["jwt"])
         return account_id, session["jwt"]
 
     def env_override_warning(self) -> str | None:

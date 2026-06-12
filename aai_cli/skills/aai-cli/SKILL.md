@@ -33,8 +33,13 @@ suddenly returns auth errors, check you are on the same `--env` you logged in
 under.
 
 **Profiles.** `--profile <name>` selects a named credential set. Global flags
-(`--profile`, `--env`, `--sandbox`) go *before* the subcommand:
+(`--profile`, `--env`, `--sandbox`, `-v/--verbose`) go *before* the subcommand:
 `assembly --sandbox transcribe call.mp3`.
+
+**Diagnostics.** `assembly -v <command>` logs request-level diagnostics to
+stderr (HTTP requests and statuses); `-vv` adds wire-level detail (WebSocket
+frames, connection events). Secrets (API key, session JWT) are redacted from
+that output. Use this to debug auth/connectivity instead of guessing.
 
 ## Output contract (read this before parsing output)
 

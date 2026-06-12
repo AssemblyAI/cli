@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+from aai_cli import debuglog
 from aai_cli.errors import APIError, CLIError, auth_failure, is_auth_failure
 
 # A pre-upgrade HTTP 403 on the WebSocket handshake is NOT a rejected key (it also
@@ -31,7 +32,12 @@ def silence_websockets_logging() -> None:
     ``websockets.client`` logger, which would land on stderr right next to our clean
     CLIError. Those internals are never user-actionable from the CLI, so raise the
     loggers above every level they emit at. Idempotent: re-setting the level is a no-op.
+
+    Stands down under the root ``-v/--verbose`` flag: wire-level frames are exactly
+    what ``-vv`` exists to show, so verbose mode leaves the loggers untouched.
     """
+    if debuglog.active():
+        return
     for name in WEBSOCKETS_LOGGERS:
         logging.getLogger(name).setLevel(logging.CRITICAL)
 

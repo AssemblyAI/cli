@@ -14,6 +14,7 @@ import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from aai_cli import debuglog
 from aai_cli.errors import CLIError, NotAuthenticated
 
 KEYRING_SERVICE = "assemblyai-cli"
@@ -408,6 +409,18 @@ def set_update_cache(*, last_check: float, latest_version: str | None) -> None:
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:
+    """The API key for SDK/gateway calls: --api-key flag > ASSEMBLYAI_API_KEY > keyring.
+
+    Every resolved key is registered with the verbose-log redactor
+    (``debuglog.register_secret``) at this single choke point, so ``-v``/``-vv``
+    diagnostics can never print it in clear no matter which library logs it.
+    """
+    key = _resolve_api_key(profile=profile, api_key_flag=api_key_flag)
+    debuglog.register_secret(key)
+    return key
+
+
+def _resolve_api_key(*, profile: str | None, api_key_flag: str | None) -> str:
     # Values are stripped at every tier: a whitespace-only key (e.g. a botched
     # `export ASSEMBLYAI_API_KEY='   '`) must read as "no key" (the clean exit-4
     # not-signed-in path), not get sent as an illegal HTTP header byte string.
