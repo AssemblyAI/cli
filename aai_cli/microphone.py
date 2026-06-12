@@ -3,6 +3,7 @@ from __future__ import annotations
 import warnings
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from types import ModuleType
 from typing import Any, Protocol, cast
 
 from aai_cli.errors import CLIError
@@ -53,12 +54,23 @@ def audio_missing_error() -> CLIError:
     )
 
 
-def _sounddevice() -> _SoundDeviceModule:
+def import_sounddevice() -> ModuleType:
+    """Import sounddevice lazily, mapping an ImportError to ``audio_missing_error``.
+
+    The one import-and-fail path for every audio device opener (mic capture,
+    TTS playback, the agent's duplex stream), so a broken sounddevice install
+    yields the same actionable error no matter which command hit it first.
+    """
     try:
-        import sounddevice as module
+        import sounddevice
     except ImportError as exc:
         raise audio_missing_error() from exc
-    return cast("_SoundDeviceModule", module)
+    module: ModuleType = sounddevice
+    return module
+
+
+def _sounddevice() -> _SoundDeviceModule:
+    return cast("_SoundDeviceModule", import_sounddevice())
 
 
 def default_rate(kind: str, device: int | None = None) -> int:

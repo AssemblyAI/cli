@@ -211,14 +211,12 @@ def _open_ws(connect: _Connect, api_key: str) -> _WebSocket:
     A rejected handshake (HTTP 401/403) gets the shared actionable suggestion
     (whoami / environment / network); anything else keeps the wsutil mapping.
     """
-    message = "Could not connect to the voice agent"
     try:
         return connect(ws_url(), additional_headers={"Authorization": f"Bearer {api_key}"})
     except Exception as exc:
-        rejected = diagnostics.handshake_error(exc, message, host=environments.active().agents_host)
-        if rejected is not None:
-            raise rejected from exc
-        raise wsutil.auth_or_api_error(exc, message) from exc
+        raise diagnostics.classify_error(
+            exc, "Could not connect to the voice agent", host=environments.active().agents_host
+        ) from exc
 
 
 def _session_update_message(config: AgentRunConfig) -> str:

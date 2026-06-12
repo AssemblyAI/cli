@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from aai_cli.errors import CLIError
-from aai_cli.microphone import audio_missing_error, default_rate, resample_pcm16
+from aai_cli.microphone import default_rate, import_sounddevice, resample_pcm16
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 
@@ -48,10 +48,7 @@ class NullPlayer:
 
 def _default_duplex_stream(*, rate: int, blocksize: int, callback: Any, device: int | None) -> Any:
     """Open ONE started full-duplex sounddevice stream (mic + speaker together)."""
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise audio_missing_error() from exc
+    sd = import_sounddevice()
     try:
         stream = sd.RawStream(
             samplerate=rate,
