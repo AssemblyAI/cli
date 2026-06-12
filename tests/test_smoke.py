@@ -55,6 +55,40 @@ def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
     assert "may be rejected" in json.loads(warning_line)["warning"]
 
 
+def test_sandbox_flag_conflicting_env_warns():
+    # Credentials are environment-bound, so `--sandbox --env production` must not pick
+    # one silently: --env wins, with a warning. Agreeing flags and --quiet stay silent.
+    noisy = runner.invoke(app, ["--sandbox", "--env", "production"])
+    assert "--sandbox ignored: --env production takes precedence." in noisy.output
+    assert '{"warning"' not in noisy.output  # human mode renders text, not JSON
+    quiet = runner.invoke(app, ["--quiet", "--sandbox", "--env", "production"])
+    assert "--sandbox ignored" not in quiet.output
+    agreeing = runner.invoke(app, ["--sandbox", "--env", "sandbox000"])
+    assert "--sandbox ignored" not in agreeing.output
+    env_only = runner.invoke(app, ["--env", "production"])
+    assert "--sandbox ignored" not in env_only.output
+
+
+def test_sandbox_conflict_warning_is_structured_in_json_mode(mocker):
+    # Same {"warning": …} contract as the env-override warning: a --json pipeline gets
+    # a machine-readable hint instead of a decorated human line.
+    import json
+
+    from aai_cli import config
+
+    config.set_api_key("default", "sk_live")
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=[]
+    )
+    result = runner.invoke(
+        app, ["--sandbox", "--env", "production", "transcripts", "list", "--json"]
+    )
+    warning_line = next(
+        line for line in result.output.splitlines() if line.strip().startswith('{"warning"')
+    )
+    assert "--sandbox ignored" in json.loads(warning_line)["warning"]
+
+
 def test_shell_completion_is_available(monkeypatch):
     # add_completion=True ships `--show-completion` (and --install-completion), the
     # discoverability affordance gh/kubectl/docker users reach for. Typer detects the

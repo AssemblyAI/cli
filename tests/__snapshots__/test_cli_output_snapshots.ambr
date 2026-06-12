@@ -766,7 +766,8 @@
    Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
    detected
    automatically: the labels are stripped and each speaker gets a different
-   voice. This feature only exists in the sandbox today — run it with --sandbox.
+   voice. This feature only exists in the sandbox today — run it as
+   'assembly --sandbox speak' (--sandbox goes before the subcommand).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
@@ -786,15 +787,15 @@
   
    Examples
    Speak text aloud (sandbox only)
-   $ assembly speak "Hello there, friend." --sandbox
+   $ assembly --sandbox speak "Hello there, friend."
    Pick a voice and language
-   $ assembly speak "Bonjour" --voice jane --language French --sandbox
+   $ assembly --sandbox speak "Bonjour" --voice jane --language French
    Speak a diarized transcript, one voice per speaker
-   $ assembly transcribe meeting.mp3 --speaker-labels | assembly speak --sandbox
+   $ assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak
    Override a speaker's voice
-   $ … | assembly speak --voice A=vera --voice B=paul --sandbox
+   $ … | assembly --sandbox speak --voice A=vera --voice B=paul
    Save to a WAV instead of playing
-   $ assembly speak "Hello" --out /tmp/hello.wav --sandbox
+   $ assembly --sandbox speak "Hello" --out /tmp/hello.wav
   
   
   
