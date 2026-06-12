@@ -89,6 +89,35 @@ def test_sessions_list_renders_table_human(monkeypatch, mocker):
     assert "12.0" in result.output
 
 
+def test_sessions_list_renders_zero_duration_as_zero(monkeypatch, mocker):
+    _auth()
+    _human(monkeypatch)
+    # 0 is a legitimate duration (a session that connected but streamed no audio):
+    # it must render as "0", not be coerced to a blank cell like a missing value.
+    # Neither row carries created_at, so the duration is the only digit in the table.
+    payload = {
+        "data": [
+            {
+                "session_id": "s_one",
+                "status": "completed",
+                "audio_duration_sec": 0,
+                "speech_model": "universal",
+            },
+            {
+                "session_id": "s_two",
+                "status": "completed",
+                "speech_model": "universal",
+            },
+        ]
+    }
+    mocker.patch(
+        "aai_cli.commands.sessions.ams.list_streaming", autospec=True, return_value=payload
+    )
+    result = runner.invoke(app, ["sessions", "list"])
+    assert result.exit_code == 0
+    assert "0" in result.output
+
+
 def test_sessions_list_empty_shows_human_empty_state(monkeypatch, mocker):
     _auth()
     _human(monkeypatch)

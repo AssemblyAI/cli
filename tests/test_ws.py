@@ -13,6 +13,7 @@ from aai_cli.errors import APIError, NotAuthenticated
 from aai_cli.ws import (
     WEBSOCKETS_LOGGERS,
     auth_or_api_error,
+    handshake_status,
     is_rejected_key,
     silence_websockets_logging,
 )
@@ -26,9 +27,36 @@ class _HandshakeRejected(Exception):
         self.response = types.SimpleNamespace(status_code=status)
 
 
+class _SdkHandshakeRejected(Exception):
+    """Mimics the assemblyai SDK's StreamingError: the HTTP status on ``.code``.
+
+    The message deliberately contains an auth hint ("forbidden") so the tests can
+    pin that the structured 403 veto wins over the text heuristic.
+    """
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"WebSocket handshake rejected: forbidden (HTTP {status})")
+        self.code = status
+
+
 def test_is_rejected_key_false_for_handshake_403():
     # 403 also covers WAF/region/plan blocks, so it must NOT read as a rejected key.
     assert is_rejected_key(_HandshakeRejected(403)) is False
+
+
+def test_is_rejected_key_false_for_sdk_handshake_403():
+    # The SDK shape (status on ``.code``) follows the same 403-is-not-auth rule as
+    # the websockets shape; without the structured veto, the auth-worded message
+    # ("forbidden") would misclassify this as a rejected key.
+    assert is_rejected_key(_SdkHandshakeRejected(403)) is False
+
+
+def test_handshake_status_reads_both_structured_shapes():
+    assert handshake_status(_SdkHandshakeRejected(401)) == 401
+    assert handshake_status(_HandshakeRejected(403)) == 403
+    assert handshake_status(RuntimeError("network unreachable")) is None
+    # A WebSocket close code (e.g. 1008 policy violation) is not a handshake status.
+    assert handshake_status(types.SimpleNamespace(code=1008)) is None
 
 
 def test_is_rejected_key_true_for_handshake_401():
