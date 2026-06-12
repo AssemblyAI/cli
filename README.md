@@ -6,6 +6,10 @@
 
 The AssemblyAI CLI (`assembly`) brings speech AI to your terminal: transcribe files, URLs, and YouTube/podcast pages, stream live audio, talk to a two-way voice agent, prompt the LLM Gateway, benchmark speech models, and scaffold ready-to-deploy starter apps.
 
+<p align="center">
+  <img src="assets/welcome.png" alt="The assembly CLI welcome screen, listing command groups for transcription, streaming, voice agents, app scaffolding, and account management" width="820">
+</p>
+
 ## 🚀 Why the AssemblyAI CLI?
 
 - **🎯 One command for everything**: transcription, real-time streaming, voice agents, LLM prompts, and WER benchmarking — no SDK boilerplate.
@@ -14,6 +18,75 @@ The AssemblyAI CLI (`assembly`) brings speech AI to your terminal: transcribe fi
 - **🛠️ From demo to deployed app**: `assembly init` scaffolds a runnable FastAPI starter, `assembly dev` / `share` / `deploy` run, tunnel, and ship it, and `--show-code` prints the equivalent Python SDK script for any run command.
 - **🤖 Agent-ready**: `assembly setup install` wires your coding agent up with the AssemblyAI docs MCP server and skills.
 - **📖 Open source**: MIT licensed.
+
+## ✨ Things you can do with it
+
+A few one-liners that show what `assembly` can do. These are the fun ones; the everyday basics live under **Quick examples** below.
+
+**Recreate a scene with synthetic voices** — transcribe and diarize a YouTube clip, then pipe it straight into TTS with a different voice per speaker:
+
+```sh
+assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labels \
+  | assembly --sandbox speak --voice A=jane --voice B=mary --out scene.wav
+```
+
+`speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices. (`speak` is sandbox-only today, hence `--sandbox`.)
+
+**Turn a podcast into audio** — Apple and Spotify podcast pages work too (yt-dlp ingestion):
+
+```sh
+assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speaker-labels \
+  | assembly --sandbox speak --out episode.wav
+```
+
+**Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
+
+```sh
+assembly stream -o text | assembly llm -f "summarize my to-dos as I talk"
+```
+
+**Caption a meeting from system audio** (macOS) — captures app/system audio alongside your mic as separate diarized speakers:
+
+```sh
+assembly stream --system-audio --speaker-labels -o text
+```
+
+**Get pinged when your name comes up** in a live meeting:
+
+```sh
+assembly stream -o text | grep --line-buffered -i alex \
+  | while read -r _; do afplay /System/Library/Sounds/Glass.aiff; done
+```
+
+**Chain LLM prompts over a transcript** — each prompt runs on the finished transcript:
+
+```sh
+assembly transcribe --sample --llm "summarize" --llm "translate the summary to French"
+```
+
+**Talk to a voice agent in your terminal** — full-duplex, around 20 voices:
+
+```sh
+assembly agent --voice ivy --system-prompt "you're a helpful interviewer"
+```
+
+**Graduate to the SDK** — `--show-code` prints the equivalent Python script for any `transcribe`/`stream`/`agent` run instead of executing it:
+
+```sh
+assembly agent --system-prompt "you're a story generator" --show-code > story.py
+```
+
+**Scaffold and deploy a voice agent** — templates: `voice-agent`, `audio-transcription`, `live-captions`:
+
+```sh
+assembly init voice-agent && assembly deploy --prod
+```
+
+**Benchmark WER against public datasets** — built-in aliases for LibriSpeech, TEDLIUM, and more:
+
+```sh
+assembly eval librispeech --speech-model universal-3-pro --limit 50
+```
 
 ## 📦 Installation
 
