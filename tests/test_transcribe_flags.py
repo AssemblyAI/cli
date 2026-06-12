@@ -52,7 +52,7 @@ def _enum_or_str(value):
 def test_transcribe_passes_speaker_labels(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -63,7 +63,7 @@ def test_transcribe_passes_speaker_labels(mocker):
 def test_transcribe_prompt_biases_speech_model(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -76,7 +76,7 @@ def test_transcribe_prompt_biases_speech_model(mocker):
 def test_transcribe_maps_analysis_flags(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -102,7 +102,7 @@ def test_transcribe_maps_analysis_flags(mocker):
 def test_transcribe_redact_pii_policy_csv(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -127,7 +127,7 @@ def test_transcribe_redact_pii_policy_csv(mocker):
 def test_transcribe_config_escape_hatch(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -138,7 +138,7 @@ def test_transcribe_config_escape_hatch(mocker):
 def test_transcribe_unknown_config_field_exits_2(mocker):
     _auth()
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -150,7 +150,7 @@ def test_transcribe_unknown_config_field_exits_2(mocker):
 def test_transcribe_webhook_auth_header(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -173,7 +173,7 @@ def test_transcribe_webhook_auth_header(mocker):
 
 def test_transcribe_negative_audio_start_exits_2(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--audio-start", "-100"])
     assert result.exit_code == 2
     tx.assert_not_called()
@@ -181,7 +181,7 @@ def test_transcribe_negative_audio_start_exits_2(mocker):
 
 def test_transcribe_language_code_with_detection_exits_2(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(
         app,
         ["transcribe", "audio.mp3", "--language-code", "en_us", "--language-detection"],
@@ -195,7 +195,7 @@ def test_transcribe_language_flags_alone_are_accepted(mocker):
     # Only the combination is contradictory; each flag works on its own.
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -209,7 +209,7 @@ def test_transcribe_language_flags_alone_are_accepted(mocker):
 
 def test_transcribe_speakers_expected_without_labels_exits_2(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--speakers-expected", "2"])
     assert result.exit_code == 2
     assert "--speakers-expected only applies when diarization is enabled." in result.output
@@ -220,7 +220,7 @@ def test_transcribe_speakers_expected_without_labels_exits_2(mocker):
 def test_transcribe_speakers_expected_with_labels_is_accepted(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -236,7 +236,7 @@ def test_transcribe_speakers_expected_with_config_speaker_labels_is_accepted(moc
     # runs on the merged config, not just the curated flag.
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -253,7 +253,7 @@ def test_transcribe_temperature_out_of_range_exits_2(mocker, value):
     # The API documents temperature as 0 (most deterministic) to 1 (least); reject
     # out-of-range values client-side instead of letting them flow to the request.
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--temperature", value])
     assert result.exit_code == 2
     tx.assert_not_called()
@@ -263,7 +263,7 @@ def test_transcribe_temperature_out_of_range_exits_2(mocker, value):
 def test_transcribe_temperature_bounds_are_inclusive(mocker, value):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -274,7 +274,7 @@ def test_transcribe_temperature_bounds_are_inclusive(mocker, value):
 
 def test_transcribe_negative_audio_end_exits_2(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--audio-end", "-100"])
     assert result.exit_code == 2
     tx.assert_not_called()
@@ -283,7 +283,7 @@ def test_transcribe_negative_audio_end_exits_2(mocker):
 def test_transcribe_audio_end_zero_is_accepted(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -296,7 +296,7 @@ def test_transcribe_json_with_non_json_output_field_exits_2(mocker):
     # --json means "the full JSON payload" (same as -o json); -o text contradicts it
     # and must not silently win.
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "text", "--json"])
     assert result.exit_code == 2
     assert "--json conflicts with -o text" in result.output
@@ -308,7 +308,7 @@ def test_transcribe_json_with_o_json_is_accepted(mocker):
 
     _auth()
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -321,7 +321,7 @@ def test_transcribe_warns_on_non_audio_extension(mocker, tmp_path):
     _auth()
     (tmp_path / "notes.txt").write_bytes(b"fake")
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -335,7 +335,7 @@ def test_transcribe_non_audio_warning_suppressed_by_quiet(mocker, tmp_path):
     _auth()
     (tmp_path / "notes.txt").write_bytes(b"fake")
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -350,7 +350,7 @@ def test_transcribe_non_audio_warning_is_structured_under_json(mocker, tmp_path)
     _auth()
     (tmp_path / "notes.txt").write_bytes(b"fake")
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -368,7 +368,7 @@ def test_transcribe_no_warning_for_audio_or_extensionless_files(mocker, tmp_path
     _auth()
     (tmp_path / name).write_bytes(b"fake")
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -382,7 +382,7 @@ def test_transcribe_no_warning_for_urls_or_sample(mocker, argv):
     # Remote sources aren't local files; the extension heuristic doesn't apply.
     _auth()
     mocker.patch(
-        "aai_cli.commands.transcribe.client.transcribe",
+        "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -393,7 +393,7 @@ def test_transcribe_no_warning_for_urls_or_sample(mocker, argv):
 
 def test_transcribe_unknown_pii_policy_exits_2_and_lists_valid(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.commands.transcribe.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.transcribe_exec.client.transcribe", autospec=True)
     result = runner.invoke(
         app,
         ["transcribe", "audio.mp3", "--redact-pii", "--redact-pii-policy", "not_a_policy"],

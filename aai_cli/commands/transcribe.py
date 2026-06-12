@@ -5,23 +5,8 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli import (
-    choices,
-    client,
-    code_gen,
-    config_builder,
-    help_panels,
-    llm,
-    options,
-    output,
-    transcribe_batch,
-    transcribe_exec,
-)
-
-# The package attribute `code_gen.transcribe` is the wrapper function, so the module's
-# render() (which also takes the -o output field) is imported from the submodule itself.
-from aai_cli.code_gen.transcribe import render as render_transcribe_code
-from aai_cli.context import AppState, run_command
+from aai_cli import choices, help_panels, llm, options, transcribe_exec
+from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
@@ -361,130 +346,59 @@ def transcribe(
 
     Curated flags cover common features; --config KEY=VALUE and --config-file reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
-
-    def body(state: AppState, json_mode: bool) -> None:
-        transcribe_exec.validate_language_flags(
-            language_code, language_detection=language_detection
-        )
-        pii_policies = config_builder.split_csv(redact_pii_policy)
-        transcribe_exec.validate_pii_policies(pii_policies)
-        flags: dict[str, object] = {
-            "speech_model": config_builder.enum_value(speech_model),
-            "language_code": language_code,
-            "language_detection": language_detection,
-            "keyterms_prompt": list(keyterms_prompt) if keyterms_prompt else None,
-            "temperature": temperature,
-            "prompt": prompt,
-            "punctuate": punctuate,
-            "format_text": format_text,
-            "disfluencies": disfluencies,
-            "speaker_labels": speaker_labels or None,
-            "speakers_expected": speakers_expected,
-            "multichannel": multichannel,
-            "redact_pii": redact_pii,
-            "redact_pii_policies": pii_policies,
-            "redact_pii_sub": config_builder.enum_value(redact_pii_sub),
-            "redact_pii_audio": redact_pii_audio,
-            "filter_profanity": filter_profanity,
-            "content_safety": content_safety,
-            "content_safety_confidence": content_safety_confidence,
-            "speech_threshold": speech_threshold,
-            "summarization": summarization,
-            "summary_model": config_builder.enum_value(summary_model),
-            "summary_type": config_builder.enum_value(summary_type),
-            "auto_chapters": auto_chapters,
-            "sentiment_analysis": sentiment_analysis,
-            "entity_detection": entity_detection,
-            "auto_highlights": auto_highlights,
-            "iab_categories": topic_detection,
-            "word_boost": list(word_boost) if word_boost else None,
-            "custom_spelling": (
-                config_builder.load_custom_spelling(custom_spelling_file)
-                if custom_spelling_file
-                else None
-            ),
-            "audio_start_from": audio_start,
-            "audio_end_at": audio_end,
-            "webhook_url": webhook_url,
-            "speech_understanding": (
-                config_builder.translation_request(list(translate_to)) if translate_to else None
-            ),
-        }
-        flags.update(config_builder.auth_header_flags(webhook_auth_header))
-
-        transcribe_exec.validate_out_with_llm(out, llm_prompt)
-        transcribe_exec.validate_out_path(out)
-        transcribe_exec.validate_json_with_output(output_field, json_mode=json_mode)
-
-        merged = config_builder.merge_transcribe_config(
-            flags=flags, overrides=config_kv, config_file=config_file
-        )
-
-        transcribe_exec.validate_speakers_expected(merged)
-
-        sources = transcribe_batch.expand_sources(source, from_stdin=from_stdin, sample=sample)
-        if sources is not None:
-            transcribe_batch.reject_single_source_flags(
-                out=out, output_field=output_field, llm_prompt=llm_prompt, show_code=show_code
-            )
-            transcribe_batch.run_batch(
-                state.resolve_api_key(),
-                sources,
-                transcription_config=config_builder.construct_transcription_config(merged),
-                concurrency=concurrency,
-                force=force,
-                json_mode=json_mode,
-                quiet=state.quiet,
-            )
-            return
-
-        if show_code:
-            # Print-only: build the equivalent script and exit without transcribing or
-            # authenticating (raw stdout, so `--show-code > script.py` runs). No
-            # source/--sample needed — fall back to a placeholder path for a pure snippet.
-            audio = (
-                client.resolve_audio_source(source, sample=sample, check_local=False)
-                if source or sample
-                else "your-audio-file.mp3"
-            )
-            gateway = code_gen.gateway_options(list(llm_prompt or []), model, max_tokens)
-            output.print_code(
-                render_transcribe_code(
-                    merged,
-                    audio,
-                    llm_gateway=gateway,
-                    output=output_field,
-                    download_sections=list(download_sections or []),
-                )
-            )
-            return
-
-        tc = config_builder.construct_transcription_config(merged)
-
-        # A typo'd path must read as "file not found", not trigger a login.
-        transcribe_exec.check_source_exists(source, sample=sample)
-        transcribe_exec.warn_unrecognized_extension(source, json_mode=json_mode, quiet=state.quiet)
-
-        api_key = state.resolve_api_key()
-        with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
-            transcript = transcribe_exec.run_transcription(
-                api_key,
-                source,
-                sample=sample,
-                transcription_config=tc,
-                download_sections=list(download_sections or []),
-            )
-
-        transcribe_exec.deliver_result(
-            transcript,
-            api_key=api_key,
-            out=out,
-            output_field=output_field,
-            transform=transcribe_exec.TransformOptions(
-                prompts=list(llm_prompt or []), model=model, max_tokens=max_tokens
-            ),
-            json_mode=json_mode,
-            quiet=state.quiet,
-        )
-
-    run_command(ctx, body, json=json_out)
+    opts = transcribe_exec.TranscribeOptions(
+        source=source,
+        sample=sample,
+        from_stdin=from_stdin,
+        concurrency=concurrency,
+        force=force,
+        speech_model=speech_model,
+        language_code=language_code,
+        language_detection=language_detection,
+        keyterms_prompt=keyterms_prompt,
+        temperature=temperature,
+        prompt=prompt,
+        punctuate=punctuate,
+        format_text=format_text,
+        disfluencies=disfluencies,
+        speaker_labels=speaker_labels,
+        speakers_expected=speakers_expected,
+        multichannel=multichannel,
+        redact_pii=redact_pii,
+        redact_pii_policy=redact_pii_policy,
+        redact_pii_sub=redact_pii_sub,
+        redact_pii_audio=redact_pii_audio,
+        filter_profanity=filter_profanity,
+        content_safety=content_safety,
+        content_safety_confidence=content_safety_confidence,
+        speech_threshold=speech_threshold,
+        summarization=summarization,
+        summary_model=summary_model,
+        summary_type=summary_type,
+        auto_chapters=auto_chapters,
+        sentiment_analysis=sentiment_analysis,
+        entity_detection=entity_detection,
+        auto_highlights=auto_highlights,
+        topic_detection=topic_detection,
+        word_boost=word_boost,
+        custom_spelling_file=custom_spelling_file,
+        audio_start=audio_start,
+        audio_end=audio_end,
+        download_sections=download_sections,
+        webhook_url=webhook_url,
+        webhook_auth_header=webhook_auth_header,
+        translate_to=translate_to,
+        config_kv=config_kv,
+        config_file=config_file,
+        llm_prompt=llm_prompt,
+        model=model,
+        max_tokens=max_tokens,
+        output_field=output_field,
+        out=out,
+        show_code=show_code,
+    )
+    run_command(
+        ctx,
+        lambda state, json_mode: transcribe_exec.run_transcribe(opts, state, json_mode=json_mode),
+        json=json_out,
+    )

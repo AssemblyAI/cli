@@ -18,7 +18,7 @@ def audio_file(tmp_path, monkeypatch):
     (tmp_path / "audio.mp3").write_bytes(b"fake-audio")
 
 
-_TRANSCRIBE = "aai_cli.commands.transcribe.client.transcribe"
+_TRANSCRIBE = "aai_cli.transcribe_exec.client.transcribe"
 
 
 def _auth():

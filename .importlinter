@@ -7,6 +7,7 @@ name = Core modules do not import command modules
 type = forbidden
 source_modules =
     aai_cli.agent
+    aai_cli.agent_exec
     aai_cli.argscan
     aai_cli.auth
     aai_cli.client
@@ -24,10 +25,12 @@ source_modules =
     aai_cli.help_text
     aai_cli.init
     aai_cli.llm
+    aai_cli.llm_exec
     aai_cli.microphone
     aai_cli.options
     aai_cli.output
     aai_cli.render
+    aai_cli.speak_exec
     aai_cli.stdio
     aai_cli.stream_exec
     aai_cli.streaming
