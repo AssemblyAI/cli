@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "aai-cli"
-version = "0.1.4"
+dynamic = ["version"]
 description = "Command-line interface for AssemblyAI"
 readme = "README.md"
 license = "MIT"
@@ -110,6 +110,12 @@ dev = [
 # Install the dev group for every `uv run`/`uv sync` (this is uv's default, pinned
 # here so it's explicit and stable).
 default-groups = ["dev"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "aai_cli/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aai_cli"]
