@@ -14,7 +14,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config, eval_data
-from aai_cli.errors import APIError
+from aai_cli.errors import APIError, auth_failure
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -121,6 +121,7 @@ def test_json_payload_shape(tmp_path, mocker):
     assert "der" not in payload
     assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
     assert payload["rows"][1] == {"item": "b.wav", "words": 2, "errors": 1, "wer": 0.5}
+    assert "failed" not in payload  # only present when a row failed
 
 
 def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker):
@@ -308,6 +309,85 @@ def test_api_error_mid_run_fails_cleanly(tmp_path, mocker):
     result = runner.invoke(app, ["eval", "manifest.csv"])
     assert result.exit_code == 1
     assert "rate limited" in result.output
+
+
+def _write_three_row_manifest(tmp_path):
+    for name in ("a.wav", "b.wav", "c.wav"):
+        (tmp_path / name).write_bytes(b"fake-audio")
+    (tmp_path / "manifest.csv").write_text(
+        "audio,text\na.wav,hello there\nb.wav,goodbye now\nc.wav,see you\n", encoding="utf-8"
+    )
+
+
+def test_failed_row_keeps_completed_rows_and_summary_pools_scored_only(tmp_path, mocker):
+    # One bad row must not discard the completed (paid) rows: the run keeps going,
+    # the summary pools only the scored rows, and the exit code is nonzero.
+    _auth()
+    _write_three_row_manifest(tmp_path)
+    _mock_transcribe(
+        mocker,
+        [_transcript("hello there"), APIError("rate limited"), _transcript("see you")],
+    )
+    result = runner.invoke(app, ["eval", "manifest.csv", "--json"])
+    assert result.exit_code == 1
+    payload = _payload_of(result)
+    assert payload["items"] == 3
+    assert payload["failed"] == 1
+    assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
+    assert payload["rows"][1] == {"item": "b.wav", "error": "rate limited"}
+    assert payload["rows"][2] == {"item": "c.wav", "words": 2, "errors": 0, "wer": 0.0}
+    # Pooled over the two scored rows only — the failed row contributes no words.
+    assert payload["words"] == 4
+    assert payload["errors"] == 0
+    assert payload["wer"] == 0.0
+    err = next(
+        json.loads(line) for line in result.output.splitlines() if line.startswith('{"error"')
+    )
+    assert err["error"]["type"] == "eval_failed"
+    assert "1 of 3 items failed" in err["error"]["message"]
+
+
+def test_failed_row_renders_error_column_in_human_table(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), APIError("rate limited")])
+    result = runner.invoke(app, ["eval", "manifest.csv"])
+    assert result.exit_code == 1
+    assert "ERROR" in result.output  # the failure column appears
+    assert "rate limited" in result.output  # with the row's error
+    assert "0.00%" in result.output  # and the scored row still renders
+    assert "1 of 2 items failed" in result.output
+
+
+def test_rejected_key_aborts_eval_with_auth_exit_code(tmp_path, mocker):
+    # A rejected key fails every row identically — abort instead of billing through
+    # the whole dataset, and keep the auth exit code (4), not the eval-failed 1.
+    _auth()
+    _write_wer_manifest(tmp_path)
+    tx = _mock_transcribe(mocker, [auth_failure()])
+    result = runner.invoke(app, ["eval", "manifest.csv"])
+    assert result.exit_code == 4
+    assert tx.call_count == 1  # aborted on the first row, no further billing
+    assert "rejected" in result.output
+
+
+def test_unauthenticated_fails_before_dataset_download(mocker):
+    # Credentials resolve before the dataset loads: a signed-out user must not
+    # pull the whole dataset first.
+    load = mocker.patch("aai_cli.commands.evaluate.eval_data.load", autospec=True)
+    result = runner.invoke(app, ["eval", "org/ds"])
+    assert result.exit_code == 4
+    load.assert_not_called()
+
+
+def test_collar_without_speaker_labels_is_a_usage_error(mocker):
+    # Mirrors transcribe's --speakers-expected guard: a silently inert flag is a bug.
+    tx = mocker.patch("aai_cli.commands.evaluate.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["eval", "org/ds", "--collar", "0.5"])
+    assert result.exit_code == 2
+    assert "--collar only applies" in result.output
+    assert "Add --speaker-labels." in result.output
+    tx.assert_not_called()
 
 
 def test_missing_manifest_is_a_usage_failure(tmp_path):

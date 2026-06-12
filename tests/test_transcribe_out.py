@@ -100,6 +100,44 @@ def test_transcribe_out_with_llm_is_a_usage_error(tmp_path):
     assert not out.exists()
 
 
+def test_transcribe_out_missing_parent_dir_fails_before_transcribing(tmp_path):
+    # The --out path is validated up front: a bad directory must not surface as an
+    # internal error after a billed, possibly long transcription.
+    _auth()
+    out = tmp_path / "no" / "such" / "dir" / "x.txt"
+    with patch(_TRANSCRIBE) as tx:
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--out", str(out)])
+    assert result.exit_code == 2
+    assert "doesn't exist" in result.output
+    tx.assert_not_called()
+    assert not out.exists()
+
+
+def test_transcribe_out_unwritable_parent_dir_fails_before_transcribing(tmp_path, monkeypatch):
+    import os
+
+    from aai_cli import transcribe_exec
+
+    _auth()
+    out = tmp_path / "x.txt"
+    calls = []
+    real_access = os.access
+
+    def fake_access(path, mode, **kwargs):
+        if path == out.parent:
+            calls.append(mode)
+            return False
+        return real_access(path, mode, **kwargs)
+
+    monkeypatch.setattr(transcribe_exec.os, "access", fake_access)
+    with patch(_TRANSCRIBE) as tx:
+        result = runner.invoke(app, ["transcribe", "audio.mp3", "--out", str(out)])
+    assert result.exit_code == 2
+    assert "isn't writable" in result.output
+    tx.assert_not_called()
+    assert calls == [os.W_OK]  # the writability probe, not a read/exec check
+
+
 def test_transcribe_out_rejects_path_traversal(tmp_path):
     # A --out path with a `..` segment is rejected with a clean usage error,
     # before anything is written.

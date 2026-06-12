@@ -116,8 +116,10 @@ def _pick_column(
     for candidate in candidates:
         if candidate in available:
             return candidate
+    noun = candidates[0]
+    article = "an" if noun[0] in "aeiou" else "a"
     raise UsageError(
-        f"Could not find a {candidates[0]} column (columns: {', '.join(available)}).",
+        f"Could not find {article} {noun} column (columns: {', '.join(available)}).",
         suggestion=f"Name it with {flag}.",
     )
 
@@ -220,6 +222,13 @@ def _load_manifest(
             exit_code=2,
             suggestion="Pass a .csv/.jsonl manifest path, or a Hugging Face dataset id.",
         )
+    if path.suffix not in _MANIFEST_SUFFIXES:
+        # Anything else (.parquet, .txt, …) would be parsed as JSONL and fail with a
+        # confusing "line 1 is not valid JSON" — name the real constraint instead.
+        raise UsageError(
+            f"Manifests must be .csv or .jsonl; got '{path.name}'.",
+            suggestion="Convert the manifest, or pass a Hugging Face dataset id.",
+        )
     rows = _manifest_rows(path)
     if not rows:
         raise UsageError(f"Manifest {path.name} has no rows.")
@@ -285,12 +294,35 @@ def _error_detail(resp: httpx.Response) -> str:
     return resp.text
 
 
+# A 401/403 body that mentions one of these reads like HF auth/gating, where a token
+# can actually help; anything else (e.g. a sandbox proxy's "Host not in allowlist")
+# gets the body verbatim instead of a misleading HF_TOKEN hint.
+_GATING_HINTS = ("gated", "private", "auth", "token")
+
+
+def _looks_gating_related(detail: str) -> bool:
+    lowered = detail.lower()
+    return not detail or any(hint in lowered for hint in _GATING_HINTS)
+
+
+def _denied_access_error(resp: httpx.Response, *, dataset: str) -> APIError:
+    detail = _error_detail(resp)
+    message = f"Hugging Face denied access to '{dataset}' (HTTP {resp.status_code})"
+    if detail:
+        message += f": {detail}"
+    return APIError(
+        message,
+        suggestion=(
+            "Gated or private dataset? Set HF_TOKEN to a token that has access."
+            if _looks_gating_related(detail)
+            else None
+        ),
+    )
+
+
 def _checked_payload(resp: httpx.Response, *, dataset: str) -> dict[str, object]:
     if resp.status_code in (401, 403):
-        raise APIError(
-            f"Hugging Face denied access to '{dataset}' (HTTP {resp.status_code}).",
-            suggestion="Gated or private dataset? Set HF_TOKEN to a token that has access.",
-        )
+        raise _denied_access_error(resp, dataset=dataset)
     if resp.status_code == HTTPStatus.NOT_FOUND:
         raise UsageError(
             f"Hugging Face dataset '{dataset}' was not found: {_error_detail(resp)}",

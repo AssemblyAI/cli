@@ -8,6 +8,7 @@ so ``run_transcription`` lives in a core module that ``onboard`` can import dire
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -55,6 +56,56 @@ def validate_out_with_llm(out: Path | None, llm_prompts: list[str] | None) -> No
             "--out can't be combined with --llm.",
             suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
         )
+
+
+def validate_out_path(out: Path | None) -> None:
+    """Reject an unusable ``--out`` up front, before the (billed, possibly long)
+    transcription runs — not after it finishes."""
+    if out is None:
+        return
+    if ".." in out.parts:  # reject path-traversal segments in --out
+        raise UsageError(f"--out path can't contain '..': {out}")
+    parent = out.parent
+    if not parent.is_dir():
+        raise UsageError(
+            f"--out directory doesn't exist: {parent}",
+            suggestion="Create it first, or point --out at an existing directory.",
+        )
+    if not os.access(parent, os.W_OK):
+        raise UsageError(f"--out directory isn't writable: {parent}")
+
+
+def validate_json_with_output(
+    output_field: choices.TranscriptOutput | None, *, json_mode: bool
+) -> None:
+    """``--json`` promises the full JSON payload (same as ``-o json``); any other
+    ``-o`` field contradicts it rather than silently winning."""
+    if json_mode and output_field is not None and output_field is not choices.TranscriptOutput.json:
+        raise UsageError(
+            f"--json conflicts with -o {output_field.value}.",
+            suggestion="Drop --json, or use -o json for the full JSON payload.",
+        )
+
+
+def warn_unrecognized_extension(source: str | None, *, json_mode: bool, quiet: bool) -> None:
+    """Warn when a single local source doesn't carry a known audio extension.
+
+    Directory batch mode filters by ``AUDIO_EXTENSIONS``; single-file mode uploads
+    anything, so a likely-non-audio file (e.g. ``.txt``) gets a stderr heads-up —
+    never an error, since the server is the truth about what it can transcribe.
+    """
+    from aai_cli.transcribe_batch import AUDIO_EXTENSIONS  # avoid a module-load cycle
+
+    if quiet or not source or source.startswith(("http://", "https://")):
+        return
+    suffix = Path(source).suffix.lower()
+    if not suffix or suffix in AUDIO_EXTENSIONS:
+        return
+    output.emit_warning(
+        f"'{source}' has extension '{suffix}', which doesn't look like audio; "
+        "the API decides what it can transcribe.",
+        json_mode=json_mode,
+    )
 
 
 def render_transform_steps(d: dict[str, Any]) -> str:
@@ -139,8 +190,7 @@ def deliver_result(
     transform chain, or the default JSON/human render — first match wins."""
     if out is not None:
         # Write a clean file artifact and confirm on stderr; stdout stays empty.
-        if ".." in out.parts:  # reject path-traversal segments in --out
-            raise UsageError(f"--out path can't contain '..': {out}")
+        # The path itself was validated up front by validate_out_path.
         out.write_text(out_payload(transcript, output_field, json_mode=json_mode) + "\n")
         if not quiet:
             output.error_console.print(output.success(f"Saved to {escape(str(out))}"))

@@ -29,6 +29,20 @@ _SECTION_RANGE_RE = re.compile(
     )?"""
 )
 
+# yt-dlp appends report-a-bug boilerplate ("please report this issue on
+# https://github.com/yt-dlp/yt-dlp/issues… Confirm you are on the latest version using
+# yt-dlp -U") to most extractor errors; it isn't actionable for CLI users, so it is
+# trimmed off before the message reaches our one clean error line.
+_YTDLP_BUG_REPORT_RE = re.compile(r";?\s*please report this issue on .*", re.IGNORECASE | re.DOTALL)
+
+
+def _ytdlp_error_message(exc: BaseException) -> str:
+    """The meaningful part of a yt-dlp failure: its message without the trailing
+    report-a-bug boilerplate or the redundant ``ERROR:`` prefix."""
+    text = _YTDLP_BUG_REPORT_RE.sub("", str(exc)).strip()
+    return text.removeprefix("ERROR:").strip() or str(exc).strip()
+
+
 # yt-dlp's default logger prints its own "ERROR: …" line straight to stderr before the
 # CLI can raise its one clean error, duplicating the message. Route yt-dlp's output to
 # a swallow-everything logger (NullHandler, no propagation) instead.
@@ -175,7 +189,7 @@ def download_audio(url: str, dest_dir: Path, *, download_sections: list[str] | N
             path = Path(ydl.prepare_filename(info))
     except Exception as exc:  # yt-dlp raises many types; surface one clean CLI error
         raise CLIError(
-            f"Could not download audio from {url}: {exc}",
+            f"Could not download audio from {url}: {_ytdlp_error_message(exc)}",
             error_type="youtube_error",
             exit_code=1,
         ) from exc

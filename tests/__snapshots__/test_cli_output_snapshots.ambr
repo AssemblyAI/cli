@@ -291,8 +291,9 @@
   │                                                     columns, in seconds).    │
   │ --collar                  FLOAT RANGE [x>=0.0]      DER forgiveness          │
   │                                                     (seconds) around each    │
-  │                                                     reference turn boundary. │
-  │                                                     [default: 1.0]           │
+  │                                                     reference turn boundary  │
+  │                                                     (default: 1.0; needs     │
+  │                                                     --speaker-labels).       │
   │ --json            -j                                Output the rows and      │
   │                                                     summary as one JSON      │
   │                                                     object.                  │
@@ -1054,8 +1055,8 @@
    with the full result, and a re-run skips sources already transcribed.
   
    Curated flags cover common features; --config KEY=VALUE and --config-file
-   reach
-   every other field. Analysis (summary, chapters, ...) renders in human mode.
+   reach every other field. Analysis (summary, chapters, ...) renders in human
+   mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, or a           │
@@ -1102,8 +1103,9 @@
   │                                                     language.                │
   │ --keyterms-prompt           TEXT                    Boost a key term         │
   │                                                     (repeatable).            │
-  │ --temperature               FLOAT                   Speech model             │
-  │                                                     temperature.             │
+  │ --temperature               FLOAT RANGE             Speech model temperature │
+  │                             [0.0<=x<=1.0]           (0 most deterministic, 1 │
+  │                                                     least).                  │
   │ --prompt                    TEXT                    Prompt to bias the       │
   │                                                     speech model (supported  │
   │                                                     models only).            │
@@ -1159,7 +1161,7 @@
   │ --custom-spelling-file        FILE                  JSON map of custom       │
   │                                                     spellings.               │
   │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms.      │
-  │ --audio-end                   INTEGER               End offset in ms.        │
+  │ --audio-end                   INTEGER RANGE [x>=0]  End offset in ms.        │
   │ --download-sections           TEXT                  For a YouTube/podcast    │
   │                                                     URL, download only part  │
   │                                                     of the source (yt-dlp    │
