@@ -178,6 +178,34 @@ def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
     assert "Traceback" not in result.output
 
 
+def test_run_command_auto_login_persistence_type_error_is_clean(monkeypatch):
+    # The TOML writer raises TypeError for a value it can't serialize. The sign-in
+    # itself succeeded, so the user must see the "could not save the credentials"
+    # message — not the generic "Unexpected error" internal-bug line.
+    _force_interactive(monkeypatch)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda **_: LoginResult(
+            api_key="sk_auto",
+            session_jwt="jwt_auto",
+            session_token="tok_auto",
+            account_id=42,
+        ),
+    )
+    monkeypatch.setattr(
+        "aai_cli.context.config.set_api_key",
+        lambda *_args: (_ for _ in ()).throw(TypeError("not TOML-serializable")),
+    )
+
+    def body(state, json_mode):
+        raise NotAuthenticated()
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 1
+    assert "could not save the credentials" in result.output
+    assert "Unexpected error" not in result.output
+
+
 def test_run_command_auto_login_failure_is_clean(monkeypatch):
     _force_interactive(monkeypatch)
 

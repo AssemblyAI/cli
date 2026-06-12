@@ -47,8 +47,12 @@ def on_audio(indata, outdata, _frames, _time, _status):
 def send_mic(ws):
     while True:
         chunk = mic_queue.get()
-        if ready.is_set():
+        if not ready.is_set():
+            continue
+        try:
             ws.send(json.dumps({{"type": "input.audio", "audio": base64.b64encode(chunk).decode()}}))
+        except Exception:
+            return  # socket closed (session over): end the mic thread quietly
 
 
 stream = sd.RawStream(

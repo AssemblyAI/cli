@@ -50,6 +50,16 @@ def test_agent_render_parses_and_injects_session_fields():
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
 
 
+def test_agent_render_mic_thread_ends_quietly_when_the_socket_closes():
+    # The generated send_mic daemon thread blocks on ws.send(); when the session
+    # ends and the socket closes, that send raises. Without the guard, the thread
+    # would dump a traceback to stderr on every normal exit of the sample script.
+    code = code_gen.agent(voice="ivy", system_prompt="Be terse.", greeting="Hi")
+    ast.parse(code)
+    assert "except Exception:" in code
+    assert "return  # socket closed (session over): end the mic thread quietly" in code
+
+
 def test_agent_render_escapes_quotes_in_prompt():
     import json as _json
 

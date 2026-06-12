@@ -330,6 +330,55 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
     assert daemons and all(d is True for d in daemons)
 
 
+def test_stream_system_audio_parallel_unexpected_worker_error_fails_the_run(monkeypatch):
+    # A non-CLIError bug inside a worker must still fail the run with a clean error:
+    # uncaught, it would die with the daemon thread and the command would exit 0
+    # for a stream that actually failed.
+    config.set_api_key("default", "sk_live")
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([b"system"])
+
+    class FakeMic:
+        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
+            self.sample_rate = target_rate
+
+        def __iter__(self):
+            return iter([b"mic"])
+
+    class ImmediateThread:
+        def __init__(self, *, target, args, daemon):
+            self._target = target
+            self._args = args
+
+        def start(self):
+            self._target(*self._args)
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            return None
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        raise RuntimeError("event parsing blew up")
+
+    monkeypatch.setattr("aai_cli.commands.stream.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
+    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
+    assert result.exit_code == 1
+    # Normalized to a clean worker error that names the source and the cause.
+    assert "Streaming worker" in result.output
+    assert "event parsing blew up" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypatch):
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)

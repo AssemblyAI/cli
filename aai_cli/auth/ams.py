@@ -37,7 +37,16 @@ def _raise_for_error(resp: httpx.Response) -> None:
 
 def _json_or_raise(resp: httpx.Response) -> object:
     _raise_for_error(resp)
-    data: object = resp.json()
+    try:
+        data: object = resp.json()
+    except ValueError as exc:
+        # A 2xx with an unparseable body (proxy interference, truncation) must
+        # surface as a clean AMS error, not escape as a raw JSONDecodeError that
+        # run_command can only report as an internal bug.
+        raise APIError(
+            f"AMS returned a response that is not valid JSON (HTTP {resp.status_code}).",
+            suggestion="Check your network and try again; if it persists, contact support.",
+        ) from exc
     return data
 
 
