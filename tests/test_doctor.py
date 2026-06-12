@@ -99,7 +99,10 @@ def test_doctor_ffmpeg_missing_warns_but_passes(healthy, monkeypatch):
     )
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 0  # a warning never blocks
-    assert _checks(result)["ffmpeg"]["status"] == "warn"
+    ffmpeg = _checks(result)["ffmpeg"]
+    assert ffmpeg["status"] == "warn"
+    # The fix must not be Debian-only — name a non-apt distro too.
+    assert "dnf install ffmpeg" in ffmpeg["fix"]
     assert json.loads(result.output)["ok"] is True
 
 
@@ -230,6 +233,11 @@ def test_check_audio_handles_portaudio_failure(monkeypatch):
     check = doctor.check_audio()
     assert check["status"] == "warn"
     assert "PortAudio" in check["detail"]
+    # The fix must not be Debian-only — name a non-apt install path too.
+    fix = check["fix"]
+    assert fix is not None
+    assert "libportaudio2" in fix
+    assert "dnf install portaudio" in fix
 
 
 def test_probe_input_devices_counts_integer_input_channels(monkeypatch):

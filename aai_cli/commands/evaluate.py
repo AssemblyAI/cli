@@ -8,7 +8,9 @@ builtin; the command itself registers as ``eval``.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from enum import StrEnum
 
 import assemblyai as aai
 import typer
@@ -20,6 +22,14 @@ from aai_cli.errors import CLIError, NotAuthenticated, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+
+class EvalSpeechModel(StrEnum):
+    """The current-generation models, requested via the SDK's ``speech_models``
+    list parameter (its legacy ``SpeechModel`` enum predates them)."""
+
+    universal_3_pro = "universal-3-pro"
+    universal_2 = "universal-2"
 
 
 def _pct(value: object) -> str:
@@ -76,12 +86,91 @@ def _pooled_metrics(results: list[_ItemResult]) -> dict[str, object]:
         metrics.update({"words": total.words, "errors": total.errors, "wer": total.wer})
     der_scores = [result.speakers for result in results if result.speakers is not None]
     if der_scores:
-        metrics["der"] = der.pooled(der_scores).der
+        pooled = der.pooled(der_scores)
+        metrics["der"] = pooled.der
+        metrics["der_breakdown"] = {
+            "missed": pooled.missed / pooled.total,
+            "false_alarm": pooled.false_alarm / pooled.total,
+            "confusion": pooled.confusion / pooled.total,
+        }
     return metrics
 
 
+def _transcribe_one(
+    api_key: str, item: eval_data.EvalItem, config: aai.TranscriptionConfig
+) -> aai.Transcript | CLIError:
+    """One item's outcome: its transcript, or the CLIError it failed with.
+
+    A bad item must not discard the other (paid) items, so per-item failures
+    are recorded rather than raised — except ``NotAuthenticated`` (one rejected
+    key fails every row identically) and non-CLIError bugs, which propagate and
+    abort the run.
+    """
+    try:
+        return client.transcribe(api_key, item.audio, config=config)
+    except NotAuthenticated:
+        raise
+    except CLIError as err:
+        return err
+
+
+def _concurrent_transcripts(
+    api_key: str,
+    items: list[eval_data.EvalItem],
+    *,
+    transcription_config: aai.TranscriptionConfig,
+    concurrency: int,
+) -> list[aai.Transcript | CLIError]:
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [
+            pool.submit(_transcribe_one, api_key, item, transcription_config) for item in items
+        ]
+        for future in as_completed(futures):
+            if (exc := future.exception()) is not None:
+                # Only aborting failures escape _transcribe_one: drop the
+                # not-yet-started items rather than burn an API call on each.
+                pool.shutdown(cancel_futures=True)
+                raise exc
+        return [future.result() for future in futures]
+
+
+def _transcripts(
+    api_key: str,
+    items: list[eval_data.EvalItem],
+    *,
+    transcription_config: aai.TranscriptionConfig,
+    concurrency: int,
+    json_mode: bool,
+    quiet: bool,
+) -> list[aai.Transcript | CLIError]:
+    """Each item's transcript — or the CLIError it failed with — in dataset order.
+
+    Sequential by default, with a per-item spinner; ``--concurrency`` fans the
+    API calls out across a thread pool (see ``_transcribe_one`` for which
+    failures are per-item outcomes and which abort the run).
+    """
+    if concurrency == 1:
+        outcomes: list[aai.Transcript | CLIError] = []
+        for index, item in enumerate(items, start=1):
+            with output.status(
+                f"[{index}/{len(items)}] Transcribing {item.item_id}…",
+                json_mode=json_mode,
+                quiet=quiet,
+            ):
+                outcomes.append(_transcribe_one(api_key, item, transcription_config))
+        return outcomes
+    with output.status(
+        f"Transcribing {len(items)} items (concurrency {concurrency})…",
+        json_mode=json_mode,
+        quiet=quiet,
+    ):
+        return _concurrent_transcripts(
+            api_key, items, transcription_config=transcription_config, concurrency=concurrency
+        )
+
+
 def _payload(
-    label: str, speech_model: aai.SpeechModel | None, results: list[_ItemResult]
+    label: str, speech_model: EvalSpeechModel | None, results: list[_ItemResult]
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "dataset": label,
@@ -105,7 +194,12 @@ def _summary(payload: dict[str, object]) -> str:
             f"WER {_pct(payload.get('wer'))} ({errors} {noun} / {payload.get('words')} words)"
         )
     if "der" in payload:
-        parts.append(f"DER {_pct(payload.get('der'))}")
+        breakdown = jsonshape.as_mapping(payload.get("der_breakdown")) or {}
+        parts.append(
+            f"DER {_pct(payload.get('der'))} (missed {_pct(breakdown.get('missed'))} · "
+            f"false alarm {_pct(breakdown.get('false_alarm'))} · "
+            f"confusion {_pct(breakdown.get('confusion'))})"
+        )
     return output.heading("   ".join(parts))
 
 
@@ -149,26 +243,29 @@ def _render(payload: dict[str, object]) -> RenderableType:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Score a model on 10 rows of an HF dataset", "assembly eval distil-whisper/meanwhile"),
+            (
+                "Score a model on 10 rows of a benchmark",
+                "assembly eval tedlium",
+            ),
             (
                 "Compare models on your own audio",
-                "assembly eval calls.csv --speech-model universal",
+                "assembly eval calls.csv --speech-model universal-3-pro",
             ),
             (
                 "Score diarization too (WER + DER)",
                 "assembly eval agent-calls.jsonl --speaker-labels",
             ),
             (
-                "Pick a subset/split and more rows",
-                "assembly eval openslr/librispeech_asr --subset clean --limit 50",
+                "More rows, transcribed four at a time",
+                "assembly eval librispeech --limit 50 --concurrency 4",
             ),
             (
                 "Evaluate non-English audio",
-                "assembly eval PolyAI/minds14 --subset fr-FR --language-code fr",
+                "assembly eval commonvoice --subset fr --language-code fr",
             ),
             (
-                "DER on a Hugging Face diarization set",
-                "assembly eval diarizers-community/simsamu --speaker-labels",
+                "DER on a diarization benchmark",
+                "assembly eval callhome --speaker-labels",
             ),
         ]
     ),
@@ -192,7 +289,7 @@ def evaluate(
     text_column: str | None = typer.Option(
         None, "--text-column", help="Reference text column name (default: auto-detect)."
     ),
-    speech_model: aai.SpeechModel | None = typer.Option(
+    speech_model: EvalSpeechModel | None = typer.Option(
         None, "--speech-model", help="Speech model to evaluate."
     ),
     language_code: str | None = typer.Option(
@@ -210,6 +307,12 @@ def evaluate(
         help="DER forgiveness (seconds) around each reference turn boundary "
         "(default: 1.0; needs --speaker-labels).",
     ),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        min=1,
+        help="How many items to transcribe at once (sequential by default).",
+    ),
     json_out: bool = options.json_option("Output the rows and summary as one JSON object."),
 ) -> None:
     """Transcribe an evaluation dataset and score WER against its reference texts.
@@ -222,13 +325,16 @@ def evaluate(
     against reference speaker turns.
 
     Datasets come from the Hugging Face Hub (any public dataset its viewer
-    serves with audio + reference columns; gated ones need HF_TOKEN) or a local
-    .csv/.jsonl manifest with audio + text columns. Hub sets to try:
-    openslr/librispeech_asr (read English; subsets clean/other),
-    MLCommons/peoples_speech (real-world US English; subset clean),
-    distil-whisper/meanwhile (long-form English), PolyAI/minds14 (banking
-    calls in 14 locales; subsets like fr-FR), and diarizers-community/simsamu
-    (French dispatch calls with speaker turns, for --speaker-labels).
+    serves with audio + reference columns; gated ones need HF_TOKEN), a local
+    .csv/.jsonl manifest with audio + text columns, or a built-in benchmark
+    alias that fills in the right hub id, subset, split, and columns:
+    librispeech / librispeech-other (read English), tedlium (TED talks),
+    earnings22 (earnings calls), spgispeech (financial calls), ami / ami-sdm
+    (meetings), gigaspeech, peoples (real-world US English), commonvoice
+    (English; --subset fr etc. for its 98 other locales), voxpopuli
+    (parliament speech), switchboard (phone calls), expresso (expressive
+    speech), loquacious, and callhome (phone calls with speaker turns, for
+    --speaker-labels).
     """
 
     def body(state: AppState, json_mode: bool) -> None:
@@ -250,30 +356,28 @@ def evaluate(
             with_speakers=speaker_labels,
         )
         transcription_config = aai.TranscriptionConfig(
-            speech_model=speech_model,
+            speech_models=[speech_model.value] if speech_model else None,
             language_code=language_code,
             speaker_labels=speaker_labels or None,
         )
-        results: list[_ItemResult] = []
-        for index, item in enumerate(data.items, start=1):
-            try:
-                with output.status(
-                    f"[{index}/{len(data.items)}] Transcribing {item.item_id}…",
-                    json_mode=json_mode,
-                    quiet=state.quiet,
-                ):
-                    transcript = client.transcribe(api_key, item.audio, config=transcription_config)
-            except NotAuthenticated:
-                # One rejected key fails every row identically; abort the run.
-                raise
-            except CLIError as err:
-                # One bad row must not discard the completed (paid) rows: record
-                # the failure, keep scoring the rest, and exit nonzero at the end.
-                results.append(_failed_result(item, err))
-                continue
-            results.append(
-                _score_item(item, transcript, collar=collar if collar is not None else 1.0)
+        outcomes = _transcripts(
+            api_key,
+            data.items,
+            transcription_config=transcription_config,
+            concurrency=concurrency,
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        results = [
+            _failed_result(item, outcome)
+            if isinstance(outcome, CLIError)
+            else _score_item(item, outcome, collar=collar if collar is not None else 1.0)
+            for item, outcome in zip(
+                data.items,
+                outcomes,
+                strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one outcome per item)
             )
+        ]
         payload = _payload(data.label, speech_model, results)
         output.emit(payload, _render, json_mode=json_mode)
         failed = jsonshape.as_int(payload.get("failed"))

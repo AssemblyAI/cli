@@ -16,5 +16,8 @@ def resolve_optional_api_key(*, profile: str | None) -> tuple[str | None, str | 
     key = config.resolve_api_key_optional(profile=profile)
     if key is None:
         return None, None
-    source = "environment" if os.environ.get(config.ENV_API_KEY) else "keyring"
+    # Mirror resolve_api_key's whitespace handling: a blank env var is "unset",
+    # so a key that actually came from the keyring must not report "environment".
+    env_value = os.environ.get(config.ENV_API_KEY, "").strip()
+    source = "environment" if env_value else "keyring"
     return key, source

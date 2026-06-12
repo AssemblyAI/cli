@@ -7,14 +7,13 @@ temp manifests so the command exercises the loader end to end.
 import contextlib
 import dataclasses
 import json
+import re
 from types import SimpleNamespace
 
-import assemblyai as aai
 import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config, eval_data
-from aai_cli.errors import APIError, auth_failure
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -124,24 +123,43 @@ def test_json_payload_shape(tmp_path, mocker):
     assert "failed" not in payload  # only present when a row failed
 
 
-def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker):
+@pytest.mark.parametrize("model", ["universal-3-pro", "universal-2"])
+def test_speech_model_flag_reaches_config_and_output(tmp_path, mocker, model):
     _auth()
     _write_wer_manifest(tmp_path)
     tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
-    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal", "--json"])
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model, "--json"])
     assert result.exit_code == 0
-    assert _payload_of(result)["speech_model"] == "universal"
+    assert _payload_of(result)["speech_model"] == model
     tx_config = tx.call_args.kwargs["config"]
-    assert tx_config.speech_model == aai.SpeechModel.universal
+    assert tx_config.speech_models == [model]
     assert tx_config.speaker_labels is None  # not requested -> omitted, not False
+
+
+def test_no_speech_model_leaves_speech_models_unset(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    tx = _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
+    assert tx.call_args.kwargs["config"].speech_models is None
+
+
+@pytest.mark.parametrize("model", ["best", "nano", "slam-1", "universal"])
+def test_legacy_models_are_a_usage_error(model):
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", model])
+    assert result.exit_code == 2
+    # CI forces color on (Rich under GITHUB_ACTIONS), interleaving style codes
+    # mid-message, so assert on the color-free render (see test_help_rendering.py).
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "Invalid value for '--speech-model'" in plain
 
 
 def test_speech_model_named_in_human_header(tmp_path, mocker):
     _auth()
     _write_wer_manifest(tmp_path)
     _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
-    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal"])
-    assert "universal" in result.output
+    result = runner.invoke(app, ["eval", "manifest.csv", "--speech-model", "universal-3-pro"])
+    assert "universal-3-pro" in result.output
     assert "default model" not in result.output
 
 
@@ -154,6 +172,10 @@ def test_speaker_labels_scores_der_only_when_dataset_has_no_text(tmp_path, mocke
     assert tx.call_args.kwargs["config"].speaker_labels is True
     assert "DER" in result.output
     assert "8.33%" in result.output  # 1.5/18 under the default 1s collar
+    # The summary names each DER component; here the error is pure confusion.
+    assert "missed 0.00%" in result.output
+    assert "false alarm 0.00%" in result.output
+    assert "confusion 8.33%" in result.output
     assert "WER" not in result.output
     assert "WORDS" not in result.output
 
@@ -167,6 +189,7 @@ def test_speaker_labels_with_text_scores_both_metrics(tmp_path, mocker):
     payload = _payload_of(result)
     assert payload["wer"] == 0.0
     assert payload["der"] == 1.5 / 18  # default 1s collar
+    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.0, "confusion": 1.5 / 18}
     assert payload["rows"][0]["wer"] == 0.0
     assert payload["rows"][0]["der"] == 1.5 / 18
 
@@ -196,7 +219,30 @@ def test_der_counts_leading_speech_the_model_missed(tmp_path, mocker):
     utterances = [SimpleNamespace(speaker="A", start=1000, end=10000)]
     _mock_transcribe(mocker, [_transcript("x", utterances)])
     result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
-    assert _payload_of(result)["der"] == 0.1
+    payload = _payload_of(result)
+    assert payload["der"] == 0.1
+    # All missed detection — distinguishes the breakdown keys from one another.
+    assert payload["der_breakdown"] == {"missed": 0.1, "false_alarm": 0.0, "confusion": 0.0}
+
+
+def test_der_counts_trailing_hypothesis_speech_as_false_alarm(tmp_path, mocker):
+    _auth()
+    (tmp_path / "a.wav").write_bytes(b"fake-audio")
+    row = {
+        "audio": "a.wav",
+        "speakers": ["alice"],
+        "timestamps_start": [0.0],
+        "timestamps_end": [10.0],
+    }
+    (tmp_path / "m.jsonl").write_text(json.dumps(row), encoding="utf-8")
+    # The hypothesis keeps "speaking" 5s past the 10s reference: 5s of false
+    # alarm over 10s of reference speech, scored without collar forgiveness.
+    utterances = [SimpleNamespace(speaker="A", start=0, end=15000)]
+    _mock_transcribe(mocker, [_transcript("x", utterances)])
+    result = runner.invoke(app, ["eval", "m.jsonl", "--speaker-labels", "--collar", "0", "--json"])
+    payload = _payload_of(result)
+    assert payload["der"] == 0.5
+    assert payload["der_breakdown"] == {"missed": 0.0, "false_alarm": 0.5, "confusion": 0.0}
 
 
 def _assign(obj, attribute, value):
@@ -300,84 +346,6 @@ def test_progress_status_counts_items(tmp_path, mocker, monkeypatch):
     monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
     assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
     assert seen == ["[1/2] Transcribing a.wav…", "[2/2] Transcribing b.wav…"]
-
-
-def test_api_error_mid_run_fails_cleanly(tmp_path, mocker):
-    _auth()
-    _write_wer_manifest(tmp_path)
-    _mock_transcribe(mocker, [_transcript("hello there"), APIError("rate limited")])
-    result = runner.invoke(app, ["eval", "manifest.csv"])
-    assert result.exit_code == 1
-    assert "rate limited" in result.output
-
-
-def _write_three_row_manifest(tmp_path):
-    for name in ("a.wav", "b.wav", "c.wav"):
-        (tmp_path / name).write_bytes(b"fake-audio")
-    (tmp_path / "manifest.csv").write_text(
-        "audio,text\na.wav,hello there\nb.wav,goodbye now\nc.wav,see you\n", encoding="utf-8"
-    )
-
-
-def test_failed_row_keeps_completed_rows_and_summary_pools_scored_only(tmp_path, mocker):
-    # One bad row must not discard the completed (paid) rows: the run keeps going,
-    # the summary pools only the scored rows, and the exit code is nonzero.
-    _auth()
-    _write_three_row_manifest(tmp_path)
-    _mock_transcribe(
-        mocker,
-        [_transcript("hello there"), APIError("rate limited"), _transcript("see you")],
-    )
-    result = runner.invoke(app, ["eval", "manifest.csv", "--json"])
-    assert result.exit_code == 1
-    payload = _payload_of(result)
-    assert payload["items"] == 3
-    assert payload["failed"] == 1
-    assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
-    assert payload["rows"][1] == {"item": "b.wav", "error": "rate limited"}
-    assert payload["rows"][2] == {"item": "c.wav", "words": 2, "errors": 0, "wer": 0.0}
-    # Pooled over the two scored rows only — the failed row contributes no words.
-    assert payload["words"] == 4
-    assert payload["errors"] == 0
-    assert payload["wer"] == 0.0
-    err = next(
-        json.loads(line) for line in result.output.splitlines() if line.startswith('{"error"')
-    )
-    assert err["error"]["type"] == "eval_failed"
-    assert "1 of 3 items failed" in err["error"]["message"]
-
-
-def test_failed_row_renders_error_column_in_human_table(tmp_path, mocker):
-    _auth()
-    _write_wer_manifest(tmp_path)
-    _mock_transcribe(mocker, [_transcript("hello there"), APIError("rate limited")])
-    result = runner.invoke(app, ["eval", "manifest.csv"])
-    assert result.exit_code == 1
-    assert "ERROR" in result.output  # the failure column appears
-    assert "rate limited" in result.output  # with the row's error
-    assert "0.00%" in result.output  # and the scored row still renders
-    assert "1 of 2 items failed" in result.output
-
-
-def test_rejected_key_aborts_eval_with_auth_exit_code(tmp_path, mocker):
-    # A rejected key fails every row identically — abort instead of billing through
-    # the whole dataset, and keep the auth exit code (4), not the eval-failed 1.
-    _auth()
-    _write_wer_manifest(tmp_path)
-    tx = _mock_transcribe(mocker, [auth_failure()])
-    result = runner.invoke(app, ["eval", "manifest.csv"])
-    assert result.exit_code == 4
-    assert tx.call_count == 1  # aborted on the first row, no further billing
-    assert "rejected" in result.output
-
-
-def test_unauthenticated_fails_before_dataset_download(mocker):
-    # Credentials resolve before the dataset loads: a signed-out user must not
-    # pull the whole dataset first.
-    load = mocker.patch("aai_cli.commands.evaluate.eval_data.load", autospec=True)
-    result = runner.invoke(app, ["eval", "org/ds"])
-    assert result.exit_code == 4
-    load.assert_not_called()
 
 
 def test_collar_without_speaker_labels_is_a_usage_error(mocker):

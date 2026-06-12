@@ -137,7 +137,10 @@ def check_ffmpeg() -> Check:
             "transcription (including YouTube) works without it, as does streaming a "
             "16 kHz mono WAV."
         ),
-        fix="Install ffmpeg (macOS: brew install ffmpeg; Debian/Ubuntu: apt-get install ffmpeg).",
+        fix=(
+            "Install ffmpeg (macOS: brew install ffmpeg; Debian/Ubuntu: apt-get install "
+            "ffmpeg; Fedora: dnf install ffmpeg; Windows: winget install ffmpeg)."
+        ),
         affects=["stream/agent (non-WAV file or URL input)"],
     )
 
@@ -178,7 +181,10 @@ def check_audio() -> Check:
             "audio",
             "warn",
             f"audio system unavailable: {exc}",
-            fix="On Linux install PortAudio: sudo apt-get install libportaudio2",
+            fix=(
+                "Install PortAudio (Debian/Ubuntu: sudo apt-get install libportaudio2; "
+                "Fedora: sudo dnf install portaudio; macOS: brew install portaudio)."
+            ),
             affects=affects,
         )
     if inputs == 0:

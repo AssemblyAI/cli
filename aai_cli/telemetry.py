@@ -139,12 +139,20 @@ def build_event(
     arguments or options), the outcome class, and coarse machine facts. The
     device id is a random UUID minted locally — no account id, email, or
     hostname ever rides along.
+
+    A failure additionally sets ``status: error`` and the reserved
+    ``error.kind`` so the event feeds Datadog **Error Tracking** (issue
+    grouping), not just log search. ``error.kind`` reuses the anonymous
+    ``outcome`` (the ``CLIError.error_type``) — the error *message* and stack
+    trace are deliberately omitted, so no free text or PII ever rides along.
     """
-    return {
+    succeeded = outcome == "success"
+    event: dict[str, object] = {
         "ddsource": "aai-cli",
         "service": "aai-cli",
         "ddtags": f"version:{__version__}",
         "message": f"{command} {outcome}",
+        "status": "info" if succeeded else "error",
         "command": command,
         "outcome": outcome,
         "exit_code": exit_code,
@@ -155,6 +163,9 @@ def build_event(
         "ci": bool(os.environ.get("CI")),
         "device_id": config.get_device_id(),
     }
+    if not succeeded:
+        event["error"] = {"kind": outcome}
+    return event
 
 
 def dispatch(event: Mapping[str, object]) -> None:

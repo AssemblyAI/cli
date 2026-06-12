@@ -150,6 +150,24 @@ def test_init_reports_key_written_from_keyring(tmp_path, monkeypatch):
     assert key_row["detail"] == "from keyring"
 
 
+def test_init_blank_env_var_reports_keyring_source(tmp_path, monkeypatch):
+    # A whitespace-only ASSEMBLYAI_API_KEY is "unset" to the key chain, so a key
+    # that actually resolved from the keyring must not be attributed to the env.
+    import json
+
+    from aai_cli import config
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "   ")
+    config.set_api_key("default", "sk-stored")
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    key_row = next(s for s in payload if s["name"] == "key")
+    assert key_row["status"] == "written"
+    assert key_row["detail"] == "from keyring"
+
+
 def test_init_no_install_hint_carries_custom_port(tmp_path, monkeypatch):
     # `--no-install --port N` signs off with `assembly dev --port N`, not a bare
     # `assembly dev` that would boot the default port instead.

@@ -9,6 +9,8 @@ Two source shapes, one output: a list of (audio, reference-text) items.
   fetched through the hub's datasets-server REST API — no heavyweight
   ``datasets`` dependency, and the audio arrives as hosted URLs the AssemblyAI
   API ingests directly. Gated/private datasets authenticate via ``HF_TOKEN``.
+  The common benchmarks also have short **aliases** (``ALIASES``) that fill in
+  the hub id plus the subset/split/audio-column defaults each set needs.
 
 With ``with_speakers`` (the ``--speaker-labels`` flag), rows must also carry
 diarization references as the parallel ``speakers`` / ``timestamps_start`` /
@@ -20,19 +22,13 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import re
 from dataclasses import dataclass
-from http import HTTPStatus
 from pathlib import Path
 
-import httpx2 as httpx
-
-from aai_cli import der, jsonshape, wer
+from aai_cli import der, eval_hf_api, jsonshape, wer
 from aai_cli.errors import APIError, CLIError, UsageError
 
-_DATASETS_SERVER = "https://datasets-server.huggingface.co"
-_TIMEOUT = 30.0  # pragma: no mutate (request timeout; nothing observable to assert)
 _MANIFEST_SUFFIXES = (".csv", ".jsonl")
 # Hub ids are `name` or `namespace/name`; rejecting anything else keeps a typo'd
 # local path from being sent to the hub as if it were a dataset id.
@@ -45,6 +41,39 @@ _TEXT_COLUMNS = ("text", "sentence", "transcription", "transcript", "normalized_
 # Diarization references: the parallel-array convention the Hugging Face
 # diarization datasets (diarizers-community/*) use, in seconds.
 _SPEAKER_COLUMNS = ("speakers", "timestamps_start", "timestamps_end")
+
+
+@dataclass(frozen=True)
+class Alias:
+    """A built-in benchmark alias: the hub dataset id plus the subset/split/
+    audio-column defaults its layout needs (explicit flags still win)."""
+
+    dataset: str
+    subset: str | None = None
+    split: str | None = None
+    audio_column: str | None = None
+
+
+# The benchmarks the `assembly eval` help recommends, under short memorable names
+# — each pins the hub id and the fiddly defaults its layout needs, so
+# `assembly eval tedlium` just works.
+ALIASES: dict[str, Alias] = {
+    "librispeech": Alias("openslr/librispeech_asr", subset="clean"),
+    "librispeech-other": Alias("openslr/librispeech_asr", subset="other"),
+    "tedlium": Alias("sanchit-gandhi/tedlium-data"),
+    "earnings22": Alias("sanchit-gandhi/earnings22_robust_split"),
+    "spgispeech": Alias("kensho/spgispeech", subset="test"),
+    "ami": Alias("edinburghcstr/ami", subset="ihm"),
+    "ami-sdm": Alias("edinburghcstr/ami", subset="sdm"),
+    "gigaspeech": Alias("fixie-ai/gigaspeech", subset="dev", split="dev"),
+    "peoples": Alias("fixie-ai/peoples_speech", subset="clean"),
+    "commonvoice": Alias("fixie-ai/common_voice_17_0", subset="en"),
+    "voxpopuli": Alias("facebook/voxpopuli", subset="en"),
+    "switchboard": Alias("hhoangphuoc/switchboard", split="validation"),
+    "expresso": Alias("ylacombe/expresso"),
+    "loquacious": Alias("speechbrain/LoquaciousSet", subset="small", audio_column="wav"),
+    "callhome": Alias("talkbank/callhome", subset="eng"),
+}
 
 
 @dataclass(frozen=True)
@@ -91,6 +120,12 @@ def load(
             limit=limit,
             with_speakers=with_speakers,
         )
+    alias = ALIASES.get(dataset)
+    if alias is not None:
+        dataset = alias.dataset
+        subset = subset or alias.subset
+        split = split or alias.split
+        audio_column = audio_column or alias.audio_column
     return _load_hf(
         dataset,
         split=split,
@@ -283,123 +318,6 @@ def _manifest_item(
 # ------------------------------------------------------- Hugging Face datasets
 
 
-def _error_detail(resp: httpx.Response) -> str:
-    try:
-        body: object = resp.json()
-    except ValueError:
-        return resp.text
-    mapping = jsonshape.as_mapping(body)
-    if mapping is not None and "error" in mapping:
-        return str(mapping["error"])
-    return resp.text
-
-
-# A 401/403 body that mentions one of these reads like HF auth/gating, where a token
-# can actually help; anything else (e.g. a sandbox proxy's "Host not in allowlist")
-# gets the body verbatim instead of a misleading HF_TOKEN hint.
-_GATING_HINTS = ("gated", "private", "auth", "token")
-
-
-def _looks_gating_related(detail: str) -> bool:
-    lowered = detail.lower()
-    return not detail or any(hint in lowered for hint in _GATING_HINTS)
-
-
-def _denied_access_error(resp: httpx.Response, *, dataset: str) -> APIError:
-    detail = _error_detail(resp)
-    message = f"Hugging Face denied access to '{dataset}' (HTTP {resp.status_code})"
-    if detail:
-        message += f": {detail}"
-    return APIError(
-        message,
-        suggestion=(
-            "Gated or private dataset? Set HF_TOKEN to a token that has access."
-            if _looks_gating_related(detail)
-            else None
-        ),
-    )
-
-
-def _checked_payload(resp: httpx.Response, *, dataset: str) -> dict[str, object]:
-    if resp.status_code in (401, 403):
-        raise _denied_access_error(resp, dataset=dataset)
-    if resp.status_code == HTTPStatus.NOT_FOUND:
-        raise UsageError(
-            f"Hugging Face dataset '{dataset}' was not found: {_error_detail(resp)}",
-            suggestion="Check the dataset id, e.g. 'distil-whisper/meanwhile'.",
-        )
-    if resp.status_code != HTTPStatus.OK:
-        raise APIError(
-            f"Hugging Face datasets server error (HTTP {resp.status_code}): {_error_detail(resp)}"
-        )
-    try:
-        data: object = resp.json()
-    except ValueError as exc:
-        raise APIError("Hugging Face datasets server returned invalid JSON.") from exc
-    mapping = jsonshape.as_mapping(data)
-    if mapping is None:
-        raise APIError(
-            "Hugging Face datasets server returned unexpected JSON (expected an object)."
-        )
-    return mapping
-
-
-def _fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> dict[str, object]:
-    token = os.environ.get("HF_TOKEN")
-    headers = {"authorization": f"Bearer {token}"} if token else {}
-    try:
-        with httpx.Client(base_url=_DATASETS_SERVER, timeout=_TIMEOUT, headers=headers) as client:
-            resp = client.get(endpoint, params=params)
-    except httpx.HTTPError as exc:
-        raise APIError(f"Could not reach the Hugging Face datasets server: {exc}") from exc
-    return _checked_payload(resp, dataset=dataset)
-
-
-def _split_entries(dataset: str) -> list[dict[str, object]]:
-    payload = _fetch_json("/splits", {"dataset": dataset}, dataset=dataset)
-    entries = jsonshape.mapping_list(payload.get("splits"))
-    if not entries:
-        raise APIError(f"Hugging Face reports no splits for '{dataset}'.")
-    return entries
-
-
-def _pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: str) -> str:
-    configs = list(dict.fromkeys(str(entry.get("config")) for entry in entries))
-    if subset is not None:
-        if subset in configs:
-            return subset
-        raise UsageError(f"'{dataset}' has no subset '{subset}' (subsets: {', '.join(configs)}).")
-    if len(configs) == 1:
-        return configs[0]
-    if "default" in configs:
-        return "default"
-    raise UsageError(
-        f"'{dataset}' has multiple subsets: {', '.join(configs)}.",
-        suggestion="Pick one with --subset.",
-    )
-
-
-def _pick_split(
-    entries: list[dict[str, object]], config: str, split: str | None, dataset: str
-) -> str:
-    splits = [str(entry.get("split")) for entry in entries if str(entry.get("config")) == config]
-    if split is not None:
-        if split in splits:
-            return split
-        raise UsageError(
-            f"'{dataset}' has no '{split}' split in subset '{config}' "
-            f"(splits: {', '.join(splits)})."
-        )
-    if "test" in splits:
-        return "test"
-    if len(splits) == 1:
-        return splits[0]
-    raise UsageError(
-        f"'{dataset}' has several splits in subset '{config}': {', '.join(splits)}.",
-        suggestion="Pick one with --split (eval sets usually score 'test').",
-    )
-
-
 def _audio_source(cell: object, *, column: str, item_id: str) -> str:
     """The audio URL out of a datasets-server cell: a bare string, or the first
     ``src`` of the ``[{"src": …, "type": …}]`` shape audio columns render as."""
@@ -448,10 +366,10 @@ def _load_hf(
             f"'{dataset}' is neither a local .csv/.jsonl manifest nor a Hugging Face dataset id.",
             suggestion="Pass a manifest path, or an id like 'distil-whisper/meanwhile'.",
         )
-    entries = _split_entries(dataset)
-    config = _pick_subset(entries, subset, dataset)
-    split_name = _pick_split(entries, config, split, dataset)
-    payload = _fetch_json(
+    entries = eval_hf_api.split_entries(dataset)
+    config = eval_hf_api.pick_subset(entries, subset, dataset)
+    split_name = eval_hf_api.pick_split(entries, config, split, dataset)
+    payload = eval_hf_api.fetch_json(
         "/rows",
         {"dataset": dataset, "config": config, "split": split_name, "offset": 0, "length": limit},
         dataset=dataset,

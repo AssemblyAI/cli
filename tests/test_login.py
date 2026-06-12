@@ -26,6 +26,9 @@ def test_login_rejects_invalid_key(mocker):
     result = runner.invoke(app, ["login", "--api-key", "sk_bad"])
     assert result.exit_code != 0
     assert config.get_api_key("default") is None
+    # is_auth_failure treats 401 *and* 403 as a rejected key (corporate proxies
+    # often answer 403), so the message must not claim a specific 401.
+    assert "rejected (HTTP 401/403)" in result.output
 
 
 def test_login_stores_under_named_profile(mocker):

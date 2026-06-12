@@ -17,15 +17,21 @@ The AssemblyAI CLI (`assembly`) brings speech AI to your terminal: transcribe fi
 
 ## 📦 Installation
 
+Requires Python 3.12+ (Homebrew brings its own; for pipx/uv see the `--python` hint below).
+
+> ⚠️ The `assemblyai-cli` package on PyPI is **not** this project — install with one of the
+> commands below, not `pip install assemblyai-cli`.
+
 ### Homebrew (recommended — macOS / Linux)
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
-brew trust assemblyai/cli
+brew trust assemblyai/cli   # only needed when HOMEBREW_REQUIRE_TAP_TRUST is set; harmless otherwise
 brew install assembly
 ```
 
-Homebrew pulls in `ffmpeg` and `portaudio`, so `transcribe`, `stream`, and `agent` work out of the box.
+Homebrew pulls in `ffmpeg` and `portaudio`, so `stream` and `agent` work out of the box.
+Plain `transcribe` uploads your file directly and needs neither.
 
 ### pipx / uv
 
@@ -41,7 +47,13 @@ Or with uv:
 uv tool install "git+https://github.com/AssemblyAI/cli.git"
 ```
 
-Requires Python 3.12+. On Linux, install PortAudio once for microphone support (`sudo apt-get install libportaudio2`), and have [`ffmpeg`](https://ffmpeg.org) on `PATH` to decode non-WAV audio.
+If your default interpreter is older than Python 3.12, add `--python python3.12` (pipx) or
+`--python 3.12` (uv) to the install command.
+
+Only `stream` and `agent` need extras: on Linux, install PortAudio once for microphone support
+(Debian/Ubuntu: `sudo apt-get install libportaudio2`; Fedora: `sudo dnf install portaudio`), and
+have [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream non-WAV audio. Plain `transcribe` needs
+neither.
 
 ## 📋 Key Features
 
@@ -50,12 +62,15 @@ Requires Python 3.12+. On Linux, install PortAudio once for microphone support (
 - **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
 - **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal (use headphones).
 - **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
-- **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset or a local `.csv`/`.jsonl` manifest and scores WER against its references (plus DER with `--speaker-labels`) — handy for picking a speech model.
+- **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset (with built-in aliases for common benchmarks: `assembly eval tedlium`) or a local `.csv`/`.jsonl` manifest and scores WER against its references (plus DER with `--speaker-labels`) — handy for picking a speech model.
 - **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`).
 - **Code generation**: add `--show-code` to `transcribe`/`stream`/`agent` to print the equivalent Python SDK script instead of running.
 - **Account self-service**: `assembly keys` / `balance` / `usage` / `limits` / `sessions` / `audit` via browser login.
 
 ## 🔐 Authentication
+
+New to AssemblyAI? Create a free account at
+[assemblyai.com/dashboard](https://www.assemblyai.com/dashboard) to get an API key.
 
 ### Option 1: Browser login (recommended)
 
@@ -95,7 +110,13 @@ Then your own audio:
 assembly transcribe call.mp3
 ```
 
-Stream the microphone live (Ctrl-C to stop):
+Stream the hosted sample live (no microphone needed):
+
+```sh
+assembly stream --sample
+```
+
+Or stream your microphone (Ctrl-C to stop):
 
 ```sh
 assembly stream
