@@ -6,7 +6,7 @@ from rich.markup import escape
 from aai_cli import jsonshape, options, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, resolve_session, run_command
-from aai_cli.errors import APIError
+from aai_cli.errors import APIError, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
@@ -119,6 +119,13 @@ def create(
     """Create a new API key. Prints the key value once — copy it now."""
 
     def body(state: AppState, json_mode: bool) -> None:
+        # Validate locally before any auth/network work: an empty or whitespace-only
+        # label would otherwise cost a session resolution plus an AMS round-trip.
+        if not name.strip():
+            raise UsageError(
+                "--name must not be empty.",
+                suggestion="Pass a label for the key, e.g. --name ci-pipeline.",
+            )
         account_id, jwt = resolve_session(state)
         pid = project_id if project_id is not None else _default_project_id(account_id, jwt)
         created = ams.create_token(account_id, pid, name, jwt)

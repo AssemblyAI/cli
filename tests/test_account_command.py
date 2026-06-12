@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli import config
@@ -14,7 +15,7 @@ def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
     )
@@ -328,7 +329,7 @@ def test_usage_rejects_invalid_date(mocker):
 def test_usage_invalid_date_fails_before_session_resolution(monkeypatch, mocker):
     # Not logged in + a bad --start/--end: date validation must run before
     # resolve_session, so the user gets a fast exit-2 usage error, not a login flow.
-    def _no_login():
+    def _no_login(**_kwargs):
         raise AssertionError("login flow must not start for an invalid date")
 
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
@@ -385,3 +386,56 @@ def test_format_usage_number_fractional_trims_trailing_zeros():
     assert account._format_usage_number(1234.5) == "1,234.5"
     assert account._format_usage_number(0.000001) == "0.000001"
     assert account._format_usage_number(2.5000004) == "2.5"
+
+
+def test_usage_rejects_end_before_start(monkeypatch, mocker):
+    # A reversed range is a fast exit-2 usage error before session resolution or
+    # any AMS call — even when not logged in.
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
+    )
+    get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
+    result = runner.invoke(app, ["usage", "--start", "2026-06-01", "--end", "2026-01-01"])
+    assert result.exit_code == 2
+    assert "is before" in result.output
+    get_usage.assert_not_called()
+
+
+def test_usage_allows_equal_start_and_end(mocker):
+    # A single-day range (end == start) is valid: pins the strict `<` in the check.
+    _auth()
+    get_usage = mocker.patch(
+        "aai_cli.commands.account.ams.get_usage", autospec=True, return_value={"usage_items": []}
+    )
+    result = runner.invoke(app, ["usage", "--start", "2026-01-01", "--end", "2026-01-01", "--json"])
+    assert result.exit_code == 0
+    get_usage.assert_called_once()
+
+
+def test_usage_rejects_unknown_window(monkeypatch, mocker):
+    # --window was free text silently misinterpreted server-side; now it's validated
+    # client-side, before session resolution or any AMS call.
+    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr(
+        "aai_cli.context.run_login_flow",
+        lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
+    )
+    get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
+    result = runner.invoke(app, ["usage", "--window", "fortnight"])
+    assert result.exit_code == 2
+    assert "Invalid --window" in result.output
+    assert "day, week, month" in result.output
+    get_usage.assert_not_called()
+
+
+@pytest.mark.parametrize("window", ["day", "week", "month"])
+def test_usage_accepts_each_known_window(mocker, window):
+    _auth()
+    get_usage = mocker.patch(
+        "aai_cli.commands.account.ams.get_usage", autospec=True, return_value={"usage_items": []}
+    )
+    result = runner.invoke(app, ["usage", "--window", window, "--json"])
+    assert result.exit_code == 0
+    assert get_usage.call_args[0][3] == window  # passed through to AMS unchanged

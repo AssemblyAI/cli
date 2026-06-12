@@ -61,6 +61,16 @@ class StoredSession(BaseModel):
     token: str = ""
 
 
+def validate_profile(name: str) -> None:
+    """Reject profile names that aren't simple identifiers.
+
+    Public so resolution-time callers (``context.AppState.resolve_profile``) can
+    fail fast on a typo'd ``--profile`` before any network work, instead of only
+    tripping over it at keyring-write time.
+    """
+    _validate_profile(name)
+
+
 def _validate_profile(name: str) -> None:
     if not _PROFILE_RE.match(name):
         from aai_cli.errors import CLIError
@@ -395,8 +405,12 @@ def set_update_cache(*, last_check: float, latest_version: str | None) -> None:
 
 
 def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = None) -> str:
+    # Values are stripped at every tier: a whitespace-only key (e.g. a botched
+    # `export ASSEMBLYAI_API_KEY='   '`) must read as "no key" (the clean exit-4
+    # not-signed-in path), not get sent as an illegal HTTP header byte string.
     if api_key_flag is not None:
-        if not api_key_flag:
+        flag_key = api_key_flag.strip()
+        if not flag_key:
             from aai_cli.errors import CLIError
 
             raise CLIError(
@@ -405,12 +419,12 @@ def resolve_api_key(*, profile: str | None = None, api_key_flag: str | None = No
                 exit_code=2,
                 suggestion="Pass a non-empty key, e.g. --api-key sk_...",
             )
-        return api_key_flag
-    env_key = os.environ.get(ENV_API_KEY)
+        return flag_key
+    env_key = (os.environ.get(ENV_API_KEY) or "").strip()
     if env_key:
         return env_key
     profile = profile or get_active_profile()
-    stored = get_api_key(profile)
+    stored = (get_api_key(profile) or "").strip()
     if stored:
         return stored
     raise NotAuthenticated()

@@ -15,7 +15,7 @@ def _invoke_split(args):
     return runner.invoke(app, args)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
     )

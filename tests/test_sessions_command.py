@@ -15,7 +15,7 @@ def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
     )

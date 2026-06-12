@@ -9,7 +9,7 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
     )

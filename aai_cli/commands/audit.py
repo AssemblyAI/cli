@@ -87,7 +87,7 @@ def _audit_rows(payload: Mapping[str, object]) -> list[dict[str, object]]:
 )
 def audit(
     ctx: typer.Context,
-    limit: int = typer.Option(20, "--limit", help="How many entries to show."),
+    limit: int = typer.Option(20, "--limit", min=1, help="How many entries to show."),
     action: str | None = typer.Option(None, "--action", help="Filter by raw action name."),
     resource: str | None = typer.Option(None, "--resource", help="Filter by raw resource type."),
     include_logins: bool = typer.Option(

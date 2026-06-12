@@ -64,7 +64,7 @@ def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
     # and the ORIGINAL NotAuthenticated must surface with its actionable suggestion.
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
+        lambda **_: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
     )
 
     def body(state, json_mode):
@@ -81,7 +81,7 @@ def test_run_command_skips_auto_login_when_session_not_interactive(monkeypatch):
 def test_run_command_not_interactive_json_keeps_clean_error_shape(monkeypatch):
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
+        lambda **_: (_ for _ in ()).throw(AssertionError("non-interactive must not auto-login")),
     )
 
     def body(state, json_mode):
@@ -102,7 +102,9 @@ def test_run_command_auto_login_notice_suppressed_in_json_mode(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=1),
+        lambda **_: LoginResult(
+            api_key="sk_auto", session_jwt="j", session_token="t", account_id=1
+        ),
     )
 
     def body(state, json_mode):
@@ -127,7 +129,7 @@ def test_run_command_auto_logs_in_and_asks_for_rerun(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: LoginResult(
+        lambda **_: LoginResult(
             api_key="sk_auto",
             session_jwt="jwt_auto",
             session_token="tok_auto",
@@ -155,7 +157,7 @@ def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
     _force_interactive(monkeypatch)
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: LoginResult(
+        lambda **_: LoginResult(
             api_key="sk_auto",
             session_jwt="jwt_auto",
             session_token="tok_auto",
@@ -179,7 +181,7 @@ def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
 def test_run_command_auto_login_failure_is_clean(monkeypatch):
     _force_interactive(monkeypatch)
 
-    def fail_login():
+    def fail_login(**_kwargs):
         raise APIError("Login failed: the server returned an unexpected response.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
@@ -197,7 +199,7 @@ def test_run_command_auto_login_timeout_maps_to_auth_error(monkeypatch):
     # generic api_error.
     _force_interactive(monkeypatch)
 
-    def fail_login():
+    def fail_login(**_kwargs):
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
     monkeypatch.setattr("aai_cli.context.run_login_flow", fail_login)
@@ -217,7 +219,7 @@ def test_run_command_skips_auto_login_for_rejected_env_key(monkeypatch):
     monkeypatch.setenv(config.ENV_API_KEY, "sk_bad")
     monkeypatch.setattr(
         "aai_cli.context.run_login_flow",
-        lambda: (_ for _ in ()).throw(AssertionError("env key retry cannot be fixed")),
+        lambda **_: (_ for _ in ()).throw(AssertionError("env key retry cannot be fixed")),
     )
 
     def body(state, json_mode):
@@ -341,7 +343,7 @@ def test_run_command_auto_logs_in_when_env_key_set_but_error_is_not_a_rejection(
     monkeypatch.setenv(config.ENV_API_KEY, "sk_env")
     ran = {"login": 0}
 
-    def fake_login():
+    def fake_login(**_kwargs):
         ran["login"] += 1
         return LoginResult(api_key="sk_auto", session_jwt="j", session_token="t", account_id=7)
 
@@ -411,3 +413,49 @@ def test_run_command_lets_broken_pipe_propagate():
 
     result = runner.invoke(_make_app(body), ["go"], standalone_mode=False)
     assert isinstance(result.exception, BrokenPipeError)
+
+
+def test_resolve_session_suggestion_never_offers_api_key_env_var():
+    # The inherited NotAuthenticated suggestion offers ASSEMBLYAI_API_KEY, which can
+    # never satisfy AMS session commands (they authenticate with the browser-session
+    # JWT, not the API key). The session-specific suggestion must say what actually
+    # works and drop the dead-end env-var advice.
+    from aai_cli.context import resolve_session
+
+    with pytest.raises(NotAuthenticated) as exc:
+        resolve_session(AppState())
+    assert exc.value.suggestion is not None
+    assert "browser" in exc.value.suggestion
+    assert "API key alone" in exc.value.suggestion
+    assert "ASSEMBLYAI_API_KEY" not in exc.value.suggestion
+
+
+def test_resolve_profile_rejects_invalid_explicit_profile_fast():
+    # Validated at resolution time (the root callback), so a typo'd --profile is a
+    # fast exit-2 before any network round-trip, not a keyring-write-time failure.
+    from aai_cli.errors import CLIError
+
+    with pytest.raises(CLIError) as exc:
+        AppState(profile="bad name!").resolve_profile()
+    assert exc.value.exit_code == 2
+    assert exc.value.message.startswith("Invalid profile name")
+
+
+def test_resolve_profile_returns_valid_explicit_profile():
+    assert AppState(profile="staging").resolve_profile() == "staging"
+
+
+def test_persist_browser_login_passes_json_mode_to_flow(monkeypatch):
+    from aai_cli.context import persist_browser_login
+
+    seen = {}
+
+    def fake(*, json_mode):
+        seen["json_mode"] = json_mode
+        return LoginResult(api_key="sk", session_jwt="j", session_token="t", account_id=1)
+
+    monkeypatch.setattr("aai_cli.context.run_login_flow", fake)
+    persist_browser_login("default", "production")
+    assert seen["json_mode"] is False  # human prose stays the default
+    persist_browser_login("default", "production", json_mode=True)
+    assert seen["json_mode"] is True  # --json reaches the flow's stderr notes

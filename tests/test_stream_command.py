@@ -29,7 +29,7 @@ def _drive_turns(
         on_turn(types.SimpleNamespace(transcript="hello world", end_of_turn=True))
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=7
     )

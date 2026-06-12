@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 import webbrowser
 from dataclasses import dataclass
 
@@ -84,16 +86,42 @@ def _parse[T](adapter: TypeAdapter[T], data: object) -> T:
         ) from exc
 
 
-def _open_browser(url: str) -> None:
+def _note(*, json_mode: bool, human: str, hint: str, url: str | None = None) -> None:
+    """One stderr progress note for the login flow.
+
+    Humans get Rich prose; ``--json`` mode gets one ``{"hint": …}`` object per note,
+    keeping stderr machine-readable (the same contract as ``output.emit_warning``).
+    """
+    if json_mode:
+        payload: dict[str, object] = {"hint": hint}
+        if url is not None:
+            payload["url"] = url
+        sys.stderr.write(json.dumps(payload) + "\n")
+    else:
+        output.error_console.print(human)
+
+
+def _open_browser(url: str, *, json_mode: bool) -> None:
     """Open the system browser, falling back to printing the URL."""
-    output.error_console.print(
-        f"Opening your browser to sign in:\n  [aai.url]{escape(url)}[/aai.url]"
+    _note(
+        json_mode=json_mode,
+        human=f"Opening your browser to sign in:\n  [aai.url]{escape(url)}[/aai.url]",
+        hint="Opening your browser to sign in.",
+        url=url,
     )
     try:
-        webbrowser.open(url)
+        opened = webbrowser.open(url)
     except Exception:  # noqa: BLE001 - opening a browser is best-effort
-        output.error_console.print(
-            "[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]"
+        opened = False
+    # webbrowser.open returns False — without raising — on headless boxes with no
+    # usable browser, so the fallback must fire on the boolean too; otherwise the
+    # user sits out the 120s timeout with no hint that nothing opened.
+    if not opened:
+        _note(
+            json_mode=json_mode,
+            human="[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]",
+            hint="Could not open a browser; open the URL manually.",
+            url=url,
         )
 
 
@@ -135,16 +163,23 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
     return _parse(_CREATED_TOKEN, created).api_key
 
 
-def run_login_flow() -> LoginResult:
+def run_login_flow(*, json_mode: bool = False) -> LoginResult:
     """Drive the full browser + AMS login and return a LoginResult."""
     # Bind the loopback callback server *before* opening the browser: if the port is
     # taken, fail cleanly now instead of stranding the user mid-OAuth in a flow that
     # can never call back.
     capture = _start_capture()
-    _open_browser(discovery.build_start_url())
-    output.error_console.print(
-        "[aai.muted]Waiting up to 2 minutes for you to finish signing in…[/aai.muted]\n"
-        "[aai.muted]No browser here? Run 'assembly login --api-key <KEY>' instead.[/aai.muted]"
+    _open_browser(discovery.build_start_url(), json_mode=json_mode)
+    _note(
+        json_mode=json_mode,
+        human=(
+            "[aai.muted]Waiting up to 2 minutes for you to finish signing in…[/aai.muted]\n"
+            "[aai.muted]No browser here? Run 'assembly login --api-key <KEY>' instead.[/aai.muted]"
+        ),
+        hint=(
+            "Waiting up to 2 minutes for you to finish signing in. "
+            "No browser here? Run 'assembly login --api-key <KEY>' instead."
+        ),
     )
     result = capture.wait()
 
@@ -167,10 +202,11 @@ def run_login_flow() -> LoginResult:
         )
     org = disc.organizations[0]
     if len(disc.organizations) > 1:
-        output.error_console.print(
-            f"[aai.muted]Found {len(disc.organizations)} organizations; signing in to "
-            f"'{org.organization_name or org.organization_id}'.[/aai.muted]"
+        chosen = (
+            f"Found {len(disc.organizations)} organizations; signing in to "
+            f"'{org.organization_name or org.organization_id}'."
         )
+        _note(json_mode=json_mode, human=f"[aai.muted]{chosen}[/aai.muted]", hint=chosen)
 
     # `exchange` already returns the signed-in account, so read the id from it
     # rather than making a second GET /v1/auth round-trip.

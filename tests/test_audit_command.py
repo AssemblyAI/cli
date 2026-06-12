@@ -14,7 +14,7 @@ def _auth():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=42)
 
 
-def _login_result():
+def _login_result(*, json_mode=False):
     return LoginResult(
         api_key="sk_from_oauth", session_jwt="jwt", session_token="tok", account_id=42
     )
@@ -184,3 +184,35 @@ def test_audit_without_session_runs_login(monkeypatch, mocker):
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     logs.assert_not_called()
     assert "Run the same command again" in result.output
+
+
+def test_audit_rejects_nonpositive_limit(mocker):
+    # --limit is min=1: zero/negative values are a fast click-level usage error.
+    _auth()
+    list_logs = mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True)
+    for bad in ("0", "-5"):
+        result = runner.invoke(app, ["audit", "--limit", bad])
+        assert result.exit_code == 2
+        assert "--limit" in result.output
+    list_logs.assert_not_called()
+
+
+def test_audit_accepts_limit_one(mocker):
+    # The boundary value is allowed (pins min=1, not min=2).
+    _auth()
+    list_logs = mocker.patch(
+        "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["audit", "--limit", "1", "--json"])
+    assert result.exit_code == 0
+    list_logs.assert_called_once_with("jwt", limit=1, action_taken=None, resource_type=None)
+
+
+def test_audit_default_limit_is_20(mocker):
+    _auth()
+    list_logs = mocker.patch(
+        "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
+    )
+    result = runner.invoke(app, ["audit", "--json"])
+    assert result.exit_code == 0
+    list_logs.assert_called_once_with("jwt", limit=20, action_taken=None, resource_type=None)
