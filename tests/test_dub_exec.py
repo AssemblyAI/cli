@@ -8,13 +8,13 @@ parsing in test_dub_command.py."""
 from __future__ import annotations
 
 import dataclasses
-import sys
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import dub_exec
+from aai_cli import dub_exec, mediafile
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._dub_helpers import (
@@ -47,8 +47,12 @@ def _fake_key(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize(
     "instance",
-    [DEFAULTS, dub_exec._Utterance(start_ms=0, speaker="A", text="hi")],
-    ids=["options", "utterance"],
+    [
+        DEFAULTS,
+        dub_exec._Utterance(start_ms=0, speaker="A", text="hi"),
+        dub_exec._VoicePlan(bare=None, overrides={}),
+    ],
+    ids=["options", "utterance", "voice_plan"],
 )
 def test_records_are_immutable(instance):
     field_name = dataclasses.fields(instance)[0].name
@@ -111,6 +115,15 @@ def test_default_out_path(language, expected):
     assert out == Path("/x") / expected
 
 
+def test_default_out_path_rejects_unsluggable_language():
+    # 中文 and 日本語 would both slug to "" and collide on "talk.dub..mp4",
+    # silently overwriting each other via ffmpeg's -y.
+    with pytest.raises(UsageError) as exc:
+        dub_exec.default_out_path(Path("/x/talk.mp4"), "中文")
+    assert "default output name" in exc.value.message
+    assert "--out" in (exc.value.suggestion or "")
+
+
 def test_assemble_timeline_fills_gaps_and_pads_tail():
     # rate 1000: one second of 16-bit mono PCM is 2000 bytes.
     track = dub_exec.assemble_timeline([(500, b"\x01\x02")], 1000, total_seconds=1.0)
@@ -140,7 +153,7 @@ def test_utterances_of_defaults_and_filtering():
             utterance(4000, "C", "  Bye  "),
         ]
     )
-    assert dub_exec._utterances_of(transcript) == [
+    assert dub_exec._utterances_of(transcript, "tr_dub") == [
         dub_exec._Utterance(start_ms=0, speaker="A", text="Hi"),
         dub_exec._Utterance(start_ms=4000, speaker="C", text="Bye"),
     ]
@@ -153,7 +166,7 @@ def test_utterances_of_defaults_and_filtering():
 )
 def test_utterances_of_requires_spoken_utterances(utterances):
     with pytest.raises(CLIError) as exc:
-        dub_exec._utterances_of(SimpleNamespace(id="tr_x", utterances=utterances))
+        dub_exec._utterances_of(SimpleNamespace(utterances=utterances), "tr_x")
     assert exc.value.error_type == "no_utterances"
     assert exc.value.exit_code == 2
     assert "Transcript tr_x has no utterances to dub" in exc.value.message
@@ -168,21 +181,6 @@ def test_utterances_of_requires_spoken_utterances(utterances):
 def test_total_seconds(duration, expected):
     transcript = SimpleNamespace(audio_duration=duration)
     assert dub_exec._total_seconds(transcript) == expected
-
-
-def test_run_ffmpeg_captures_output_and_does_not_raise():
-    # The real boundary (not the fake): output is captured as text and a non-zero
-    # exit must not raise — _mux turns the exit code into a CLIError itself.
-    result = dub_exec._run_ffmpeg(
-        [
-            sys.executable,
-            "-c",
-            "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
-        ]
-    )
-    assert result.returncode == 3
-    assert result.stdout == "out\n"
-    assert result.stderr == "err\n"
 
 
 # --- validation order (cheap local checks before any credential or network) ----
@@ -210,7 +208,8 @@ def test_run_dub_rejects_missing_file(sandbox, tmp_path):
         dub_exec.run_dub(opts, AppState(), json_mode=False)
     assert exc.value.error_type == "file_not_found"
     assert exc.value.exit_code == 2
-    assert "local audio/video file" in (exc.value.suggestion or "")
+    # The command name pins the shared helper's parameterization.
+    assert "assembly dub needs a local audio/video file" in (exc.value.suggestion or "")
 
 
 def test_run_dub_rejects_directory(sandbox, tmp_path):
@@ -229,10 +228,65 @@ def test_run_dub_refuses_to_overwrite_the_input(sandbox, media):
     assert "overwrite the input file" in exc.value.message
 
 
+def test_run_dub_rejects_remote_urls_with_the_url_intact(sandbox):
+    # http(s) URLs are downloaded (or rejected by the yt-dlp branch); a bucket
+    # URL would otherwise reach Path(), which collapses "//" and echoes a
+    # corrupted "s3:/bucket/…" back.
+    url = "s3://bucket/talk.mp4"
+    opts = dataclasses.replace(DEFAULTS, media=url)
+    with pytest.raises(UsageError) as exc:
+        dub_exec.run_dub(opts, AppState(), json_mode=False)
+    assert url in exc.value.message
+    assert "Download the media first" in (exc.value.suggestion or "")
+
+
+def test_run_dub_rejects_malformed_voice_before_any_network(sandbox, media):
+    # No transcription/ffmpeg fakes installed: pytest-socket would fail loudly
+    # if the malformed mapping survived to the billed pipeline.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["A="])
+    with pytest.raises(UsageError) as exc:
+        dub_exec.run_dub(opts, AppState(), json_mode=False)
+    assert "Invalid --voice mapping" in exc.value.message
+
+
+def test_validate_out_rejects_the_input_via_hard_link(media):
+    # Two spellings of one file (mimics --out TALK.MP4 on a case-insensitive
+    # filesystem): path comparison passes, samefile must still catch it.
+    clone = media.parent / "TALK.MP4"
+    os.link(media, clone)
+    with pytest.raises(UsageError) as exc:
+        mediafile.validate_out(clone, media)
+    assert "overwrite the input file" in exc.value.message
+
+
+def test_validate_out_rejects_a_directory(media, tmp_path):
+    with pytest.raises(UsageError) as exc:
+        mediafile.validate_out(tmp_path, media)
+    assert "--out is a directory" in exc.value.message
+    assert "file path" in (exc.value.suggestion or "")
+
+
+def test_validate_out_rejects_a_missing_parent_directory(media, tmp_path):
+    with pytest.raises(UsageError) as exc:
+        mediafile.validate_out(tmp_path / "missing" / "dub.mp4", media)
+    assert "output directory doesn't exist" in exc.value.message
+    assert "missing" in exc.value.message
+
+
+def test_validate_out_rejects_an_extensionless_output(media, tmp_path):
+    # ffmpeg picks the container from the extension, so this would fail only
+    # after the whole billed pipeline (e.g. an extension-less input's default out).
+    with pytest.raises(UsageError) as exc:
+        mediafile.validate_out(tmp_path / "noext", media)
+    assert "has no extension" in exc.value.message
+    assert ".mp4" in (exc.value.suggestion or "")
+
+
 def test_run_dub_requires_ffmpeg(sandbox, media, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: None)
     opts = dataclasses.replace(DEFAULTS, media=str(media))
     with pytest.raises(CLIError) as exc:
         dub_exec.run_dub(opts, AppState(), json_mode=False)
     assert exc.value.error_type == "missing_dependency"
-    assert "ffmpeg" in exc.value.message
+    # The purpose string pins the shared helper's parameterization.
+    assert "ffmpeg is required to write the dubbed file" in exc.value.message

@@ -29,6 +29,11 @@ SPEC = command_registry.CommandModuleSpec(
                 'assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video',
             ),
             (
+                "Dub only the first 15 minutes of a YouTube video",
+                'assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video '
+                '--download-sections "*0:00-15:00"',
+            ),
+            (
                 "Dub every speaker with one voice",
                 "assembly --sandbox dub talk.mp4 -l fr --voice paul",
             ),
@@ -59,6 +64,11 @@ def dub(
         "--lang",
         "-l",
         help="Target language: an ISO code (de, fr, es, …) or a language name (German).",
+    ),
+    source_lang: str | None = typer.Option(
+        None,
+        "--source-lang",
+        help="ISO code of the source audio (e.g. de). Default: auto-detect the language.",
     ),
     transcript_id: str | None = typer.Option(
         None,
@@ -96,6 +106,13 @@ def dub(
         help="Download the full video (not just the audio track) for a URL source, "
         "so the dub keeps the picture. Local files keep their video already.",
     ),
+    download_sections: list[str] = typer.Option(
+        [],
+        "--download-sections",
+        help="For a URL source, download (and dub) only part of it (yt-dlp "
+        '"--download-sections" syntax, e.g. "*0:00-15:00" for the first fifteen '
+        "minutes; repeatable).",
+    ),
     json_out: bool = options.json_option("Emit JSON describing the dubbed file."),
 ) -> None:
     """Dub a video or audio file into another language (sandbox only).
@@ -105,19 +122,22 @@ def dub(
     the translations are synthesized with streaming TTS (one voice per
     speaker), and ffmpeg lays the new audio over the original — video copied
     untouched. A YouTube/media-page URL is downloaded first (audio only, or
-    the full video with --video). Streaming TTS only exists in the sandbox
+    the full video with --video; --download-sections fetches and dubs only a
+    time slice of it). Streaming TTS only exists in the sandbox
     today — run it as 'assembly --sandbox dub' (--sandbox goes before the
     subcommand). Requires ffmpeg.
     """
     opts = dub_exec.DubOptions(
         media=media,
         language=lang,
+        source_language=source_lang,
         transcript_id=transcript_id,
         voice=voice,
         model=model,
         max_tokens=max_tokens,
         out=out,
         video=video,
+        download_sections=download_sections,
     )
     run_command(
         ctx,

@@ -40,6 +40,7 @@ source_modules =
     aai_cli.jsonshape
     aai_cli.llm
     aai_cli.llm_exec
+    aai_cli.mediafile
     aai_cli.microphone
     aai_cli.onboard
     aai_cli.options

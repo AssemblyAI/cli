@@ -178,6 +178,26 @@ def test_validate_video_flag_without_video_is_a_no_op(source):
     youtube.validate_video_flag(source, video=False)  # no exception
 
 
+def test_validate_sections_flag_accepts_downloadable_urls():
+    youtube.validate_sections_flag("https://youtu.be/abc123", ["*0:00-15:00"])  # no exception
+
+
+@pytest.mark.parametrize("source", ["talk.mp4", "https://example.com/episode.mp3"])
+def test_validate_sections_flag_rejects_non_downloadable_sources(source):
+    # The specs only shape what a media-page download fetches; a local file (or a
+    # direct URL the API fetches itself) is never downloaded, so the flag would be
+    # silently dropped — and a requested flag is never dropped silently.
+    with pytest.raises(UsageError) as exc:
+        youtube.validate_sections_flag(source, ["*0:00-15:00"])
+    assert "--download-sections only applies to a downloadable URL source" in exc.value.message
+    assert "assembly clip" in (exc.value.suggestion or "")
+
+
+@pytest.mark.parametrize("source", ["talk.mp4", "https://youtu.be/abc123"])
+def test_validate_sections_flag_without_sections_is_a_no_op(source):
+    youtube.validate_sections_flag(source, [])  # no exception
+
+
 def test_download_media_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypatch, capsys):
     # yt-dlp's default logger writes its own "ERROR: …" line to stderr before the CLI's
     # clean error, duplicating the message; the passed logger must swallow everything.

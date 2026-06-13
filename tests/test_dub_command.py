@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from aai_cli import dub_exec, llm
 from aai_cli.main import app
-from tests._dub_helpers import plain
+from tests._clip_helpers import plain
 
 runner = CliRunner()
 
@@ -53,12 +53,14 @@ def test_defaults_map_to_options(captured_run):
     assert captured_run["opts"] == dub_exec.DubOptions(
         media="talk.mp4",
         language="de",
+        source_language=None,
         transcript_id=None,
         voice=[],
         model=llm.DEFAULT_MODEL,
         max_tokens=llm.DEFAULT_MAX_TOKENS,
         out=None,
         video=False,
+        download_sections=[],
     )
 
 
@@ -70,6 +72,8 @@ def test_every_flag_maps_to_options(captured_run):
             "talk.mp4",
             "--lang",
             "German",
+            "--source-lang",
+            "fr",
             "-t",
             "tr_1",
             "--voice",
@@ -83,6 +87,10 @@ def test_every_flag_maps_to_options(captured_run):
             "--out",
             "dubbed.mp4",
             "--video",
+            "--download-sections",
+            "*0:00-15:00",
+            "--download-sections",
+            "intro",
             "--json",
         ],
     )
@@ -91,10 +99,12 @@ def test_every_flag_maps_to_options(captured_run):
     assert captured_run["opts"] == dub_exec.DubOptions(
         media="talk.mp4",
         language="German",
+        source_language="fr",
         transcript_id="tr_1",
         voice=["A=jane", "paul"],
         model="gpt-5",
         max_tokens=7,
         out=Path("dubbed.mp4"),
         video=True,
+        download_sections=["*0:00-15:00", "intro"],
     )
