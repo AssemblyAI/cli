@@ -31,6 +31,9 @@ class Check(TypedDict):
 
 
 class DoctorResult(TypedDict):
+    """The full `assembly doctor` payload: overall ok, the profile/env checked, and
+    each individual `Check`."""
+
     ok: bool
     # Which profile/environment the checks ran against. `assembly doctor` always fills
     # these in; the onboarding wizard reuses `render` for a partial check without
@@ -68,6 +71,7 @@ def _check(
 
 
 def check_python() -> Check:
+    """Check the interpreter meets the 3.12+ floor the CLI requires."""
     v = sys.version_info
     version = f"{v.major}.{v.minor}.{v.micro}"
     if v >= (3, 12):
@@ -85,6 +89,8 @@ def check_python() -> Check:
 # but CodeQL's name heuristic would treat the call's return value as a secret and flag
 # the doctor payload emit (py/clear-text-logging-sensitive-data).
 def check_credentials(profile: str) -> Check:
+    """Check the profile has a usable API key, distinguishing "none set" from an
+    unusable keyring backend so the fix hint points the right way."""
     try:
         key = config.resolve_api_key(profile=profile)
     except NotAuthenticated:
@@ -132,6 +138,8 @@ def check_credentials(profile: str) -> Check:
 
 
 def check_ffmpeg() -> Check:
+    """Check whether ffmpeg is on PATH — a warning, not a failure, since only the
+    realtime decode paths (stream/agent) need it."""
     # ffmpeg is ONLY used to stream non-WAV files or URLs (stream/agent), where it
     # decodes them to 16 kHz mono PCM on the fly. Plain `transcribe` (including
     # YouTube URLs) uploads the file to AssemblyAI and never invokes ffmpeg, so it is
@@ -174,6 +182,8 @@ def _input_channels(device: Mapping[str, object]) -> int:
 
 
 def check_audio() -> Check:
+    """Check for a usable microphone input device (a warning when none, since file
+    transcription doesn't need one)."""
     affects = ["stream (microphone)", "agent"]
     try:
         inputs = _probe_input_devices()
@@ -208,6 +218,8 @@ def check_audio() -> Check:
 
 
 def check_coding_agent() -> Check:
+    """Check the coding-agent integration: whether claude/npx are present and, if so,
+    which `assembly setup` artifacts are installed."""
     missing = [tool for tool in ("claude", "npx") if shutil.which(tool) is None]
     if not missing:
         # Tools are present, so report what `assembly setup install` actually
@@ -252,6 +264,8 @@ def render_check_lines(checks: list[Check]) -> list[str]:
 
 
 def render(data: DoctorResult) -> str:
+    """Render a `DoctorResult` as the human-readable doctor report (also reused by the
+    onboarding wizard for a partial check)."""
     checks = data["checks"]
     lines = [output.heading("Environment check")]
     profile, environment = data.get("profile"), data.get("environment")

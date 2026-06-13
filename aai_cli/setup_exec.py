@@ -45,6 +45,8 @@ def _proc_detail(proc: subprocess.CompletedProcess[str]) -> str:
 
 
 def install_mcp(scope: str, *, force: bool) -> Step:
+    """Register the docs MCP via the ``claude`` CLI (idempotent; ``force`` re-adds).
+    Returns a `Step` describing the outcome; a missing ``claude`` is skipped, not failed."""
     if shutil.which("claude") is None:
         return {
             "name": "mcp",
@@ -74,6 +76,7 @@ def install_mcp(scope: str, *, force: bool) -> Step:
 
 
 def mcp_status() -> Step:
+    """Report whether the docs MCP is registered (``unknown`` when ``claude`` is absent)."""
     if shutil.which("claude") is None:
         return {"name": "mcp", "status": "unknown", "detail": "Claude Code not found"}
     present = _mcp_present()
@@ -85,6 +88,7 @@ def mcp_status() -> Step:
 
 
 def remove_mcp(scope: str | None) -> Step:
+    """Unregister the docs MCP via the ``claude`` CLI (no-op if not registered)."""
     if shutil.which("claude") is None:
         return {"name": "mcp", "status": "skipped", "detail": "Claude Code not found"}
     if not _mcp_present():
@@ -106,6 +110,8 @@ _SKILL_ADD_HINT = f"npx skills add {SKILL_REPO} --global"
 
 
 def install_skill(*, force: bool) -> Step:
+    """Install the published ``assemblyai`` skill via ``npx skills`` (idempotent;
+    ``force`` re-downloads). A missing ``npx`` is skipped, not failed."""
     if shutil.which("npx") is None:
         return {
             "name": "skill",
@@ -142,6 +148,7 @@ def install_skill(*, force: bool) -> Step:
 
 
 def skill_status() -> Step:
+    """Report whether the published ``assemblyai`` skill is present on disk."""
     return {
         "name": "skill",
         "status": "installed" if _skill_installed() else "not_installed",
@@ -150,6 +157,7 @@ def skill_status() -> Step:
 
 
 def remove_skill() -> Step:
+    """Remove the published ``assemblyai`` skill via ``npx skills`` (no-op if absent)."""
     if not _skill_installed():
         return {"name": "skill", "status": "not_installed", "detail": str(_skill_dir())}
     if shutil.which("npx") is None:
@@ -191,6 +199,8 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
 
 
 def install_cli_skill(*, force: bool) -> Step:
+    """Install the bundled ``aai-cli`` skill by copying it out of the wheel into the
+    agent's skills dir — no network or npx (idempotent; ``force`` re-copies)."""
     # Bundled in the package, so no network/npx — just copy it into the agent's
     # skills dir. Idempotent: skip the copy when already present and not --force.
     dest = _cli_skill_dir()
@@ -216,6 +226,7 @@ def install_cli_skill(*, force: bool) -> Step:
 
 
 def cli_skill_status() -> Step:
+    """Report whether the bundled ``aai-cli`` skill is present on disk."""
     return {
         "name": "aai-cli skill",
         "status": "installed" if _cli_skill_installed() else "not_installed",
@@ -224,6 +235,7 @@ def cli_skill_status() -> Step:
 
 
 def remove_cli_skill() -> Step:
+    """Remove the bundled ``aai-cli`` skill directory (no-op if absent)."""
     # We copied a real directory in (not a symlink into a store), so removal is a
     # plain rmtree of the destination.
     dest = _cli_skill_dir()
@@ -240,4 +252,5 @@ def remove_cli_skill() -> Step:
 
 
 def render(data: dict[str, list[Step]]) -> str:
+    """Render the install/remove `Step` list as the human-readable setup report."""
     return render_steps(data["steps"], heading=_STEPS_HEADING)

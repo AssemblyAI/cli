@@ -10,7 +10,7 @@ from pathlib import Path
 # current level and only ever ratchets up: a change may not drop public-API documentation
 # below it, but nobody is forced to backfill the existing gap in one go. Raising FLOOR as
 # coverage climbs is a deliberate, reviewed edit here — the same model as a coverage gate.
-FLOOR = 64.0
+FLOOR = 74.0
 
 PACKAGE = Path(__file__).resolve().parent.parent / "aai_cli"
 
@@ -18,8 +18,18 @@ _Def = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def _public_nodes(tree: ast.Module) -> list[ast.AST]:
+    """The module plus its public API surface: top-level functions/classes and the
+    methods of public classes. Functions nested inside functions (command-body
+    closures, callback handlers) are implementation detail, not public API, so they
+    are not counted — only definitions reachable through the module or a class body."""
     nodes: list[ast.AST] = [tree]
-    nodes.extend(n for n in ast.walk(tree) if isinstance(n, _Def) and not n.name.startswith("_"))
+    for top in tree.body:
+        if isinstance(top, _Def) and not top.name.startswith("_"):
+            nodes.append(top)
+            if isinstance(top, ast.ClassDef):
+                nodes.extend(
+                    m for m in top.body if isinstance(m, _Def) and not m.name.startswith("_")
+                )
     return nodes
 
 

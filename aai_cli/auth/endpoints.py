@@ -1,3 +1,11 @@
+"""Resolved endpoints and constants for the browser-login (Stytch B2B OAuth) flow.
+
+The environment-specific values (Stytch domain/token, AMS base, signup URL) are read
+lazily from the active environment so a credential is always matched to the
+environment that minted it; the loopback port and redirect URI are fixed because
+Stytch does exact-match redirect validation.
+"""
+
 from __future__ import annotations
 
 import os
@@ -51,18 +59,22 @@ def loopback_port() -> int:
 # vanity CNAME) so the CSRF state cookie is set on the same domain as the OAuth
 # callback — otherwise Stytch returns `oauth_invalid_state`.
 def stytch_domain() -> str:
+    """The active environment's Stytch API domain (where the OAuth flow starts)."""
     return environments.active().stytch_domain
 
 
 def stytch_public_token() -> str:
+    """The active environment's Stytch public token."""
     return environments.active().stytch_public_token
 
 
 def ams_base() -> str:
+    """The active environment's AMS (account-management service) base URL."""
     return environments.active().ams_base
 
 
 def signup_url() -> str:
+    """The active environment's web signup URL, offered when login finds no account."""
     return environments.active().signup_url
 
 

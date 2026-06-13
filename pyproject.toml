@@ -163,9 +163,14 @@ python_version = "3.12"
 files = ["aai_cli", "tests"]
 # Init templates are packaged scaffold assets, not importable package modules.
 exclude = ["^aai_cli/init/templates/"]
+# Local stubs for stub-less third-party deps we call into (currently jiwer, used by
+# wer.py). Typing the surface we touch keeps the full --strict bar — including
+# disallow_untyped_calls — green with no per-call escape hatch.
+mypy_path = "stubs"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true
+disallow_untyped_calls = true
 warn_unused_ignores = true
 warn_return_any = true
 no_implicit_optional = true
@@ -175,15 +180,13 @@ warn_unreachable = true
 disallow_any_generics = true
 no_implicit_reexport = true
 extra_checks = true
-# The remaining flags from mypy --strict, which aai_cli already satisfies. They close
-# gaps the above leave open: a function with *some* annotations but an unannotated
-# arg/return (disallow_incomplete_defs), the body of any still-untyped function going
-# unchecked (check_untyped_defs), an untyped decorator silently erasing a function's
-# type (disallow_untyped_decorators), subclassing an Any-typed base (disallow_subclassing_any),
-# and a config option that no longer matches any file (warn_unused_configs). The one
-# strict flag left off is disallow_untyped_calls: jiwer ships no stubs, so wer.py's
-# RemovePunctuation() call is unavoidably untyped, and turning it on would force a
-# net-new `# type: ignore` the escape-hatch gate rejects.
+# aai_cli now runs the full mypy --strict bar. These are the strict flags beyond the
+# ones above: a function with *some* annotations but an unannotated arg/return
+# (disallow_incomplete_defs), the body of any still-untyped function going unchecked
+# (check_untyped_defs), an untyped decorator silently erasing a function's type
+# (disallow_untyped_decorators), subclassing an Any-typed base (disallow_subclassing_any),
+# and a config option that no longer matches any file (warn_unused_configs).
+# disallow_untyped_calls (above) is satisfied via the local jiwer stub in stubs/.
 disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = true
@@ -201,6 +204,7 @@ warn_unused_configs = true
 # untyped helper; silence those notes so the test output stays signal.
 module = "tests.*"
 disallow_untyped_defs = false
+disallow_untyped_calls = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
 disallow_subclassing_any = false

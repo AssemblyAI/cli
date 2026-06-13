@@ -1,3 +1,9 @@
+"""Profile + credential storage: ``config.toml`` for non-secret settings, the OS
+keyring for the API key and browser-login session. Keyring access is wrapped so a
+locked or absent backend reads as "nothing stored" (headless boxes have no keyring),
+never a crash; key-resolution precedence lives in `context.py`.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -79,6 +85,7 @@ def validate_profile(name: str) -> None:
 
 
 def config_dir() -> Path:
+    """The platformdirs config directory for the CLI (where ``config.toml`` lives)."""
     return Path(platformdirs.user_config_dir("assemblyai"))
 
 
@@ -172,6 +179,8 @@ def _dump(cfg: Config) -> None:
 
 
 def get_active_profile() -> str:
+    """The profile commands act on by default: the persisted active profile, else
+    ``DEFAULT_PROFILE``."""
     return _load().active_profile or DEFAULT_PROFILE
 
 
@@ -236,6 +245,8 @@ def _keyring_restore(username: str, prior: str | None) -> None:
 
 
 def set_api_key(profile: str, api_key: str) -> None:
+    """Store ``profile``'s API key in the keyring, creating it and making it active
+    when it is the first profile configured."""
     validate_profile(profile)
     _keyring_set(profile, api_key)
     cfg = _load()
@@ -259,6 +270,8 @@ def _keyring_get(username: str) -> str | None:
 
 
 def get_api_key(profile: str) -> str | None:
+    """The profile's API key from the OS keyring, or None when nothing is stored (or
+    there is no usable keyring backend)."""
     return _keyring_get(profile)
 
 
@@ -292,6 +305,8 @@ def set_profile_env(profile: str, env: str) -> None:
 
 
 def clear_api_key(profile: str) -> None:
+    """Remove the profile's API key from the keyring; a missing entry or absent
+    backend is a no-op (the goal is "nothing stored")."""
     # KeyringError, not just PasswordDeleteError: with no backend at all (headless
     # boxes) delete raises NoKeyringError, and "nothing stored" is already the goal.
     with contextlib.suppress(keyring.errors.KeyringError):
@@ -340,6 +355,8 @@ def get_account_id(profile: str) -> int | None:
 
 
 def clear_session(profile: str) -> None:
+    """Drop the profile's stored browser-login session — the keyring session JWT and
+    the account id in config.toml — leaving any API key intact."""
     with contextlib.suppress(keyring.errors.KeyringError):
         keyring.delete_password(KEYRING_SERVICE, _session_username(profile))
     cfg = _load()
@@ -414,6 +431,8 @@ def get_telemetry_enabled() -> bool | None:
 
 
 def set_telemetry_enabled(*, enabled: bool) -> None:
+    """Persist the user's explicit telemetry opt-in/opt-out (`assembly telemetry
+    enable/disable`)."""
     cfg = _load()
     cfg.telemetry_enabled = enabled
     _dump(cfg)

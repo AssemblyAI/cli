@@ -1,3 +1,11 @@
+"""Thin wrappers over the ``assemblyai`` SDK (transcribe, list, fetch, stream).
+
+Every call goes through ``_sdk_errors``, which normalizes SDK exceptions into the
+CLIError hierarchy: an auth failure becomes one clean ``auth_failure()`` error,
+everything else an ``APIError``. New SDK calls should follow that try/except shape so
+no raw SDK traceback ever reaches the user.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -179,6 +187,7 @@ def _item_to_dict(item: Any) -> dict[str, Any]:
 
 
 def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]]:
+    """The account's most recent transcripts (up to ``limit``), each as a plain dict."""
     _configure(api_key)
     with _sdk_errors("Could not list transcripts"):
         resp = aai.Transcriber().list_transcripts(_list_transcript_params(limit))
@@ -186,6 +195,8 @@ def list_transcripts(api_key: str, *, limit: int = 10) -> list[dict[str, object]
 
 
 def transcribe(api_key: str, audio: str, *, config: aai.TranscriptionConfig) -> aai.Transcript:
+    """Transcribe ``audio`` and return the completed transcript, raising ``APIError``
+    if the job finishes in the error state."""
     _configure(api_key)
     with _sdk_errors("Transcription request failed"):
         transcript = aai.Transcriber().transcribe(audio, config=config)
@@ -293,6 +304,8 @@ _TRANSCRIPT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def validate_transcript_id(transcript_id: str) -> str:
+    """Return ``transcript_id`` unchanged if it is a well-formed opaque id, else raise
+    ``UsageError`` — so a crafted value like ``../v2/other`` can't steer the request path."""
     if not _TRANSCRIPT_ID_RE.match(transcript_id):
         raise UsageError(
             f"{transcript_id!r} doesn't look like a transcript id.",
@@ -302,6 +315,7 @@ def validate_transcript_id(transcript_id: str) -> str:
 
 
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
+    """Fetch a transcript by id (validated first), as the completed SDK object."""
     validate_transcript_id(transcript_id)
     _configure(api_key)
     with _sdk_errors(f"Could not fetch transcript {transcript_id}"):

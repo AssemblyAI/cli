@@ -17,6 +17,9 @@ CLI_SKILL_NAME = "aai-cli"
 
 
 def run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
+    """Run an agent CLI command (``claude``/``npx``) with output captured and stdin
+    closed, returning the finished process — a timeout becomes a synthetic exit 124
+    rather than a hang or raise."""
     # stdin=DEVNULL so a child that would otherwise prompt (npx's "Ok to proceed?",
     # a `claude` confirmation) gets EOF and fails fast instead of hanging forever on
     # input the user can't see (its stdout is captured). timeout is a final backstop.
@@ -39,6 +42,7 @@ def run(cmd: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[
 
 
 def skills_root() -> Path:
+    """The agent's skills directory (``$CLAUDE_CONFIG_DIR/skills`` or ``~/.claude/skills``)."""
     # Honor CLAUDE_CONFIG_DIR so install/status/remove agree with the agent's actual
     # config root rather than assuming ~/.claude.
     config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -52,18 +56,22 @@ def mcp_present() -> bool:
 
 
 def skill_dir() -> Path:
+    """Where the published ``assemblyai`` skill installs."""
     return skills_root() / SKILL_NAME
 
 
 def skill_installed() -> bool:
+    """Whether the ``assemblyai`` skill is present on disk (its SKILL.md exists)."""
     return (skill_dir() / "SKILL.md").exists()
 
 
 def cli_skill_dir() -> Path:
+    """Where the bundled ``aai-cli`` skill installs."""
     return skills_root() / CLI_SKILL_NAME
 
 
 def cli_skill_installed() -> bool:
+    """Whether the bundled ``aai-cli`` skill is present on disk (its SKILL.md exists)."""
     return (cli_skill_dir() / "SKILL.md").exists()
 
 
