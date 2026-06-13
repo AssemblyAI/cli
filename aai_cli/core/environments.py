@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
+from aai_cli.core import env
 from aai_cli.core.errors import CLIError
 
 
@@ -97,7 +97,7 @@ def get(name: str) -> Environment:
 
 def resolve(flag: str | None, profile_env: str | None) -> Environment:
     """Pick the environment by precedence: --env flag > AAI_ENV > profile > default."""
-    name = flag or os.environ.get("AAI_ENV") or profile_env or DEFAULT_ENV
+    name = flag or env.get("AAI_ENV") or profile_env or DEFAULT_ENV
     return get(name)
 
 

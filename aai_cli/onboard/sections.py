@@ -7,8 +7,10 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli.app import doctor_checks, init_exec, setup_exec, transcribe_exec, transcribe_render
+from aai_cli.app import doctor_checks, init_exec, setup_exec
 from aai_cli.app.context import AppState, persist_browser_login
+from aai_cli.app.transcribe import render as transcribe_render
+from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.core import config, environments
 from aai_cli.core.errors import CLIError
 from aai_cli.init import runner

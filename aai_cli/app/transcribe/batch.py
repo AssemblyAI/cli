@@ -32,8 +32,8 @@ from typing import TYPE_CHECKING
 from rich.live import Live
 from rich.markup import escape
 
-from aai_cli.app import transcribe_exec
-from aai_cli.app.transcribe_sources import SIDECAR_SUFFIX, URL_PREFIXES
+from aai_cli.app.transcribe import run as transcribe_exec
+from aai_cli.app.transcribe.sources import SIDECAR_SUFFIX, URL_PREFIXES
 from aai_cli.core import client, jsonshape, llm, remotefs
 from aai_cli.core.errors import CLIError, NotAuthenticated
 from aai_cli.ui import output, theme

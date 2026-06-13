@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,7 +8,7 @@ from typing import NoReturn
 import keyring.errors
 import typer
 
-from aai_cli.core import config, debuglog, environments, telemetry
+from aai_cli.core import config, debuglog, env, environments, telemetry
 from aai_cli.core.environments import Environment
 from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.ui import output, update_check
@@ -86,7 +85,7 @@ class AppState:
         """
         if self.env is not None:
             source, selected = "--env", self.env
-        elif (from_env := os.environ.get("AAI_ENV")) is not None:
+        elif (from_env := env.get("AAI_ENV")) is not None:
             source, selected = "AAI_ENV", from_env
         else:
             return None
@@ -152,7 +151,7 @@ def _should_auto_login(err: NotAuthenticated) -> bool:
     # so retrying cannot fix that case. `rejected_key` is the structured marker set
     # by auth_failure(); auth-owning commands (login/logout) opt out at their
     # run_command call site with auto_login=False instead of being name-matched here.
-    return not (os.environ.get(config.ENV_API_KEY) and err.rejected_key)
+    return not (env.get(config.ENV_API_KEY) and err.rejected_key)
 
 
 def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:

@@ -8,12 +8,11 @@ everything else surfaces the server's own detail verbatim.
 
 from __future__ import annotations
 
-import os
 from http import HTTPStatus
 
 import httpx2 as httpx
 
-from aai_cli.core import jsonshape
+from aai_cli.core import env, jsonshape
 from aai_cli.core.errors import APIError, UsageError
 
 _DATASETS_SERVER = "https://datasets-server.huggingface.co"
@@ -82,7 +81,7 @@ def _checked_payload(resp: httpx.Response, *, dataset: str) -> dict[str, object]
 
 
 def fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> dict[str, object]:
-    token = os.environ.get("HF_TOKEN")
+    token = env.get("HF_TOKEN")
     headers = {"authorization": f"Bearer {token}"} if token else {}
     try:
         with httpx.Client(base_url=_DATASETS_SERVER, timeout=_TIMEOUT, headers=headers) as client:

@@ -29,7 +29,7 @@ def _with_session():
 def test_transcribe_sample_renders_real_transcript(mocker):
     _with_api_key()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=rf.transcript("transcribe_sample"),
     )

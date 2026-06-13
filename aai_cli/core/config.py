@@ -14,7 +14,7 @@ import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aai_cli.core import debuglog
+from aai_cli.core import debuglog, env
 from aai_cli.core.errors import CLIError, NotAuthenticated
 
 KEYRING_SERVICE = "assemblyai-cli"
@@ -460,7 +460,7 @@ def _resolve_api_key(*, profile: str | None, api_key_flag: str | None) -> str:
                 suggestion="Pass a non-empty key, e.g. --api-key sk_...",
             )
         return flag_key
-    env_key = (os.environ.get(ENV_API_KEY) or "").strip()
+    env_key = (env.get(ENV_API_KEY) or "").strip()
     if env_key:
         return env_key
     profile = profile or get_active_profile()

@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 import typer
 
-from aai_cli.app import init_exec, transcribe_exec, transcribe_render
+from aai_cli.app import init_exec
 from aai_cli.app import setup_exec as setup_cmd
 from aai_cli.app.context import AppState
+from aai_cli.app.transcribe import render as transcribe_render
+from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.core.errors import CLIError
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter

@@ -66,7 +66,7 @@ def test_onboard_json_emits_machine_readable_summary(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     monkeypatch.setattr(
-        "aai_cli.app.transcribe_exec.run_transcription", lambda *a, **k: _FakeTranscript()
+        "aai_cli.app.transcribe.run.run_transcription", lambda *a, **k: _FakeTranscript()
     )
     result = CliRunner().invoke(app, ["onboard", "--json"])
     assert result.exit_code == 0, result.output

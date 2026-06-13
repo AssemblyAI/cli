@@ -14,14 +14,15 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.app import transcribe_batch, transcribe_sources
+from aai_cli.app.transcribe import batch as transcribe_batch
+from aai_cli.app.transcribe import sources as transcribe_sources
 from aai_cli.core import config
 from aai_cli.core.errors import UsageError
 from aai_cli.main import app
 
 runner = CliRunner()
 
-_TRANSCRIBE = "aai_cli.app.transcribe_exec.client.transcribe"
+_TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
 
 
 @pytest.fixture(autouse=True)

@@ -57,7 +57,7 @@ def _fake_transcript(mocker):
 def test_transcribe_sample_prints_text(mocker):
     _auth()
     tx = mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -71,7 +71,7 @@ def test_transcribe_sample_prints_text(mocker):
 def test_transcribe_json_output(mocker):
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -83,7 +83,7 @@ def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch, moc
     monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     tx = mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -97,7 +97,7 @@ def test_transcribe_unauthenticated_runs_login_then_transcribes(monkeypatch, moc
 def test_transcribe_output_text_field(mocker):
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -109,7 +109,7 @@ def test_transcribe_output_text_field(mocker):
 def test_transcribe_output_id_field(mocker):
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -122,7 +122,7 @@ def test_transcribe_output_srt_field(mocker):
     _auth()
     t = _fake_transcript(mocker)
     t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello world\n"
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "srt"])
     assert result.exit_code == 0
     assert "00:00:00,000 --> 00:00:02,000" in result.output  # SRT body, pipe-friendly
@@ -133,7 +133,7 @@ def test_transcribe_output_vtt_field(mocker):
     _auth()
     t = _fake_transcript(mocker)
     t.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello world\n"
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "-o", "vtt"])
     assert result.exit_code == 0
     assert "WEBVTT" in result.output  # VTT body, pipe-friendly
@@ -144,7 +144,7 @@ def test_transcribe_chars_per_caption_forwarded_to_export(mocker):
     _auth()
     t = _fake_transcript(mocker)
     t.export_subtitles_srt.return_value = "1\n00:00:00,000 --> 00:00:02,000\nhello\nworld\n"
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     result = runner.invoke(
         app, ["transcribe", "audio.mp3", "-o", "srt", "--chars-per-caption", "42"]
     )
@@ -157,7 +157,7 @@ def test_transcribe_chars_per_caption_forwarded_through_out_file(tmp_path, mocke
     _auth()
     t = _fake_transcript(mocker)
     t.export_subtitles_vtt.return_value = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nhello\n"
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     out = tmp_path / "captions.vtt"
     result = runner.invoke(
         app,
@@ -170,7 +170,7 @@ def test_transcribe_chars_per_caption_forwarded_through_out_file(tmp_path, mocke
 
 def test_transcribe_chars_per_caption_requires_subtitle_output(mocker):
     _auth()
-    tx = mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--chars-per-caption", "42"])
     assert result.exit_code == 2
     assert "--chars-per-caption only applies to subtitle output" in result.output
@@ -180,7 +180,7 @@ def test_transcribe_chars_per_caption_requires_subtitle_output(mocker):
 def test_transcribe_output_invalid_exits_2(mocker):
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -199,7 +199,7 @@ def test_transcribe_reads_audio_from_stdin(monkeypatch, mocker):
         seen["bytes"] = pathlib.Path(audio).read_bytes()
         return _fake_transcript(mocker)
 
-    monkeypatch.setattr("aai_cli.app.transcribe_exec.client.transcribe", fake_transcribe)
+    monkeypatch.setattr("aai_cli.app.transcribe.run.client.transcribe", fake_transcribe)
     result = runner.invoke(app, ["transcribe", "-", "-o", "text"], input=b"RIFFfake-wav-bytes")
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"
@@ -213,7 +213,7 @@ def test_transcribe_status_renders_enum_value(mocker):
     t = _fake_transcript(mocker)
     t.status = aai.TranscriptStatus.completed
     t.json_response = None
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--json"])
     assert result.exit_code == 0
     assert '"status": "completed"' in result.output
@@ -230,7 +230,7 @@ def test_transcribe_prompt_transforms_json(monkeypatch, mocker):
         return "a short summary"
 
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -259,7 +259,7 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch, mocker):
         return f"out({prompt})"
 
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -290,7 +290,7 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch, mocker):
 def test_transcribe_prompt_human_shows_only_transform(monkeypatch, mocker):
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -309,7 +309,7 @@ def test_transcribe_chained_prompts_human_labels_each_step(monkeypatch, mocker):
     # prints only the lone output; this one enumerates "Step N").
     _auth()
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -332,11 +332,11 @@ def test_transcribe_youtube_url_downloads_then_transcribes(monkeypatch, mocker, 
     fake = tmp_path / "vid.m4a"
     fake.write_bytes(b"x")
     monkeypatch.setattr(
-        "aai_cli.app.transcribe_exec.youtube.download_media",
+        "aai_cli.app.transcribe.run.youtube.download_media",
         lambda url, d, *, download_sections=None: fake,
     )
     tx = mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -356,9 +356,9 @@ def test_transcribe_youtube_url_forwards_download_sections(monkeypatch, mocker, 
         seen["sections"] = download_sections
         return fake
 
-    monkeypatch.setattr("aai_cli.app.transcribe_exec.youtube.download_media", _capture)
+    monkeypatch.setattr("aai_cli.app.transcribe.run.youtube.download_media", _capture)
     mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -377,11 +377,11 @@ def test_transcribe_podcast_page_url_downloads_then_transcribes(monkeypatch, moc
     fake = tmp_path / "episode.m4a"
     fake.write_bytes(b"x")
     monkeypatch.setattr(
-        "aai_cli.app.transcribe_exec.youtube.download_media",
+        "aai_cli.app.transcribe.run.youtube.download_media",
         lambda url, d, *, download_sections=None: fake,
     )
     tx = mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -405,7 +405,7 @@ def test_transcribe_remote_bucket_url_downloads_then_transcribes(monkeypatch, mo
         seen["bytes"] = Path(audio).read_bytes()
         return _fake_transcript(mocker)
 
-    monkeypatch.setattr("aai_cli.app.transcribe_exec.client.transcribe", fake)
+    monkeypatch.setattr("aai_cli.app.transcribe.run.client.transcribe", fake)
     result = runner.invoke(app, ["transcribe", "memory://bucket/call.mp3", "-o", "text"])
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"
@@ -416,7 +416,7 @@ def test_transcribe_remote_bucket_url_downloads_then_transcribes(monkeypatch, mo
 
 def test_transcribe_missing_remote_file_fails_cleanly(mocker, memory_fs):
     _auth()
-    tx = mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True)
+    tx = mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True)
     result = runner.invoke(app, ["transcribe", "memory://bucket/nope.mp3"])
     assert result.exit_code == 2
     assert "Remote file not found" in result.output
@@ -430,9 +430,9 @@ def test_transcribe_direct_audio_url_passes_through_without_download(monkeypatch
     def _no_download(url, d, *, download_sections=None):
         raise AssertionError("direct audio URLs must not be downloaded")
 
-    monkeypatch.setattr("aai_cli.app.transcribe_exec.youtube.download_media", _no_download)
+    monkeypatch.setattr("aai_cli.app.transcribe.run.youtube.download_media", _no_download)
     tx = mocker.patch(
-        "aai_cli.app.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=_fake_transcript(mocker),
     )
@@ -446,7 +446,7 @@ def test_transcribe_renders_summary_human(mocker):
     t = _fake_transcript(mocker)
     t.summary = "three bullet summary"
     t.chapters = []
-    mocker.patch("aai_cli.app.transcribe_exec.client.transcribe", autospec=True, return_value=t)
+    mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True, return_value=t)
     result = runner.invoke(app, ["transcribe", "audio.mp3", "--summarization"])
     assert result.exit_code == 0
     assert "Summary:" in result.output

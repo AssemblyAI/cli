@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
-
-from aai_cli.core import config
+from aai_cli.core import config, env
 
 
 def resolve_optional_api_key(*, profile: str | None) -> tuple[str | None, str | None]:
@@ -18,6 +16,6 @@ def resolve_optional_api_key(*, profile: str | None) -> tuple[str | None, str | 
         return None, None
     # Mirror resolve_api_key's whitespace handling: a blank env var is "unset",
     # so a key that actually came from the keyring must not report "environment".
-    env_value = os.environ.get(config.ENV_API_KEY, "").strip()
+    env_value = (env.get(config.ENV_API_KEY) or "").strip()
     source = "environment" if env_value else "keyring"
     return key, source

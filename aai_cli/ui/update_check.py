@@ -9,7 +9,6 @@ Every failure is swallowed: the notice must never delay or break a command.
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 
@@ -19,7 +18,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from aai_cli import __version__
-from aai_cli.core import config, procs
+from aai_cli.core import config, env, procs
 from aai_cli.core.errors import CLIError
 from aai_cli.ui import output
 
@@ -97,7 +96,7 @@ def _should_notify(*, json_mode: bool) -> bool:
     """Notify only on human, interactive, opted-in, non-CI runs."""
     if json_mode:
         return False
-    if os.environ.get(ENV_DISABLED) or os.environ.get("CI"):
+    if env.get(ENV_DISABLED) or env.get("CI"):
         return False
     return bool(output.error_console.is_terminal)
 

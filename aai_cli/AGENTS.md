@@ -24,17 +24,18 @@ between layers is enforced — higher may import lower, never the reverse:
 - **`commands/`** — the Typer sub-apps (top of the stack; see the convention
   below).
 - **`app/`** — orchestration / shared run-logic that wires features together and
-  is reused beyond one command: `context`, `transcribe_exec`/`transcribe_render`
-  /`transcribe_batch`/`transcribe_sources`/`transcribe_validate`, `init_exec`,
-  `setup_exec`, `doctor_checks`, `coding_agent`, `mediafile` (it renders via the
-  UI layer, so it sits here, not in `core`).
+  is reused beyond one command: `context`, the `transcribe/` subpackage
+  (`run`/`render`/`batch`/`sources`/`validate`), `init_exec`, `setup_exec`,
+  `doctor_checks`, `coding_agent`, `mediafile` (it renders via the UI layer, so
+  it sits here, not in `core`).
 - **`ui/`** — Rich rendering: `output`, `render`, `theme`, `steps`, `follow`,
   `help_text`, `typer_patches`, `update_check`.
 - **`core/`** — the Rich-free library layer: `client`, `config`,
-  `config_builder`, `environments`, `errors`, `llm`, `telemetry`, `debuglog`,
-  `remotefs`, `sync_stt`, `hotkey`, `ws`, `youtube`, `wer`, `argscan`,
-  `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`, `choices`. Contract 4
-  also forbids `rich` here, so "no Rich below the UI layer" is structural.
+  `config_builder`, `environments`, `env`, `errors`, `llm`, `telemetry`,
+  `debuglog`, `remotefs`, `sync_stt`, `hotkey`, `ws`, `youtube`, `wer`,
+  `argscan`, `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`,
+  `choices`. Contract 4 also forbids `rich` here, so "no Rich below the UI
+  layer" is structural.
 
 Three things sit *beside* the stack, intentionally unlisted in the layers
 contract:
@@ -75,10 +76,12 @@ private and avoids colliding with the package's own command functions (the
 `listen.py`). This is the Prefect/spaCy convention: flat file by default,
 promote to a folder only when the command has earned multiple modules. Run-logic
 that's **shared beyond one command lives in the `app/` layer**, not inside a
-command package — `app/transcribe_exec`/`transcribe_render`/`transcribe_batch`
-and `app/init_exec` are reused by the onboarding wizard (`onboard/sections.py`),
-so they live in `app/` alongside `doctor_checks`/`setup_exec` rather than under
-`commands/transcribe/` or `commands/init/`.
+command package — the `app/transcribe/` subpackage (`run`/`render`/`batch`/
+`sources`/`validate` — promoted from flat `transcribe_*` modules once the family
+outgrew one file) and `app/init_exec` are reused by the onboarding wizard
+(`onboard/sections.py`), so they live in `app/` alongside
+`doctor_checks`/`setup_exec` rather than under `commands/transcribe/` or
+`commands/init/`.
 
 **Adding a command is purely additive — no shared file edits.** Every command
 module declares a module-level
@@ -119,7 +122,7 @@ import one command module from another.
 function only parses argv into a frozen `<Cmd>Options` dataclass and hands it
 to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda
 adapter in `run_command(ctx, ..., json=...)`. The run commands follow it —
-`commands/stream/_exec.py` (the reference implementation), `app/transcribe_exec.py`
+`commands/stream/_exec.py` (the reference implementation), `app/transcribe/run.py`
 (in the `app/` layer — shared with onboarding), `commands/agent/_exec.py`,
 `commands/speak/_exec.py`, `commands/llm/_exec.py`, `commands/clip/_exec.py`,
 `commands/dictate/_exec.py`. Because the run path is a plain function of data, tests
@@ -137,7 +140,7 @@ heavily-reworked commands with long bodies; small commands keep the inline
 - **`core/environments.py`** — a frozen `Environment` (api_base, streaming_host, llm_gateway_base, ams_base, stytch_*). `DEFAULT_ENV` is **`production`**; use `--sandbox` (or `--env sandbox000` / `AAI_ENV`) to target the sandbox. The active environment is a process-global set once at startup; precedence: `--env` → `AAI_ENV` → profile's stored env → default. A credential is only valid against the environment that minted it.
 - **`core/client.py`** — thin wrappers over the `assemblyai` SDK (`transcribe`, `list_transcripts`, `stream_audio`, etc.). It normalizes SDK exceptions: auth failures become a single clean `auth_failure()` `CLIError`; everything else becomes `APIError`. New SDK calls should follow this try/except shape.
 - **`core/errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `ui/output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` switches to machine-readable output; it is never auto-enabled — `output.resolve_json()` deliberately keeps human text the default even when piped or agent-run.
-- **Raw `subprocess` and `os.environ`/`os.getenv` are fenced by ruff `banned-api` (TID251).** Only the modules allowlisted in `pyproject.toml`'s `per-file-ignores` may call them — process spawning is meant to go through `core/procs.py`, and environment reads through the config/env-resolution layer. A new module reaching for either trips the gate, so adding one is a deliberate, reviewable allowlist edit (the Deno toolchain's per-crate `clippy.toml` model). Tests and `scripts/` are exempt.
+- **Raw `subprocess` and `os.environ`/`os.getenv` are fenced by ruff `banned-api` (TID251).** Environment access has a single chokepoint: **`core/env.py`** is the only module allowlisted for raw `os.environ` — every other module reads/writes the environment through `env.get`/`env.child_env`/`env.force_color`/… (callers still own their variable *names*, e.g. `config.ENV_API_KEY`). Process spawning is the sibling boundary, but unlike env reads it's genuinely diverse (sync-capture, long-lived `Popen` with pipes, detached children), so each module that shells out to its specific tool stays individually allowlisted rather than funnelling through one module. A new module reaching past either boundary trips the gate, so adding one is a deliberate, reviewable edit (the Deno toolchain's per-crate `clippy.toml` model). Tests and `scripts/` are exempt.
 - **`core/debuglog.py`** — the root `-v/--verbose` flag (count: `-v` request-level at INFO, `-vv` wire-level at DEBUG). The CLI normally configures no logging, and the realtime paths *silence* library loggers (`ws.py`, `streaming/diagnostics.py`); verbose mode installs one redacting stderr handler and those silencers stand down. Secrets are registered at their resolution choke points (`config.resolve_api_key`, `AppState.resolve_session`) and masked in every rendered record — websockets logs the raw Authorization header at DEBUG, so masking lives in the formatter, not at call sites. Stdlib-only on purpose: `config` (a Rich-free layer) imports it.
 
 ### Feature subsystems

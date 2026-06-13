@@ -16,8 +16,8 @@ import typer
 
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import DEFAULT_VOICE
-from aai_cli.app import transcribe_exec
 from aai_cli.app.context import AppState
+from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.commands.agent import _exec as agent_exec
 from aai_cli.commands.llm import _exec as llm_exec
 from aai_cli.commands.speak import _exec as speak_exec

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import sys
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING
@@ -13,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from aai_cli import __version__
-from aai_cli.core import choices, jsonshape
+from aai_cli.core import choices, env, jsonshape
 from aai_cli.ui import theme
 
 if TYPE_CHECKING:
@@ -36,7 +35,7 @@ def is_agentic() -> bool:
     env var is set. Used to suppress *interactivity* (the spinner) — never to change the
     output *shape*; `resolve_json` keeps text the default regardless (see its docstring).
     """
-    return not _stdout_is_tty() or any(os.environ.get(var) for var in _AGENT_ENV_VARS)
+    return not _stdout_is_tty() or any(env.get(var) for var in _AGENT_ENV_VARS)
 
 
 def set_color_mode(mode: choices.ColorMode) -> None:
@@ -50,15 +49,13 @@ def set_color_mode(mode: choices.ColorMode) -> None:
     if mode is choices.ColorMode.auto:
         return
     if mode is choices.ColorMode.always:
-        os.environ["FORCE_COLOR"] = "1"
-        os.environ.pop("NO_COLOR", None)
+        env.force_color()
         rebuilt = {
             "console": theme.make_console(force_terminal=True),
             "error_console": theme.make_console(stderr=True, force_terminal=True),
         }
     else:
-        os.environ["NO_COLOR"] = "1"
-        os.environ.pop("FORCE_COLOR", None)
+        env.disable_color()
         rebuilt = {
             "console": theme.make_console(no_color=True),
             "error_console": theme.make_console(stderr=True, no_color=True),

@@ -17,7 +17,6 @@ and every send-side failure is swallowed.
 from __future__ import annotations
 
 import json
-import os
 import platform
 import sys
 import time
@@ -27,7 +26,7 @@ from contextlib import contextmanager
 import typer
 
 from aai_cli import __version__
-from aai_cli.core import argscan, config, procs
+from aai_cli.core import argscan, config, env, procs
 from aai_cli.core.errors import CLIError
 
 ENV_DISABLED = "AAI_TELEMETRY_DISABLED"
@@ -55,11 +54,11 @@ _ERROR_MESSAGE_MAX_CHARS = 500
 
 def client_token() -> str:
     """The write-only intake token: env override first, then the shipped one."""
-    return os.environ.get(ENV_CLIENT_TOKEN) or SHIPPED_CLIENT_TOKEN
+    return env.get(ENV_CLIENT_TOKEN) or SHIPPED_CLIENT_TOKEN
 
 
 def intake_url() -> str:
-    return os.environ.get(ENV_INTAKE_URL) or DEFAULT_INTAKE_URL
+    return env.get(ENV_INTAKE_URL) or DEFAULT_INTAKE_URL
 
 
 def consent_granted() -> bool:
@@ -69,7 +68,7 @@ def consent_granted() -> bool:
     tools commonly export ``true``, and treating those as "still tracking" would
     betray the user's stated intent.
     """
-    if os.environ.get(ENV_DISABLED) or os.environ.get(ENV_DO_NOT_TRACK):
+    if env.get(ENV_DISABLED) or env.get(ENV_DO_NOT_TRACK):
         return False
     return config.get_telemetry_enabled() is not False
 
@@ -79,9 +78,9 @@ def consent_source() -> str:
     an env kill-switch (``env:AAI_TELEMETRY_DISABLED`` / ``env:DO_NOT_TRACK``), the
     choice persisted by ``assembly telemetry enable/disable`` (``config``), or the
     opt-out ``default``."""
-    if os.environ.get(ENV_DISABLED):
+    if env.get(ENV_DISABLED):
         return f"env:{ENV_DISABLED}"
-    if os.environ.get(ENV_DO_NOT_TRACK):
+    if env.get(ENV_DO_NOT_TRACK):
         return f"env:{ENV_DO_NOT_TRACK}"
     if config.get_telemetry_enabled() is not None:
         return "config"
@@ -165,7 +164,7 @@ def build_event(
         "cli_version": __version__,
         "os": platform.system().lower(),
         "python_version": platform.python_version(),
-        "ci": bool(os.environ.get("CI")),
+        "ci": bool(env.get("CI")),
         "device_id": config.get_device_id(),
     }
     if not succeeded:

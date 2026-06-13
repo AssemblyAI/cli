@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from aai_cli.app import transcribe_render as tr
+from aai_cli.app.transcribe import render as tr
 from aai_cli.ui import theme
 
 
@@ -127,7 +127,7 @@ def test_renders_entities_topics_content_safety_highlights():
 def test_fmt_ms_rolls_over_to_hours():
     # Sub-hour stays MM:SS; at an hour the format grows an hours field so a
     # 1h chapter reads 1:00:00 instead of the ambiguous 60:00.
-    from aai_cli.app.transcribe_render import _fmt_ms
+    from aai_cli.app.transcribe.render import _fmt_ms
 
     assert _fmt_ms(0) == "00:00"
     assert _fmt_ms(59_000) == "00:59"
@@ -141,7 +141,7 @@ def test_sentiment_percentages_always_sum_to_100():
     # Largest-remainder rounding: three equal counts split 34/33/33, not 33x3=99.
     from collections import Counter
 
-    from aai_cli.app.transcribe_render import _percentages
+    from aai_cli.app.transcribe.render import _percentages
 
     pcts = _percentages(Counter(positive=1, neutral=1, negative=1))
     assert sum(pcts.values()) == 100

@@ -64,7 +64,7 @@ def test_every_render_feature_has_a_snippet():
     # but no `_render_speaker_labels` function, so it is an allowed orphan.
     import inspect
 
-    from aai_cli.app import transcribe_render
+    from aai_cli.app.transcribe import render as transcribe_render
 
     rendered = {
         name[len("_render_") :]

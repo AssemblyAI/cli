@@ -14,7 +14,7 @@ from pathlib import Path
 
 import assemblyai as aai
 
-from aai_cli.app import transcribe_sources
+from aai_cli.app.transcribe import sources as transcribe_sources
 from aai_cli.core import choices
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.ui import output

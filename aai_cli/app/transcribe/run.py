@@ -16,8 +16,10 @@ import assemblyai as aai
 from rich.markup import escape
 
 from aai_cli import code_gen
-from aai_cli.app import transcribe_render, transcribe_sources, transcribe_validate
 from aai_cli.app.context import AppState
+from aai_cli.app.transcribe import render as transcribe_render
+from aai_cli.app.transcribe import sources as transcribe_sources
+from aai_cli.app.transcribe import validate as transcribe_validate
 from aai_cli.code_gen.transcribe import render as render_transcribe_code
 from aai_cli.core import choices, client, config_builder, jsonshape, llm, remotefs, stdio, youtube
 from aai_cli.core.errors import UsageError
@@ -300,7 +302,7 @@ def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None
 def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly transcribe` invocation from already-parsed flags."""
     # Module-load order: transcribe_batch imports this module, so import it lazily.
-    from aai_cli.app import transcribe_batch
+    from aai_cli.app.transcribe import batch as transcribe_batch
 
     transcribe_validate.validate_language_flags(
         opts.language_code, language_detection=opts.language_detection
