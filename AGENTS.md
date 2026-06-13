@@ -34,7 +34,7 @@ Individual tools (all via `uv run`):
 ```sh
 uv run ruff check .          # lint
 uv run ruff format .         # format (line-length 100)
-uv run mypy                  # files = ["aai_cli", "tests"] from pyproject; strict (disallow_untyped_defs on src)
+uv run mypy                  # files = ["aai_cli", "tests"] from pyproject; src is full --strict bar disallow_untyped_calls (jiwer ships no stubs); tests relax the untyped-body flags
 prettier --check "aai_cli/init/templates/**/*.{js,css}"  # JS/CSS template formatting
 uv run pytest -q             # default unit suite
 uv run pytest tests/test_transcribe.py -q              # a single file

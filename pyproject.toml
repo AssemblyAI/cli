@@ -175,11 +175,37 @@ warn_unreachable = true
 disallow_any_generics = true
 no_implicit_reexport = true
 extra_checks = true
+# The remaining flags from mypy --strict, which aai_cli already satisfies. They close
+# gaps the above leave open: a function with *some* annotations but an unannotated
+# arg/return (disallow_incomplete_defs), the body of any still-untyped function going
+# unchecked (check_untyped_defs), an untyped decorator silently erasing a function's
+# type (disallow_untyped_decorators), subclassing an Any-typed base (disallow_subclassing_any),
+# and a config option that no longer matches any file (warn_unused_configs). The one
+# strict flag left off is disallow_untyped_calls: jiwer ships no stubs, so wer.py's
+# RemovePunctuation() call is unavoidably untyped, and turning it on would force a
+# net-new `# type: ignore` the escape-hatch gate rejects.
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+disallow_subclassing_any = true
+warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-# Tests are type-checked too, but pytest functions don't need return annotations.
+# Tests are type-checked too, but pytest functions don't need return annotations
+# (disallow_untyped_defs/disallow_incomplete_defs), and the bodies of those untyped
+# helpers — full of mock plumbing and ad-hoc fixtures — would drown the signal if
+# type-checked (check_untyped_defs) or block subclassing untyped test doubles
+# (disallow_subclassing_any) / wrapping them in untyped decorators
+# (disallow_untyped_decorators). The strict flags stay on for the shipped package.
+# With check_untyped_defs off, mypy emits an `annotation-unchecked` note per annotated
+# untyped helper; silence those notes so the test output stays signal.
 module = "tests.*"
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+disable_error_code = ["annotation-unchecked"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of
@@ -211,9 +237,23 @@ extend-exclude = ["aai_cli/_version.py"]
 # A/N/FBT/PL/T20/PT/PIE/PERF/TCH add maintainability pressure: naming/shadowing,
 # boolean traps, pylint-style design issues, centralized raw output, pytest style,
 # small simplifications, performance footguns, and type-only import hygiene.
+# ASYNC/LOG/G/DTZ/FLY/ICN/SLOT/ISC/TID add correctness pressure the above miss and the
+# codebase already satisfies (so they're forward-looking, zero-churn enforcement):
+#   ASYNC — blocking calls (time.sleep, open(), sync HTTP) inside the streaming/agent
+#           asyncio code, which would stall the event loop;
+#   LOG/G — logging anti-patterns (f-strings/`.format` in log calls, `exception()`
+#           outside handlers) in debuglog and friends;
+#   DTZ   — naive datetime construction (timezone bugs);
+#   FLY   — static `str.join` that should be an f-string (pairs with UP);
+#   ISC   — implicitly concatenated string literals across lines (the classic
+#           missing-comma-in-a-list bug); ISC001 is owned by the formatter (ignored);
+#   ICN/SLOT — import-convention and __slots__ hygiene;
+#   TID   — relative imports (banned outright below) so every import is absolute,
+#           reinforcing the import-linter architecture contracts.
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF",
           "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "C90", "T20", "PT",
-          "PIE", "PERF", "TCH"]
+          "PIE", "PERF", "TCH", "ASYNC", "LOG", "G", "DTZ", "FLY", "ICN", "SLOT", "ISC",
+          "TID"]
 # E501: line length is owned by the formatter.
 # B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
 # S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
@@ -223,13 +263,21 @@ select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S"
 # PLC0415: optional/heavy runtime deps are imported lazily to keep startup fast.
 # TC001-TC003: the project intentionally keeps readable top-level type imports; TC006
 #   still enforces quoted runtime casts.
+# ISC001: single-line implicit string concatenation is managed by the formatter, which
+#   would otherwise fight this lint (ruff's own recommendation when both are enabled).
 ignore = ["E501", "B008", "S603", "S607", "TRY003", "N818", "PLC0415",
-          "TC001", "TC002", "TC003"]
+          "TC001", "TC002", "TC003", "ISC001"]
 
 # Function-size pressure, tuned to keep functions small enough to read and edit in
 # one screen (the friction a coding agent hits most). These complement xenon's
 # cyclomatic-complexity gate in check.sh: mccabe (C901) and max-branches bound
 # branchiness; max-statements bounds raw length; max-args bounds signatures.
+[tool.ruff.lint.flake8-tidy-imports]
+# Every intra-package import is already absolute (`from aai_cli.x import y`); banning
+# relative imports outright keeps it that way, which makes modules movable and the
+# import-linter contracts unambiguous.
+ban-relative-imports = "all"
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10  # matches xenon's grade-B ceiling (CC <= 10) so the two agree
 
