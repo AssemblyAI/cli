@@ -62,9 +62,15 @@ def _fake_ytdlp(monkeypatch, ydl_cls):
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=ydl_cls))
 
 
-def test_download_media_returns_prepared_path(tmp_path, monkeypatch):
-    created = tmp_path / "vid123.m4a"
-    captured = {}
+def _ydl_stub(monkeypatch, extract, *, filename=""):
+    """Install a FakeYoutubeDL that drives just the parts a test cares about.
+
+    `extract()` returns the info dict (and performs any download side effects, e.g.
+    writing the landed file); `filename` is what prepare_filename() reports. Returns
+    the dict capturing the constructor `opts` (under "opts") and the `download` flag
+    extract_info was called with (under "download"), so callers can assert on either.
+    """
+    captured: dict = {}
 
     class FakeYDL:
         def __init__(self, opts):
@@ -78,13 +84,32 @@ def test_download_media_returns_prepared_path(tmp_path, monkeypatch):
 
         def extract_info(self, url, download):
             captured["download"] = download
-            created.write_bytes(b"audio")
-            return {"id": "vid123", "ext": "m4a"}
+            return extract()
 
         def prepare_filename(self, info):
-            return str(created)
+            return filename
 
     _fake_ytdlp(monkeypatch, FakeYDL)
+    return captured
+
+
+def _raising_extract(message):
+    """An `extract` callable for `_ydl_stub` that fails like yt-dlp would."""
+
+    def extract():
+        raise RuntimeError(message)
+
+    return extract
+
+
+def test_download_media_returns_prepared_path(tmp_path, monkeypatch):
+    created = tmp_path / "vid123.m4a"
+
+    def extract():
+        created.write_bytes(b"audio")
+        return {"id": "vid123", "ext": "m4a"}
+
+    captured = _ydl_stub(monkeypatch, extract, filename=str(created))
     out = youtube.download_media("https://youtu.be/vid123", tmp_path)
     assert out == created
     assert out.is_file()
@@ -101,26 +126,11 @@ def test_download_media_returns_prepared_path(tmp_path, monkeypatch):
 def test_download_media_video_fetches_merged_video(tmp_path, monkeypatch):
     # video=True must request the full video (best video+audio) merged into one
     # mp4 container, so the result is playable/clippable everywhere.
-    captured = {}
+    def extract():
+        (tmp_path / "x.mp4").write_bytes(b"video")
+        return {"id": "x", "ext": "mp4"}
 
-    class FakeYDL:
-        def __init__(self, opts):
-            captured["opts"] = opts
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            (tmp_path / "x.mp4").write_bytes(b"video")
-            return {"id": "x", "ext": "mp4"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "x.mp4")
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    captured = _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "x.mp4"))
     out = youtube.download_media("https://youtu.be/x", tmp_path, video=True)
     assert out == tmp_path / "x.mp4"
     assert captured["opts"]["format"] == "bestvideo*+bestaudio/best"
@@ -129,30 +139,15 @@ def test_download_media_video_fetches_merged_video(tmp_path, monkeypatch):
 
 def test_download_media_video_errors_name_the_video(tmp_path, monkeypatch):
     # With video=True the failure messages say "video", not "audio".
-    _fake_ytdlp(monkeypatch, _raising_ydl("network down"))
+    _ydl_stub(monkeypatch, _raising_extract("network down"))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path, video=True)
     assert exc.value.message == "Could not download video from https://youtu.be/x: network down"
 
 
 def test_download_media_video_no_file_produced_names_the_video(tmp_path, monkeypatch):
-    class FakeYDL:
-        def __init__(self, opts):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            return {"id": "x"}  # writes no file
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "guessed.mp4")  # doesn't exist
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    # extract writes no file; prepare_filename points at a missing one.
+    _ydl_stub(monkeypatch, lambda: {"id": "x"}, filename=str(tmp_path / "guessed.mp4"))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path, video=True)
     assert "no video file" in exc.value.message
@@ -203,26 +198,11 @@ def test_download_media_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypat
     # clean error, duplicating the message; the passed logger must swallow everything.
     import logging
 
-    captured = {}
+    def extract():
+        (tmp_path / "x.m4a").write_bytes(b"audio")
+        return {"id": "x", "ext": "m4a"}
 
-    class FakeYDL:
-        def __init__(self, opts):
-            captured["opts"] = opts
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            (tmp_path / "x.m4a").write_bytes(b"audio")
-            return {"id": "x", "ext": "m4a"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "x.m4a")
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    captured = _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "x.m4a"))
     youtube.download_media("https://youtu.be/x", tmp_path)
     logger = captured["opts"]["logger"]
     # Structurally quiet: no propagation to root, only swallow-everything handlers.
@@ -242,24 +222,12 @@ def test_download_media_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypat
 def test_download_media_falls_back_to_landed_file(tmp_path, monkeypatch):
     landed = tmp_path / "actual.webm"
 
-    class FakeYDL:
-        def __init__(self, opts):
-            pass
+    def extract():
+        landed.write_bytes(b"x")
+        return {"id": "x"}
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            landed.write_bytes(b"x")
-            return {"id": "x"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "guessed.m4a")  # wrong extension; file doesn't exist
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    # prepare_filename has the wrong extension and names a file that doesn't exist.
+    _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "guessed.m4a"))
     assert youtube.download_media("https://youtu.be/x", tmp_path) == landed
 
 
@@ -269,47 +237,19 @@ def test_download_media_falls_back_to_largest_file(tmp_path, monkeypatch):
     audio = tmp_path / "actual.webm"
     thumb = tmp_path / "actual.webp"
 
-    class FakeYDL:
-        def __init__(self, opts):
-            pass
+    def extract():
+        thumb.write_bytes(b"\x00" * 16)  # small sidecar
+        audio.write_bytes(b"\x00" * 4096)  # the real, much larger track
+        return {"id": "x"}
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            thumb.write_bytes(b"\x00" * 16)  # small sidecar
-            audio.write_bytes(b"\x00" * 4096)  # the real, much larger track
-            return {"id": "x"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "guessed.m4a")  # wrong extension; file doesn't exist
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    # prepare_filename has the wrong extension and names a file that doesn't exist.
+    _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "guessed.m4a"))
     assert youtube.download_media("https://youtu.be/x", tmp_path) == audio
 
 
 def test_download_media_no_file_produced_raises(tmp_path, monkeypatch):
     # prepare_filename points at a missing file and nothing landed in dest_dir.
-    class FakeYDL:
-        def __init__(self, opts):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            return {"id": "x"}  # writes no file
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "guessed.m4a")  # doesn't exist
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    _ydl_stub(monkeypatch, lambda: {"id": "x"}, filename=str(tmp_path / "guessed.m4a"))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
@@ -317,28 +257,8 @@ def test_download_media_no_file_produced_raises(tmp_path, monkeypatch):
     assert "no audio file" in exc.value.message
 
 
-def _raising_ydl(message):
-    class FakeYDL:
-        def __init__(self, opts):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            raise RuntimeError(message)
-
-        def prepare_filename(self, info):
-            return ""
-
-    return FakeYDL
-
-
 def test_download_media_error_raises_cli_error(tmp_path, monkeypatch):
-    _fake_ytdlp(monkeypatch, _raising_ydl("network down"))
+    _ydl_stub(monkeypatch, _raising_extract("network down"))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.error_type == "youtube_error"
@@ -357,7 +277,7 @@ def test_download_media_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch
     # yt-dlp appends report-a-bug boilerplate to extractor errors; only the
     # meaningful part should reach the user, without the "ERROR: " prefix.
     message = f"ERROR: [youtube] abc: Video unavailable; {_YTDLP_BOILERPLATE}"
-    _fake_ytdlp(monkeypatch, _raising_ydl(message))
+    _ydl_stub(monkeypatch, _raising_extract(message))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path)
     assert exc.value.message == (
@@ -370,7 +290,7 @@ def test_download_media_trims_ytdlp_bug_report_boilerplate(tmp_path, monkeypatch
 def test_download_media_all_boilerplate_message_falls_back_to_raw_text(tmp_path, monkeypatch):
     # When trimming would leave nothing, keep the original message over an empty error.
     message = _YTDLP_BOILERPLATE[0].upper() + _YTDLP_BOILERPLATE[1:]
-    _fake_ytdlp(monkeypatch, _raising_ydl(message))
+    _ydl_stub(monkeypatch, _raising_extract(message))
     with pytest.raises(CLIError) as exc:
         youtube.download_media("https://youtu.be/x", tmp_path)
     assert message in exc.value.message
@@ -443,26 +363,11 @@ def test_parse_download_sections_rejects_malformed(spec, needle):
 def test_download_media_with_sections_sets_download_ranges(tmp_path, monkeypatch):
     # --download-sections must reach yt-dlp as download_ranges + force_keyframes_at_cuts
     # (exact cuts, not the nearest keyframe).
-    captured = {}
+    def extract():
+        (tmp_path / "x.m4a").write_bytes(b"audio")
+        return {"id": "x", "ext": "m4a"}
 
-    class FakeYDL:
-        def __init__(self, opts):
-            captured["opts"] = opts
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            (tmp_path / "x.m4a").write_bytes(b"audio")
-            return {"id": "x", "ext": "m4a"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "x.m4a")
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    captured = _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "x.m4a"))
     youtube.download_media(
         "https://youtu.be/x", tmp_path, download_sections=["*0:00-5:00", "intro"]
     )
@@ -475,26 +380,11 @@ def test_download_media_with_sections_sets_download_ranges(tmp_path, monkeypatch
 
 def test_download_media_without_sections_omits_download_ranges(tmp_path, monkeypatch):
     # The default path must not set download_ranges (downloads the whole track).
-    captured = {}
+    def extract():
+        (tmp_path / "x.m4a").write_bytes(b"audio")
+        return {"id": "x", "ext": "m4a"}
 
-    class FakeYDL:
-        def __init__(self, opts):
-            captured["opts"] = opts
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def extract_info(self, url, download):
-            (tmp_path / "x.m4a").write_bytes(b"audio")
-            return {"id": "x", "ext": "m4a"}
-
-        def prepare_filename(self, info):
-            return str(tmp_path / "x.m4a")
-
-    _fake_ytdlp(monkeypatch, FakeYDL)
+    captured = _ydl_stub(monkeypatch, extract, filename=str(tmp_path / "x.m4a"))
     youtube.download_media("https://youtu.be/x", tmp_path)
     assert "download_ranges" not in captured["opts"]
     assert "force_keyframes_at_cuts" not in captured["opts"]
