@@ -1,0 +1,6 @@
+# Normalize line endings to LF on checkout everywhere. The suite renders output
+# with "\n" and the syrupy snapshot goldens (tests/__snapshots__/*.ambr) are
+# compared byte-for-byte, so a Windows checkout converting them to CRLF (Git's
+# default autocrlf) would fail every snapshot test. text=auto still lets Git
+# auto-detect and leave binary files untouched.
+* text=auto eol=lf
