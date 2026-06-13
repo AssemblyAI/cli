@@ -30,6 +30,12 @@ The suite is hermetic by construction (`tests/conftest.py` + `pyproject.toml` `[
 
 Lessons that cost iterations getting the patch-coverage and mutation tail gates green:
 
+- **Control a command's output shape with the real `--json` flag, never by patching
+  `output.resolve_json`.** `resolve_json` is now just `return explicit` (it no longer
+  auto-enables JSON off a tty), so a test wanting human output simply omits `--json`
+  (the suite's default) and one wanting machine output passes `--json` to `runner.invoke`.
+  A `monkeypatch.setattr("aai_cli.output.resolve_json", …)` is therefore a no-op that
+  bypasses the real argscan→`json_option`→`resolve_json` path — don't add one.
 - **A boolean literal/default survives the mutation gate unless a test asserts the
   difference between its two values**, not just that the line ran. `json_mode=False` passed
   to `output.emit`, or `quiet=False` on `output.status`, get mutated to `True` — kill them by

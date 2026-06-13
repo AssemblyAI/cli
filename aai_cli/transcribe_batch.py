@@ -3,12 +3,13 @@
 ``assembly transcribe`` switches to batch mode when the source is a directory or a
 glob pattern — local, or on fsspec-addressable remote storage (an ``s3://…/*.mp3``
 glob, or a trailing-slash folder like ``s3://bucket/calls/``) — or when
-``--from-stdin`` supplies one path/URL per line. Sources run
-concurrently behind a live progress table; each finished source gets a
-``<source>.aai.json`` sidecar holding the full transcript. The sidecar doubles as
-the resume marker — a re-run skips any source whose sidecar records a completed
-transcription of the same bytes — so retrying a partly-failed batch only pays for
-what's missing (``--force`` re-transcribes everything).
+``--from-stdin`` supplies one path/URL per line (the source-list expansion itself
+lives in ``transcribe_sources``). Sources run concurrently behind a live progress
+table; each finished source gets a ``<source>.aai.json`` sidecar holding the full
+transcript. The sidecar doubles as the resume marker — a re-run skips any source
+whose sidecar records a completed transcription of the same bytes — so retrying a
+partly-failed batch only pays for what's missing (``--force`` re-transcribes
+everything).
 
 ``--llm`` prompts run per source once its transcription is recorded, landing under
 the sidecar's ``transform`` key. The chain is resumable on its own: a re-run with
@@ -31,164 +32,19 @@ from typing import TYPE_CHECKING
 from rich.live import Live
 from rich.markup import escape
 
-from aai_cli import client, jsonshape, llm, output, remotefs, stdio, theme, transcribe_exec
-from aai_cli.errors import CLIError, NotAuthenticated, UsageError, mutually_exclusive
+from aai_cli import client, jsonshape, llm, output, remotefs, theme, transcribe_exec
+from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.transcribe_sources import SIDECAR_SUFFIX, URL_PREFIXES
 
 if TYPE_CHECKING:
     import assemblyai as aai
     from rich.table import Table
 
-SIDECAR_SUFFIX = ".aai.json"
-
-# What a directory scan picks up (an explicit glob or stdin list is taken as-is).
-AUDIO_EXTENSIONS = frozenset(
-    {
-        ".3gp",
-        ".aac",
-        ".aif",
-        ".aiff",
-        ".amr",
-        ".flac",
-        ".m4a",
-        ".m4b",
-        ".mka",
-        ".mkv",
-        ".mov",
-        ".mp2",
-        ".mp3",
-        ".mp4",
-        ".mpga",
-        ".oga",
-        ".ogg",
-        ".opus",
-        ".wav",
-        ".webm",
-        ".wma",
-    }
-)
-
-_URL_PREFIXES = ("http://", "https://")
-_GLOB_CHARS = frozenset("*?[")
-
-
-def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> list[str] | None:
-    """The batch source list, or ``None`` when this is a single-source invocation.
-
-    Batch mode triggers on ``--from-stdin``, a directory (scanned recursively for
-    audio files), a glob pattern that names no existing file, or a bucket URL
-    that is a glob or trailing-slash folder. A plain file, URL, ``-`` (audio
-    piped on stdin), or ``--sample`` stays on the single-source path.
-    """
-    if from_stdin:
-        return _stdin_sources(source, sample=sample)
-    # `not source` (rather than `is None`) also catches the empty string — e.g. an
-    # unset shell variable in `assembly transcribe "$FILE"`. `Path("")` is `Path(".")`,
-    # so it would otherwise fall into the directory branch and batch-transcribe the
-    # whole working directory; instead it stays single-source and fails validation.
-    if not source or sample or source == "-" or source.startswith(_URL_PREFIXES):
-        return None
-    if remotefs.is_remote_url(source):
-        return _remote_sources(source)
-    path = Path(source)
-    if path.is_dir():
-        return _directory_sources(path)
-    if not path.exists() and _GLOB_CHARS.intersection(source):
-        return _glob_sources(source)
-    return None
-
-
-def _stdin_sources(source: str | None, *, sample: bool) -> list[str]:
-    if source is not None or sample:
-        raise UsageError(
-            "--from-stdin reads sources from stdin; don't also pass a source or --sample."
-        )
-    lines = list(dict.fromkeys(stdio.iter_piped_stdin_lines()))  # dedupe, keep order
-    if not lines:
-        raise UsageError(
-            "No sources received on stdin.",
-            suggestion="Pipe one path or URL per line, e.g. "
-            "find . -name '*.mp3' | assembly transcribe --from-stdin.",
-        )
-    return lines
-
-
-def _directory_sources(path: Path) -> list[str]:
-    files = sorted(
-        str(p) for p in path.rglob("*") if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS
-    )
-    if not files:
-        raise UsageError(
-            f"No audio files found under {path}.",
-            suggestion="Recognized extensions: " + ", ".join(sorted(AUDIO_EXTENSIONS)) + ".",
-        )
-    return files
-
-
-def _remote_sources(url: str) -> list[str] | None:
-    """Batch sources for a bucket/remote URL, or ``None`` when it's a single file.
-
-    Mirrors the local rules: a glob expands to its file matches (sidecars
-    excluded), a trailing-slash folder to its audio files (recursive, filtered by
-    ``AUDIO_EXTENSIONS``); anything else is downloaded as one file.
-    """
-    if _GLOB_CHARS.intersection(url):
-        matches = [u for u in remotefs.glob_files(url) if not u.endswith(SIDECAR_SUFFIX)]
-        if not matches:
-            raise UsageError(f"No files match {url}.")
-        return matches
-    if url.endswith("/"):
-        files = [u for u in remotefs.list_files(url) if Path(u).suffix.lower() in AUDIO_EXTENSIONS]
-        if not files:
-            raise UsageError(
-                f"No audio files found under {url}.",
-                suggestion="Recognized extensions: " + ", ".join(sorted(AUDIO_EXTENSIONS)) + ".",
-            )
-        return files
-    return None
-
-
-def _glob_sources(pattern: str) -> list[str]:
-    # pathlib globs are always relative, so peel an absolute pattern's anchor off
-    # and glob from there ("" anchors at the working directory; Path("") is ".").
-    anchor = Path(pattern).anchor
-    matches = sorted(
-        str(p)
-        for p in Path(anchor).glob(pattern.removeprefix(anchor))
-        if p.is_file() and not str(p).endswith(SIDECAR_SUFFIX)
-    )
-    if not matches:
-        raise UsageError(f"No files match {pattern}.")
-    return matches
-
-
-def reject_single_source_flags(
-    *,
-    out: Path | None,
-    output_field: object | None,
-    show_code: bool,
-) -> None:
-    """Batch mode writes one sidecar per source; the single-result flags don't apply.
-
-    ``--llm`` is deliberately not here: in batch mode the chain runs per source and
-    its steps land in each sidecar.
-    """
-    mutually_exclusive(
-        ("--show-code", show_code),
-        ("multiple sources", True),
-        suggestion="Pass one file or URL with --show-code.",
-    )
-    mutually_exclusive(
-        ("--out", out),
-        ("-o/--output", output_field),
-        ("multiple sources", True),
-        suggestion=f"Each source gets a '{SIDECAR_SUFFIX}' sidecar with the full result.",
-    )
-
 
 def sidecar_path(source: str) -> Path:
     """Where ``source``'s sidecar lives: ``<file>.aai.json`` next to a local file, or
     a slug + URL-hash name in the working directory for a URL (web or bucket)."""
-    if source.startswith(_URL_PREFIXES) or remotefs.is_remote_url(source):
+    if source.startswith(URL_PREFIXES) or remotefs.is_remote_url(source):
         digest = hashlib.sha256(source.encode()).hexdigest()[:8]
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", source.partition("://")[2]).strip("-.")[:64]
         return Path(f"{slug}-{digest}{SIDECAR_SUFFIX}")
@@ -197,7 +53,7 @@ def sidecar_path(source: str) -> Path:
 
 def _source_digest(source: str) -> str | None:
     """SHA-256 of a local file's bytes; ``None`` for URLs (and paths that aren't files)."""
-    if source.startswith(_URL_PREFIXES) or not Path(source).is_file():
+    if source.startswith(URL_PREFIXES) or not Path(source).is_file():
         return None
     with Path(source).open("rb") as f:
         return hashlib.file_digest(f, "sha256").hexdigest()

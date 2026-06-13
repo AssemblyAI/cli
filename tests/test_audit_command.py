@@ -21,10 +21,6 @@ def _login_result(*, json_mode=False):
     )
 
 
-def _human(monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
-
-
 def test_audit_renders_rows(mocker):
     _auth()
     payload = {
@@ -67,9 +63,8 @@ def test_audit_passes_filters(mocker):
     )
 
 
-def test_audit_human_mode_renders_table(monkeypatch, mocker):
+def test_audit_human_mode_renders_table(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "data": [
             {
@@ -117,9 +112,8 @@ def test_audit_helpers_format_edge_cases():
     assert audit._audit_rows({"data": "bad"}) == []
 
 
-def test_audit_human_empty_result(monkeypatch, mocker):
+def test_audit_human_empty_result(mocker):
     _auth()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}
     )
@@ -128,9 +122,8 @@ def test_audit_human_empty_result(monkeypatch, mocker):
     assert "No audit events found" in result.output
 
 
-def test_audit_can_include_login_events(monkeypatch, mocker):
+def test_audit_can_include_login_events(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "data": [
             {
@@ -151,9 +144,8 @@ def test_audit_can_include_login_events(monkeypatch, mocker):
     assert "Hidden:" not in result.output
 
 
-def test_audit_summarizes_all_login_rows(monkeypatch, mocker):
+def test_audit_summarizes_all_login_rows(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "data": [
             {

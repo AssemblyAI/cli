@@ -17,14 +17,6 @@ def _isolate_home(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 
-@pytest.fixture(autouse=True)
-def _force_json(monkeypatch):
-    """These tests pin the structured step/status JSON. The CLI now defaults to human
-    text everywhere (JSON is opt-in), so force the machine output the assertions parse —
-    the equivalent of invoking each command with --json."""
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: True)
-
-
 def test_proc_detail_prefers_stderr_then_falls_back_to_stdout():
     from aai_cli import setup_exec as setup
 
@@ -51,7 +43,7 @@ def test_remove_skill_failure_reports_failed(monkeypatch):
         FakeRun({("claude", "mcp", "get"): 1}, removes_skill=False),
     )
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 1
     assert _statuses(result)["skill"] == "failed"
     # The failure detail surfaces the subprocess's stderr ("boom"), preferring it over
@@ -77,7 +69,7 @@ def test_remove_skill_skipped_when_npx_missing(monkeypatch):
         FakeRun({("claude", "mcp", "get"): 1}),
     )
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["skill"] == "skipped"
 
@@ -94,7 +86,7 @@ def test_remove_unwinds_all(monkeypatch, tmp_path):
     fake = FakeRun({("claude", "mcp", "get"): 0})  # present -> removable
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 0
     assert _statuses(result) == {"mcp": "removed", "skill": "removed", "aai-cli skill": "removed"}
     assert ["claude", "mcp", "remove", "assemblyai-docs"] in fake.calls
@@ -111,7 +103,7 @@ def test_remove_when_absent_is_not_an_error(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})  # absent
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 0
     assert _statuses(result) == {
         "mcp": "not_installed",
@@ -146,7 +138,7 @@ def test_remove_skips_mcp_when_claude_missing(monkeypatch):
     fake = FakeRun()
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["mcp"] == "skipped"
     assert not any(c[0] == "claude" for c in fake.calls)
@@ -158,7 +150,7 @@ def test_remove_mcp_failure_reports_failed(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 0, ("claude", "mcp", "remove"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "remove"])
+    result = runner.invoke(app, ["setup", "remove", "--json"])
     assert result.exit_code == 1
     assert _statuses(result)["mcp"] == "failed"
 

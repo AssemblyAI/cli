@@ -103,6 +103,16 @@ fi
 echo "==> markdownlint (docs/ is generated, so excluded)"
 markdownlint "**/*.md" --ignore docs --ignore node_modules --ignore .pytest_cache
 
+echo "==> codespell (spell-check code, comments, docs)"
+# Kubernetes' verify-spelling, generalized. Config (skips + ignore-words) is in
+# [tool.codespell] in pyproject.toml. Run via uvx (like twine below) so it needs no
+# entry in uv.lock; pre-commit also runs it. uvx self-skips if offline/unavailable.
+if command -v uvx >/dev/null 2>&1; then
+  uvx codespell .
+else
+  echo "   uvx not found; skipping (pre-commit + CI run codespell)"
+fi
+
 echo "==> json validity (all tracked + staged *.json)"
 # Parse every JSON file so a malformed dashboard / vercel.json / fixture fails here
 # instead of silently downstream (a bad dashboard just won't import). Validity only —
@@ -169,6 +179,32 @@ trap - EXIT
 
 echo "==> init template contract/import gate"
 uv run python scripts/template_contract_gate.py
+
+echo "==> unused snapshot/fixture gate"
+# xdist disables syrupy's own unused-snapshot detection, so a renamed/deleted test can
+# leave an orphaned .ambr or recorded API fixture behind. This static check catches it.
+uv run python scripts/unused_fixtures_gate.py
+
+echo "==> docs consistency gate (env vars / exit codes / command refs)"
+# curl's "every option is documented" presubmit, generalized: REFERENCE.md/README.md must
+# not drift from the code — every env var and exit code is documented, every `assembly …`
+# example names a real command.
+uv run python scripts/docs_consistency_gate.py
+
+echo "==> docstring coverage gate (public API ratchet)"
+# interrogate can't parse this codebase's PEP 695 generics, so an ast-based ratchet stands
+# in: public-API docstring coverage may not drop below the floor in scripts/.
+uv run python scripts/docstring_coverage_gate.py
+
+echo "==> brew audit (Homebrew formula)"
+# Lint the formula we ship (Formula/assembly.rb) the way Homebrew's own CI does, so a
+# formula regression fails here instead of on the release PR. brew is macOS/Linuxbrew
+# only, so this self-skips where it isn't installed (CI's release path has it).
+if command -v brew >/dev/null 2>&1; then
+  brew audit --strict --formula Formula/assembly.rb
+else
+  echo "   brew not found; skipping (Homebrew CI / release runner has it)"
+fi
 
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need

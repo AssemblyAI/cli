@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config, transcribe_batch
+from aai_cli import config, transcribe_batch, transcribe_sources
 from aai_cli.errors import UsageError
 from aai_cli.main import app
 
@@ -129,7 +129,7 @@ def test_stdin_source_list_dedupes_preserving_order(monkeypatch):
     import io
 
     monkeypatch.setattr("sys.stdin", io.StringIO("b.mp3\na.mp3\nb.mp3\n"))
-    assert transcribe_batch.expand_sources(None, from_stdin=True, sample=False) == [
+    assert transcribe_sources.expand_sources(None, from_stdin=True, sample=False) == [
         "b.mp3",
         "a.mp3",
     ]
@@ -158,7 +158,7 @@ def test_from_stdin_rejects_sample():
 
 @pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None, ""])
 def test_non_batch_sources_return_none(source):
-    assert transcribe_batch.expand_sources(source, from_stdin=False, sample=False) is None
+    assert transcribe_sources.expand_sources(source, from_stdin=False, sample=False) is None
 
 
 def test_empty_source_is_rejected_not_treated_as_cwd(tmp_path, mocker, monkeypatch):
@@ -175,13 +175,13 @@ def test_empty_source_is_rejected_not_treated_as_cwd(tmp_path, mocker, monkeypat
 
 
 def test_sample_returns_none_even_without_source():
-    assert transcribe_batch.expand_sources(None, from_stdin=False, sample=True) is None
+    assert transcribe_sources.expand_sources(None, from_stdin=False, sample=True) is None
 
 
 def test_expand_sources_directory_error_message_names_the_path(tmp_path):
     (tmp_path / "calls").mkdir()
     with pytest.raises(UsageError, match="No audio files found under calls"):
-        transcribe_batch.expand_sources("calls", from_stdin=False, sample=False)
+        transcribe_sources.expand_sources("calls", from_stdin=False, sample=False)
 
 
 @pytest.mark.parametrize(
@@ -295,7 +295,7 @@ def test_remote_glob_without_matches_exits_2(memory_fs):
 def test_plain_remote_file_url_stays_single_source(memory_fs):
     # No glob and no trailing slash: a bucket URL is one file, like a local path.
     for url in ("memory://calls/a.mp3", "memory://calls"):
-        assert transcribe_batch.expand_sources(url, from_stdin=False, sample=False) is None
+        assert transcribe_sources.expand_sources(url, from_stdin=False, sample=False) is None
 
 
 def test_sidecar_path_for_remote_url_is_slug_plus_hash():

@@ -47,11 +47,12 @@
   │              pipe                                                            │
   │ dictate      Push-to-talk dictation: record the mic, get the transcript back │
   │ agent        Hold a live two-way voice conversation with a voice agent       │
-  │ speak         Synthesize speech from text with AssemblyAI streaming TTS      │
+  │ speak        [sandbox] Synthesize speech from text with AssemblyAI streaming │
+  │              TTS                                                             │
   │ llm          Send a prompt to AssemblyAI's LLM Gateway and print the reply   │
   │ clip         Cut clips from media by speaker, text match, LLM pick, or time  │
   │              range                                                           │
-  │ dub           Dub a video or audio file into another language                │
+  │ dub          [sandbox] Dub a video or audio file into another language       │
   │ caption      Burn always-visible captions into a video                       │
   │ eval         Transcribe a dataset and score WER against its reference texts  │
   │ webhooks     Receive webhook deliveries on a public dev URL                  │

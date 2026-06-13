@@ -287,7 +287,7 @@
   
    Usage: assembly dub [OPTIONS] MEDIA
   
-    Dub a video or audio file into another language
+   [sandbox] Dub a video or audio file into another language
   
    The whole platform in one command: the media is transcribed with diarized
    utterance timestamps, each utterance is translated by an LLM Gateway model,
@@ -504,7 +504,7 @@
   
    Usage: assembly speak [OPTIONS] [TEXT]
   
-    Synthesize speech from text with AssemblyAI streaming TTS
+   [sandbox] Synthesize speech from text with AssemblyAI streaming TTS
   
    Plays the audio through your speakers by default, or writes a WAV with
    --out. Speaker-labeled input (from 'assembly transcribe

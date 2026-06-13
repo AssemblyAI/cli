@@ -115,7 +115,7 @@ def dub(
     ),
     json_out: bool = options.json_option("Emit JSON describing the dubbed file"),
 ) -> None:
-    """[sandbox] Dub a video or audio file into another language
+    r"""\[sandbox] Dub a video or audio file into another language
 
     The whole platform in one command: the media is transcribed with diarized
     utterance timestamps, each utterance is translated by an LLM Gateway model,

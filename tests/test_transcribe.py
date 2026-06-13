@@ -289,7 +289,6 @@ def test_transcribe_chains_multiple_gateway_prompts(monkeypatch, mocker):
 
 def test_transcribe_prompt_human_shows_only_transform(monkeypatch, mocker):
     _auth()
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
@@ -309,7 +308,6 @@ def test_transcribe_chained_prompts_human_labels_each_step(monkeypatch, mocker):
     # Human render of a multi-step chain labels each step (the single-step path
     # prints only the lone output; this one enumerates "Step N").
     _auth()
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
@@ -443,9 +441,8 @@ def test_transcribe_direct_audio_url_passes_through_without_download(monkeypatch
     assert tx.call_args.args[1] == "https://example.com/episode.mp3"
 
 
-def test_transcribe_renders_summary_human(monkeypatch, mocker):
+def test_transcribe_renders_summary_human(mocker):
     _auth()
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     t = _fake_transcript(mocker)
     t.summary = "three bullet summary"
     t.chapters = []

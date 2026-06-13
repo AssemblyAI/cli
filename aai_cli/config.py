@@ -70,8 +70,6 @@ def validate_profile(name: str) -> None:
     tripping over it at keyring-write time.
     """
     if not _PROFILE_RE.match(name):
-        from aai_cli.errors import CLIError
-
         raise CLIError(
             f"Invalid profile name {name!r}.",
             error_type="invalid_profile",
@@ -132,8 +130,6 @@ def _load() -> Config:
         try:
             data = tomllib.load(fh)
         except tomllib.TOMLDecodeError as exc:
-            from aai_cli.errors import CLIError
-
             raise CLIError(
                 f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
                 error_type="invalid_config",
@@ -142,8 +138,6 @@ def _load() -> Config:
     try:
         cfg = Config.model_validate(data)
     except ValidationError as exc:
-        from aai_cli.errors import CLIError
-
         raise CLIError(
             f"Config file at {path} has an unexpected shape "
             f"({_validation_summary(exc)}). Fix or delete it.",
@@ -459,8 +453,6 @@ def _resolve_api_key(*, profile: str | None, api_key_flag: str | None) -> str:
     if api_key_flag is not None:
         flag_key = api_key_flag.strip()
         if not flag_key:
-            from aai_cli.errors import CLIError
-
             raise CLIError(
                 "Empty --api-key provided.",
                 error_type="invalid_key",
