@@ -11,6 +11,7 @@ source_modules =
     aai_cli.argscan
     aai_cli.auth
     aai_cli.caption_exec
+    aai_cli.choices
     aai_cli.client
     aai_cli.clip_exec
     aai_cli.clip_select
@@ -28,6 +29,7 @@ source_modules =
     aai_cli.environments
     aai_cli.errors
     aai_cli.eval_data
+    aai_cli.eval_hf_api
     aai_cli.evaluate_exec
     aai_cli.follow
     aai_cli.help_panels
@@ -35,9 +37,11 @@ source_modules =
     aai_cli.hotkey
     aai_cli.init
     aai_cli.init_exec
+    aai_cli.jsonshape
     aai_cli.llm
     aai_cli.llm_exec
     aai_cli.microphone
+    aai_cli.onboard
     aai_cli.options
     aai_cli.output
     aai_cli.procs
@@ -47,14 +51,19 @@ source_modules =
     aai_cli.share_exec
     aai_cli.speak_exec
     aai_cli.stdio
+    aai_cli.steps
     aai_cli.stream_exec
     aai_cli.streaming
     aai_cli.sync_stt
     aai_cli.telemetry
     aai_cli.theme
+    aai_cli.timeparse
     aai_cli.transcribe_batch
     aai_cli.transcribe_exec
     aai_cli.transcribe_render
+    aai_cli.tts
+    aai_cli.typer_patches
+    aai_cli.update_check
     aai_cli.webhook_listen
     aai_cli.wer
     aai_cli.ws

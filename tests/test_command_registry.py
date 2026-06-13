@@ -8,6 +8,7 @@ rather than silently dropping out of the CLI.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import types
 
@@ -27,6 +28,20 @@ def _fake_module(name: str, **attrs):
 _VALID_SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.TRANSCRIPTION, order=10, commands=("fake",)
 )
+
+
+def test_spec_and_registration_are_immutable():
+    # Specs are shared module-level singletons read at every discovery; freezing them
+    # is load-bearing, not decoration — a mutated spec would silently reorder help.
+    # The attribute names are typed plain `str` so the type checkers permit the
+    # runtime probe of what they statically know is read-only.
+    order_field: str = "order"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(_VALID_SPEC, order_field, 99)
+    registered = command_registry.RegisteredModule(spec=_VALID_SPEC, app=typer.Typer())
+    spec_field: str = "spec"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(registered, spec_field, _VALID_SPEC)
 
 
 def test_module_without_spec_is_rejected(monkeypatch):

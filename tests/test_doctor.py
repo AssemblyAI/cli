@@ -300,6 +300,21 @@ def test_render_omits_profile_line_for_partial_payloads() -> None:
     assert "assembly transcribe --sample" not in text
 
 
+def test_render_omits_profile_line_when_only_one_key_is_present() -> None:
+    # The context line needs BOTH keys: rendering it with only `profile` set would
+    # interpolate a missing environment. Distinct from the neither-key case above —
+    # this is the payload shape that distinguishes the `and` from an `or`.
+    payload: doctor.DoctorResult = {
+        "ok": True,
+        "profile": "default",
+        "checks": [
+            {"name": "python", "status": "ok", "affects": [], "detail": "3.12", "fix": None}
+        ],
+    }
+    text = doctor.render(payload)
+    assert "profile:" not in text
+
+
 def test_doctor_human_output_shows_profile_and_environment(healthy, monkeypatch):
     monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["doctor"])
