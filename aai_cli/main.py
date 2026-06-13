@@ -145,15 +145,15 @@ def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
 )
 def main(
     ctx: typer.Context,
-    profile: str | None = typer.Option(None, "--profile", "-p", help="Named credential profile."),
+    profile: str | None = typer.Option(None, "--profile", "-p", help="Named credential profile"),
     env: str | None = typer.Option(
-        None, "--env", help=f"Backend environment ({', '.join(environments.ENVIRONMENTS)})."
+        None, "--env", help=f"Backend environment ({', '.join(environments.ENVIRONMENTS)})"
     ),
     sandbox: bool = typer.Option(
-        False, "--sandbox", help=f"Shortcut for --env {environments.SANDBOX_ENV}."
+        False, "--sandbox", help=f"Shortcut for --env {environments.SANDBOX_ENV}"
     ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
+        False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)"
     ),
     color: choices.ColorMode = typer.Option(
         choices.ColorMode.auto,
@@ -165,7 +165,7 @@ def main(
         "--verbose",
         "-v",
         count=True,
-        help="Log diagnostics to stderr (-v: requests, -vv: wire-level detail).",
+        help="Log diagnostics to stderr (-v: requests, -vv: wire-level detail)",
     ),
     # Underscore name: the eager callback does the work, so the parameter is intentionally
     # unused in the body (avoids ARG001 without a `del`).
@@ -173,7 +173,7 @@ def main(
         False,
         "--version",
         "-V",
-        help="Show the CLI version and exit.",
+        help="Show the CLI version and exit",
         callback=_version_callback,
         # Eager so --version short-circuits before subcommand/arg parsing — the idiomatic
         # default. The plain `assembly --version` path behaves identically with or without this,

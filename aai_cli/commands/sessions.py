@@ -11,7 +11,7 @@ from aai_cli.auth import ams
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
-app = typer.Typer(help="Browse your past streaming (real-time) sessions.", no_args_is_help=True)
+app = typer.Typer(help="Browse your past streaming (real-time) sessions", no_args_is_help=True)
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.HISTORY,
@@ -68,13 +68,13 @@ class SessionStatus(enum.StrEnum):
 )
 def list_(
     ctx: typer.Context,
-    limit: int = typer.Option(10, "--limit", help="How many sessions to show.", min=1),
+    limit: int = typer.Option(10, "--limit", help="How many sessions to show", min=1),
     status: SessionStatus | None = typer.Option(
-        None, "--status", help="Only show sessions with this status."
+        None, "--status", help="Only show sessions with this status"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """List recent streaming sessions."""
+    """List recent streaming sessions"""
 
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = state.resolve_session()
@@ -125,10 +125,10 @@ def list_(
 )
 def get(
     ctx: typer.Context,
-    session_id: str = typer.Argument(..., help="Streaming session id."),
+    session_id: str = typer.Argument(..., help="Streaming session id"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show details for one streaming session."""
+    """Show details for one streaming session"""
 
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = state.resolve_session()

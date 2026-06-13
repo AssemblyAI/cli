@@ -51,7 +51,7 @@ def speak(
         [],
         "--voice",
         help="Voice id (e.g. jane, michael, mary, paul, eve, george), or SPEAKER=VOICE "
-        "for diarized input (repeatable, e.g. --voice A=jane).",
+        "for diarized input (repeatable, e.g. --voice A=jane)",
     ),
     language: str = typer.Option(
         DEFAULT_LANGUAGE,
@@ -66,11 +66,11 @@ def speak(
         min=1,
     ),
     out: Path | None = typer.Option(
-        None, "--out", help="Write a WAV file instead of playing through the speakers."
+        None, "--out", help="Write a WAV file instead of playing through the speakers"
     ),
-    json_out: bool = options.json_option("Emit JSON metadata about the synthesized audio."),
+    json_out: bool = options.json_option("Emit JSON metadata about the synthesized audio"),
 ) -> None:
-    r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS.
+    r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS
 
     Plays the audio through your speakers by default, or writes a WAV with
     --out. Speaker-labeled input (from 'assembly transcribe

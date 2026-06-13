@@ -49,18 +49,18 @@ def _list_models(output_field: choices.TextOrJson | None, json_mode: bool) -> No
 )
 def llm(
     ctx: typer.Context,
-    prompt: str | None = typer.Argument(None, help="The prompt to send to the model."),
+    prompt: str | None = typer.Argument(None, help="The prompt to send to the model"),
     # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | assembly llm "summarize"`).
     model: str = typer.Option(
         gateway.DEFAULT_MODEL,
         "--model",
-        help="LLM Gateway model.",
+        help="LLM Gateway model",
         autocompletion=gateway.complete_model,
     ),
     transcript_id: str | None = typer.Option(
-        None, "--transcript-id", help="Inject this transcript's text into the prompt."
+        None, "--transcript-id", help="Inject this transcript's text into the prompt"
     ),
-    system: str | None = typer.Option(None, "--system", help="Optional system prompt."),
+    system: str | None = typer.Option(None, "--system", help="Optional system prompt"),
     follow: bool = typer.Option(
         False,
         "--follow",
@@ -73,10 +73,10 @@ def llm(
         None,
         "-o",
         "--output",
-        help="Print one field of the result: text (just the answer, pipe-friendly) or json.",
+        help="Print one field of the result: text (just the answer, pipe-friendly) or json",
     ),
     max_tokens: int = typer.Option(
-        gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate.", min=1
+        gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate", min=1
     ),
     config_kv: list[str] | None = typer.Option(
         None,
@@ -84,10 +84,10 @@ def llm(
         help="Set any extra gateway request field: KEY=VALUE, repeatable "
         "(e.g. --config temperature=0.2). Values parse as JSON, else literal text.",
     ),
-    list_models: bool = typer.Option(False, "--list-models", help="Print known models and exit."),
-    json_out: bool = options.json_option("Output raw JSON (one object per turn in --follow mode)."),
+    list_models: bool = typer.Option(False, "--list-models", help="Print known models and exit"),
+    json_out: bool = options.json_option("Output raw JSON (one object per turn in --follow mode)"),
 ) -> None:
-    """Send a prompt to AssemblyAI's LLM Gateway and print the response.
+    """Send a prompt to AssemblyAI's LLM Gateway and print the reply
 
     With --transcript-id the transcript's text is injected server-side, so you
     can ask questions about a past transcription (e.g. assembly llm "summarize" --transcript-id ID).

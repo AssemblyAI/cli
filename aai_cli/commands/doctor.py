@@ -28,7 +28,7 @@ def doctor(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Check that your environment is ready to use AssemblyAI."""
+    """Check that your environment is ready for AssemblyAI"""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()

@@ -206,3 +206,11 @@ def test_sessions_without_session_runs_login(monkeypatch, mocker):
     assert config.get_session("default") == {"jwt": "jwt", "token": "tok"}
     list_.assert_not_called()
     assert "Run the same command again" in result.output
+
+
+def test_sessions_no_subcommand_shows_help():
+    # no_args_is_help=True: bare `assembly sessions` prints its help (the subcommand list)
+    # rather than the bare "Missing command." usage error that no_args_is_help=False emits.
+    result = runner.invoke(app, ["sessions"])
+    assert "Missing command" not in result.output
+    assert "list" in result.output and "get" in result.output

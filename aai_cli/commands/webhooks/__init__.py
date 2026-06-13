@@ -8,7 +8,7 @@ from aai_cli.commands.webhooks import _listen as webhook_listen
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
-app = typer.Typer(help="Receive webhook deliveries on a public dev URL.", no_args_is_help=True)
+app = typer.Typer(help="Receive webhook deliveries on a public dev URL", no_args_is_help=True)
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.TRANSCRIPTION,
@@ -38,23 +38,23 @@ SPEC = command_registry.CommandModuleSpec(
 def listen(
     ctx: typer.Context,
     port: int = typer.Option(
-        8989, "--port", help="Local listener port (the first free port from here)."
+        8989, "--port", help="Local listener port (the first free port from here)"
     ),
     forward_to: str | None = typer.Option(
-        None, "--forward-to", help="Re-POST each delivery to this URL (e.g. your local app)."
+        None, "--forward-to", help="Re-POST each delivery to this URL (e.g. your local app)"
     ),
     no_tunnel: bool = typer.Option(
-        False, "--no-tunnel", help="Local-only: skip the cloudflared public URL."
+        False, "--no-tunnel", help="Local-only: skip the cloudflared public URL"
     ),
     max_events: int = typer.Option(
         0,  # pragma: no mutate (0 = serve forever; only observable by never exiting)
         "--max-events",
         min=0,
-        help="Exit after this many deliveries (0 = run until Ctrl-C).",
+        help="Exit after this many deliveries (0 = run until Ctrl-C)",
     ),
-    json_out: bool = options.json_option("One NDJSON record per delivery."),
+    json_out: bool = options.json_option("One NDJSON record per delivery"),
 ) -> None:
-    """Receive AssemblyAI webhooks on a public URL and watch them arrive.
+    """Receive AssemblyAI webhooks on a public URL and watch them arrive
 
     Opens a cloudflared quick tunnel to a local listener and prints the public
     URL to pass as --webhook-url (or webhook_url in the API). Each delivery is

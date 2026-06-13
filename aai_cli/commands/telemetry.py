@@ -15,7 +15,7 @@ from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(
-    help="Anonymous usage telemetry: status, enable, disable.",
+    help="Anonymous usage telemetry: status, enable, disable",
     no_args_is_help=True,
 )
 
@@ -43,7 +43,7 @@ def status(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show whether anonymous usage telemetry is active, and why."""
+    """Show whether anonymous usage telemetry is active, and why"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         data: dict[str, object] = {
@@ -86,7 +86,7 @@ def enable(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Re-enable anonymous usage telemetry for this machine."""
+    """Re-enable anonymous usage telemetry for this machine"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         config.set_telemetry_enabled(enabled=True)
@@ -111,9 +111,9 @@ def enable(
     ),
 )
 def flush(
-    payload: str = typer.Argument(..., help="Serialized telemetry payload (internal)."),
+    payload: str = typer.Argument(..., help="Serialized telemetry payload (internal)"),
 ) -> None:
-    """Deliver one serialized telemetry event to the intake (internal).
+    """Deliver one serialized telemetry event to the intake (internal)
 
     This is the detached flusher `telemetry.dispatch` spawns so user commands never
     wait on the network — an explicit, reviewable entry point rather than inline
@@ -130,7 +130,7 @@ def disable(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Opt out of anonymous usage telemetry for this machine."""
+    """Opt out of anonymous usage telemetry for this machine"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         config.set_telemetry_enabled(enabled=False)

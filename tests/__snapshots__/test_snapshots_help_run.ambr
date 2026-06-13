@@ -4,7 +4,7 @@
   
    Usage: assembly agent [OPTIONS] [SOURCE]
   
-   Have a live two-way voice conversation with an AssemblyAI voice agent.
+   Hold a live two-way voice conversation with a voice agent
   
    Use headphones: the mic stays open while the agent speaks, so on
    speakers it would hear itself and loop. Pass an audio file/URL (or
@@ -20,11 +20,11 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                   Speak the hosted wildfires.mp3    │
-  │                                            sample to the agent.              │
+  │                                            sample to the agent               │
   │ --voice                       TEXT         Agent voice. See --list-voices.   │
   │                                            [default: ivy]                    │
   │ --system-prompt               TEXT         System prompt (the agent's        │
-  │                                            persona).                         │
+  │                                            persona)                          │
   │                                            [default: You are a friendly      │
   │                                            voice assistant having a casual   │
   │                                            conversation. Keep replies short  │
@@ -34,20 +34,20 @@
   │                                            relaxed, low-key, no exclamation  │
   │                                            marks.]                           │
   │ --system-prompt-file          FILE         Read the system prompt from a     │
-  │                                            file (overrides --system-prompt). │
-  │ --greeting                    TEXT         Spoken greeting.                  │
+  │                                            file (overrides --system-prompt)  │
+  │ --greeting                    TEXT         Spoken greeting                   │
   │                                            [default: Hey, what's on your     │
   │                                            mind?]                            │
-  │ --device                      INTEGER      Microphone device index.          │
-  │ --list-voices                              Print known voices and exit.      │
+  │ --device                      INTEGER      Microphone device index           │
+  │ --list-voices                              Print known voices and exit       │
   │ --json                -j                   Emit newline-delimited JSON       │
-  │                                            events.                           │
+  │                                            events                            │
   │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
   │                                            lines as plain stdout,            │
-  │                                            pipe-friendly) or json.           │
+  │                                            pipe-friendly) or json            │
   │ --show-code                                Print the equivalent Python SDK   │
   │                                            code and exit (does not start a   │
-  │                                            session).                         │
+  │                                            session)                          │
   │ --help                                     Show this message and exit.       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -72,7 +72,7 @@
   
    Usage: assembly caption [OPTIONS] MEDIA
   
-   Burn always-visible captions into a video.
+   Burn always-visible captions into a video
   
    The video is transcribed (or an existing transcript is reused with
    --transcript-id), the transcript's SRT captions are fetched, and ffmpeg
@@ -84,25 +84,25 @@
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    media      TEXT  Video to caption: a local file, or a                   │
   │                       YouTube/media-page URL (the full video is downloaded   │
-  │                       via yt-dlp).                                           │
+  │                       via yt-dlp)                                            │
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --transcript-id      -t      TEXT                  Reuse an existing         │
   │                                                    transcript of this media  │
   │                                                    instead of transcribing   │
-  │                                                    it again.                 │
+  │                                                    it again                  │
   │ --chars-per-caption          INTEGER RANGE [x>=1]  Max characters per        │
-  │                                                    caption line.             │
+  │                                                    caption line              │
   │ --font-size                  INTEGER RANGE [x>=1]  Font size of the          │
   │                                                    burned-in captions        │
   │                                                    (ffmpeg's default styling │
-  │                                                    when omitted).            │
+  │                                                    when omitted)             │
   │ --out                        PATH                  Output file (default:     │
   │                                                    <name>.captioned<ext>     │
-  │                                                    next to the input).       │
+  │                                                    next to the input)        │
   │ --json               -j                            Emit JSON describing the  │
-  │                                                    captioned file.           │
+  │                                                    captioned file            │
   │ --help                                             Show this message and     │
   │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -128,7 +128,7 @@
   
    Usage: assembly clip [OPTIONS] MEDIA
   
-   Cut clips out of a media file by speaker, text match, LLM pick, or time range.
+   Cut clips from media by speaker, text match, LLM pick, or time range
   
    --speaker and --search select from a diarized transcript (made on the fly,
    or reused with --transcript-id); --llm has an LLM Gateway model pick the
@@ -141,7 +141,7 @@
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    media      TEXT  Audio/video to cut clips from: a local file, or a      │
-  │                       YouTube/media-page URL (audio downloaded via yt-dlp).  │
+  │                       YouTube/media-page URL (audio downloaded via yt-dlp)   │
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
@@ -152,23 +152,23 @@
   │                                                         again: an id, or '-' │
   │                                                         to read an id or     │
   │                                                         'transcribe --json'  │
-  │                                                         output from stdin.   │
+  │                                                         output from stdin    │
   │ --speaker                         TEXT                  Keep segments spoken │
   │                                                         by this diarized     │
   │                                                         speaker label        │
   │                                                         (repeatable, e.g.    │
-  │                                                         --speaker A).        │
+  │                                                         --speaker A)         │
   │ --search                          TEXT                  Keep segments whose  │
   │                                                         text contains this   │
-  │                                                         (case-insensitive).  │
+  │                                                         (case-insensitive)   │
   │ --range                           TEXT                  Keep an explicit     │
   │                                                         START-END window     │
   │                                                         (seconds or          │
   │                                                         [HH:]MM:SS;          │
-  │                                                         repeatable).         │
+  │                                                         repeatable)          │
   │ --padding                         FLOAT RANGE [x>=0.0]  Seconds of padding   │
   │                                                         to add around each   │
-  │                                                         clip.                │
+  │                                                         clip                 │
   │                                                         [default: 0.0]       │
   │ --snap               --no-snap                          Snap clip boundaries │
   │                                                         into nearby silence  │
@@ -177,11 +177,11 @@
   │                                                         don't land mid-word; │
   │                                                         --no-snap cuts at    │
   │                                                         the exact selected   │
-  │                                                         times.               │
+  │                                                         times                │
   │                                                         [default: snap]      │
   │ --out-dir                         PATH                  Directory for the    │
   │                                                         clip files (default: │
-  │                                                         next to the input).  │
+  │                                                         next to the input)   │
   │ --video                                                 Download the full    │
   │                                                         video (not just the  │
   │                                                         audio track) for a   │
@@ -191,7 +191,7 @@
   │                                                         files keep their     │
   │                                                         video already.       │
   │ --json           -j                                     Emit JSON describing │
-  │                                                         the clips written.   │
+  │                                                         the clips written    │
   │ --help                                                  Show this message    │
   │                                                         and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -200,9 +200,9 @@
   │                              clip from the timestamped transcript (e.g.      │
   │                              --llm "the funniest moments"). Composes with    │
   │                              --speaker/--search.                             │
-  │ --model             TEXT     LLM Gateway model for --llm.                    │
+  │ --model             TEXT     LLM Gateway model for --llm                     │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens for the --llm selection reply.       │
+  │ --max-tokens        INTEGER  Max tokens for the --llm selection reply        │
   │                              [default: 1000]                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -237,7 +237,7 @@
   
    Usage: assembly dictate [OPTIONS]
   
-   Dictate with a hotkey: record the mic, get the transcript back instantly.
+   Push-to-talk dictation: record the mic, get the transcript back
   
    Press Enter (or Space) to start recording and press it again to stop; the
    utterance is sent to the AssemblyAI Sync API and the transcript prints
@@ -248,20 +248,20 @@
   │ --language             TEXT                       ISO 639-1 language code,   │
   │                                                   or a comma-separated list  │
   │                                                   for code-switching audio   │
-  │                                                   (default: en).             │
+  │                                                   (default: en)              │
   │ --prompt               TEXT                       Custom transcription       │
   │                                                   prompt (overrides          │
-  │                                                   --language).               │
+  │                                                   --language)                │
   │ --word-boost           TEXT                       Bias recognition toward a  │
-  │                                                   term (repeatable).         │
-  │ --device               INTEGER                    Microphone device index.   │
+  │                                                   term (repeatable)          │
+  │ --device               INTEGER                    Microphone device index    │
   │ --once                                            Transcribe one utterance,  │
-  │                                                   then exit.                 │
+  │                                                   then exit                  │
   │ --max-seconds          FLOAT RANGE                Auto-stop a recording      │
-  │                        [1.0<=x<=120.0]            after this many seconds.   │
+  │                        [1.0<=x<=120.0]            after this many seconds    │
   │                                                   [default: 120.0]           │
   │ --json         -j                                 Emit one JSON object per   │
-  │                                                   utterance.                 │
+  │                                                   utterance                  │
   │ --help                                            Show this message and      │
   │                                                   exit.                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -287,7 +287,7 @@
   
    Usage: assembly dub [OPTIONS] MEDIA
   
-   [sandbox] Dub a video or audio file into another language.
+   [sandbox] Dub a video or audio file into another language
   
    The whole platform in one command: the media is transcribed with diarized
    utterance timestamps, each utterance is translated by an LLM Gateway model,
@@ -302,19 +302,19 @@
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    media      TEXT  Audio/video to dub: a local file (the video stream is  │
   │                       copied untouched), or a YouTube/media-page URL         │
-  │                       (downloaded via yt-dlp).                               │
+  │                       (downloaded via yt-dlp)                                │
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ *  --lang               -l      TEXT  Target language: an ISO code (de, fr,  │
-  │                                       es, …) or a language name (German).    │
+  │                                       es, …) or a language name (German)     │
   │                                       [required]                             │
   │    --source-lang                TEXT  ISO code of the source audio (e.g.     │
   │                                       de). Default: auto-detect the          │
   │                                       language.                              │
   │    --transcript-id      -t      TEXT  Reuse an existing diarized transcript  │
   │                                       of this media instead of transcribing  │
-  │                                       it again.                              │
+  │                                       it again                               │
   │    --voice                      TEXT  Voice id for every speaker (e.g. jane, │
   │                                       michael, paul), or SPEAKER=VOICE to    │
   │                                       pin a diarized speaker (repeatable,    │
@@ -322,7 +322,7 @@
   │                                       target language's native voice(s).     │
   │    --out                        PATH  Output file (default:                  │
   │                                       <name>.dub.<lang><ext> next to the     │
-  │                                       input).                                │
+  │                                       input)                                 │
   │    --video                            Download the full video (not just the  │
   │                                       audio track) for a URL source, so the  │
   │                                       dub keeps the picture. Local files     │
@@ -331,15 +331,15 @@
   │                                       only part of it (yt-dlp                │
   │                                       "--download-sections" syntax, e.g.     │
   │                                       "*0:00-15:00" for the first fifteen    │
-  │                                       minutes; repeatable).                  │
-  │    --json               -j            Emit JSON describing the dubbed file.  │
+  │                                       minutes; repeatable)                   │
+  │    --json               -j            Emit JSON describing the dubbed file   │
   │    --help                             Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --model             TEXT     LLM Gateway model that translates the           │
-  │                              utterances.                                     │
+  │                              utterances                                      │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens per utterance translation.           │
+  │ --max-tokens        INTEGER  Max tokens per utterance translation            │
   │                              [default: 1000]                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -371,7 +371,7 @@
   
    Usage: assembly eval [OPTIONS] DATASET
   
-   Transcribe an evaluation dataset and score WER against its reference texts.
+   Transcribe a dataset and score WER against its reference texts
   
    Each row's audio is transcribed, then scored against the row's reference
    text; both are normalized first (lowercased, punctuation stripped) so style
@@ -392,33 +392,33 @@
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │ *    dataset      TEXT  Hugging Face dataset id, or a local .csv/.jsonl      │
-  │                         manifest with audio + text columns.                  │
+  │                         manifest with audio + text columns                   │
   │                         [required]                                           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --split                  TEXT                      Hugging Face split to     │
-  │                                                    score (default: test).    │
+  │                                                    score (default: test)     │
   │ --subset                 TEXT                      Hugging Face              │
   │                                                    config/subset name (e.g.  │
-  │                                                    a language).              │
-  │ --limit                  INTEGER RANGE             Rows to evaluate (1-100). │
+  │                                                    a language)               │
+  │ --limit                  INTEGER RANGE             Rows to evaluate (1-100)  │
   │                          [1<=x<=100]               [default: 10]             │
   │ --audio-column           TEXT                      Audio column name         │
-  │                                                    (default: auto-detect).   │
+  │                                                    (default: auto-detect)    │
   │ --text-column            TEXT                      Reference text column     │
   │                                                    name (default:            │
-  │                                                    auto-detect).             │
-  │ --speech-model           [universal-3-pro|univers  Speech model to evaluate. │
+  │                                                    auto-detect)              │
+  │ --speech-model           [universal-3-pro|univers  Speech model to evaluate  │
   │                          al-2]                                               │
   │ --language-code          TEXT                      Force a language (e.g.    │
-  │                                                    en_us).                   │
+  │                                                    en_us)                    │
   │ --concurrency            INTEGER RANGE [x>=1]      How many items to         │
   │                                                    transcribe at once        │
-  │                                                    (sequential by default).  │
+  │                                                    (sequential by default)   │
   │                                                    [default: 1]              │
   │ --json           -j                                Output the rows and       │
   │                                                    summary as one JSON       │
-  │                                                    object.                   │
+  │                                                    object                    │
   │ --help                                             Show this message and     │
   │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -442,22 +442,22 @@
   
    Usage: assembly llm [OPTIONS] [PROMPT]
   
-   Send a prompt to AssemblyAI's LLM Gateway and print the response.
+   Send a prompt to AssemblyAI's LLM Gateway and print the reply
   
    With --transcript-id the transcript's text is injected server-side, so you
    can ask questions about a past transcription (e.g. assembly llm "summarize"
    --transcript-id ID).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   prompt      [PROMPT]  The prompt to send to the model.                     │
+  │   prompt      [PROMPT]  The prompt to send to the model                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model                  TEXT                  LLM Gateway model.            │
+  │ --model                  TEXT                  LLM Gateway model             │
   │                                                [default:                     │
   │                                                claude-haiku-4-5-20251001]    │
   │ --transcript-id          TEXT                  Inject this transcript's text │
-  │                                                into the prompt.              │
-  │ --system                 TEXT                  Optional system prompt.       │
+  │                                                into the prompt               │
+  │ --system                 TEXT                  Optional system prompt        │
   │ --follow         -f                            Re-run the prompt over a      │
   │                                                growing transcript piped on   │
   │                                                stdin, refreshing the answer  │
@@ -469,8 +469,8 @@
   │ --output         -o      [text|json]           Print one field of the        │
   │                                                result: text (just the        │
   │                                                answer, pipe-friendly) or     │
-  │                                                json.                         │
-  │ --max-tokens             INTEGER RANGE [x>=1]  Max tokens to generate.       │
+  │                                                json                          │
+  │ --max-tokens             INTEGER RANGE [x>=1]  Max tokens to generate        │
   │                                                [default: 1000]               │
   │ --config                 TEXT                  Set any extra gateway request │
   │                                                field: KEY=VALUE, repeatable  │
@@ -478,9 +478,9 @@
   │                                                temperature=0.2). Values      │
   │                                                parse as JSON, else literal   │
   │                                                text.                         │
-  │ --list-models                                  Print known models and exit.  │
+  │ --list-models                                  Print known models and exit   │
   │ --json           -j                            Output raw JSON (one object   │
-  │                                                per turn in --follow mode).   │
+  │                                                per turn in --follow mode)    │
   │ --help                                         Show this message and exit.   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -504,7 +504,7 @@
   
    Usage: assembly speak [OPTIONS] [TEXT]
   
-   [sandbox] Synthesize speech from text with AssemblyAI streaming TTS.
+   [sandbox] Synthesize speech from text with AssemblyAI streaming TTS
   
    Plays the audio through your speakers by default, or writes a WAV with
    --out. Speaker-labeled input (from 'assembly transcribe
@@ -521,7 +521,7 @@
   │                                              mary, paul, eve, george), or    │
   │                                              SPEAKER=VOICE for diarized      │
   │                                              input (repeatable, e.g. --voice │
-  │                                              A=jane).                        │
+  │                                              A=jane)                         │
   │ --language             TEXT                  Language of the text. The       │
   │                                              default voice follows it (e.g.  │
   │                                              --language Italian speaks with  │
@@ -531,9 +531,9 @@
   │                                              (positive). Server default if   │
   │                                              omitted.                        │
   │ --out                  PATH                  Write a WAV file instead of     │
-  │                                              playing through the speakers.   │
+  │                                              playing through the speakers    │
   │ --json         -j                            Emit JSON metadata about the    │
-  │                                              synthesized audio.              │
+  │                                              synthesized audio               │
   │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -558,7 +558,7 @@
   
    Usage: assembly stream [OPTIONS] [SOURCE]
   
-   Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
+   Transcribe live audio in real time from a mic, file, URL, or pipe
   
    Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
    ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | assembly stream -.
@@ -573,12 +573,12 @@
   │                         to use the microphone.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                          Stream the hosted wildfires.mp3 sample.    │
-  │ --json       -j                   Emit newline-delimited JSON events.        │
+  │ --sample                          Stream the hosted wildfires.mp3 sample     │
+  │ --json       -j                   Emit newline-delimited JSON events         │
   │ --output     -o      [text|json]  Output mode: text (finalized turns as      │
-  │                                   plain lines, pipe-friendly) or json.       │
+  │                                   plain lines, pipe-friendly) or json        │
   │ --show-code                       Print the equivalent Python SDK code and   │
-  │                                   exit (does not stream).                    │
+  │                                   exit (does not stream)                     │
   │ --help                            Show this message and exit.                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
@@ -587,79 +587,79 @@
   │                                                  for the mic, or the         │
   │                                                  declared rate of raw PCM on │
   │                                                  stdin (default: device      │
-  │                                                  native / 16000).            │
-  │ --device                   INTEGER               Microphone device index.    │
+  │                                                  native / 16000)             │
+  │ --device                   INTEGER               Microphone device index     │
   │ --system-audio                                   macOS only: stream          │
   │                                                  system/app audio and        │
   │                                                  microphone as separate      │
-  │                                                  sessions.                   │
+  │                                                  sessions                    │
   │ --system-audio-only                              macOS only: stream          │
   │                                                  system/app audio without    │
-  │                                                  the microphone.             │
+  │                                                  the microphone              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
-  │ --speech-model              [universal-streaming-m  Streaming speech model.  │
+  │ --speech-model              [universal-streaming-m  Streaming speech model   │
   │                             ultilingual|universal-  [default: u3-rt-pro]     │
   │                             streaming-english|u3-r                           │
   │                             t-pro|whisper-rt|u3-pr                           │
   │                             o]                                               │
-  │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding.          │
+  │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding           │
   │ --language-detection                                Auto-detect the spoken   │
-  │                                                     language.                │
+  │                                                     language                 │
   │ --domain                    TEXT                    Domain preset (e.g.      │
-  │                                                     medical).                │
+  │                                                     medical)                 │
   │ --prompt                    TEXT                    Prompt to bias the       │
   │                                                     speech model (supported  │
-  │                                                     models only).            │
+  │                                                     models only)             │
   │ --keyterms-prompt           TEXT                    Boost a key term         │
-  │                                                     (repeatable).            │
+  │                                                     (repeatable)             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
   │ --end-of-turn-confidence                         FLOAT RANGE   End-of-turn   │
   │                                                  [0.0<=x<=1.0  confidence    │
-  │                                                  ]             (0-1).        │
+  │                                                  ]             (0-1)         │
   │ --min-turn-silence                               INTEGER       Min silence   │
   │                                                                to end a turn │
-  │                                                                (ms).         │
+  │                                                                (ms)          │
   │ --max-turn-silence                               INTEGER       Max silence   │
   │                                                                before ending │
-  │                                                                a turn (ms).  │
+  │                                                                a turn (ms)   │
   │ --vad-threshold                                  FLOAT RANGE   Voice         │
   │                                                  [0.0<=x<=1.0  activity      │
   │                                                  ]             threshold     │
-  │                                                                (0-1).        │
+  │                                                                (0-1)         │
   │ --format-turns              --no-format-turns                  Format        │
   │                                                                (punctuate)   │
   │                                                                finalized     │
-  │                                                                turns.        │
+  │                                                                turns         │
   │ --include-partial-turns                                        Emit partial  │
-  │                                                                turns.        │
+  │                                                                turns         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
   │ --speaker-labels                              Diarize speakers. With system  │
   │                                               audio the mic stays "You";     │
   │                                               only the system audio is split │
   │                                               into speakers.                 │
-  │ --max-speakers          INTEGER RANGE [x>=1]  Max speakers.                  │
+  │ --max-speakers          INTEGER RANGE [x>=1]  Max speakers                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Features ───────────────────────────────────────────────────────────────────╮
   │ --voice-focus                  [near-field|far-field  Voice focus (noise     │
-  │                                ]                      suppression model).    │
+  │                                ]                      suppression model)     │
   │ --voice-focus-threshold        FLOAT RANGE            Voice-focus threshold  │
-  │                                [0.0<=x<=1.0]          (0-1).                 │
+  │                                [0.0<=x<=1.0]          (0-1)                  │
   │ --inactivity-timeout           INTEGER                Auto-close after N     │
-  │                                                       seconds idle.          │
+  │                                                       seconds idle           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
-  │ --filter-profanity               Mask profanity.                             │
-  │ --redact-pii                     Redact PII from turns.                      │
-  │ --redact-pii-policy        TEXT  Comma-separated PII policies.               │
+  │ --filter-profanity               Mask profanity                              │
+  │ --redact-pii                     Redact PII from turns                       │
+  │ --redact-pii-policy        TEXT  Comma-separated PII policies                │
   │ --redact-pii-sub           TEXT  Replace redacted PII with: hash or          │
-  │                                  entity_name.                                │
+  │                                  entity_name                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
-  │ --webhook-url                TEXT        Webhook URL.                        │
-  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
+  │ --webhook-url                TEXT        Webhook URL                         │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm                 TEXT                  Run a prompt over the live       │
@@ -670,17 +670,17 @@
   │                                             one's response (a chain).        │
   │ --llm-interval        FLOAT RANGE [x>=0.0]  Seconds between --llm summary    │
   │                                             refreshes (0 refreshes on every  │
-  │                                             turn).                           │
+  │                                             turn)                            │
   │                                             [default: 10.0]                  │
-  │ --model               TEXT                  LLM Gateway model.               │
+  │ --model               TEXT                  LLM Gateway model                │
   │                                             [default:                        │
   │                                             claude-haiku-4-5-20251001]       │
-  │ --max-tokens          INTEGER               Max tokens. [default: 1000]      │
+  │ --max-tokens          INTEGER               Max tokens [default: 1000]       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any StreamingParameters field as         │
-  │                                 KEY=VALUE (repeatable).                      │
-  │ --config-file        FILE       JSON file of streaming fields.               │
+  │                                 KEY=VALUE (repeatable)                       │
+  │ --config-file        FILE       JSON file of streaming fields                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -708,7 +708,7 @@
   
    Usage: assembly t [OPTIONS] [SOURCE]
   
-   Transcribe an audio file, URL, or YouTube/podcast link — or a whole batch.
+   Transcribe a file, URL, or YouTube/podcast link — or a whole batch
   
    Quickest start: assembly transcribe call.mp3 (or --sample for the hosted
    demo).
@@ -732,11 +732,11 @@
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode). │
+  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
-  │                                                      wildfires.mp3 sample.   │
+  │                                                      wildfires.mp3 sample    │
   │ --json               -j                              Output the full result  │
   │                                                      as JSON. Text stays the │
   │                                                      default even when       │
@@ -745,18 +745,18 @@
   │ --output             -o      [text|id|status|uttera  Print one field: text,  │
   │                              nces|srt|vtt|json]      id, status, utterances, │
   │                                                      srt or vtt (captions),  │
-  │                                                      or json.                │
+  │                                                      or json                 │
   │ --chars-per-caption          INTEGER RANGE [x>=1]    Max characters per      │
   │                                                      caption line (only with │
-  │                                                      -o srt or -o vtt).      │
+  │                                                      -o srt or -o vtt)       │
   │ --out                        FILE                    Save the result to a    │
   │                                                      file instead of         │
   │                                                      printing it (clean      │
-  │                                                      text; pairs with -o).   │
+  │                                                      text; pairs with -o)    │
   │ --show-code                                          Print the equivalent    │
   │                                                      Python SDK code and     │
   │                                                      exit (does not          │
-  │                                                      transcribe).            │
+  │                                                      transcribe)             │
   │ --help                                               Show this message and   │
   │                                                      exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -764,82 +764,82 @@
   │ --from-stdin                               Batch mode: read audio paths/URLs │
   │                                            from stdin, one per line          │
   │                                            (composes with find/ls/yt-dlp     │
-  │                                            output).                          │
+  │                                            output)                           │
   │ --concurrency        INTEGER RANGE [x>=1]  How many sources to transcribe at │
-  │                                            once in batch mode.               │
+  │                                            once in batch mode                │
   │                                            [default: 4]                      │
   │ --force                                    Batch mode: re-transcribe sources │
   │                                            whose sidecar already records a   │
-  │                                            completed run.                    │
+  │                                            completed run                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
-  │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
+  │ --speech-model              [best|nano|slam-1|univ  Speech model             │
   │                             ersal]                                           │
   │ --language-code             TEXT                    Force a language (e.g.   │
-  │                                                     en_us).                  │
+  │                                                     en_us)                   │
   │ --language-detection                                Auto-detect the spoken   │
-  │                                                     language.                │
+  │                                                     language                 │
   │ --keyterms-prompt           TEXT                    Boost a key term         │
-  │                                                     (repeatable).            │
+  │                                                     (repeatable)             │
   │ --temperature               FLOAT RANGE             Speech model temperature │
   │                             [0.0<=x<=1.0]           (0 most deterministic, 1 │
-  │                                                     least).                  │
+  │                                                     least)                   │
   │ --prompt                    TEXT                    Prompt to bias the       │
   │                                                     speech model (supported  │
-  │                                                     models only).            │
+  │                                                     models only)             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Formatting ─────────────────────────────────────────────────────────────────╮
-  │ --punctuate       --no-punctuate        Add punctuation.                     │
+  │ --punctuate       --no-punctuate        Add punctuation                      │
   │ --format-text     --no-format-text      Apply text formatting (casing,       │
-  │                                         numbers).                            │
-  │ --disfluencies                          Keep filler words (e.g. um, uh).     │
+  │                                         numbers)                             │
+  │ --disfluencies                          Keep filler words (e.g. um, uh)      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
-  │ --speaker-labels                                 Enable diarization.         │
-  │ --speakers-expected        INTEGER RANGE [x>=1]  Hint speaker count.         │
+  │ --speaker-labels                                 Enable diarization          │
+  │ --speakers-expected        INTEGER RANGE [x>=1]  Hint speaker count          │
   │ --multichannel                                   Transcribe each audio       │
-  │                                                  channel separately.         │
+  │                                                  channel separately          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
   │ --redact-pii                                            Redact PII from the  │
-  │                                                         transcript.          │
+  │                                                         transcript           │
   │ --redact-pii-policy                TEXT                 Comma-separated PII  │
   │                                                         policies (e.g.       │
-  │                                                         person_name,...).    │
+  │                                                         person_name,...)     │
   │ --redact-pii-sub                   [hash|entity_name]   How to replace       │
-  │                                                         redacted PII.        │
-  │ --redact-pii-audio                                      Also redact audio.   │
-  │ --filter-profanity                                      Mask profanity.      │
+  │                                                         redacted PII         │
+  │ --redact-pii-audio                                      Also redact audio    │
+  │ --filter-profanity                                      Mask profanity       │
   │ --content-safety                                        Detect sensitive     │
-  │                                                         content.             │
+  │                                                         content              │
   │ --content-safety-confidence        INTEGER RANGE        Content-safety       │
   │                                    [25<=x<=100]         confidence threshold │
-  │                                                         (25-100).            │
+  │                                                         (25-100)             │
   │ --speech-threshold                 FLOAT RANGE          Minimum proportion   │
   │                                    [0.0<=x<=1.0]        of speech required   │
-  │                                                         (0-1).               │
+  │                                                         (0-1)                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
   │ --summarization                                      Summarize the           │
-  │                                                      transcript.             │
-  │ --summary-model             [informative|conversati  Summary model.          │
+  │                                                      transcript              │
+  │ --summary-model             [informative|conversati  Summary model           │
   │                             onal|catchy]                                     │
-  │ --summary-type              [bullets|bullets_verbos  Summary format.         │
+  │ --summary-type              [bullets|bullets_verbos  Summary format          │
   │                             e|gist|headline|paragra                          │
   │                             ph]                                              │
-  │ --auto-chapters                                      Generate chapters.      │
-  │ --sentiment-analysis                                 Analyze sentiment.      │
-  │ --entity-detection                                   Detect entities.        │
-  │ --auto-highlights                                    Detect key phrases.     │
-  │ --topic-detection                                    Detect IAB topics.      │
+  │ --auto-chapters                                      Generate chapters       │
+  │ --sentiment-analysis                                 Analyze sentiment       │
+  │ --entity-detection                                   Detect entities         │
+  │ --auto-highlights                                    Detect key phrases      │
+  │ --topic-detection                                    Detect IAB topics       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Customization ──────────────────────────────────────────────────────────────╮
   │ --word-boost                  TEXT                  Boost a word             │
-  │                                                     (repeatable).            │
+  │                                                     (repeatable)             │
   │ --custom-spelling-file        FILE                  JSON map of custom       │
-  │                                                     spellings.               │
-  │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms.      │
-  │ --audio-end                   INTEGER RANGE [x>=0]  End offset in ms.        │
+  │                                                     spellings                │
+  │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms       │
+  │ --audio-end                   INTEGER RANGE [x>=0]  End offset in ms         │
   │ --download-sections           TEXT                  For a YouTube/podcast    │
   │                                                     URL, download only part  │
   │                                                     of the source (yt-dlp    │
@@ -847,30 +847,30 @@
   │                                                     syntax, e.g.             │
   │                                                     "*0:00-5:00" for the     │
   │                                                     first five minutes;      │
-  │                                                     repeatable).             │
+  │                                                     repeatable)              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
   │ --webhook-url                TEXT        Webhook URL for completion (get a   │
   │                                          dev URL with `assembly webhooks     │
-  │                                          listen`).                           │
-  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
+  │                                          listen`)                            │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Translation ────────────────────────────────────────────────────────────────╮
-  │ --translate-to        TEXT  Translate transcript to a language (repeatable). │
+  │ --translate-to        TEXT  Translate transcript to a language (repeatable)  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any TranscriptionConfig field as         │
-  │                                 KEY=VALUE (repeatable).                      │
-  │ --config-file        FILE       JSON file of config fields.                  │
+  │                                 KEY=VALUE (repeatable)                       │
+  │ --config-file        FILE       JSON file of config fields                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Transform the finished transcript through LLM   │
   │                              Gateway. Repeatable: each prompt runs on the    │
   │                              previous one's response (a chain), the first on │
   │                              the transcript.                                 │
-  │ --model             TEXT     LLM Gateway model.                              │
+  │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
+  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -886,7 +886,7 @@
   
    Usage: assembly transcribe [OPTIONS] [SOURCE]
   
-   Transcribe an audio file, URL, or YouTube/podcast link — or a whole batch.
+   Transcribe a file, URL, or YouTube/podcast link — or a whole batch
   
    Quickest start: assembly transcribe call.mp3 (or --sample for the hosted
    demo).
@@ -910,11 +910,11 @@
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode). │
+  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
-  │                                                      wildfires.mp3 sample.   │
+  │                                                      wildfires.mp3 sample    │
   │ --json               -j                              Output the full result  │
   │                                                      as JSON. Text stays the │
   │                                                      default even when       │
@@ -923,18 +923,18 @@
   │ --output             -o      [text|id|status|uttera  Print one field: text,  │
   │                              nces|srt|vtt|json]      id, status, utterances, │
   │                                                      srt or vtt (captions),  │
-  │                                                      or json.                │
+  │                                                      or json                 │
   │ --chars-per-caption          INTEGER RANGE [x>=1]    Max characters per      │
   │                                                      caption line (only with │
-  │                                                      -o srt or -o vtt).      │
+  │                                                      -o srt or -o vtt)       │
   │ --out                        FILE                    Save the result to a    │
   │                                                      file instead of         │
   │                                                      printing it (clean      │
-  │                                                      text; pairs with -o).   │
+  │                                                      text; pairs with -o)    │
   │ --show-code                                          Print the equivalent    │
   │                                                      Python SDK code and     │
   │                                                      exit (does not          │
-  │                                                      transcribe).            │
+  │                                                      transcribe)             │
   │ --help                                               Show this message and   │
   │                                                      exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -942,82 +942,82 @@
   │ --from-stdin                               Batch mode: read audio paths/URLs │
   │                                            from stdin, one per line          │
   │                                            (composes with find/ls/yt-dlp     │
-  │                                            output).                          │
+  │                                            output)                           │
   │ --concurrency        INTEGER RANGE [x>=1]  How many sources to transcribe at │
-  │                                            once in batch mode.               │
+  │                                            once in batch mode                │
   │                                            [default: 4]                      │
   │ --force                                    Batch mode: re-transcribe sources │
   │                                            whose sidecar already records a   │
-  │                                            completed run.                    │
+  │                                            completed run                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
-  │ --speech-model              [best|nano|slam-1|univ  Speech model.            │
+  │ --speech-model              [best|nano|slam-1|univ  Speech model             │
   │                             ersal]                                           │
   │ --language-code             TEXT                    Force a language (e.g.   │
-  │                                                     en_us).                  │
+  │                                                     en_us)                   │
   │ --language-detection                                Auto-detect the spoken   │
-  │                                                     language.                │
+  │                                                     language                 │
   │ --keyterms-prompt           TEXT                    Boost a key term         │
-  │                                                     (repeatable).            │
+  │                                                     (repeatable)             │
   │ --temperature               FLOAT RANGE             Speech model temperature │
   │                             [0.0<=x<=1.0]           (0 most deterministic, 1 │
-  │                                                     least).                  │
+  │                                                     least)                   │
   │ --prompt                    TEXT                    Prompt to bias the       │
   │                                                     speech model (supported  │
-  │                                                     models only).            │
+  │                                                     models only)             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Formatting ─────────────────────────────────────────────────────────────────╮
-  │ --punctuate       --no-punctuate        Add punctuation.                     │
+  │ --punctuate       --no-punctuate        Add punctuation                      │
   │ --format-text     --no-format-text      Apply text formatting (casing,       │
-  │                                         numbers).                            │
-  │ --disfluencies                          Keep filler words (e.g. um, uh).     │
+  │                                         numbers)                             │
+  │ --disfluencies                          Keep filler words (e.g. um, uh)      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Speakers & Channels ────────────────────────────────────────────────────────╮
-  │ --speaker-labels                                 Enable diarization.         │
-  │ --speakers-expected        INTEGER RANGE [x>=1]  Hint speaker count.         │
+  │ --speaker-labels                                 Enable diarization          │
+  │ --speakers-expected        INTEGER RANGE [x>=1]  Hint speaker count          │
   │ --multichannel                                   Transcribe each audio       │
-  │                                                  channel separately.         │
+  │                                                  channel separately          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
   │ --redact-pii                                            Redact PII from the  │
-  │                                                         transcript.          │
+  │                                                         transcript           │
   │ --redact-pii-policy                TEXT                 Comma-separated PII  │
   │                                                         policies (e.g.       │
-  │                                                         person_name,...).    │
+  │                                                         person_name,...)     │
   │ --redact-pii-sub                   [hash|entity_name]   How to replace       │
-  │                                                         redacted PII.        │
-  │ --redact-pii-audio                                      Also redact audio.   │
-  │ --filter-profanity                                      Mask profanity.      │
+  │                                                         redacted PII         │
+  │ --redact-pii-audio                                      Also redact audio    │
+  │ --filter-profanity                                      Mask profanity       │
   │ --content-safety                                        Detect sensitive     │
-  │                                                         content.             │
+  │                                                         content              │
   │ --content-safety-confidence        INTEGER RANGE        Content-safety       │
   │                                    [25<=x<=100]         confidence threshold │
-  │                                                         (25-100).            │
+  │                                                         (25-100)             │
   │ --speech-threshold                 FLOAT RANGE          Minimum proportion   │
   │                                    [0.0<=x<=1.0]        of speech required   │
-  │                                                         (0-1).               │
+  │                                                         (0-1)                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Analysis ───────────────────────────────────────────────────────────────────╮
   │ --summarization                                      Summarize the           │
-  │                                                      transcript.             │
-  │ --summary-model             [informative|conversati  Summary model.          │
+  │                                                      transcript              │
+  │ --summary-model             [informative|conversati  Summary model           │
   │                             onal|catchy]                                     │
-  │ --summary-type              [bullets|bullets_verbos  Summary format.         │
+  │ --summary-type              [bullets|bullets_verbos  Summary format          │
   │                             e|gist|headline|paragra                          │
   │                             ph]                                              │
-  │ --auto-chapters                                      Generate chapters.      │
-  │ --sentiment-analysis                                 Analyze sentiment.      │
-  │ --entity-detection                                   Detect entities.        │
-  │ --auto-highlights                                    Detect key phrases.     │
-  │ --topic-detection                                    Detect IAB topics.      │
+  │ --auto-chapters                                      Generate chapters       │
+  │ --sentiment-analysis                                 Analyze sentiment       │
+  │ --entity-detection                                   Detect entities         │
+  │ --auto-highlights                                    Detect key phrases      │
+  │ --topic-detection                                    Detect IAB topics       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Customization ──────────────────────────────────────────────────────────────╮
   │ --word-boost                  TEXT                  Boost a word             │
-  │                                                     (repeatable).            │
+  │                                                     (repeatable)             │
   │ --custom-spelling-file        FILE                  JSON map of custom       │
-  │                                                     spellings.               │
-  │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms.      │
-  │ --audio-end                   INTEGER RANGE [x>=0]  End offset in ms.        │
+  │                                                     spellings                │
+  │ --audio-start                 INTEGER RANGE [x>=0]  Start offset in ms       │
+  │ --audio-end                   INTEGER RANGE [x>=0]  End offset in ms         │
   │ --download-sections           TEXT                  For a YouTube/podcast    │
   │                                                     URL, download only part  │
   │                                                     of the source (yt-dlp    │
@@ -1025,30 +1025,30 @@
   │                                                     syntax, e.g.             │
   │                                                     "*0:00-5:00" for the     │
   │                                                     first five minutes;      │
-  │                                                     repeatable).             │
+  │                                                     repeatable)              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
   │ --webhook-url                TEXT        Webhook URL for completion (get a   │
   │                                          dev URL with `assembly webhooks     │
-  │                                          listen`).                           │
-  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE.  │
+  │                                          listen`)                            │
+  │ --webhook-auth-header        NAME:VALUE  Webhook auth header as NAME:VALUE   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Translation ────────────────────────────────────────────────────────────────╮
-  │ --translate-to        TEXT  Translate transcript to a language (repeatable). │
+  │ --translate-to        TEXT  Translate transcript to a language (repeatable)  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any TranscriptionConfig field as         │
-  │                                 KEY=VALUE (repeatable).                      │
-  │ --config-file        FILE       JSON file of config fields.                  │
+  │                                 KEY=VALUE (repeatable)                       │
+  │ --config-file        FILE       JSON file of config fields                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Transform the finished transcript through LLM   │
   │                              Gateway. Repeatable: each prompt runs on the    │
   │                              previous one's response (a chain), the first on │
   │                              the transcript.                                 │
-  │ --model             TEXT     LLM Gateway model.                              │
+  │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens. [default: 1000]                     │
+  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -1086,7 +1086,7 @@
   
    Usage: assembly webhooks listen [OPTIONS]
   
-   Receive AssemblyAI webhooks on a public URL and watch them arrive.
+   Receive AssemblyAI webhooks on a public URL and watch them arrive
   
    Opens a cloudflared quick tunnel to a local listener and prints the public
    URL to pass as --webhook-url (or webhook_url in the API). Each delivery is
@@ -1101,16 +1101,16 @@
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --port                INTEGER               Local listener port (the first   │
-  │                                             free port from here).            │
+  │                                             free port from here)             │
   │                                             [default: 8989]                  │
   │ --forward-to          TEXT                  Re-POST each delivery to this    │
-  │                                             URL (e.g. your local app).       │
+  │                                             URL (e.g. your local app)        │
   │ --no-tunnel                                 Local-only: skip the cloudflared │
-  │                                             public URL.                      │
+  │                                             public URL                       │
   │ --max-events          INTEGER RANGE [x>=0]  Exit after this many deliveries  │
-  │                                             (0 = run until Ctrl-C).          │
+  │                                             (0 = run until Ctrl-C)           │
   │                                             [default: 0]                     │
-  │ --json        -j                            One NDJSON record per delivery.  │
+  │ --json        -j                            One NDJSON record per delivery   │
   │ --help                                      Show this message and exit.      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   

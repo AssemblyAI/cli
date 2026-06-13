@@ -4,16 +4,15 @@
   
    Usage: assembly audit [OPTIONS]
   
-   List recent audit-log entries for your account.
+   List recent audit-log entries for your account
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit                   INTEGER RANGE [x>=1]  How many entries to show.    │
+  │ --limit                   INTEGER RANGE [x>=1]  How many entries to show     │
   │                                                 [default: 20]                │
-  │ --action                  TEXT                  Filter by raw action name.   │
-  │ --resource                TEXT                  Filter by raw resource type. │
-  │ --include-logins                                Show successful login        │
-  │                                                 events.                      │
-  │ --json            -j                            Output raw JSON.             │
+  │ --action                  TEXT                  Filter by raw action name    │
+  │ --resource                TEXT                  Filter by raw resource type  │
+  │ --include-logins                                Show successful login events │
+  │ --json            -j                            Output raw JSON              │
   │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -38,10 +37,10 @@
   
    Usage: assembly balance [OPTIONS]
   
-   Show your remaining account balance.
+   Show your remaining account balance
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -60,13 +59,13 @@
   
    Usage: assembly keys create [OPTIONS]
   
-   Create a new API key. Prints the key value once — copy it now.
+   Create an API key (printed once — copy it now)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ *  --name             TEXT     A label for the new key. [required]           │
+  │ *  --name             TEXT     A label for the new key [required]            │
   │    --project          INTEGER  Project id to create the key in (defaults to  │
-  │                                your first).                                  │
-  │    --json     -j               Output raw JSON.                              │
+  │                                your first)                                   │
+  │    --json     -j               Output raw JSON                               │
   │    --help                      Show this message and exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -88,10 +87,10 @@
   
    Usage: assembly keys list [OPTIONS]
   
-   List API keys across your projects (keys shown masked).
+   List API keys across your projects (shown masked)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -112,15 +111,14 @@
   
    Usage: assembly keys rename [OPTIONS] TOKEN_ID NEW_NAME
   
-   Rename an existing API key.
+   Rename an existing API key
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    token_id      INTEGER  The key id (see `assembly keys list`).           │
-  │                             [required]                                       │
-  │ *    new_name      TEXT     The new label. [required]                        │
+  │ *    token_id      INTEGER  The key id (see `assembly keys list`) [required] │
+  │ *    new_name      TEXT     The new label [required]                         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -137,10 +135,10 @@
   
    Usage: assembly limits [OPTIONS]
   
-   Show your account's rate limits per service.
+   Show your account's rate limits per service
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -159,13 +157,13 @@
   
    Usage: assembly login [OPTIONS]
   
-   Authenticate via your browser; stores a CLI API key.
+   Authenticate via your browser and store a CLI API key
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --with-api-key            Read an API key from stdin instead of the browser  │
   │                           flow: printenv ASSEMBLYAI_API_KEY | assembly login │
   │                           --with-api-key                                     │
-  │ --json          -j        Output raw JSON.                                   │
+  │ --json          -j        Output raw JSON                                    │
   │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -184,10 +182,10 @@
   
    Usage: assembly logout [OPTIONS]
   
-   Clear stored credentials for the active profile.
+   Clear stored credentials for the active profile
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -204,16 +202,16 @@
   
    Usage: assembly usage [OPTIONS]
   
-   Show usage over a date range (defaults to the last 30 days).
+   Show usage over a date range (default: last 30 days)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --start                       TEXT  Start date (YYYY-MM-DD). Default: 30d    │
   │                                     ago.                                     │
   │ --end                         TEXT  End date (YYYY-MM-DD). Default: today.   │
-  │ --window                      TEXT  Window size: 'day', 'week', or 'month'.  │
+  │ --window                      TEXT  Window size: 'day', 'week', or 'month'   │
   │ --include-zero,--all                Include zero-usage windows (matches      │
-  │                                     --include-logins on `assembly audit`).   │
-  │ --json                -j            Output raw JSON.                         │
+  │                                     --include-logins on `assembly audit`)    │
+  │ --json                -j            Output raw JSON                          │
   │ --help                              Show this message and exit.              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -236,10 +234,10 @@
   
    Usage: assembly whoami [OPTIONS]
   
-   Show the active profile and whether its key is usable.
+   Show the active profile and whether its key works
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   

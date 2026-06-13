@@ -4,13 +4,13 @@
   
    Usage: assembly sessions get [OPTIONS] SESSION_ID
   
-   Show details for one streaming session.
+   Show details for one streaming session
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    session_id      TEXT  Streaming session id. [required]                  │
+  │ *    session_id      TEXT  Streaming session id [required]                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -32,14 +32,14 @@
   
    Usage: assembly sessions list [OPTIONS]
   
-   List recent streaming sessions.
+   List recent streaming sessions
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit           INTEGER RANGE [x>=1]       How many sessions to show.      │
+  │ --limit           INTEGER RANGE [x>=1]       How many sessions to show       │
   │                                              [default: 10]                   │
   │ --status          [created|completed|error]  Only show sessions with this    │
-  │                                              status.                         │
-  │ --json    -j                                 Output raw JSON.                │
+  │                                              status                          │
+  │ --json    -j                                 Output raw JSON                 │
   │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -63,18 +63,18 @@
   
    Usage: assembly transcripts get [OPTIONS] TRANSCRIPT_ID
   
-   Fetch a past transcript by id and print its text.
+   Fetch a past transcript by id and print its text
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    transcript_id      TEXT  Transcript id. [required]                      │
+  │ *    transcript_id      TEXT  Transcript id [required]                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --output             -o      [text|id|status|uttera  Print one field of the  │
-  │                              nces|srt|vtt|json]      result.                 │
+  │                              nces|srt|vtt|json]      result                  │
   │ --chars-per-caption          INTEGER RANGE [x>=1]    Max characters per      │
   │                                                      caption line (only with │
-  │                                                      -o srt or -o vtt).      │
-  │ --json               -j                              Output raw JSON.        │
+  │                                                      -o srt or -o vtt)       │
+  │ --json               -j                              Output raw JSON         │
   │ --help                                               Show this message and   │
   │                                                      exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -100,12 +100,12 @@
   
    Usage: assembly transcripts list [OPTIONS]
   
-   List recent transcripts.
+   List recent transcripts
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit          INTEGER RANGE [x>=1]  How many transcripts to show.         │
+  │ --limit          INTEGER RANGE [x>=1]  How many transcripts to show          │
   │                                        [default: 10]                         │
-  │ --json   -j                            Output raw JSON.                      │
+  │ --json   -j                            Output raw JSON                       │
   │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   

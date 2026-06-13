@@ -44,32 +44,32 @@ def caption(
     media: str = typer.Argument(
         ...,
         help="Video to caption: a local file, or a YouTube/media-page URL "
-        "(the full video is downloaded via yt-dlp).",
+        "(the full video is downloaded via yt-dlp)",
     ),
     transcript_id: str | None = typer.Option(
         None,
         "--transcript-id",
         "-t",
-        help="Reuse an existing transcript of this media instead of transcribing it again.",
+        help="Reuse an existing transcript of this media instead of transcribing it again",
     ),
     chars_per_caption: int | None = typer.Option(
         None,
         "--chars-per-caption",
         min=1,
-        help="Max characters per caption line.",
+        help="Max characters per caption line",
     ),
     font_size: int | None = typer.Option(
         None,
         "--font-size",
         min=1,
-        help="Font size of the burned-in captions (ffmpeg's default styling when omitted).",
+        help="Font size of the burned-in captions (ffmpeg's default styling when omitted)",
     ),
     out: Path | None = typer.Option(
-        None, "--out", help="Output file (default: <name>.captioned<ext> next to the input)."
+        None, "--out", help="Output file (default: <name>.captioned<ext> next to the input)"
     ),
-    json_out: bool = options.json_option("Emit JSON describing the captioned file."),
+    json_out: bool = options.json_option("Emit JSON describing the captioned file"),
 ) -> None:
-    """Burn always-visible captions into a video.
+    """Burn always-visible captions into a video
 
     The video is transcribed (or an existing transcript is reused with
     --transcript-id), the transcript's SRT captions are fetched, and ffmpeg
