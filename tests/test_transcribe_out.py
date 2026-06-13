@@ -118,7 +118,7 @@ def test_transcribe_out_missing_parent_dir_fails_before_transcribing(tmp_path):
 def test_transcribe_out_unwritable_parent_dir_fails_before_transcribing(tmp_path, monkeypatch):
     import os
 
-    from aai_cli import transcribe_exec
+    from aai_cli import transcribe_validate
 
     _auth()
     out = tmp_path / "x.txt"
@@ -131,7 +131,7 @@ def test_transcribe_out_unwritable_parent_dir_fails_before_transcribing(tmp_path
             return False
         return real_access(path, mode, **kwargs)
 
-    monkeypatch.setattr(transcribe_exec.os, "access", fake_access)
+    monkeypatch.setattr(transcribe_validate.os, "access", fake_access)
     with patch(_TRANSCRIBE) as tx:
         result = runner.invoke(app, ["transcribe", "audio.mp3", "--out", str(out)])
     assert result.exit_code == 2

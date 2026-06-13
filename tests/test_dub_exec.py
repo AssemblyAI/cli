@@ -16,6 +16,7 @@ import pytest
 
 from aai_cli import mediafile
 from aai_cli.commands.dub import _exec as dub_exec
+from aai_cli.commands.dub import _pipeline as dub_pipeline
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._dub_helpers import (
@@ -50,8 +51,8 @@ def _fake_key(monkeypatch: pytest.MonkeyPatch):
     "instance",
     [
         DEFAULTS,
-        dub_exec._Utterance(start_ms=0, speaker="A", text="hi"),
-        dub_exec._VoicePlan(bare=None, overrides={}),
+        dub_pipeline.Utterance(start_ms=0, speaker="A", text="hi"),
+        dub_pipeline.VoicePlan(bare=None, overrides={}),
     ],
     ids=["options", "utterance", "voice_plan"],
 )
@@ -127,7 +128,7 @@ def test_default_out_path_rejects_unsluggable_language():
 
 def test_assemble_timeline_fills_gaps_and_pads_tail():
     # rate 1000: one second of 16-bit mono PCM is 2000 bytes.
-    track = dub_exec.assemble_timeline([(500, b"\x01\x02")], 1000, total_seconds=1.0)
+    track = dub_pipeline.assemble_timeline([(500, b"\x01\x02")], 1000, total_seconds=1.0)
     # 0.5 s leading silence, the segment, then a 0.499 s tail pad to 1.0 s.
     assert track == b"\x00" * 1000 + b"\x01\x02" + b"\x00" * 998
 
@@ -136,12 +137,12 @@ def test_assemble_timeline_overlap_appends_without_silence():
     # The first segment runs to 0.1 s; the second "starts" at 0.05 s, so it is
     # appended immediately (the dub drifts) rather than overlapping or crashing.
     placed = [(0, b"\x01" * 200), (50, b"\x02\x02")]
-    track = dub_exec.assemble_timeline(placed, 1000, total_seconds=None)
+    track = dub_pipeline.assemble_timeline(placed, 1000, total_seconds=None)
     assert track == b"\x01" * 200 + b"\x02\x02"
 
 
 def test_assemble_timeline_skips_tail_when_track_is_long_enough():
-    track = dub_exec.assemble_timeline([(0, b"\x01" * 200)], 1000, total_seconds=0.05)
+    track = dub_pipeline.assemble_timeline([(0, b"\x01" * 200)], 1000, total_seconds=0.05)
     assert track == b"\x01" * 200
 
 
@@ -154,9 +155,9 @@ def test_utterances_of_defaults_and_filtering():
             utterance(4000, "C", "  Bye  "),
         ]
     )
-    assert dub_exec._utterances_of(transcript, "tr_dub") == [
-        dub_exec._Utterance(start_ms=0, speaker="A", text="Hi"),
-        dub_exec._Utterance(start_ms=4000, speaker="C", text="Bye"),
+    assert dub_pipeline.utterances_of(transcript, "tr_dub") == [
+        dub_pipeline.Utterance(start_ms=0, speaker="A", text="Hi"),
+        dub_pipeline.Utterance(start_ms=4000, speaker="C", text="Bye"),
     ]
 
 
@@ -167,7 +168,7 @@ def test_utterances_of_defaults_and_filtering():
 )
 def test_utterances_of_requires_spoken_utterances(utterances):
     with pytest.raises(CLIError) as exc:
-        dub_exec._utterances_of(SimpleNamespace(utterances=utterances), "tr_x")
+        dub_pipeline.utterances_of(SimpleNamespace(utterances=utterances), "tr_x")
     assert exc.value.error_type == "no_utterances"
     assert exc.value.exit_code == 2
     assert "Transcript tr_x has no utterances to dub" in exc.value.message
@@ -181,7 +182,7 @@ def test_utterances_of_requires_spoken_utterances(utterances):
 )
 def test_total_seconds(duration, expected):
     transcript = SimpleNamespace(audio_duration=duration)
-    assert dub_exec._total_seconds(transcript) == expected
+    assert dub_pipeline.total_seconds(transcript) == expected
 
 
 # --- validation order (cheap local checks before any credential or network) ----
