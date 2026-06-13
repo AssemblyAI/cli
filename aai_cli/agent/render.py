@@ -4,6 +4,7 @@ from typing import Any
 
 from rich.text import Text
 
+from aai_cli.agent import events
 from aai_cli.ui.render import BaseRenderer
 
 
@@ -28,10 +29,14 @@ class AgentRenderer(BaseRenderer):
         # File-driven runs have no mic, so they skip the "start talking" prompt.
         self.mic_input = mic_input
 
+    def _emit_event(self, event: events.Event) -> None:
+        """Serialize one typed agent event to the NDJSON stream."""
+        self._emit(event.model_dump())
+
     # --- lifecycle ---------------------------------------------------------
     def connected(self) -> None:
         if self.json_mode:
-            self._emit({"type": "session.ready"})
+            self._emit_event(events.SessionReady())
         elif not self.mic_input:
             return
         elif self.text_mode:
@@ -53,13 +58,13 @@ class AgentRenderer(BaseRenderer):
     # --- user --------------------------------------------------------------
     def user_partial(self, text: str) -> None:
         if self.json_mode:
-            self._emit({"type": "transcript.user.delta", "text": text})
+            self._emit_event(events.UserDelta(text=text))
         elif not self.text_mode:  # partials are noise for piped text
             self._update_line(_labeled("you: ", text, style="aai.you"))
 
     def user_final(self, text: str) -> None:
         if self.json_mode:
-            self._emit({"type": "transcript.user", "text": text})
+            self._emit_event(events.UserFinal(text=text))
         elif self.text_mode:
             self._write(f"you: {text}\n")
         else:
@@ -68,11 +73,11 @@ class AgentRenderer(BaseRenderer):
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:
         if self.json_mode:
-            self._emit({"type": "reply.started"})
+            self._emit_event(events.ReplyStarted())
 
     def agent_transcript(self, text: str, *, interrupted: bool) -> None:
         if self.json_mode:
-            self._emit({"type": "transcript.agent", "text": text, "interrupted": interrupted})
+            self._emit_event(events.AgentTranscript(text=text, interrupted=interrupted))
         elif self.text_mode:
             self._write(f"agent: {text}\n")
         else:
@@ -81,4 +86,4 @@ class AgentRenderer(BaseRenderer):
 
     def reply_done(self, *, interrupted: bool) -> None:
         if self.json_mode:
-            self._emit({"type": "reply.done", "interrupted": interrupted})
+            self._emit_event(events.ReplyDone(interrupted=interrupted))

@@ -200,6 +200,14 @@ def test_hf_no_rows(monkeypatch):
         eval_data.load("org/ds", limit=1)
 
 
+def test_hf_split_entry_missing_required_field_is_an_api_error(monkeypatch):
+    # A /splits entry without the required config/split pair is a schema surprise,
+    # not a usable slice — surface it as a clean AMS-style error, not a KeyError.
+    _hf_handler(monkeypatch, splits=[{"split": "test"}], rows=[_hf_row()])
+    with pytest.raises(APIError, match="unexpected /splits payload"):
+        eval_data.load("org/ds", limit=1)
+
+
 @pytest.mark.parametrize("status", [401, 403])
 def test_hf_auth_failure_suggests_hf_token(monkeypatch, status):
     _patch_transport(monkeypatch, lambda request: httpx.Response(status, json={"error": "gated"}))

@@ -11,6 +11,7 @@ from __future__ import annotations
 from http import HTTPStatus
 
 import httpx2 as httpx
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from aai_cli.core import env, jsonshape
 from aai_cli.core.errors import APIError, UsageError
@@ -91,16 +92,37 @@ def fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> 
     return _checked_payload(resp, dataset=dataset)
 
 
-def split_entries(dataset: str) -> list[dict[str, object]]:
+class _SplitEntry(BaseModel):
+    """One ``/splits`` entry: the (config, split) pair naming a dataset slice.
+
+    ``extra="allow"`` keeps the sibling fields the server returns (``dataset``,
+    ``num_examples``) without modelling them, so subset/split selection reads
+    typed fields instead of ``str(entry.get("config"))`` off a bare dict.
+    """
+
+    model_config = ConfigDict(extra="allow")
+    config: str
+    split: str
+
+
+_SPLIT_ENTRIES = TypeAdapter(list[_SplitEntry])
+
+
+def split_entries(dataset: str) -> list[_SplitEntry]:
     payload = fetch_json("/splits", {"dataset": dataset}, dataset=dataset)
-    entries = jsonshape.mapping_list(payload.get("splits"))
+    try:
+        entries = _SPLIT_ENTRIES.validate_python(payload.get("splits") or [])
+    except ValidationError as exc:
+        raise APIError(
+            f"Hugging Face returned an unexpected /splits payload for '{dataset}'."
+        ) from exc
     if not entries:
         raise APIError(f"Hugging Face reports no splits for '{dataset}'.")
     return entries
 
 
-def pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: str) -> str:
-    configs = list(dict.fromkeys(str(entry.get("config")) for entry in entries))
+def pick_subset(entries: list[_SplitEntry], subset: str | None, dataset: str) -> str:
+    configs = list(dict.fromkeys(entry.config for entry in entries))
     if subset is not None:
         if subset in configs:
             return subset
@@ -115,10 +137,8 @@ def pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: s
     )
 
 
-def pick_split(
-    entries: list[dict[str, object]], config: str, split: str | None, dataset: str
-) -> str:
-    splits = [str(entry.get("split")) for entry in entries if str(entry.get("config")) == config]
+def pick_split(entries: list[_SplitEntry], config: str, split: str | None, dataset: str) -> str:
+    splits = [entry.split for entry in entries if entry.config == config]
     if split is not None:
         if split in splits:
             return split

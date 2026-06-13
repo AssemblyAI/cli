@@ -6,7 +6,7 @@ from typing import TextIO
 from rich.console import Console
 from rich.text import Text
 
-from aai_cli.core import jsonshape
+from aai_cli.streaming import events
 from aai_cli.ui import theme
 from aai_cli.ui.render import BaseRenderer
 
@@ -72,12 +72,6 @@ class StreamRenderer(BaseRenderer):
         self._lock = threading.RLock()
 
     @staticmethod
-    def _with_source(payload: dict[str, object], source: str | None) -> dict[str, object]:
-        if source is not None:
-            payload["source"] = source
-        return payload
-
-    @staticmethod
     def _label(text: str, source: str | None, speaker: str | None = None) -> str:
         prefix = speaker_prefix(source, speaker)
         return text if prefix is None else f"{prefix[0]}: {text}"
@@ -99,7 +93,7 @@ class StreamRenderer(BaseRenderer):
         with self._lock:
             if self.json_mode:
                 self._emit(
-                    self._with_source({"type": "begin", "id": getattr(event, "id", None)}, source)
+                    events.Begin(session_id=getattr(event, "id", None), source=source).wire()
                 )
 
     def listening(self) -> None:
@@ -116,16 +110,12 @@ class StreamRenderer(BaseRenderer):
         speaker = getattr(event, "speaker_label", None)  # set when --speaker-labels diarizes
         with self._lock:
             if self.json_mode:
-                # speaker is omitted entirely when undiarized (not null).
-                payload = jsonshape.compact(
-                    {
-                        "type": "turn",
-                        "transcript": text,
-                        "end_of_turn": end,
-                        "speaker": speaker,
-                    }
+                # speaker/source are omitted entirely when absent (not null) — see wire().
+                self._emit(
+                    events.Turn(
+                        transcript=text, end_of_turn=end, speaker=speaker, source=source
+                    ).wire()
                 )
-                self._emit(self._with_source(payload, source))
             elif self.text_mode:
                 if end and text:
                     self._write(self._label(text, source, speaker) + "\n")  # plain finalized line
@@ -137,16 +127,9 @@ class StreamRenderer(BaseRenderer):
     def termination(self, event: object, *, source: str | None = None) -> None:
         with self._lock:
             if self.json_mode:
+                duration = getattr(event, "audio_duration_seconds", None)
                 self._emit(
-                    self._with_source(
-                        {
-                            "type": "termination",
-                            "audio_duration_seconds": getattr(
-                                event, "audio_duration_seconds", None
-                            ),
-                        },
-                        source,
-                    )
+                    events.Termination(audio_duration_seconds=duration, source=source).wire()
                 )
 
     def stopped(self) -> None:
