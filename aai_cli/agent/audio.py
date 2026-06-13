@@ -6,8 +6,8 @@ import threading
 from collections.abc import Callable, Iterator
 from typing import Any
 
-from aai_cli.errors import CLIError
-from aai_cli.microphone import default_rate, import_sounddevice, resample_pcm16
+from aai_cli.core.errors import CLIError
+from aai_cli.core.microphone import default_rate, import_sounddevice, resample_pcm16
 
 SAMPLE_RATE = 24000  # Voice Agent native PCM16 mono rate
 

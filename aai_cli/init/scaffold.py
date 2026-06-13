@@ -7,7 +7,7 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 from aai_cli.init import templates
 
 if TYPE_CHECKING:

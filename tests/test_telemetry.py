@@ -9,8 +9,8 @@ import uuid
 import pytest
 import typer
 
-from aai_cli import config, telemetry
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import config, telemetry
+from aai_cli.core.errors import CLIError, UsageError
 
 # --- token / url resolution -------------------------------------------------
 

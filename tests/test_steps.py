@@ -1,4 +1,4 @@
-from aai_cli import steps
+from aai_cli.ui import steps
 
 
 def test_render_steps_includes_name_status_detail() -> None:

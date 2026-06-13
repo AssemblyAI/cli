@@ -10,8 +10,8 @@ import time
 import webbrowser
 from pathlib import Path
 
-from aai_cli import output
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
+from aai_cli.ui import output
 
 
 def has_uv() -> bool:

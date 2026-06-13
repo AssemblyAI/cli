@@ -3,8 +3,8 @@
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config, llm
-from aai_cli.errors import UsageError
+from aai_cli.core import config, llm
+from aai_cli.core.errors import UsageError
 from aai_cli.main import app
 from tests.test_llm import _fake_client, _response
 

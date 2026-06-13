@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import command_registry, help_panels, init_exec, options
-from aai_cli.context import AppState, run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app import init_exec
+from aai_cli.app.context import AppState, run_command
 from aai_cli.init import templates
+from aai_cli.ui.help_text import examples_epilog
 
 # Single-command sub-typer flattened to `assembly init` (the exact pattern `assembly transcribe`
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with

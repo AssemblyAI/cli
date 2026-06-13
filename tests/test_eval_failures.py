@@ -14,7 +14,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aai_cli.commands.evaluate import _exec as evaluate
-from aai_cli.errors import APIError, auth_failure
+from aai_cli.core.errors import APIError, auth_failure
 from aai_cli.main import app
 from tests.test_eval_command import (
     _auth,

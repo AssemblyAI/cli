@@ -2,7 +2,7 @@ import httpx2 as httpx
 import pytest
 
 from aai_cli.auth import ams
-from aai_cli.errors import NotAuthenticated
+from aai_cli.core.errors import NotAuthenticated
 
 
 def _patch_transport(monkeypatch, handler):

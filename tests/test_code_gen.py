@@ -64,7 +64,7 @@ def test_every_render_feature_has_a_snippet():
     # but no `_render_speaker_labels` function, so it is an allowed orphan.
     import inspect
 
-    from aai_cli import transcribe_render
+    from aai_cli.app.transcribe import render as transcribe_render
 
     rendered = {
         name[len("_render_") :]
@@ -254,9 +254,9 @@ def test_output_field_maps_cover_every_transcript_output_choice():
     # plain transcript text for unknown fields, so an exact key-set check is what
     # turns "added a TranscriptOutput member, forgot a map" into a test failure
     # instead of silently-wrong output.
-    from aai_cli import client
-    from aai_cli.choices import TranscriptOutput
     from aai_cli.code_gen.transcribe import _OUTPUT_SNIPPETS
+    from aai_cli.core import client
+    from aai_cli.core.choices import TranscriptOutput
 
     values = {member.value for member in TranscriptOutput}
     assert set(_OUTPUT_SNIPPETS) == values
@@ -359,7 +359,7 @@ def test_transcribe_show_code_without_gateway_has_no_openai_import():
 def test_generated_code_targets_active_environment():
     # --show-code embeds hosts from the active environment, so a sandbox user's
     # generated script talks to the sandbox that minted their key, not production.
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     sandbox = environments.get("sandbox000")
     environments.set_active(sandbox)

@@ -4,10 +4,10 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import run_command
 from aai_cli.commands.dev import _exec as dev_exec
-from aai_cli.context import run_command
-from aai_cli.help_text import examples_epilog
 from aai_cli.init import devserver
+from aai_cli.ui.help_text import examples_epilog
 
 # Flattened single-command sub-typer (same pattern as `assembly init`): one
 # @app.command() registered via app.add_typer(dev.app) with no name.

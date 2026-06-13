@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import command_registry, config, help_panels, options, output, telemetry
-from aai_cli.context import AppState, run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
+from aai_cli.core import config, telemetry
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(
     help="Anonymous usage telemetry: status, enable, disable",

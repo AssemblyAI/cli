@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli.errors import CLIError
-from aai_cli.microphone import audio_missing_error
+from aai_cli.core.errors import CLIError
+from aai_cli.core.microphone import audio_missing_error
 from aai_cli.tts import audio
 
 

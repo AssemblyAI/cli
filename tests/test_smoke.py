@@ -24,7 +24,7 @@ def test_version_flag_prints_and_exits():
 
 def test_quiet_suppresses_env_override_warning(monkeypatch):
     # --env contradicting the profile normally warns on stderr; --quiet silences it.
-    from aai_cli import config
+    from aai_cli.core import config
 
     config.set_api_key("default", "sk_live")
     config.set_profile_env("default", "production")
@@ -41,7 +41,7 @@ def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
     # pipeline gets a machine-readable hint instead of an unexplained auth failure.
     import json
 
-    from aai_cli import config
+    from aai_cli.core import config
 
     config.set_api_key("default", "sk_live")
     config.set_profile_env("default", "production")
@@ -56,7 +56,7 @@ def test_env_override_warning_is_structured_in_json_mode(monkeypatch, mocker):
 
 
 def test_sandbox_alone_targets_sandbox():
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     result = runner.invoke(app, ["--sandbox"])
     assert result.exit_code == 0
@@ -64,7 +64,7 @@ def test_sandbox_alone_targets_sandbox():
 
 
 def test_sandbox_with_agreeing_env_is_fine():
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     result = runner.invoke(app, ["--sandbox", "--env", "sandbox000"])
     assert result.exit_code == 0
@@ -90,7 +90,7 @@ def test_sandbox_conflict_warning_is_structured_in_json_mode(mocker):
     # a machine-readable hint instead of a decorated human line.
     import json
 
-    from aai_cli import config
+    from aai_cli.core import config
 
     config.set_api_key("default", "sk_live")
     mocker.patch(

@@ -14,11 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from aai_cli import jsonshape, mediafile, output
-from aai_cli import llm as gateway
-from aai_cli.errors import APIError, CLIError
+from aai_cli.app import mediafile
+from aai_cli.core import jsonshape
+from aai_cli.core import llm as gateway
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.tts.session import SpeakConfig
+from aai_cli.ui import output
 
 if TYPE_CHECKING:
     from aai_cli.commands.dub._exec import DubOptions

@@ -23,8 +23,9 @@ htmlcov/
 
 # Local scratch scripts (often contain live keys)
 transcribe/
-# But do track the packaged template
+# But do track the packaged template and the transcribe orchestration subpackage
 !aai_cli/init/templates/transcribe/
+!aai_cli/app/transcribe/
 
 # Wrong tool for this project (hatchling + uv); never commit a poetry lock
 poetry.lock

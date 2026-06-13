@@ -15,8 +15,8 @@ import math
 import re
 from dataclasses import dataclass
 
-from aai_cli import jsonshape
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import jsonshape
+from aai_cli.core.errors import CLIError, UsageError
 
 _RANGE_FORMAT = "START-END, each end as seconds or [HH:]MM:SS (e.g. 90-120 or 1:30-2:00)"
 _MAX_CLOCK_FIELDS = 3  # [HH:]MM:SS — anything longer than three colon fields is a typo

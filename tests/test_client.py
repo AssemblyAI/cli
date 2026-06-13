@@ -6,8 +6,8 @@ client.stream_audio tests live in test_client_streaming.py.
 import assemblyai as aai
 import pytest
 
-from aai_cli import client
-from aai_cli.errors import APIError
+from aai_cli.core import client
+from aai_cli.core.errors import APIError
 
 
 def test_validate_key_true_on_success(mocker):
@@ -166,7 +166,7 @@ def test_list_transcripts_auth_error_becomes_apierror(mocker):
 
 
 def test_list_transcripts_rejected_key_becomes_not_authenticated(mocker):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     T = mocker.patch.object(client.aai, "Transcriber", autospec=True)
     T.return_value.list_transcripts.side_effect = aai.types.AssemblyAIError(
@@ -290,7 +290,7 @@ def test_select_transcript_field_vtt_network_error_becomes_apierror(mocker):
 
 
 def test_select_transcript_field_srt_auth_error_becomes_not_authenticated(mocker):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     t = mocker.MagicMock()
     t.export_subtitles_srt.side_effect = RuntimeError("HTTP 401 Unauthorized")
@@ -299,7 +299,7 @@ def test_select_transcript_field_srt_auth_error_becomes_not_authenticated(mocker
 
 
 def test_select_transcript_field_vtt_auth_error_becomes_not_authenticated(mocker):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     t = mocker.MagicMock()
     t.export_subtitles_vtt.side_effect = RuntimeError("HTTP 401 Unauthorized")
@@ -318,7 +318,7 @@ def test_validate_chars_per_caption_allows_unset_value():
 
 @pytest.mark.parametrize("field", [None, "text", "json"])
 def test_validate_chars_per_caption_rejects_non_subtitle_fields(field):
-    from aai_cli.errors import UsageError
+    from aai_cli.core.errors import UsageError
 
     with pytest.raises(UsageError) as exc:
         client.validate_chars_per_caption(40, field)
@@ -341,7 +341,7 @@ def test_get_transcript_generic_error_becomes_apierror(mocker):
 
 
 def test_get_transcript_auth_error_becomes_not_authenticated(mocker):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     mocker.patch.object(
         client.aai.Transcript, "get_by_id", side_effect=RuntimeError("HTTP 401 Unauthorized")
@@ -359,7 +359,7 @@ def test_transcribe_network_error_becomes_apierror(mocker):
 
 
 def test_transcribe_auth_error_becomes_not_authenticated(mocker):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     fake_transcriber = mocker.MagicMock()
     fake_transcriber.transcribe.side_effect = RuntimeError("Invalid API key")
@@ -371,7 +371,7 @@ def test_transcribe_auth_error_becomes_not_authenticated(mocker):
 def test_transcribe_passes_prebuilt_config(monkeypatch, mocker):
     import assemblyai as aai
 
-    from aai_cli import client
+    from aai_cli.core import client
 
     captured = {}
 

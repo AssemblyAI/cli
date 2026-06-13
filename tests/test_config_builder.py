@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from aai_cli import config_builder as cb
-from aai_cli.errors import UsageError
+from aai_cli.core import config_builder as cb
+from aai_cli.core.errors import UsageError
 
 
 def _param_names(model_cls) -> set[str]:
@@ -186,7 +186,7 @@ def test_every_transcribe_field_is_a_valid_param(field):
 
 
 def test_merge_transcribe_config_returns_kwargs_dict():
-    from aai_cli import config_builder
+    from aai_cli.core import config_builder
 
     merged = config_builder.merge_transcribe_config(
         flags={"speaker_labels": True, "language_code": None},
@@ -199,7 +199,7 @@ def test_merge_transcribe_config_returns_kwargs_dict():
 def test_construct_transcribe_config_from_merged():
     import assemblyai as aai
 
-    from aai_cli import config_builder
+    from aai_cli.core import config_builder
 
     tc = config_builder.construct_transcription_config({"speaker_labels": True})
     assert isinstance(tc, aai.TranscriptionConfig)
@@ -210,7 +210,7 @@ def test_construct_transcribe_config_from_merged():
 def test_merge_streaming_params_coerces_speech_model_enum():
     from assemblyai.streaming.v3 import SpeechModel
 
-    from aai_cli import config_builder
+    from aai_cli.core import config_builder
 
     merged = config_builder.merge_streaming_params(
         flags={"speech_model": "universal-streaming-multilingual", "sample_rate": 16000},

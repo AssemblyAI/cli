@@ -8,11 +8,13 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from rich.markup import escape
 from rich.text import Text
 
-from aai_cli import command_registry, help_panels, jsonshape, options, output, timeparse
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
 from aai_cli.auth import ams
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import jsonshape, timeparse
+from aai_cli.core.errors import UsageError
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 
 def _parse_day(day: str) -> date:

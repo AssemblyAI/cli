@@ -26,11 +26,13 @@ from types import SimpleNamespace
 
 from rich.markup import escape
 
-from aai_cli import jsonshape, llm, mediafile, output, stdio, youtube
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
 from aai_cli.commands.clip import _select as clip_select
 from aai_cli.commands.clip._select import Segment
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import jsonshape, llm, stdio, youtube
+from aai_cli.core.errors import CLIError, UsageError
+from aai_cli.ui import output
 
 
 @dataclass(frozen=True)

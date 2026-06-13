@@ -4,9 +4,9 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
 from aai_cli.commands.webhooks import _listen as webhook_listen
-from aai_cli.context import AppState, run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(help="Receive webhook deliveries on a public dev URL", no_args_is_help=True)
 

@@ -14,18 +14,12 @@ import subprocess
 
 import typer
 
-from aai_cli import (
-    __version__,
-    command_registry,
-    config,
-    help_panels,
-    options,
-    output,
-    update_check,
-)
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import APIError, CLIError
-from aai_cli.help_text import examples_epilog
+from aai_cli import __version__, command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
+from aai_cli.core import config
+from aai_cli.core.errors import APIError, CLIError
+from aai_cli.ui import output, update_check
+from aai_cli.ui.help_text import examples_epilog
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.SETUP,

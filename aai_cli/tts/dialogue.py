@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from aai_cli.errors import UsageError
+from aai_cli.core.errors import UsageError
 
 # A rendered transcript line: "Speaker A: text". The id is a non-space run; the
 # colon may be followed by a single space (label-only lines can lack trailing text).

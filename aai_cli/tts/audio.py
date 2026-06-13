@@ -6,8 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from aai_cli.errors import CLIError
-from aai_cli.microphone import import_sounddevice
+from aai_cli.core.errors import CLIError
+from aai_cli.core.microphone import import_sounddevice
 
 
 class _OutputStream(Protocol):

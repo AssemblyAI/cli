@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from aai_cli import output
-from aai_cli.context import AppState
+from aai_cli.app.context import AppState
 from aai_cli.onboard import sections, wizard
 from aai_cli.onboard.prompter import NonInteractivePrompter, WizardCancelled
 from aai_cli.onboard.sections import SectionResult, WizardContext
+from aai_cli.ui import output
 
 ALL_SECTIONS = (
     "welcome",

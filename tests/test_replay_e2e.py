@@ -1,7 +1,7 @@
 """End-to-end replay tests: drive real CLI commands against recorded API responses.
 
 Each test patches the command's network boundary (``client.* / llm.* / ams.*``) to
-return an object rebuilt from a real, scrubbed fixture (see ``tests/replay_fixtures.py``
+return an object rebuilt from a real, scrubbed fixture (see ``tests/_replay_fixtures.py``
 and ``scripts/record_fixtures.py``), then invokes the command through Typer and asserts
 on the rendered output. The transport stays offline — pytest-socket is untouched — but
 the command's own parsing, formatting, and rendering all run against a real payload.
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.main import app
-from tests import replay_fixtures as rf
+from tests import _replay_fixtures as rf
 
 runner = CliRunner()
 
@@ -29,7 +29,7 @@ def _with_session():
 def test_transcribe_sample_renders_real_transcript(mocker):
     _with_api_key()
     mocker.patch(
-        "aai_cli.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe.run.client.transcribe",
         autospec=True,
         return_value=rf.transcript("transcribe_sample"),
     )

@@ -52,7 +52,7 @@ def _stub(
     monkeypatch.setattr(
         "shutil.which", lambda name: f"/usr/bin/{name}" if name in available else None
     )
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: agentic)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: agentic)
     calls: dict[str, object] = {}
 
     def fake_confirm(prompt: str) -> bool:

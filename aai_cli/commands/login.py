@@ -6,16 +6,12 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import client, command_registry, config, environments, help_panels, options, output
-from aai_cli.context import AppState, persist_browser_login, run_command
-from aai_cli.errors import (
-    STDIN_KEY_RECIPE,
-    APIError,
-    CLIError,
-    UsageError,
-    mutually_exclusive,
-)
-from aai_cli.help_text import examples_epilog
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, persist_browser_login, run_command
+from aai_cli.core import client, config, environments
+from aai_cli.core.errors import STDIN_KEY_RECIPE, APIError, CLIError, UsageError, mutually_exclusive
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

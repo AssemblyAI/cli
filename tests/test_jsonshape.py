@@ -1,6 +1,6 @@
 import datetime
 
-from aai_cli import jsonshape
+from aai_cli.core import jsonshape
 
 
 def test_as_mapping_accepts_json_objects_only():

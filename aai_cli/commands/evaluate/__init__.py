@@ -10,10 +10,10 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import run_command
 from aai_cli.commands.evaluate import _exec as evaluate_exec
 from aai_cli.commands.evaluate._exec import EvalSpeechModel
-from aai_cli.context import run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

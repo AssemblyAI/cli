@@ -11,8 +11,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from aai_cli import config
-from aai_cli.errors import CLIError
+from aai_cli.core import config
+from aai_cli.core.errors import CLIError
 from aai_cli.init import runner
 
 # cloudflared binary name; resolved via shutil.which by callers.

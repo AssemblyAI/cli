@@ -13,11 +13,12 @@ from dataclasses import dataclass
 
 from rich.markup import escape
 
-from aai_cli import choices, client, output, stdio
-from aai_cli import llm as gateway
-from aai_cli.context import AppState
-from aai_cli.errors import UsageError
-from aai_cli.follow import FollowRenderer
+from aai_cli.app.context import AppState
+from aai_cli.core import choices, client, stdio
+from aai_cli.core import llm as gateway
+from aai_cli.core.errors import UsageError
+from aai_cli.ui import output
+from aai_cli.ui.follow import FollowRenderer
 
 _FOLLOW_STDIN_MESSAGE = (
     "--follow needs transcript text piped on stdin, e.g. "

@@ -4,7 +4,7 @@ from typing import Any
 
 from rich.text import Text
 
-from aai_cli.render import BaseRenderer
+from aai_cli.ui.render import BaseRenderer
 
 
 def _labeled(label: str, body: str, *, style: str = "aai.label") -> Text:

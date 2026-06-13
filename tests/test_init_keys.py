@@ -1,4 +1,4 @@
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.init import keys
 
 

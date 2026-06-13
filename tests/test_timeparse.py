@@ -1,6 +1,6 @@
 from datetime import UTC
 
-from aai_cli import timeparse
+from aai_cli.core import timeparse
 
 
 def test_parse_iso_utc_normalizes_z_and_offsets():

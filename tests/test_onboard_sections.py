@@ -7,14 +7,17 @@ from pathlib import Path
 import pytest
 import typer
 
-from aai_cli import init_exec, output, transcribe_exec, transcribe_render
-from aai_cli import setup_exec as setup_cmd
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError
+from aai_cli.app import init_exec
+from aai_cli.app import setup_exec as setup_cmd
+from aai_cli.app.context import AppState
+from aai_cli.app.transcribe import render as transcribe_render
+from aai_cli.app.transcribe import run as transcribe_exec
+from aai_cli.core.errors import CLIError
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
 from aai_cli.onboard.sections import SectionResult, WizardContext
-from aai_cli.steps import Step
+from aai_cli.ui import output
+from aai_cli.ui.steps import Step
 
 
 class _FakeTranscript:
@@ -131,7 +134,7 @@ def test_first_request_uses_custom_source(
 
 
 def test_first_request_handles_failure(ctx: WizardContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
 

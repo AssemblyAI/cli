@@ -10,7 +10,7 @@ import json
 import pytest
 
 from aai_cli.commands.evaluate import _data as eval_data
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core.errors import CLIError, UsageError
 
 # ---------------------------------------------------------------- local manifests
 

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
-
-from aai_cli import environments
-from aai_cli.errors import CLIError
+from aai_cli.core import env, environments
+from aai_cli.core.errors import CLIError
 
 # Constant across environments.
 STYTCH_OAUTH_PROVIDER = "google"
@@ -34,7 +32,7 @@ def loopback_port() -> int:
     path, so that ValueError would otherwise crash *every* ``assembly`` command (even
     ``--help``), not just ``assembly login``.
     """
-    raw = os.environ.get("AAI_AUTH_PORT")
+    raw = env.get("AAI_AUTH_PORT")
     if raw is None:
         return _DEFAULT_LOOPBACK_PORT
     try:

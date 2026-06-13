@@ -6,10 +6,12 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import command_registry, help_panels, jsonshape, options, output, theme, timeparse
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
 from aai_cli.auth import ams
-from aai_cli.context import AppState, run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import jsonshape, timeparse
+from aai_cli.ui import output, theme
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(help="Browse your past streaming (real-time) sessions", no_args_is_help=True)
 

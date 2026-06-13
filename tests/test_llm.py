@@ -6,8 +6,8 @@ import openai
 import pytest
 from openai.types.chat import ChatCompletion
 
-from aai_cli import environments, llm
-from aai_cli.errors import APIError
+from aai_cli.core import environments, llm
+from aai_cli.core.errors import APIError
 
 _GATEWAY_BASE = environments.get(environments.DEFAULT_ENV).llm_gateway_base
 _REQUEST = httpx.Request("POST", f"{_GATEWAY_BASE}/chat/completions")
@@ -42,7 +42,7 @@ def _fake_client(monkeypatch, *, result=None, error=None):
 
 
 def test_client_targets_active_gateway_base():
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     client = llm._client("sk_live")
     assert str(client.base_url).rstrip("/") == environments.active().llm_gateway_base.rstrip("/")

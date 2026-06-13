@@ -25,11 +25,13 @@ from pathlib import Path
 
 from rich.markup import escape
 
-from aai_cli import mediafile, output, youtube
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
 from aai_cli.commands.dub import _pipeline as pipeline
-from aai_cli.context import AppState
-from aai_cli.errors import UsageError
+from aai_cli.core import youtube
+from aai_cli.core.errors import UsageError
 from aai_cli.tts import audio, dialogue, session
+from aai_cli.ui import output
 
 # ISO-639-1 codes accepted by --lang, mapped to the language *name* both the
 # translation prompt and the streaming-TTS `language` param expect. A value not

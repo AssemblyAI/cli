@@ -4,9 +4,9 @@ import types
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
-from aai_cli.llm import KNOWN_MODELS
+from aai_cli.core import config
+from aai_cli.core.llm import KNOWN_MODELS
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -86,7 +86,7 @@ def test_llm_json_emits_json_even_for_interactive_human(monkeypatch):
     _auth()
     # Even at an interactive terminal, --json emits machine output (it's the single,
     # explicit opt-in; we never auto-switch on pipe/agent anymore).
-    monkeypatch.setattr("aai_cli.output._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.ui.output._stdout_is_tty", lambda: True)
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("4"))
     result = runner.invoke(app, ["llm", "hi", "--json"])
     assert result.exit_code == 0
@@ -239,7 +239,7 @@ def test_llm_missing_prompt_exits_2(monkeypatch):
 
 
 def test_llm_unauthenticated_runs_login(monkeypatch):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
 
     def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
@@ -354,7 +354,7 @@ def test_llm_output_json_field_forces_json_without_flag(monkeypatch):
     # interactive terminal (where json_mode is otherwise off). Pins the
     # `output_field == "json"` half of the json_mode disjunction.
     _auth()
-    monkeypatch.setattr("aai_cli.output._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.ui.output._stdout_is_tty", lambda: True)
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload("hi42"))
     result = runner.invoke(app, ["llm", "hi", "-o", "json"])
     assert result.exit_code == 0

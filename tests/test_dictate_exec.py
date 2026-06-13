@@ -14,10 +14,10 @@ import json
 
 import pytest
 
-from aai_cli import config, sync_stt
+from aai_cli.app.context import AppState
 from aai_cli.commands.dictate import _exec as dictate_exec
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError
+from aai_cli.core import config, sync_stt
+from aai_cli.core.errors import CLIError
 
 DICTATE_DEFAULTS = dictate_exec.DictateOptions(
     language=None,

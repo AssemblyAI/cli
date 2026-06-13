@@ -1,10 +1,10 @@
-"""Unit tests for aai_cli.coding_agent — the setup/doctor shared presence probes."""
+"""Unit tests for aai_cli.app.coding_agent — the setup/doctor shared presence probes."""
 
 import subprocess
 
 import pytest
 
-from aai_cli import coding_agent
+from aai_cli.app import coding_agent
 
 
 @pytest.fixture(autouse=True)

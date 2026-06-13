@@ -5,8 +5,10 @@ import types
 
 from typer.testing import CliRunner
 
-from aai_cli import __version__, config, update_check
+from aai_cli import __version__
+from aai_cli.core import config
 from aai_cli.main import app
+from aai_cli.ui import update_check
 
 runner = CliRunner()
 
@@ -34,6 +36,15 @@ def _record_subprocess(monkeypatch, returncode=0):
 
     monkeypatch.setattr("aai_cli.commands.update.subprocess.run", fake_run)
     return calls
+
+
+def test_hidden_update_check_command_refreshes_cache(monkeypatch):
+    """The detached `_update-check` command delegates to fetch_and_cache()."""
+    called = {"hit": False}
+    monkeypatch.setattr(update_check, "fetch_and_cache", lambda: called.__setitem__("hit", True))
+    result = runner.invoke(app, ["_update-check"])
+    assert result.exit_code == 0
+    assert called["hit"] is True
 
 
 def test_update_check_reports_available(monkeypatch):

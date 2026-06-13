@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli.context import AppState
+from aai_cli.app.context import AppState
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import NonInteractivePrompter
 from aai_cli.onboard.sections import SectionResult, WizardContext
@@ -39,9 +39,9 @@ def _patch_checks(
         }
         return lambda: check
 
-    monkeypatch.setattr("aai_cli.doctor_checks.check_python", _mk("python", python))
-    monkeypatch.setattr("aai_cli.doctor_checks.check_ffmpeg", _mk("ffmpeg", ffmpeg))
-    monkeypatch.setattr("aai_cli.doctor_checks.check_audio", _mk("audio", audio))
+    monkeypatch.setattr("aai_cli.app.doctor_checks.check_python", _mk("python", python))
+    monkeypatch.setattr("aai_cli.app.doctor_checks.check_ffmpeg", _mk("ffmpeg", ffmpeg))
+    monkeypatch.setattr("aai_cli.app.doctor_checks.check_audio", _mk("audio", audio))
 
 
 def test_environment_all_ok_says_everything_looks_good(

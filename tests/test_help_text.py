@@ -1,4 +1,4 @@
-from aai_cli.help_text import examples_epilog
+from aai_cli.ui.help_text import examples_epilog
 
 
 def test_examples_epilog_has_header_and_entries():

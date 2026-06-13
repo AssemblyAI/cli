@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -18,7 +18,7 @@ def audio_file(tmp_path, monkeypatch):
     (tmp_path / "audio.mp3").write_bytes(b"fake-audio")
 
 
-_TRANSCRIBE = "aai_cli.transcribe_exec.client.transcribe"
+_TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
 
 
 def _auth():
@@ -118,7 +118,7 @@ def test_transcribe_out_missing_parent_dir_fails_before_transcribing(tmp_path):
 def test_transcribe_out_unwritable_parent_dir_fails_before_transcribing(tmp_path, monkeypatch):
     import os
 
-    from aai_cli import transcribe_validate
+    from aai_cli.app.transcribe import validate as transcribe_validate
 
     _auth()
     out = tmp_path / "x.txt"

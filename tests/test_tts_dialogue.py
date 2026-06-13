@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli.errors import UsageError
+from aai_cli.core.errors import UsageError
 from aai_cli.tts import dialogue
 
 

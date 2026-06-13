@@ -5,7 +5,7 @@ import re
 
 from typer.testing import CliRunner
 
-from aai_cli import config, telemetry
+from aai_cli.core import config, telemetry
 from aai_cli.main import app
 
 runner = CliRunner()

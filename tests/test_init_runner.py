@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 from aai_cli.init import runner
 
 

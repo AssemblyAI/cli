@@ -1,7 +1,7 @@
 import pytest
 
-from aai_cli import config, environments
-from aai_cli.errors import CLIError
+from aai_cli.core import config, environments
+from aai_cli.core.errors import CLIError
 
 
 def test_get_returns_named_environment():

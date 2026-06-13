@@ -5,8 +5,8 @@ from typing import Protocol
 
 import typer
 
-from aai_cli import output
-from aai_cli.errors import UsageError
+from aai_cli.core.errors import UsageError
+from aai_cli.ui import output
 
 
 class WizardCancelled(Exception):

@@ -13,9 +13,9 @@ import types
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
-from aai_cli.errors import APIError
+from aai_cli.core import config
+from aai_cli.core.errors import APIError
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -131,7 +131,7 @@ def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
 
 
 def test_stream_unauthenticated_runs_login(monkeypatch):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
 
     def fake_stream_audio(
@@ -155,7 +155,7 @@ def _capture_source(seen):
 
 
 def test_stream_sample_uses_hosted_clip(monkeypatch):
-    from aai_cli import client
+    from aai_cli.core import client
 
     config.set_api_key("default", "sk_live")
     monkeypatch.setattr("aai_cli.streaming.sources.shutil.which", lambda _n: "/usr/bin/ffmpeg")
@@ -311,7 +311,7 @@ def test_stream_downloadable_url_resolves_credentials_before_downloading(monkeyp
     # authentication *before* yt-dlp runs, so a signed-out user never downloads a
     # whole video only to be told to log in (mirrors transcribe's source -> auth ->
     # work ordering).
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: False)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: False)
     downloads = []
     monkeypatch.setattr(
         "aai_cli.commands.stream._exec.youtube.download_media",

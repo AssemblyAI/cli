@@ -11,7 +11,9 @@ import httpx2
 import pytest
 from rich.console import Console
 
-from aai_cli import __version__, config, output, theme, update_check
+from aai_cli import __version__
+from aai_cli.core import config
+from aai_cli.ui import output, theme, update_check
 
 
 def test_update_cache_roundtrips(tmp_path, monkeypatch):
@@ -239,7 +241,7 @@ def test_spawn_refresh_is_detached(monkeypatch):
         }
         return object()
 
-    monkeypatch.setattr("aai_cli.procs.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("aai_cli.core.procs.subprocess.Popen", fake_popen)
     update_check.spawn_refresh()
 
     assert calls["args"][:3] == [sys.executable, "-m", "aai_cli"]

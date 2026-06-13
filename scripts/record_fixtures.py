@@ -28,9 +28,9 @@ from typing import Any
 
 import assemblyai as aai
 
-from aai_cli import client, config, environments, llm
 from aai_cli.auth import ams
-from aai_cli.errors import CLIError
+from aai_cli.core import client, config, environments, llm
+from aai_cli.core.errors import CLIError
 
 FIXTURE_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "api"
 PROFILE = "default"

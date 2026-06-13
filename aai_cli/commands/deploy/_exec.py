@@ -17,10 +17,10 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import output
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.app.context import AppState
+from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.init import procfile
+from aai_cli.ui import output
 
 
 @dataclass(frozen=True)

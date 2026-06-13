@@ -137,7 +137,7 @@ def test_init_reports_key_written_from_environment(tmp_path, monkeypatch):
 def test_init_reports_key_written_from_keyring(tmp_path, monkeypatch):
     import json
 
-    from aai_cli import config
+    from aai_cli.core import config
 
     monkeypatch.chdir(tmp_path)
     config.set_api_key("default", "sk-stored")
@@ -154,7 +154,7 @@ def test_init_blank_env_var_reports_keyring_source(tmp_path, monkeypatch):
     # that actually resolved from the keyring must not be attributed to the env.
     import json
 
-    from aai_cli import config
+    from aai_cli.core import config
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "   ")

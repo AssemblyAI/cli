@@ -4,10 +4,11 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import command_registry, help_panels, llm, options
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import run_command
 from aai_cli.commands.clip import _exec as clip_exec
-from aai_cli.context import run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import llm
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

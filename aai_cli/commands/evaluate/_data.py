@@ -21,9 +21,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from aai_cli import jsonshape, wer
 from aai_cli.commands.evaluate import _hf_api as eval_hf_api
-from aai_cli.errors import APIError, CLIError, UsageError
+from aai_cli.core import jsonshape, wer
+from aai_cli.core.errors import APIError, CLIError, UsageError
 
 _MANIFEST_SUFFIXES = (".csv", ".jsonl")
 # Hub ids are `name` or `namespace/name`; rejecting anything else keeps a typo'd

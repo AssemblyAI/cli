@@ -289,8 +289,8 @@ ban-relative-imports = "all"
 # exemplars (string literals) don't trip it.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "subprocess".msg = "Spawn detached children via aai_cli.procs; if a module genuinely needs raw subprocess, add it to the TID251 allowlist in pyproject.toml."
-"os.environ".msg = "Resolve configuration through aai_cli.config / aai_cli.context (which centralize precedence and secret handling); env-owning modules are allowlisted for TID251 in pyproject.toml."
-"os.getenv".msg = "Use os.environ.get (the single project idiom) via an env-owning module; see the TID251 allowlist in pyproject.toml."
+"os.environ".msg = "Read/write the environment through aai_cli.core.env (env.get/child_env/force_color/...), the single allowlisted chokepoint; callers still own their variable names."
+"os.getenv".msg = "Use aai_cli.core.env.get, the single project idiom and the only module allowlisted for raw os.environ (TID251)."
 "os.putenv".msg = "os.putenv/os.unsetenv bypass os.environ and desync the mapping; mutate os.environ instead."
 "os.unsetenv".msg = "os.putenv/os.unsetenv bypass os.environ and desync the mapping; mutate os.environ instead."
 
@@ -326,29 +326,37 @@ max-statements = 40
 # command signatures do.
 "aai_cli/options.py" = ["FBT003"]
 # Raw stdout/stderr writes are centralized here; command modules call output helpers.
-# TID251: output owns the FORCE_COLOR/NO_COLOR env toggles and TTY/agent detection.
-"aai_cli/output.py" = ["T201", "TID251"]
+"aai_cli/ui/output.py" = ["T201"]
 # The active environment is process-global startup state by design.
-# TID251: environments.py owns AAI_ENV resolution (an env-owning module).
-"aai_cli/environments.py" = ["PLW0603", "TID251"]
+"aai_cli/core/environments.py" = ["PLW0603"]
 # Verbosity is process-global startup state by design (mirrors environments.py).
-"aai_cli/debuglog.py" = ["PLW0603"]
+"aai_cli/core/debuglog.py" = ["PLW0603"]
 # BaseHTTPRequestHandler.log_message requires a parameter named `format`.
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
 # TID251: the scaffolds are end-user example apps that read their own config straight
 # from os.environ — that's correct, idiomatic code to ship, not a CLI-internal env read.
 "aai_cli/init/templates/**" = ["S105", "TID251"]
+# ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
+# source (release builds inject the write-only client token).
+"aai_cli/core/telemetry.py" = ["S105"]
 
 # TID251 banned-api allowlist (see [tool.ruff.lint.flake8-tidy-imports.banned-api]).
-# These are the only modules permitted raw `subprocess` (process spawning) or raw
-# `os.environ`/`os.getenv` (environment access). Splitting the ignore per file keeps the
-# blast radius explicit: a new module needing either must be added here in review.
-# Process-spawning modules (shell out to claude/npx/ffmpeg/yt-dlp/tunnels/etc.):
-"aai_cli/procs.py" = ["TID251"]
-"aai_cli/coding_agent.py" = ["TID251"]
-"aai_cli/mediafile.py" = ["TID251"]
-"aai_cli/setup_exec.py" = ["TID251"]
+# Two OS boundaries are fenced; each is owned by a chokepoint so the allowlist stays
+# small and a new module reaching past the boundary trips the gate in review.
+# Environment access: aai_cli.core.env is the SINGLE module permitted raw os.environ;
+# every other module reads/writes the environment through it (callers still own their
+# variable *names*). One entry, enforced structurally — not a per-file list to drift.
+"aai_cli/core/env.py" = ["TID251"]
+# Process spawning: unlike env reads, these are genuinely diverse (sync-capture,
+# long-lived Popen with pipes, detached children) and each owns shelling out to its
+# specific external tool — funnelling them through one module would just re-export all
+# of `subprocess`, so they stay individually allowlisted (claude/npx/ffmpeg/yt-dlp/
+# tunnels/vercel/the macOS Swift helper, etc.):
+"aai_cli/core/procs.py" = ["TID251"]
+"aai_cli/app/coding_agent.py" = ["TID251"]
+"aai_cli/app/mediafile.py" = ["TID251"]
+"aai_cli/app/setup_exec.py" = ["TID251"]
 "aai_cli/commands/deploy/_exec.py" = ["TID251"]
 "aai_cli/commands/update.py" = ["TID251"]
 "aai_cli/commands/webhooks/_listen.py" = ["TID251"]
@@ -356,20 +364,6 @@ max-statements = 40
 "aai_cli/init/tunnel.py" = ["TID251"]
 "aai_cli/streaming/macos.py" = ["TID251"]
 "aai_cli/streaming/sources.py" = ["TID251"]
-# Environment-owning modules (config/auth/env resolution; output & environments are
-# allowlisted above alongside their existing ignores):
-"aai_cli/config.py" = ["TID251"]
-"aai_cli/context.py" = ["TID251"]
-"aai_cli/update_check.py" = ["TID251"]
-"aai_cli/auth/endpoints.py" = ["TID251"]
-"aai_cli/init/keys.py" = ["TID251"]
-"aai_cli/commands/dev/_exec.py" = ["TID251"]
-"aai_cli/commands/share/_exec.py" = ["TID251"]
-"aai_cli/commands/evaluate/_hf_api.py" = ["TID251"]
-# ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
-# source (release builds inject the write-only client token). TID251: telemetry reads
-# its opt-out / intake-URL / CI-detection env vars (an env-owning module).
-"aai_cli/telemetry.py" = ["S105", "TID251"]
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]

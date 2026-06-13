@@ -2,9 +2,9 @@ import json
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.agent.voices import VOICES, format_voice_list
 from aai_cli.auth.flow import LoginResult
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -57,7 +57,7 @@ def test_list_voices_json_emits_machine_readable_array(monkeypatch):
 
 
 def test_agent_unauthenticated_runs_login(monkeypatch):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     monkeypatch.setattr("aai_cli.commands.agent._exec.FileSource", lambda src: f"filesrc:{src}")
 
@@ -368,7 +368,7 @@ def test_resolve_system_prompt_unreadable_file_raises_clierror(tmp_path):
     import pytest
 
     from aai_cli.commands.agent import _exec as agent_exec
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     missing = Path(tmp_path) / "does-not-exist.txt"
     with pytest.raises(CLIError) as exc:

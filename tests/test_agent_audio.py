@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 
 
 class FakeStream:

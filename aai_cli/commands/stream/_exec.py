@@ -15,11 +15,11 @@ from pathlib import Path
 
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
-from aai_cli import choices, client, code_gen, config_builder, output, youtube
-from aai_cli.context import AppState
-from aai_cli.errors import UsageError
-from aai_cli.follow import FollowRenderer
-from aai_cli.microphone import MicrophoneSource
+from aai_cli import code_gen
+from aai_cli.app.context import AppState
+from aai_cli.core import choices, client, config_builder, youtube
+from aai_cli.core.errors import UsageError
+from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
@@ -29,6 +29,8 @@ from aai_cli.streaming.session import (
     validate_sources,
 )
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
+from aai_cli.ui import output
+from aai_cli.ui.follow import FollowRenderer
 
 
 @dataclass(frozen=True)

@@ -158,7 +158,7 @@ def test_local_host_constant_is_loopback():
 def test_notify_port_change_emits_warning_with_both_ports(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "aai_cli.output.emit_warning",
+        "aai_cli.ui.output.emit_warning",
         lambda msg, *, json_mode: calls.append((msg, json_mode)),
     )
     devserver.notify_port_change(5000, 5001, json_mode=True, quiet=False)
@@ -169,7 +169,7 @@ def test_notify_port_change_emits_warning_with_both_ports(monkeypatch):
 def test_notify_port_change_silent_cases(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "aai_cli.output.emit_warning",
+        "aai_cli.ui.output.emit_warning",
         lambda msg, *, json_mode: calls.append(msg),
     )
     # Same port bound: nothing to announce.
@@ -184,7 +184,7 @@ def test_notify_port_change_silent_cases(monkeypatch):
 def test_notify_port_change_human_mode_passthrough(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "aai_cli.output.emit_warning",
+        "aai_cli.ui.output.emit_warning",
         lambda msg, *, json_mode: calls.append(json_mode),
     )
     devserver.notify_port_change(5000, 5001, json_mode=False, quiet=False)

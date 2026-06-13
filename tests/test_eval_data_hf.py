@@ -12,7 +12,7 @@ import pytest
 
 from aai_cli.commands.evaluate import _data as eval_data
 from aai_cli.commands.evaluate import _hf_api as eval_hf_api
-from aai_cli.errors import APIError, UsageError
+from aai_cli.core.errors import APIError, UsageError
 
 # ------------------------------------------------------- Hugging Face datasets
 

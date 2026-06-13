@@ -4,17 +4,14 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import choices, command_registry, help_panels, options, output
+from aai_cli import command_registry, help_panels, options
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
-from aai_cli.agent.voices import (
-    DEFAULT_VOICE,
-    VOICES,
-    complete_voice,
-    format_voice_list,
-)
+from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_voice_list
+from aai_cli.app.context import AppState, run_command
 from aai_cli.commands.agent import _exec as agent_exec
-from aai_cli.context import AppState, run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import choices
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

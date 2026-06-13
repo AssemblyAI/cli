@@ -11,13 +11,14 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config, transcribe_batch
-from aai_cli.errors import auth_failure
+from aai_cli.app.transcribe import batch as transcribe_batch
+from aai_cli.core import config
+from aai_cli.core.errors import auth_failure
 from aai_cli.main import app
 
 runner = CliRunner()
 
-_TRANSCRIBE = "aai_cli.transcribe_exec.client.transcribe"
+_TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
 
 
 @pytest.fixture(autouse=True)
@@ -202,7 +203,7 @@ def test_url_sidecar_slug_truncates_to_64_chars():
 
 
 def test_partial_failure_exits_1_and_completes_the_rest(tmp_path, mocker, monkeypatch):
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     _auth()
     (tmp_path / "a.mp3").write_bytes(b"a")
@@ -238,7 +239,7 @@ def test_rejected_key_aborts_the_batch_with_exit_4(tmp_path, monkeypatch):
         raise auth_failure()
 
     monkeypatch.setattr(_TRANSCRIBE, fake)
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: False)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: False)
     result = runner.invoke(app, ["transcribe", "*.mp3"])
     assert result.exit_code == 4
     assert "rejected" in result.output
@@ -264,7 +265,7 @@ def test_auth_failure_drops_not_yet_started_sources(tmp_path, monkeypatch):
         raise auth_failure()
 
     monkeypatch.setattr(_TRANSCRIBE, fake)
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: False)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: False)
     result = runner.invoke(app, ["transcribe", "*.mp3"])
     assert result.exit_code == 4
     assert seen["cancel_futures"] is True

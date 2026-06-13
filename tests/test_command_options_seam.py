@@ -14,14 +14,15 @@ import dataclasses
 import pytest
 import typer
 
-from aai_cli import choices, config, llm, transcribe_exec
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import DEFAULT_VOICE
+from aai_cli.app.context import AppState
+from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.commands.agent import _exec as agent_exec
 from aai_cli.commands.llm import _exec as llm_exec
 from aai_cli.commands.speak import _exec as speak_exec
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import choices, config, llm
+from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.options import DEFAULT_BATCH_CONCURRENCY
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.

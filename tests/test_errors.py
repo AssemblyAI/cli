@@ -1,6 +1,6 @@
 import pytest
 
-from aai_cli.errors import (
+from aai_cli.core.errors import (
     APIError,
     CLIError,
     NotAuthenticated,
@@ -89,7 +89,7 @@ def test_api_error_carries_suggestion():
 
 
 def test_auth_failure_splits_message_and_suggestion():
-    from aai_cli.errors import auth_failure
+    from aai_cli.core.errors import auth_failure
 
     err = auth_failure()
     assert err.error_type == "not_authenticated"

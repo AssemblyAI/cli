@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from aai_cli import environments
 from aai_cli.code_gen import serialize
+from aai_cli.core import environments
 
 # Streaming-class imports always used by the generated scaffold. SpeechModel is added
 # only when a speech_model kwarg is emitted, so the generated script stays lint-clean.

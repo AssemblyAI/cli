@@ -8,17 +8,17 @@ constructing options directly instead of round-tripping argv.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import typer
 from rich.markup import escape
 
-from aai_cli import output, steps
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError
+from aai_cli.app.context import AppState
+from aai_cli.core import env as os_env
+from aai_cli.core.errors import CLIError
 from aai_cli.init import devserver, procfile, runner, tunnel
+from aai_cli.ui import output, steps
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ def run_share(opts: ShareOptions, state: AppState, *, json_mode: bool) -> None:
 
     chosen_port = runner.find_free_port(opts.port)
     devserver.notify_port_change(opts.port, chosen_port, json_mode=json_mode, quiet=state.quiet)
-    env = {**os.environ, "PORT": str(chosen_port)}
+    env = os_env.child_env(PORT=str(chosen_port))
     web = procfile.web_argv(target, env=env)  # validates we're in a scaffolded project
     tunnel.require_cloudflared("share a public link")
 

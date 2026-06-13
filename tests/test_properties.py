@@ -8,8 +8,8 @@ import wave
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from aai_cli import config_builder as cb
 from aai_cli.agent.render import AgentRenderer
+from aai_cli.core import config_builder as cb
 from aai_cli.streaming import sources
 from aai_cli.streaming.render import StreamRenderer
 

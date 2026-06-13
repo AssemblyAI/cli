@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli import output
-from aai_cli.errors import APIError, CLIError, NotAuthenticated, UsageError, auth_failure
+from aai_cli.core.errors import APIError, CLIError, NotAuthenticated, UsageError, auth_failure
+from aai_cli.ui import output
 from tests._snapshot_surface import normalize
 
 pytestmark = pytest.mark.usefixtures("fixed_render_size")

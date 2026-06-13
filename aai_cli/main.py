@@ -13,23 +13,15 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import (
-    __version__,
-    argscan,
-    choices,
-    command_registry,
-    debuglog,
-    environments,
-    output,
-    stdio,
-    typer_patches,
-)
+from aai_cli import __version__, command_registry
+from aai_cli.app.context import AppState
 from aai_cli.commands import onboard
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, NotAuthenticated
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import argscan, choices, debuglog, environments, stdio
+from aai_cli.core.errors import CLIError, NotAuthenticated
 from aai_cli.onboard import wizard
 from aai_cli.onboard.sections import WizardContext
+from aai_cli.ui import output, typer_patches
+from aai_cli.ui.help_text import examples_epilog
 
 # Every module under aai_cli/commands/ declares its own panel, rank, and command
 # names (`SPEC`, see aai_cli/command_registry.py); discovery imports and orders them
@@ -236,7 +228,7 @@ for _registered in _REGISTERED_COMMAND_MODULES:
 )
 def update_check_command() -> None:
     """Internal: refresh the cached latest version (spawned detached). Hidden."""
-    from aai_cli import update_check
+    from aai_cli.ui import update_check
 
     update_check.fetch_and_cache()
 

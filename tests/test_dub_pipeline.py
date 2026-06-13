@@ -16,10 +16,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import client, llm, mediafile
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
 from aai_cli.commands.dub import _exec as dub_exec
-from aai_cli.context import AppState
-from aai_cli.errors import APIError, CLIError
+from aai_cli.core import client, llm
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.tts import session
 from aai_cli.tts.session import SpeakResult
 from tests._clip_helpers import plain

@@ -9,12 +9,13 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config, transcribe_batch
+from aai_cli.app.transcribe import batch as transcribe_batch
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
 
-_TRANSCRIBE = "aai_cli.transcribe_exec.client.transcribe"
+_TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +56,7 @@ def _ndjson(result):
 
 # --- the --llm chain in batch mode ------------------------------------------------
 
-_TRANSFORM = "aai_cli.llm.transform_transcript"
+_TRANSFORM = "aai_cli.core.llm.transform_transcript"
 
 
 def _patch_transform(monkeypatch):
@@ -135,7 +136,7 @@ def test_batch_llm_stores_chain_steps_in_each_sidecar(tmp_path, mocker, monkeypa
 
 
 def test_failed_llm_chain_leaves_resumable_transcription(tmp_path, mocker, monkeypatch):
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     _auth()
     (tmp_path / "a.mp3").write_bytes(b"aaa")

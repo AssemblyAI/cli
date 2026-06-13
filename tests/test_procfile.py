@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 from aai_cli.init import procfile
 
 WEB = "web: uvicorn api.index:app --host 0.0.0.0 --port ${PORT:-3000}\n"

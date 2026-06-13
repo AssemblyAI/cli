@@ -3,11 +3,13 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import command_registry, help_panels, jsonshape, options, output
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
 from aai_cli.auth import ams
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import APIError, UsageError
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import jsonshape
+from aai_cli.core.errors import APIError, UsageError
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys", no_args_is_help=True)
 

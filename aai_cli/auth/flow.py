@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from rich.markup import escape
 
-from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
-from aai_cli.errors import STDIN_KEY_RECIPE, APIError, NotAuthenticated
+from aai_cli.core.errors import STDIN_KEY_RECIPE, APIError, NotAuthenticated
+from aai_cli.ui import output
 
 
 @dataclass

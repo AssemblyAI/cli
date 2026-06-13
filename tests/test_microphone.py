@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 
-from aai_cli import microphone
-from aai_cli.errors import CLIError
-from aai_cli.microphone import (
+from aai_cli.core import microphone
+from aai_cli.core.errors import CLIError
+from aai_cli.core.microphone import (
     _FALLBACK_RATE,
     MicrophoneSource,
     _default_mic_stream,
@@ -38,7 +38,7 @@ class _FakeRawStream:
 
 
 def test_audio_missing_error_has_reinstall_suggestion():
-    from aai_cli.microphone import audio_missing_error
+    from aai_cli.core.microphone import audio_missing_error
 
     err = audio_missing_error()
     assert "sounddevice" in err.message

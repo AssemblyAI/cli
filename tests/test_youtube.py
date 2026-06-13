@@ -5,8 +5,8 @@ import types
 
 import pytest
 
-from aai_cli import youtube
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import youtube
+from aai_cli.core.errors import CLIError, UsageError
 
 
 def test_is_youtube_url_variants():
@@ -206,7 +206,7 @@ def test_download_media_routes_ytdlp_output_to_silent_logger(tmp_path, monkeypat
     youtube.download_media("https://youtu.be/x", tmp_path)
     logger = captured["opts"]["logger"]
     # Structurally quiet: no propagation to root, only swallow-everything handlers.
-    assert logger.name == "aai_cli.youtube.yt_dlp"
+    assert logger.name == "aai_cli.core.youtube.yt_dlp"
     assert logger.propagate is False
     assert logger.handlers
     assert all(isinstance(h, logging.NullHandler) for h in logger.handlers)

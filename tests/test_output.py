@@ -1,8 +1,8 @@
 import json
 from typing import cast
 
-from aai_cli import output
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
+from aai_cli.ui import output
 
 
 def test_resolve_json_true_only_when_explicit():
@@ -113,7 +113,7 @@ def test_emit_error_no_suggestion_line_when_absent(capsys):
 
 
 def test_affordance_helpers_carry_their_symbol():
-    from aai_cli import theme
+    from aai_cli.ui import theme
 
     assert theme.SYMBOL_SUCCESS in output.success("done")
     assert theme.SYMBOL_WARN in output.warn("careful")
@@ -123,7 +123,7 @@ def test_affordance_helpers_carry_their_symbol():
 
 
 def test_affordance_helpers_use_resolvable_styles(capsys):
-    from aai_cli import theme
+    from aai_cli.ui import theme
 
     # Rendering through the themed console proves the markup parses and the
     # aai.* style names resolve (a bad name would raise MissingStyle).
@@ -150,7 +150,7 @@ def test_print_code_plain_when_piped(monkeypatch, capsys):
 
 
 def test_print_code_highlights_for_interactive_human(monkeypatch, capsys):
-    from aai_cli import theme
+    from aai_cli.ui import theme
 
     monkeypatch.setattr(output, "_stdout_is_tty", lambda: True)
     monkeypatch.setattr(
@@ -286,7 +286,7 @@ def test_status_is_noop_when_quiet(monkeypatch):
 
 
 def test_emit_warning_human_writes_yellow_line_to_stderr(capsys):
-    from aai_cli import theme
+    from aai_cli.ui import theme
 
     output.emit_warning("env mismatch", json_mode=False)
     captured = capsys.readouterr()

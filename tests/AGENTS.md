@@ -102,7 +102,7 @@ these live in the default suite. Three moving parts:
   Refresh after an API shape change: `ASSEMBLYAI_API_KEY=… uv run python scripts/record_fixtures.py`.
   The key comes from the env; the AMS session JWT + `account_id` from the keyring/`config.toml`
   of whoever ran `assembly login` (profile `default`) — neither is ever written to a fixture.
-- **`tests/replay_fixtures.py`** — rebuilds the boundary objects from JSON. A transcript is a
+- **`tests/_replay_fixtures.py`** — rebuilds the boundary objects from JSON. A transcript is a
   real `aai.Transcript` via `Transcript.from_response`; an LLM response is rebuilt with
   `ChatCompletion.model_construct` (**not** `model_validate`) because the gateway returns
   Anthropic-flavored fields — `finish_reason="end_turn"`, token counts under

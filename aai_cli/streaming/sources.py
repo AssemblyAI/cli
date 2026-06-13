@@ -10,7 +10,7 @@ from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
 
-from aai_cli.errors import APIError, CLIError
+from aai_cli.core.errors import APIError, CLIError
 
 TARGET_RATE = 16000
 PCM16_SAMPLE_WIDTH_BYTES = 2

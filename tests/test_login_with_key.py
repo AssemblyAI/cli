@@ -6,9 +6,9 @@ import types
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.commands import login as login_cmd
-from aai_cli.errors import STDIN_KEY_RECIPE, UsageError
+from aai_cli.core import config
+from aai_cli.core.errors import STDIN_KEY_RECIPE, UsageError
 from aai_cli.main import app
 from tests._snapshot_surface import normalize
 

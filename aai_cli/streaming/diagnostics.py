@@ -12,9 +12,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from aai_cli import debuglog
-from aai_cli import ws as wsutil
-from aai_cli.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.core import debuglog
+from aai_cli.core import ws as wsutil
+from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 
 # The assemblyai SDK's streaming client logs its own connection failures at ERROR
 # ("Connection failed: WebSocket handshake rejected (HTTP 403) (code=403)") through

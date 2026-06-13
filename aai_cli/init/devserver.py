@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aai_cli import output, steps
 from aai_cli.init import runner
+from aai_cli.ui import output, steps
 
 
 def install_step(target: Path, *, no_install: bool, use_uv: bool) -> steps.Step:
