@@ -2,7 +2,7 @@
 validation, ffmpeg orchestration, and transcript-backed --speaker/--search
 selection. Constructed-options tests (dataclasses.replace off the shared
 defaults) avoid any argv round-trip; the ffmpeg boundary is faked at
-`clip_exec._run_ffmpeg`. The pure selection logic is covered in
+`mediafile.run_ffmpeg`. The pure selection logic is covered in
 test_clip_select.py; YouTube/stdin/LLM sources in test_clip_sources.py."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli import clip_exec, config
+from aai_cli import client, clip_exec, config, mediafile
 from aai_cli.clip_select import Segment
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
@@ -72,7 +72,8 @@ def test_run_clip_rejects_missing_file(tmp_path):
     assert exc.value.error_type == "file_not_found"
     assert exc.value.exit_code == 2
     assert "File not found" in exc.value.message
-    assert "local audio/video file" in (exc.value.suggestion or "")
+    # The command name pins the shared helper's parameterization.
+    assert "assembly clip needs a local audio/video file" in (exc.value.suggestion or "")
 
 
 def test_run_clip_rejects_directory(tmp_path):
@@ -126,7 +127,8 @@ def test_run_clip_requires_ffmpeg(media, monkeypatch):
     with pytest.raises(CLIError) as exc:
         clip_exec.run_clip(opts, AppState(), json_mode=False)
     assert exc.value.error_type == "missing_dependency"
-    assert "ffmpeg is required" in exc.value.message
+    # The purpose string pins the shared helper's parameterization.
+    assert "ffmpeg is required to cut media" in exc.value.message
     assert "Install it" in (exc.value.suggestion or "")
 
 
@@ -213,6 +215,15 @@ def test_run_clip_rounds_payload_times_to_milliseconds(media, fake_ffmpeg, capsy
     }
 
 
+def test_dash_prefixed_clip_dest_is_disambiguated_for_ffmpeg(tmp_path, fake_ffmpeg, monkeypatch):
+    # A bare "-x.clip01.mp4" argv token would be parsed by ffmpeg as an option.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "-x.mp4").write_bytes(b"\x00fake-media")
+    opts = dataclasses.replace(DEFAULTS, media="-x.mp4", ranges=["1-2"])
+    clip_exec.run_clip(opts, AppState(), json_mode=True)
+    assert fake_ffmpeg[1][-1] == "./-x.clip01.mp4"
+
+
 def test_run_clip_honors_out_dir(media, tmp_path, fake_ffmpeg, capsys):
     out_dir = tmp_path / "clips"
     out_dir.mkdir()
@@ -257,7 +268,7 @@ def test_run_clip_failed_silence_detection_cuts_at_selected_times(media, capsys,
             )
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(clip_exec, "_run_ffmpeg", run)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", run)
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["5-12.5"])
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     clips = json.loads(capsys.readouterr().out)["clips"]
@@ -284,7 +295,7 @@ def test_run_clip_surfaces_ffmpeg_failure(media, monkeypatch):
             args=args, returncode=1, stdout="", stderr="noise\nInvalid data found\n"
         )
 
-    monkeypatch.setattr(clip_exec, "_run_ffmpeg", fail)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", fail)
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"])
     with pytest.raises(CLIError) as exc:
         clip_exec.run_clip(opts, AppState(), json_mode=False)
@@ -299,8 +310,8 @@ def test_run_clip_surfaces_ffmpeg_failure(media, monkeypatch):
 def test_run_clip_reports_exit_code_when_ffmpeg_is_silent(media, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        clip_exec,
-        "_run_ffmpeg",
+        mediafile,
+        "run_ffmpeg",
         lambda args: subprocess.CompletedProcess(args=args, returncode=3, stdout="", stderr=""),
     )
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"])
@@ -311,8 +322,8 @@ def test_run_clip_reports_exit_code_when_ffmpeg_is_silent(media, monkeypatch):
 
 def test_run_ffmpeg_captures_output_and_does_not_raise():
     # The real boundary (not the fake): output is captured as text and a non-zero
-    # exit must not raise — _cut_clip turns the exit code into a CLIError itself.
-    result = clip_exec._run_ffmpeg(
+    # exit must not raise — the callers turn the exit code into a CLIError.
+    result = mediafile.run_ffmpeg(
         [
             sys.executable,
             "-c",
@@ -337,12 +348,14 @@ def test_run_clip_transcribes_with_speaker_labels(media, fake_ffmpeg, capsys, mo
         seen["config"] = config
         return fake_transcript(list(UTTERANCES))
 
-    monkeypatch.setattr(clip_exec.client, "transcribe", fake_transcribe)
+    monkeypatch.setattr(client, "transcribe", fake_transcribe)
     opts = dataclasses.replace(DEFAULTS, media=str(media), speakers=["a"])
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     assert seen["api_key"] == "sk_test"
     assert seen["audio"] == str(media)
     assert seen["config"].speaker_labels is True
+    # Clip keeps the API's language defaults (only dub opts into detection).
+    assert seen["config"].language_detection is None
     payload = json.loads(capsys.readouterr().out)
     assert payload["transcript_id"] == "tr_123"
     # Speaker A's two utterances: 1.5-2.5s and 5-6s.
@@ -359,9 +372,9 @@ def test_run_clip_reuses_transcript_by_id(media, fake_ffmpeg, capsys, monkeypatc
         seen["args"] = (api_key, transcript_id)
         return fake_transcript(list(UTTERANCES))
 
-    monkeypatch.setattr(clip_exec.client, "get_transcript", fake_get)
+    monkeypatch.setattr(client, "get_transcript", fake_get)
     monkeypatch.setattr(
-        clip_exec.client,
+        client,
         "transcribe",
         lambda *a, **k: pytest.fail("must not re-transcribe when -t is given"),
     )
@@ -377,7 +390,7 @@ def test_run_clip_merges_transcript_matches_with_explicit_ranges(
 ):
     config.set_api_key("default", "sk_test")
     utterances = [utterance(5000, 8000, "A", "hello")]
-    monkeypatch.setattr(clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(utterances))
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(utterances))
     opts = dataclasses.replace(DEFAULTS, media=str(media), speakers=["A"], ranges=["7-12"])
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     clips = json.loads(capsys.readouterr().out)["clips"]
@@ -386,7 +399,7 @@ def test_run_clip_merges_transcript_matches_with_explicit_ranges(
 
 def test_run_clip_errors_when_transcript_has_no_utterances(media, fake_ffmpeg, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(None))
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(None))
     opts = dataclasses.replace(DEFAULTS, media=str(media), speakers=["A"])
     with pytest.raises(CLIError) as exc:
         clip_exec.run_clip(opts, AppState(), json_mode=False)
@@ -398,9 +411,7 @@ def test_run_clip_errors_when_transcript_has_no_utterances(media, fake_ffmpeg, m
 
 def test_run_clip_errors_when_nothing_matches(media, fake_ffmpeg, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     opts = dataclasses.replace(DEFAULTS, media=str(media), speakers=["Z"])
     with pytest.raises(CLIError) as exc:
         clip_exec.run_clip(opts, AppState(), json_mode=False)
@@ -411,9 +422,7 @@ def test_run_clip_errors_when_nothing_matches(media, fake_ffmpeg, monkeypatch):
 
 def test_run_clip_status_messages(media, fake_ffmpeg, monkeypatch):
     config.set_api_key("default", "sk_test")
-    monkeypatch.setattr(
-        clip_exec.client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES))
-    )
+    monkeypatch.setattr(client, "transcribe", lambda *a, **k: fake_transcript(list(UTTERANCES)))
     messages: list[str] = []
 
     @contextlib.contextmanager

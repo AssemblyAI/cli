@@ -2,7 +2,7 @@
 the pure helpers (output naming, filtergraph escaping), validation order, and the
 faked transcribe → SRT export → ffmpeg burn-in runs. The boundaries are faked at
 the modules caption_exec calls into (`client.transcribe`, `client.get_transcript`,
-`youtube.download_media`) and at `caption_exec._run_ffmpeg`; argv parsing lives in
+`youtube.download_media`) and at `mediafile.run_ffmpeg`; argv parsing lives in
 test_caption_command.py."""
 
 from __future__ import annotations
@@ -10,18 +10,17 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import json
-import re
 import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import caption_exec, client, config, youtube
+from aai_cli import caption_exec, client, config, mediafile, youtube
 from aai_cli.caption_exec import CaptionOptions
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
+from tests._clip_helpers import plain
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
 DEFAULTS = CaptionOptions(
@@ -33,13 +32,6 @@ DEFAULTS = CaptionOptions(
 )
 
 SRT = "1\n00:00:00,500 --> 00:00:01,500\nHello.\n\n2\n00:00:02,000 --> 00:00:03,000\nWorld.\n"
-
-_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def plain(text: str) -> str:
-    """Strip SGR color codes (CI forces color on) for substring assertions."""
-    return _ANSI_SGR.sub("", text)
 
 
 def fake_transcript(srt: str = SRT, transcript_id: str = "tr_cap"):
@@ -70,7 +62,7 @@ def record_ffmpeg(monkeypatch, *, returncode: int = 0, stderr: str = ""):
             args=args, returncode=returncode, stdout="", stderr=stderr
         )
 
-    monkeypatch.setattr(caption_exec, "_run_ffmpeg", run)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", run)
     return recorded
 
 
@@ -141,21 +133,6 @@ def test_subtitles_filter_escapes_filtergraph_metacharacters():
     assert spec == "subtitles=/tmp/a\\'b\\:c\\,d\\;e\\[f\\]g.srt"
 
 
-def test_run_ffmpeg_captures_output_and_does_not_raise():
-    # The real boundary (not the fake): output is captured as text and a non-zero
-    # exit must not raise — _burn turns the exit code into a CLIError itself.
-    result = caption_exec._run_ffmpeg(
-        [
-            sys.executable,
-            "-c",
-            "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
-        ]
-    )
-    assert result.returncode == 3
-    assert result.stdout == "out\n"
-    assert result.stderr == "err\n"
-
-
 # --- validation order (cheap local checks before any credential or network) ----
 
 
@@ -164,7 +141,8 @@ def test_run_caption_requires_ffmpeg(monkeypatch):
     with pytest.raises(CLIError) as exc:
         _run(DEFAULTS, json_mode=False)
     assert exc.value.error_type == "missing_dependency"
-    assert "ffmpeg" in exc.value.message
+    # The purpose string pins the shared helper's parameterization.
+    assert "ffmpeg is required to burn captions into video" in exc.value.message
 
 
 def test_run_caption_rejects_missing_file(fake_ffmpeg, tmp_path):
@@ -173,7 +151,8 @@ def test_run_caption_rejects_missing_file(fake_ffmpeg, tmp_path):
         _run(opts, json_mode=False)
     assert exc.value.error_type == "file_not_found"
     assert exc.value.exit_code == 2
-    assert "local video file" in (exc.value.suggestion or "")
+    # The command name + kind pin the shared helper's parameterization.
+    assert "assembly caption needs a local video file" in (exc.value.suggestion or "")
 
 
 def test_run_caption_rejects_directory(fake_ffmpeg, tmp_path):
@@ -200,6 +179,15 @@ def test_run_caption_rejects_non_downloadable_url(fake_ffmpeg):
     assert "Download the video first" in (exc.value.suggestion or "")
 
 
+def test_run_caption_rejects_remote_urls_with_the_url_intact(fake_ffmpeg):
+    # Path() would collapse "//" and echo a corrupted "s3:/bucket/…" back.
+    opts = dataclasses.replace(DEFAULTS, media="s3://bucket/talk.mp4")
+    with pytest.raises(UsageError) as exc:
+        _run(opts, json_mode=False)
+    assert "s3://bucket/talk.mp4" in exc.value.message
+    assert "Download the video first" in (exc.value.suggestion or "")
+
+
 # --- the faked pipeline ---------------------------------------------------------
 
 
@@ -207,9 +195,11 @@ def test_run_caption_end_to_end(media, fake_transcribe, fake_ffmpeg, capsys):
     opts = dataclasses.replace(DEFAULTS, media=str(media))
     _run(opts, json_mode=True)
 
-    # Transcription: the local file, with the resolved key.
+    # Transcription: the local file, with the resolved key, no diarization
+    # (captions don't need speaker labels).
     assert fake_transcribe["api_key"] == "test-key"
     assert fake_transcribe["audio"] == str(media)
+    assert fake_transcribe["config"].speaker_labels is None
     # No --chars-per-caption: the export endpoint gets None (its own default).
     assert fake_transcribe["transcript"].export_calls == [None]
 
@@ -268,6 +258,16 @@ def test_run_caption_status_messages(media, fake_transcribe, fake_ffmpeg, monkey
     monkeypatch.setattr(caption_exec.output, "status", fake_status)
     _run(dataclasses.replace(DEFAULTS, media=str(media)), json_mode=False)
     assert messages == ["Transcribing for captions…", "Fetching captions…", "Burning captions…"]
+
+
+def test_dash_prefixed_out_is_disambiguated_for_ffmpeg(
+    media, fake_transcribe, fake_ffmpeg, monkeypatch, tmp_path
+):
+    # A bare "-cap.mp4" argv token would be parsed by ffmpeg as an option.
+    monkeypatch.chdir(tmp_path)
+    opts = dataclasses.replace(DEFAULTS, media=str(media), out=Path("-cap.mp4"))
+    _run(opts, json_mode=True)
+    assert fake_ffmpeg["args"][-1] == "./-cap.mp4"
 
 
 def test_run_caption_forwards_chars_per_caption(media, fake_transcribe, fake_ffmpeg):
