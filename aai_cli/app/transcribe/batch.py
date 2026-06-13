@@ -79,7 +79,10 @@ def resumable_record(sidecar: Path, *, digest: str | None) -> dict[str, object] 
 
 
 def _dump_sidecar(sidecar: Path, record: dict[str, object]) -> None:
-    sidecar.write_text(json.dumps(record, indent=2, default=str) + "\n")
+    # `sidecar` is derived from the user's own CLI source argument and written next to
+    # that source by design (it's the resume marker). A local CLI has no attacker-
+    # controlled path input, so the path-traversal taint warning is a false positive.
+    sidecar.write_text(json.dumps(record, indent=2, default=str) + "\n")  # nosemgrep
 
 
 def _write_sidecar(
