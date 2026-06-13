@@ -60,8 +60,7 @@ def test_doctor_no_keyring_recommends_env_var(healthy, monkeypatch):
     assert "no usable OS keyring" in api["detail"]
 
 
-def test_doctor_success_suggests_trying_transcribe(healthy, monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+def test_doctor_success_suggests_trying_transcribe(healthy):
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "assembly transcribe --sample" in result.output
@@ -315,8 +314,7 @@ def test_render_omits_profile_line_when_only_one_key_is_present() -> None:
     assert "profile:" not in text
 
 
-def test_doctor_human_output_shows_profile_and_environment(healthy, monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
+def test_doctor_human_output_shows_profile_and_environment(healthy):
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "profile: default" in result.output

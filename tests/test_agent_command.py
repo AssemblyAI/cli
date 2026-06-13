@@ -119,7 +119,6 @@ def test_agent_passes_voice_and_prompt_file(monkeypatch, tmp_path):
 
 def test_agent_headphones_notice_in_human_mode(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", lambda *a, **k: None)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
@@ -212,7 +211,6 @@ def test_agent_file_source_with_device_exits_2(monkeypatch, tmp_path):
 
 def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("aai_cli.commands.agent._exec.FileSource", lambda src: "filesrc")
     monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", lambda *a, **k: None)
     wav = tmp_path / "say.wav"
@@ -224,7 +222,6 @@ def test_agent_file_source_no_headphones_notice(monkeypatch, tmp_path):
 
 def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("aai_cli.commands.agent._exec.FileSource", lambda src: "filesrc")
 
     def fake_run_session(api_key, *, renderer, player, mic, config):
@@ -241,7 +238,6 @@ def test_agent_file_source_no_start_talking_notice(monkeypatch, tmp_path):
 
 def test_agent_mic_shows_start_talking_notice(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     # Avoid opening real audio hardware; the renderer is what we're testing.
     class FakeDuplex:
@@ -320,7 +316,6 @@ def test_agent_headphones_notice_routes_to_stderr(monkeypatch):
     # `assembly agent | head` must not eat the advisory as transcript data: in the
     # default human mode the notice goes to stderr, stdout stays transcript-only.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", lambda *a, **k: None)
     result = _invoke_split(["agent"])
     assert result.exit_code == 0

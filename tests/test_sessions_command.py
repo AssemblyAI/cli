@@ -21,10 +21,6 @@ def _login_result(*, json_mode=False):
     )
 
 
-def _human(monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
-
-
 def test_sessions_help_lists_list_before_get():
     # Pins the list-then-get subcommand order `transcripts --help` mirrors.
     result = runner.invoke(app, ["sessions", "--help"])
@@ -63,9 +59,8 @@ def test_session_rows_filter_invalid_items():
     assert sessions._session_rows([{"session_id": "s_1"}, "bad"]) == [{"session_id": "s_1"}]
 
 
-def test_sessions_list_renders_table_human(monkeypatch, mocker):
+def test_sessions_list_renders_table_human(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "data": [
             {
@@ -89,9 +84,8 @@ def test_sessions_list_renders_table_human(monkeypatch, mocker):
     assert "12.0" in result.output
 
 
-def test_sessions_list_renders_zero_duration_as_zero(monkeypatch, mocker):
+def test_sessions_list_renders_zero_duration_as_zero(mocker):
     _auth()
-    _human(monkeypatch)
     # 0 is a legitimate duration (a session that connected but streamed no audio):
     # it must render as "0", not be coerced to a blank cell like a missing value.
     # Neither row carries created_at, so the duration is the only digit in the table.
@@ -118,9 +112,8 @@ def test_sessions_list_renders_zero_duration_as_zero(monkeypatch, mocker):
     assert "0" in result.output
 
 
-def test_sessions_list_empty_shows_human_empty_state(monkeypatch, mocker):
+def test_sessions_list_empty_shows_human_empty_state(mocker):
     _auth()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.sessions.ams.list_streaming",
         autospec=True,
@@ -185,9 +178,8 @@ def test_sessions_list_without_status_passes_none(mocker):
     list_streaming.assert_called_once_with("jwt", limit=10, status=None)
 
 
-def test_sessions_get_renders_detail(monkeypatch, mocker):
+def test_sessions_get_renders_detail(mocker):
     _auth()
-    _human(monkeypatch)
     detail = {
         "session_id": "s_1",
         "status": "completed",

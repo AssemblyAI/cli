@@ -150,9 +150,8 @@ def test_get_short_json_flag_emits_json(mocker):
     assert json.loads(result.output)["id"] == "t_42"
 
 
-def test_list_empty_shows_human_empty_state(monkeypatch, mocker):
+def test_list_empty_shows_human_empty_state(mocker):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     mocker.patch(
         "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=[]
     )
@@ -216,9 +215,8 @@ def test_list_limit_must_be_at_least_one(mocker):
     list_.assert_not_called()
 
 
-def test_list_human_mode_renders_table(monkeypatch, mocker):
+def test_list_human_mode_renders_table(mocker):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     rows = [{"id": "t1", "status": "completed", "created": "2026-01-01"}]
     mocker.patch(
         "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=rows
@@ -249,7 +247,6 @@ def test_list_table_colors_status(monkeypatch, mocker):
     from aai_cli.theme import make_console
 
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     # Pin a truecolor console with an empty _environ so the rendered ANSI is
     # deterministic: Rich otherwise reads ambient color env (NO_COLOR/COLORTERM/...)
     # at render time, which leaks across tests and flips the color depth. With

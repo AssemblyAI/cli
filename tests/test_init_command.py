@@ -143,7 +143,6 @@ def test_init_appears_in_help():
 def test_init_prints_cli_banner_in_human_mode(tmp_path, monkeypatch):
     # Vercel-style header at the top of an interactive run (human output only).
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["init", TEMPLATE, "x", "--no-install"])
     assert result.exit_code == 0, result.output
     # Decoration goes to stderr (data → stdout), so a piped stdout never sees it.
@@ -155,7 +154,6 @@ def test_init_banner_skipped_on_error_only_runs(tmp_path, monkeypatch):
     # The banner prints only after validation passes: a pure error run (unknown
     # template) stays undecorated like the sibling commands, and stdout stays empty.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     result = runner.invoke(app, ["init", "nope", "x", "--no-install"])
     assert result.exit_code == 1
     assert "AssemblyAI CLI" not in result.stderr
@@ -165,7 +163,6 @@ def test_init_banner_skipped_on_error_only_runs(tmp_path, monkeypatch):
 def test_init_banner_skipped_on_target_conflict_error(tmp_path, monkeypatch):
     # Target validation failures are error-only runs too: no banner.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
     result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
     assert result.exit_code == 1
@@ -363,9 +360,6 @@ def test_init_launches_when_key_present(tmp_path, monkeypatch):
     # Key present + install succeeds -> the server is launched and the browser opens.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-real-key")
-    monkeypatch.setattr(
-        "aai_cli.output.resolve_json", lambda *, explicit: False
-    )  # exercise human banner
     monkeypatch.setattr(
         "aai_cli.init.runner.run_setup",
         lambda *a, **k: subprocess.CompletedProcess([], 0, "ok", ""),

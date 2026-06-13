@@ -119,7 +119,6 @@ def test_whoami_network_failure_still_renders_table(mocker):
 
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
-    mocker.patch("aai_cli.output.resolve_json", autospec=True, return_value=False)
     mocker.patch(
         "aai_cli.commands.login.client.validate_key",
         autospec=True,

@@ -381,7 +381,6 @@ def test_stream_system_audio_parallel_unexpected_worker_error_fails_the_run(monk
 
 def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     class FakeSystemAudio:
         def __init__(self, *, on_open=None):

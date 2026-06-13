@@ -36,7 +36,6 @@ def test_init_force_warns_existing_files_are_overwritten(tmp_path, monkeypatch):
     # --force overlays the template onto a non-empty target; the run must say so
     # (on stderr) instead of silently clobbering files.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
     assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
     result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--force"])
     assert result.exit_code == 0

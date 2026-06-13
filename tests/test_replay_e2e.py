@@ -18,11 +18,6 @@ from tests import replay_fixtures as rf
 runner = CliRunner()
 
 
-def _human(monkeypatch):
-    """Pin human output (the real default) so output assertions don't depend on a tty."""
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
-
-
 def _with_api_key():
     config.set_api_key("default", "sk_live")
 
@@ -31,9 +26,8 @@ def _with_session():
     config.set_session("default", session_jwt="jwt", session_token="tok", account_id=12345)
 
 
-def test_transcribe_sample_renders_real_transcript(monkeypatch, mocker):
+def test_transcribe_sample_renders_real_transcript(mocker):
     _with_api_key()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.transcribe_exec.client.transcribe",
         autospec=True,
@@ -44,9 +38,8 @@ def test_transcribe_sample_renders_real_transcript(monkeypatch, mocker):
     assert "Smoke from hundreds of wildfires" in result.output
 
 
-def test_transcripts_get_renders_real_text(monkeypatch, mocker):
+def test_transcripts_get_renders_real_text(mocker):
     _with_api_key()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.transcripts.client.get_transcript",
         autospec=True,
@@ -57,9 +50,8 @@ def test_transcripts_get_renders_real_text(monkeypatch, mocker):
     assert "Smoke from hundreds of wildfires" in result.output
 
 
-def test_transcripts_list_renders_real_rows(monkeypatch, mocker):
+def test_transcripts_list_renders_real_rows(mocker):
     _with_api_key()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.transcripts.client.list_transcripts",
         autospec=True,
@@ -74,9 +66,8 @@ def test_transcripts_list_renders_real_rows(monkeypatch, mocker):
     assert "status" in result.output
 
 
-def test_llm_renders_real_completion(monkeypatch, mocker):
+def test_llm_renders_real_completion(mocker):
     _with_api_key()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.llm.gateway.complete",
         autospec=True,
@@ -87,9 +78,8 @@ def test_llm_renders_real_completion(monkeypatch, mocker):
     assert "PONG" in result.output
 
 
-def test_balance_renders_real_dollars(monkeypatch, mocker):
+def test_balance_renders_real_dollars(mocker):
     _with_session()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
         autospec=True,
@@ -100,9 +90,8 @@ def test_balance_renders_real_dollars(monkeypatch, mocker):
     assert "$879.58" in result.output
 
 
-def test_usage_renders_real_breakdown(monkeypatch, mocker):
+def test_usage_renders_real_breakdown(mocker):
     _with_session()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_usage",
         autospec=True,
@@ -116,9 +105,8 @@ def test_usage_renders_real_breakdown(monkeypatch, mocker):
     assert "$" in result.output
 
 
-def test_limits_renders_no_custom_limits(monkeypatch, mocker):
+def test_limits_renders_no_custom_limits(mocker):
     _with_session()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_rate_limits",
         autospec=True,
