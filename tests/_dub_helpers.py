@@ -31,6 +31,7 @@ DEFAULTS = DubOptions(
     max_tokens=llm.DEFAULT_MAX_TOKENS,
     out=None,
     video=False,
+    download_sections=[],
 )
 
 SAMPLE_RATE = 100  # tiny rate keeps the timeline byte math exact and readable

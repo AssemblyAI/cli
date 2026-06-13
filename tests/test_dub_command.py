@@ -59,6 +59,7 @@ def test_defaults_map_to_options(captured_run):
         max_tokens=llm.DEFAULT_MAX_TOKENS,
         out=None,
         video=False,
+        download_sections=[],
     )
 
 
@@ -83,6 +84,10 @@ def test_every_flag_maps_to_options(captured_run):
             "--out",
             "dubbed.mp4",
             "--video",
+            "--download-sections",
+            "*0:00-15:00",
+            "--download-sections",
+            "intro",
             "--json",
         ],
     )
@@ -97,4 +102,5 @@ def test_every_flag_maps_to_options(captured_run):
         max_tokens=7,
         out=Path("dubbed.mp4"),
         video=True,
+        download_sections=["*0:00-15:00", "intro"],
     )
