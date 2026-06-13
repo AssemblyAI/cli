@@ -170,6 +170,11 @@ trap - EXIT
 echo "==> init template contract/import gate"
 uv run python scripts/template_contract_gate.py
 
+echo "==> unused snapshot/fixture gate"
+# xdist disables syrupy's own unused-snapshot detection, so a renamed/deleted test can
+# leave an orphaned .ambr or recorded API fixture behind. This static check catches it.
+uv run python scripts/unused_fixtures_gate.py
+
 echo "==> pytest (with branch-coverage gate)"
 # Exclude e2e: they drive the CLI as a subprocess (uncounted by coverage) and need
 # a live API key. Exclude install (real per-template dep install, slow + network).
