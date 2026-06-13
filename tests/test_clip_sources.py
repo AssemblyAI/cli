@@ -39,9 +39,11 @@ def fake_download(monkeypatch):
     """Stand in for yt-dlp: 'download' a fixed media file into the temp dir."""
     seen: dict[str, object] = {}
 
-    def download(url, dest_dir, *, video=False):
+    def download(url, dest_dir, *, video=False, download_sections=None):
         seen["url"] = url
         seen["video"] = video
+        seen["download_sections"] = download_sections
+        seen["dest_dir"] = dest_dir
         path = dest_dir / ("vid123.mp4" if video else "vid123.m4a")
         path.write_bytes(b"\x00media")
         seen["path"] = path
@@ -61,6 +63,9 @@ def test_run_clip_downloads_youtube_audio_into_cwd(
     opts = dataclasses.replace(DEFAULTS, media=YT_URL, ranges=["1-2"])
     clip_exec.run_clip(opts, AppState(), json_mode=True)
     assert fake_download["url"] == YT_URL
+    # No section slicing, into the command's own source temp dir.
+    assert fake_download["download_sections"] is None
+    assert Path(fake_download["dest_dir"]).name.startswith("aai-clip-src-")
     # ffmpeg reads the downloaded temp file; the clip lands in the cwd, named
     # after the download (the temp dir is gone after the run).
     assert fake_ffmpeg[1][6] == str(fake_download["path"])

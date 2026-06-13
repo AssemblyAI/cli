@@ -22,9 +22,9 @@ from pathlib import Path
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import client, mediafile, output, youtube
+from aai_cli import client, mediafile, output
 from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.errors import CLIError
 
 
 @dataclass(frozen=True)
@@ -122,34 +122,25 @@ def _fetch_srt(transcript: object, opts: CaptionOptions, *, json_mode: bool, qui
 def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly caption` invocation from already-parsed flags."""
     ffmpeg = mediafile.require_ffmpeg("burn captions into video")
-    if youtube.is_downloadable_url(opts.media):
-        # A media-page URL (YouTube, …) is downloaded once — always the full
-        # video, since the captions are burned into it. The download dir is
-        # temporary, so the default output lands in the current directory.
-        with tempfile.TemporaryDirectory(prefix="aai-caption-src-") as td:
-            with output.status("Downloading video…", json_mode=json_mode, quiet=state.quiet):
-                local = youtube.download_media(opts.media, Path(td), video=True)
-            out = opts.out if opts.out is not None else Path.cwd() / default_out_path(local).name
-            mediafile.validate_out(out, local)
-            _caption_and_emit(opts, local, out, ffmpeg, state, json_mode=json_mode)
-        return
-    if opts.media.startswith(("http://", "https://")):
-        raise UsageError(
-            "assembly caption can't fetch this URL; it captions a local file or a "
-            "media-page URL yt-dlp can download (YouTube, …).",
-            suggestion="Download the video first, then caption the local copy.",
+    # A media-page URL is downloaded once — always the full video, since the
+    # captions are burned into it.
+    with mediafile.resolve_media_source(
+        opts.media,
+        "caption",
+        fetch_clause="captions a local file or a media-page URL yt-dlp can download (YouTube, …)",
+        download_suggestion="Download the video first, then caption the local copy.",
+        video=True,
+        download_sections=None,
+        json_mode=json_mode,
+        quiet=state.quiet,
+    ) as (media, downloaded):
+        if not downloaded:
+            mediafile.validate_local_media(media, "caption", kind="video")
+        out = mediafile.default_output(
+            opts.out, media, downloaded=downloaded, namer=default_out_path
         )
-    if "://" in opts.media:
-        # Path() would collapse the "//" and report a corrupted echo of the URL.
-        raise UsageError(
-            f"assembly caption needs a local file, not a URL: {opts.media}",
-            suggestion="Download the video first, then caption the local copy.",
-        )
-    media = Path(opts.media)
-    mediafile.validate_local_media(media, "caption", kind="video")
-    out = opts.out if opts.out is not None else default_out_path(media)
-    mediafile.validate_out(out, media)
-    _caption_and_emit(opts, media, out, ffmpeg, state, json_mode=json_mode)
+        mediafile.validate_out(out, media)
+        _caption_and_emit(opts, media, out, ffmpeg, state, json_mode=json_mode)
 
 
 def _caption_and_emit(

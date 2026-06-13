@@ -92,6 +92,17 @@ def test_run_clip_rejects_non_downloadable_url():
     with pytest.raises(UsageError) as exc:
         clip_exec.run_clip(opts, AppState(), json_mode=False)
     assert "can't fetch this URL" in exc.value.message
+    assert "cuts a local file" in exc.value.message
+    assert "Download the media first" in (exc.value.suggestion or "")
+
+
+def test_run_clip_rejects_remote_urls_with_the_url_intact():
+    # Path() would collapse "//" and echo a corrupted "s3:/bucket/…" back, so a
+    # bare scheme:// is rejected outright (same handling as caption/dub).
+    opts = dataclasses.replace(DEFAULTS, media="s3://bucket/talk.mp4", ranges=["1-2"])
+    with pytest.raises(UsageError) as exc:
+        clip_exec.run_clip(opts, AppState(), json_mode=False)
+    assert "s3://bucket/talk.mp4" in exc.value.message
     assert "Download the media first" in (exc.value.suggestion or "")
 
 

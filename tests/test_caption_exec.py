@@ -177,6 +177,7 @@ def test_run_caption_rejects_non_downloadable_url(fake_ffmpeg):
     with pytest.raises(UsageError) as exc:
         _run(opts, json_mode=False)
     assert "assembly caption can't fetch this URL" in exc.value.message
+    assert "captions a local file" in exc.value.message
     assert "Download the video first" in (exc.value.suggestion or "")
 
 
@@ -345,9 +346,11 @@ def fake_download(monkeypatch: pytest.MonkeyPatch):
     """Stand in for yt-dlp: 'download' a fixed video file into the temp dir."""
     seen: dict[str, object] = {}
 
-    def download(url, dest_dir, *, video=False):
+    def download(url, dest_dir, *, video=False, download_sections=None):
         seen["url"] = url
         seen["video"] = video
+        seen["download_sections"] = download_sections
+        seen["dest_dir"] = dest_dir
         path = dest_dir / "vid123.mp4"
         path.write_bytes(b"\x00video")
         seen["path"] = path
@@ -363,9 +366,12 @@ def test_run_caption_youtube_downloads_the_full_video(
     monkeypatch.chdir(tmp_path)
     opts = dataclasses.replace(DEFAULTS, media=YT_URL)
     _run(opts, json_mode=True)
-    # Captions are burned into the picture, so the download is always the video.
+    # Captions are burned into the picture, so the download is always the video,
+    # never a section slice, into the command's own source temp dir.
     assert fake_download["url"] == YT_URL
     assert fake_download["video"] is True
+    assert fake_download["download_sections"] is None
+    assert Path(fake_download["dest_dir"]).name.startswith("aai-caption-src-")
     assert fake_transcribe["audio"] == str(fake_download["path"])
     # ffmpeg reads the downloaded temp file; the default output lands in the cwd,
     # named after the download (the temp dir is gone after the run).

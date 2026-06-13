@@ -20,7 +20,6 @@ is re-encoded into its own file with ffmpeg.
 from __future__ import annotations
 
 import json
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -308,28 +307,26 @@ def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
     youtube.validate_video_flag(opts.media, video=opts.video)
     explicit = [clip_select.parse_range(value) for value in opts.ranges]
     ffmpeg = mediafile.require_ffmpeg("cut media")
-    if youtube.is_downloadable_url(opts.media):
-        # A media-page URL (YouTube, podcast page, …) is downloaded once — the
-        # audio track by default, the full video with --video so the clips carry
-        # video too — and clipped locally. The download dir is temporary, so the
-        # clips land in --out-dir or the current directory — never next to the
-        # temp file.
-        downloading = "Downloading video…" if opts.video else "Downloading audio…"
-        with tempfile.TemporaryDirectory(prefix="aai-clip-") as td:
-            with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
-                local = youtube.download_media(opts.media, Path(td), video=opts.video)
-            out_dir = opts.out_dir if opts.out_dir is not None else Path.cwd()
-            _cut_and_emit(opts, local, out_dir, explicit, ffmpeg, state, json_mode=json_mode)
-        return
-    if opts.media.startswith(("http://", "https://")):
-        raise UsageError(
-            "assembly clip can't fetch this URL; it cuts a local file or a "
-            "media-page URL yt-dlp can download (YouTube, podcasts, …).",
-            suggestion="Download the media first, then clip the local copy.",
-        )
-    media = Path(opts.media)
-    mediafile.validate_local_media(media, "clip")
-    _cut_and_emit(opts, media, opts.out_dir, explicit, ffmpeg, state, json_mode=json_mode)
+    # A media-page URL is downloaded once — the audio track by default, the full
+    # video with --video so the clips carry video too — and clipped locally.
+    with mediafile.resolve_media_source(
+        opts.media,
+        "clip",
+        fetch_clause="cuts a local file or a media-page URL yt-dlp can download (YouTube, podcasts, …)",
+        download_suggestion="Download the media first, then clip the local copy.",
+        video=opts.video,
+        download_sections=None,
+        json_mode=json_mode,
+        quiet=state.quiet,
+    ) as (media, downloaded):
+        if not downloaded:
+            mediafile.validate_local_media(media, "clip")
+        # A downloaded source lives in a temp dir, so its clips land in --out-dir
+        # or the current directory — never next to the vanishing temp file.
+        out_dir: Path | None = opts.out_dir
+        if downloaded and out_dir is None:
+            out_dir = Path.cwd()
+        _cut_and_emit(opts, media, out_dir, explicit, ffmpeg, state, json_mode=json_mode)
 
 
 def _cut_and_emit(

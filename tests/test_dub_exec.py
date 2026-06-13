@@ -229,10 +229,12 @@ def test_run_dub_refuses_to_overwrite_the_input(sandbox, media):
     assert "overwrite the input file" in exc.value.message
 
 
-def test_run_dub_rejects_remote_urls_with_the_url_intact(sandbox):
+def test_run_dub_rejects_remote_urls_with_the_url_intact(sandbox, monkeypatch):
     # http(s) URLs are downloaded (or rejected by the yt-dlp branch); a bucket
     # URL would otherwise reach Path(), which collapses "//" and echoes a
-    # corrupted "s3:/bucket/…" back.
+    # corrupted "s3:/bucket/…" back. ffmpeg is checked first (as in caption), so
+    # stub it present to reach the URL classification.
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
     url = "s3://bucket/talk.mp4"
     opts = dataclasses.replace(DEFAULTS, media=url)
     with pytest.raises(UsageError) as exc:

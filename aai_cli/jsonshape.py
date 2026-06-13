@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pydantic import TypeAdapter, ValidationError
 
 _JSON_OBJECT: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
@@ -66,3 +68,25 @@ def as_float(value: object, default: float = 0.0) -> float:
         return _FLOAT.validate_python(value)
     except ValidationError:
         return default
+
+
+def dumps(obj: object) -> str:
+    """Serialize ``obj`` to a JSON string the way the whole CLI does it.
+
+    ``default=str`` is the one safety the CLI relies on everywhere it emits JSON:
+    pydantic/SDK models and ``datetime``\\s that aren't natively serializable fall
+    back to ``str(...)`` instead of raising. Centralized here so every emission
+    path (``output``'s stdout/stderr writers, the realtime ``BaseRenderer``, the
+    ``--out`` and ``-o json`` field renderers) shares one serialization policy.
+    """
+    return json.dumps(obj, default=str)
+
+
+def compact(mapping: dict[str, object]) -> dict[str, object]:
+    """Return ``mapping`` without the keys whose value is ``None``.
+
+    For JSON payloads where an absent optional field should be omitted entirely
+    rather than serialized as ``null`` — the build-then-``if x is not None``
+    idiom repeated across the error and realtime-event payloads.
+    """
+    return {key: value for key, value in mapping.items() if value is not None}
