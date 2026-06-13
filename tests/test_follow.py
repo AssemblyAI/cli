@@ -10,8 +10,8 @@ def test_json_mode_emits_ndjson_per_refresh(monkeypatch):
         r("second answer", 2)
 
     assert emitted == [
-        {"turns": 1, "output": "first answer"},
-        {"turns": 2, "output": "second answer"},
+        {"type": "answer", "turns": 1, "output": "first answer"},
+        {"type": "answer", "turns": 2, "output": "second answer"},
     ]
 
 

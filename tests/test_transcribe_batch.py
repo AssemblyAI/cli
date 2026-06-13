@@ -91,6 +91,7 @@ def test_rerun_skips_sources_with_completed_sidecars(tmp_path, mocker, monkeypat
     assert seen == ["b.mp3"]  # only the unfinished source pays
     records = {r["source"]: r for r in _ndjson(result)}
     assert records["a.mp3"] == {
+        "type": "result",
         "source": "a.mp3",
         "status": "skipped",
         "id": "t_old",
@@ -159,7 +160,13 @@ def test_url_source_resumes_on_sidecar_alone(tmp_path, mocker, monkeypatch):
     assert result.exit_code == 0
     assert seen == []
     assert _ndjson(result) == [
-        {"source": url, "status": "skipped", "id": "t_old", "sidecar": str(sidecar)}
+        {
+            "type": "result",
+            "source": url,
+            "status": "skipped",
+            "id": "t_old",
+            "sidecar": str(sidecar),
+        }
     ]
 
 
@@ -210,7 +217,12 @@ def test_partial_failure_exits_1_and_completes_the_rest(tmp_path, mocker, monkey
     result = runner.invoke(app, ["transcribe", "*.mp3", "--json"])
     assert result.exit_code == 1
     records = {r["source"]: r for r in _ndjson(result) if "source" in r}
-    assert records["a.mp3"] == {"source": "a.mp3", "status": "failed", "error": "upload exploded"}
+    assert records["a.mp3"] == {
+        "type": "result",
+        "source": "a.mp3",
+        "status": "failed",
+        "error": "upload exploded",
+    }
     assert records["b.mp3"]["status"] == "completed"
     assert (tmp_path / "b.mp3.aai.json").exists()
     assert not (tmp_path / "a.mp3.aai.json").exists()
@@ -377,7 +389,11 @@ def test_resumable_record_requires_matching_hash():
 
 def test_item_record_minimal_shape_before_any_work():
     # A not-yet-finished item serializes to just {source, status}: no empty id/sidecar keys.
-    assert transcribe_batch._Item("x.mp3").record() == {"source": "x.mp3", "status": "queued"}
+    assert transcribe_batch._Item("x.mp3").record() == {
+        "type": "result",
+        "source": "x.mp3",
+        "status": "queued",
+    }
 
 
 def test_source_digest_is_sha256_of_file_bytes(tmp_path):

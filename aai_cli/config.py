@@ -84,6 +84,12 @@ def config_dir() -> Path:
     return Path(platformdirs.user_config_dir("assemblyai"))
 
 
+def config_file_path() -> Path:
+    """Where config.toml lives — surfaced by `assembly config path` so users can
+    find the file without knowing the platformdirs convention."""
+    return _config_file()
+
+
 def _config_file() -> Path:
     return config_dir() / "config.toml"
 
@@ -173,6 +179,32 @@ def _dump(cfg: Config) -> None:
 
 def get_active_profile() -> str:
     return _load().active_profile or DEFAULT_PROFILE
+
+
+def list_profiles() -> dict[str, str | None]:
+    """Profile name -> stored backend env, for every profile in config.toml."""
+    return {name: prof.env for name, prof in _load().profiles.items()}
+
+
+def set_active_profile(name: str) -> None:
+    """Make ``name`` the default profile for future runs (``assembly config set``).
+
+    Only an existing profile can become active: pointing the default at a name with
+    no stored credentials would make every later command fail as "not signed in"
+    with no hint why, so the typo is rejected here with the known names listed.
+    """
+    validate_profile(name)
+    cfg = _load()
+    if name not in cfg.profiles:
+        known = ", ".join(sorted(cfg.profiles)) or "none yet"
+        raise CLIError(
+            f"No profile named {name!r} (known: {known}).",
+            error_type="invalid_profile",
+            exit_code=2,
+            suggestion=f"Create it first: assembly --profile {name} login",
+        )
+    cfg.active_profile = name
+    _dump(cfg)
 
 
 def _keyring_set(username: str, secret: str) -> None:

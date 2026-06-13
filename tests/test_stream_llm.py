@@ -49,10 +49,10 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
     assert seen["model"] == "gpt-4.1"
     assert seen["max_tokens"] == 50
     lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
-    assert {"turns": 1, "output": "answer:hola"} in lines
-    assert {"turns": 2, "output": "answer:hola mundo"} in lines
+    assert {"type": "answer", "turns": 1, "output": "answer:hola"} in lines
+    assert {"type": "answer", "turns": 2, "output": "answer:hola mundo"} in lines
     # Live mode replaces the raw turn envelopes; only follow refreshes reach stdout.
-    assert '"type"' not in result.output
+    assert '"type": "turn"' not in result.output
 
 
 def test_stream_llm_chains_multiple_prompts(monkeypatch):

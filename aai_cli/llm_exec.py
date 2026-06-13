@@ -41,6 +41,8 @@ class LlmOptions:
     follow: bool
     output_field: choices.TextOrJson | None
     max_tokens: int
+    # Raw --config KEY=VALUE pairs; parsed (and validated) once in run_llm.
+    config_kv: tuple[str, ...] = ()
 
 
 def _validate_follow_args(
@@ -88,7 +90,9 @@ def _stdin_transcript_text(
     return None
 
 
-def _run_follow(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
+def _run_follow(
+    opts: LlmOptions, state: AppState, extra: dict[str, object], *, json_mode: bool
+) -> None:
     prompt_text = _validate_follow_args(opts.prompt, opts.output_field, opts.transcript_id)
     api_key = state.resolve_api_key()
 
@@ -97,7 +101,7 @@ def _run_follow(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
             prompt_text, system=opts.system, transcript_text=transcript_text
         )
         response = gateway.complete(
-            api_key, model=opts.model, messages=messages, max_tokens=opts.max_tokens
+            api_key, model=opts.model, messages=messages, max_tokens=opts.max_tokens, extra=extra
         )
         return gateway.content_of(response)
 
@@ -117,7 +121,9 @@ def _run_follow(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
         raise UsageError(_FOLLOW_STDIN_MESSAGE)
 
 
-def _run_oneshot(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
+def _run_oneshot(
+    opts: LlmOptions, state: AppState, extra: dict[str, object], *, json_mode: bool
+) -> None:
     if not opts.prompt:
         raise UsageError(
             "Provide a prompt.",
@@ -138,6 +144,7 @@ def _run_oneshot(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
         messages=messages,
         max_tokens=opts.max_tokens,
         transcript_id=opts.transcript_id,
+        extra=extra,
     )
     content = gateway.content_of(response)
     if opts.output_field == "text":
@@ -153,7 +160,9 @@ def _run_oneshot(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
 
 def run_llm(opts: LlmOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly llm` invocation (one-shot or --follow) from parsed flags."""
+    # Parsed before any stdin/network work so a malformed pair fails fast.
+    extra = gateway.parse_gateway_overrides(opts.config_kv)
     if opts.follow:
-        _run_follow(opts, state, json_mode=json_mode)
+        _run_follow(opts, state, extra, json_mode=json_mode)
     else:
-        _run_oneshot(opts, state, json_mode=json_mode)
+        _run_oneshot(opts, state, extra, json_mode=json_mode)

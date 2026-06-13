@@ -126,6 +126,7 @@ def test_batch_llm_stores_chain_steps_in_each_sidecar(tmp_path, mocker, monkeypa
     assert sidecar["transcript"]["id"] == "t_a.mp3"  # transcription payload kept alongside
     records = {r["source"]: r for r in _ndjson(result)}
     assert records["a.mp3"] == {
+        "type": "result",
         "source": "a.mp3",
         "status": "completed",
         "id": "t_a.mp3",
@@ -192,7 +193,13 @@ def test_rerun_with_same_llm_chain_skips_entirely(tmp_path, mocker, monkeypatch)
     assert seen == []
     assert calls == []
     assert _ndjson(result) == [
-        {"source": "a.mp3", "status": "skipped", "id": "t_old", "sidecar": "a.mp3.aai.json"}
+        {
+            "type": "result",
+            "source": "a.mp3",
+            "status": "skipped",
+            "id": "t_old",
+            "sidecar": "a.mp3.aai.json",
+        }
     ]
 
 

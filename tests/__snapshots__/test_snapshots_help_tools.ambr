@@ -18,6 +18,106 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[config_get]
+  '''
+  
+   Usage: assembly config get [OPTIONS]
+   KEY:{active_profile|env|telemetry_enabled}
+  
+   Print one setting's stored value (`env` reads the selected profile's).
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    key      KEY:{active_profile|env|teleme  Which setting to read.         │
+  │               try_enabled}                    [required]                     │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Read one setting (pipe-friendly)
+   $ assembly config get env
+   Read a named profile's env
+   $ assembly -p staging config get env
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[config_list]
+  '''
+  
+   Usage: assembly config list [OPTIONS]
+  
+   Show every persisted setting and the stored profiles.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Show every persisted setting
+   $ assembly config list
+   As JSON for scripting
+   $ assembly config list --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[config_path]
+  '''
+  
+   Usage: assembly config path [OPTIONS]
+  
+   Print where config.toml lives.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Where settings are stored
+   $ assembly config path
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[config_set]
+  '''
+  
+   Usage: assembly config set [OPTIONS]
+   KEY:{active_profile|env|telemetry_enabled}
+                              VALUE
+  
+   Change one setting (`env` writes to the selected profile).
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │ *    key        KEY:{active_profile|env|tele  Which setting to change.       │
+  │                 metry_enabled}                [required]                     │
+  │ *    value      TEXT                          The new value. [required]      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --json  -j        Output raw JSON.                                           │
+  │ --help            Show this message and exit.                                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Switch the default profile
+   $ assembly config set active_profile staging
+   Bind the active profile to the sandbox
+   $ assembly config set env sandbox000
+   Opt out of telemetry
+   $ assembly config set telemetry_enabled false
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[doctor]
   '''
   
@@ -208,6 +308,30 @@
    $ assembly telemetry status
    As JSON for scripting
    $ assembly telemetry status --json
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[update]
+  '''
+  
+   Usage: assembly update [OPTIONS]
+  
+   Update the CLI to the latest release via your install method (brew/pipx/uv).
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --check            Report whether a newer release exists without installing  │
+  │                    it.                                                       │
+  │ --json   -j        Output raw JSON.                                          │
+  │ --help             Show this message and exit.                               │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Upgrade to the latest release
+   $ assembly update
+   Only check whether one exists
+   $ assembly update --check
   
   
   

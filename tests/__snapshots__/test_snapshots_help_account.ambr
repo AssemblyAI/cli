@@ -162,16 +162,18 @@
    Authenticate via your browser; stores a CLI API key.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --api-key          TEXT  Provide key non-interactively.                      │
-  │ --json     -j            Output raw JSON.                                    │
-  │ --help                   Show this message and exit.                         │
+  │ --with-api-key            Read an API key from stdin instead of the browser  │
+  │                           flow: printenv ASSEMBLYAI_API_KEY | assembly login │
+  │                           --with-api-key                                     │
+  │ --json          -j        Output raw JSON.                                   │
+  │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Log in with your browser
    $ assembly login
    Log in non-interactively (CI)
-   $ assembly login --api-key sk_...
+   $ printenv ASSEMBLYAI_API_KEY | assembly login --with-api-key
   
   
   

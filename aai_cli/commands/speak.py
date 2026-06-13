@@ -69,7 +69,7 @@ def speak(
     ),
     json_out: bool = options.json_option("Emit JSON metadata about the synthesized audio."),
 ) -> None:
-    """Synthesize speech from text with AssemblyAI streaming TTS (sandbox only).
+    """[sandbox] Synthesize speech from text with AssemblyAI streaming TTS.
 
     Plays the audio through your speakers by default, or writes a WAV with
     --out. Speaker-labeled input (from 'assembly transcribe
