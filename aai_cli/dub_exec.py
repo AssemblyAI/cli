@@ -80,6 +80,7 @@ class DubOptions:
     max_tokens: int
     out: Path | None
     video: bool
+    download_sections: list[str]
 
 
 def resolve_language(value: str) -> str:
@@ -338,16 +339,23 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     # Parse --voice now: a malformed mapping must fail before the billed pipeline.
     voice_plan = _VoicePlan(*dialogue.parse_voice_overrides(opts.voice))
     youtube.validate_video_flag(opts.media, video=opts.video)
+    youtube.validate_sections_flag(opts.media, opts.download_sections)
     if youtube.is_downloadable_url(opts.media):
         # A media-page URL (YouTube, podcast page, …) is downloaded once — the
         # audio track by default, the full video with --video so the dub keeps
-        # the picture — and dubbed locally. ffmpeg is checked before the
-        # download so a missing dependency fails before any fetch.
+        # the picture, only the --download-sections slices when given — and
+        # dubbed locally. ffmpeg is checked before the download so a missing
+        # dependency fails before any fetch.
         ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
         downloading = "Downloading video…" if opts.video else "Downloading audio…"
         with tempfile.TemporaryDirectory(prefix="aai-dub-src-") as td:
             with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
-                local = youtube.download_media(opts.media, Path(td), video=opts.video)
+                local = youtube.download_media(
+                    opts.media,
+                    Path(td),
+                    video=opts.video,
+                    download_sections=opts.download_sections,
+                )
             # The download dir is temporary, so the default output lands in the
             # current directory — never next to the temp file.
             out = (

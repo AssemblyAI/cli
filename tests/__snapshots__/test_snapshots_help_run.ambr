@@ -294,7 +294,8 @@
    the translations are synthesized with streaming TTS (one voice per
    speaker), and ffmpeg lays the new audio over the original — video copied
    untouched. A YouTube/media-page URL is downloaded first (audio only, or
-   the full video with --video). Streaming TTS only exists in the sandbox
+   the full video with --video; --download-sections fetches and dubs only a
+   time slice of it). Streaming TTS only exists in the sandbox
    today — run it as 'assembly --sandbox dub' (--sandbox goes before the
    subcommand). Requires ffmpeg.
   
@@ -305,27 +306,34 @@
   │                       [required]                                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ *  --lang           -l      TEXT  Target language: an ISO code (de, fr, es,  │
-  │                                   …) or a language name (German).            │
-  │                                   [required]                                 │
-  │    --source-lang            TEXT  ISO code of the source audio (e.g. de).    │
-  │                                   Default: auto-detect the language.         │
-  │    --transcript-id  -t      TEXT  Reuse an existing diarized transcript of   │
-  │                                   this media instead of transcribing it      │
-  │                                   again.                                     │
-  │    --voice                  TEXT  Voice id for every speaker (e.g. jane,     │
-  │                                   michael, paul), or SPEAKER=VOICE to pin a  │
-  │                                   diarized speaker (repeatable, e.g. --voice │
-  │                                   A=jane). Default: the target language's    │
-  │                                   native voice(s).                           │
-  │    --out                    PATH  Output file (default:                      │
-  │                                   <name>.dub.<lang><ext> next to the input). │
-  │    --video                        Download the full video (not just the      │
-  │                                   audio track) for a URL source, so the dub  │
-  │                                   keeps the picture. Local files keep their  │
-  │                                   video already.                             │
-  │    --json           -j            Emit JSON describing the dubbed file.      │
-  │    --help                         Show this message and exit.                │
+  │ *  --lang               -l      TEXT  Target language: an ISO code (de, fr,  │
+  │                                       es, …) or a language name (German).    │
+  │                                       [required]                             │
+  │    --source-lang                TEXT  ISO code of the source audio (e.g.     │
+  │                                       de). Default: auto-detect the          │
+  │                                       language.                              │
+  │    --transcript-id      -t      TEXT  Reuse an existing diarized transcript  │
+  │                                       of this media instead of transcribing  │
+  │                                       it again.                              │
+  │    --voice                      TEXT  Voice id for every speaker (e.g. jane, │
+  │                                       michael, paul), or SPEAKER=VOICE to    │
+  │                                       pin a diarized speaker (repeatable,    │
+  │                                       e.g. --voice A=jane). Default: the     │
+  │                                       target language's native voice(s).     │
+  │    --out                        PATH  Output file (default:                  │
+  │                                       <name>.dub.<lang><ext> next to the     │
+  │                                       input).                                │
+  │    --video                            Download the full video (not just the  │
+  │                                       audio track) for a URL source, so the  │
+  │                                       dub keeps the picture. Local files     │
+  │                                       keep their video already.              │
+  │    --download-sections          TEXT  For a URL source, download (and dub)   │
+  │                                       only part of it (yt-dlp                │
+  │                                       "--download-sections" syntax, e.g.     │
+  │                                       "*0:00-15:00" for the first fifteen    │
+  │                                       minutes; repeatable).                  │
+  │    --json               -j            Emit JSON describing the dubbed file.  │
+  │    --help                             Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --model             TEXT     LLM Gateway model that translates the           │
@@ -342,6 +350,9 @@
    $ assembly --sandbox dub talk.mp4 -l Spanish
    Dub the full video from YouTube
    $ assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video
+   Dub only the first 15 minutes of a YouTube video
+   $ assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video
+   --download-sections "*0:00-15:00"
    Dub every speaker with one voice
    $ assembly --sandbox dub talk.mp4 -l fr --voice paul
    Pin a voice per diarized speaker

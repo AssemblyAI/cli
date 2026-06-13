@@ -158,6 +158,22 @@ def validate_video_flag(source: str, *, video: bool) -> None:
         )
 
 
+def validate_sections_flag(source: str, sections: list[str]) -> None:
+    """Reject ``--download-sections`` for a source that isn't a downloadable URL.
+
+    The specs select which parts of a media-page download yt-dlp fetches; a local
+    file (or a direct URL the API fetches itself) is never downloaded, so the flag
+    would be a silent no-op there — and a requested flag is never dropped silently.
+    """
+    if sections and not is_downloadable_url(source):
+        raise UsageError(
+            "--download-sections only applies to a downloadable URL source "
+            "(YouTube, media pages, …).",
+            suggestion="Cut a local file first (assembly clip <file> --range START-END), "
+            "then use the cut.",
+        )
+
+
 def _ytdlp_options(
     dest_dir: Path, *, video: bool, download_sections: list[str] | None
 ) -> dict[str, object]:

@@ -65,9 +65,10 @@ def fake_download(monkeypatch: pytest.MonkeyPatch):
     """Stand in for yt-dlp: 'download' a fixed media file into the temp dir."""
     seen: dict[str, object] = {}
 
-    def download(url, dest_dir, *, video=False):
+    def download(url, dest_dir, *, video=False, download_sections=None):
         seen["url"] = url
         seen["video"] = video
+        seen["download_sections"] = download_sections
         path = dest_dir / ("vid123.mp4" if video else "vid123.m4a")
         path.write_bytes(b"\x00media")
         seen["path"] = path
@@ -94,9 +95,11 @@ def test_run_dub_youtube_downloads_and_dubs_into_cwd(
     monkeypatch.chdir(tmp_path)
     opts = dataclasses.replace(DEFAULTS, media=YT_URL)
     _run(opts, json_mode=True)
-    # Audio-only download by default; the downloaded temp file feeds the pipeline.
+    # Audio-only download by default — the whole source, no section slicing —
+    # and the downloaded temp file feeds the pipeline.
     assert fake_download["url"] == YT_URL
     assert fake_download["video"] is False
+    assert fake_download["download_sections"] == []
     assert fake_transcribe["audio"] == str(fake_download["path"])
     # ffmpeg muxes over the downloaded file; the default output lands in the cwd,
     # named after the download (the temp dir is gone after the run).
@@ -173,6 +176,34 @@ def test_run_dub_youtube_honors_explicit_out(
     opts = dataclasses.replace(DEFAULTS, media=YT_URL, out=out)
     _run(opts, json_mode=True)
     assert fake_ffmpeg["args"][-1] == str(out)
+
+
+def test_run_dub_youtube_download_sections_slice_the_download(
+    tmp_path,
+    fake_download,
+    fake_transcribe,
+    fake_translate,
+    fake_synthesize,
+    fake_ffmpeg,
+    capsys,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    opts = dataclasses.replace(DEFAULTS, media=YT_URL, download_sections=["*0:00-15:00"])
+    _run(opts, json_mode=True)
+    # The specs reach yt-dlp verbatim, so only that slice is fetched (and dubbed).
+    assert fake_download["download_sections"] == ["*0:00-15:00"]
+
+
+def test_run_dub_download_sections_require_a_url_source(media, monkeypatch):
+    # A local file is never downloaded, so the slice specs would be a silent
+    # no-op — they are rejected instead, with the local-file alternative named.
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
+    opts = dataclasses.replace(DEFAULTS, media=str(media), download_sections=["*0:00-15:00"])
+    with pytest.raises(UsageError) as exc:
+        _run(opts, json_mode=False)
+    assert "--download-sections only applies to a downloadable URL source" in exc.value.message
+    assert "assembly clip" in (exc.value.suggestion or "")
 
 
 def test_run_dub_video_requires_a_url_source(media, monkeypatch):
