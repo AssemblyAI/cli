@@ -249,11 +249,13 @@ extend-exclude = ["aai_cli/_version.py"]
 #           missing-comma-in-a-list bug); ISC001 is owned by the formatter (ignored);
 #   ICN/SLOT — import-convention and __slots__ hygiene;
 #   TID   — relative imports (banned outright below) so every import is absolute,
-#           reinforcing the import-linter architecture contracts.
+#           reinforcing the import-linter architecture contracts;
+#   T10   — a forgotten breakpoint()/pdb/ipdb left in the shipped code (the debugger
+#           counterpart to the T20 print ban already selected).
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF",
           "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "C90", "T20", "PT",
           "PIE", "PERF", "TCH", "ASYNC", "LOG", "G", "DTZ", "FLY", "ICN", "SLOT", "ISC",
-          "TID"]
+          "TID", "T10"]
 # E501: line length is owned by the formatter.
 # B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
 # S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
@@ -374,6 +376,16 @@ min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
 ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
                 "org", "preserve_logging_state", "refresh", "rpath"]
+
+[tool.codespell]
+# Spell-check code, comments, and docs (Kubernetes' verify-spelling, generalized). Run via
+# `uvx codespell` in check.sh and as a pre-commit hook, so it needs no entry in uv.lock.
+# Skip generated/binary/snapshot trees and the lockfile; recorded fixtures and snapshots
+# are byte-pinned and must not be "corrected".
+skip = "./.venv,./dist,./docs,./node_modules,./.git,uv.lock,*.ambr,./tests/fixtures,./aai_cli/_version.py"
+# Domain words codespell misreads: "unparseable" (accepted variant), "ist" (an identifier),
+# "expresso" (a deliberate mis-transcription used as an eval/WER example).
+ignore-words-list = "unparseable,ist,expresso,notin,ans"
 
 [tool.deptry]
 exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]
