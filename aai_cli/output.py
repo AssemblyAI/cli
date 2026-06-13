@@ -35,9 +35,7 @@ def is_agentic() -> bool:
     env var is set. Used to suppress *interactivity* (the spinner) — never to change the
     output *shape*; `resolve_json` keeps text the default regardless (see its docstring).
     """
-    if not _stdout_is_tty():
-        return True
-    return any(os.environ.get(var) for var in _AGENT_ENV_VARS)
+    return not _stdout_is_tty() or any(os.environ.get(var) for var in _AGENT_ENV_VARS)
 
 
 def set_color_mode(mode: choices.ColorMode) -> None:
