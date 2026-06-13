@@ -1,4 +1,3 @@
-# aai_cli/init/runner.py
 from __future__ import annotations
 
 import os

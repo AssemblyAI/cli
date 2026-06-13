@@ -1,4 +1,3 @@
-# aai_cli/init/procfile.py
 from __future__ import annotations
 
 import re
