@@ -42,7 +42,7 @@ def _write_wer_manifest(tmp_path):
 
 def _mock_transcribe(mocker, results):
     return mocker.patch(
-        "aai_cli.commands.evaluate.client.transcribe",
+        "aai_cli.evaluate_exec.client.transcribe",
         autospec=True,
         side_effect=list(results),
     )
@@ -141,7 +141,7 @@ def _assign(obj, attribute, value):
 
 
 def test_item_results_are_immutable():
-    from aai_cli.commands.evaluate import _ItemResult
+    from aai_cli.evaluate_exec import _ItemResult
 
     result = _ItemResult(row={}, words=None)
     with pytest.raises(dataclasses.FrozenInstanceError):
@@ -165,7 +165,7 @@ def _loaded_dataset():
 def test_loader_defaults(tmp_path, mocker):
     _auth()
     load = mocker.patch(
-        "aai_cli.commands.evaluate.eval_data.load", autospec=True, return_value=_loaded_dataset()
+        "aai_cli.evaluate_exec.eval_data.load", autospec=True, return_value=_loaded_dataset()
     )
     _mock_transcribe(mocker, [_transcript("hello")])
     result = runner.invoke(app, ["eval", "org/ds"])
@@ -179,7 +179,7 @@ def test_loader_defaults(tmp_path, mocker):
 def test_explicit_loader_flags_pass_through(tmp_path, mocker):
     _auth()
     load = mocker.patch(
-        "aai_cli.commands.evaluate.eval_data.load", autospec=True, return_value=_loaded_dataset()
+        "aai_cli.evaluate_exec.eval_data.load", autospec=True, return_value=_loaded_dataset()
     )
     _mock_transcribe(mocker, [_transcript("hello")])
     argv = [
@@ -206,7 +206,7 @@ def test_limit_out_of_range_is_a_usage_error(limit):
 def test_limit_bounds_are_inclusive(tmp_path, mocker, limit):
     _auth()
     mocker.patch(
-        "aai_cli.commands.evaluate.eval_data.load", autospec=True, return_value=_loaded_dataset()
+        "aai_cli.evaluate_exec.eval_data.load", autospec=True, return_value=_loaded_dataset()
     )
     _mock_transcribe(mocker, [_transcript("hello")])
     assert runner.invoke(app, ["eval", "org/ds", "--limit", limit]).exit_code == 0
@@ -223,7 +223,7 @@ def test_progress_status_counts_items(tmp_path, mocker, monkeypatch):
         seen.append(message)
         yield
 
-    monkeypatch.setattr("aai_cli.commands.evaluate.output.status", fake_status)
+    monkeypatch.setattr("aai_cli.evaluate_exec.output.status", fake_status)
     assert runner.invoke(app, ["eval", "manifest.csv"]).exit_code == 0
     assert seen == ["[1/2] Transcribing a.wav…", "[2/2] Transcribing b.wav…"]
 

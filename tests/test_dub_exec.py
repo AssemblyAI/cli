@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import dub_exec
+from aai_cli import dub_exec, mediafile
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._dub_helpers import (
@@ -47,8 +47,12 @@ def _fake_key(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize(
     "instance",
-    [DEFAULTS, dub_exec._Utterance(start_ms=0, speaker="A", text="hi")],
-    ids=["options", "utterance"],
+    [
+        DEFAULTS,
+        dub_exec._Utterance(start_ms=0, speaker="A", text="hi"),
+        dub_exec._VoicePlan(bare=None, overrides={}),
+    ],
+    ids=["options", "utterance", "voice_plan"],
 )
 def test_records_are_immutable(instance):
     field_name = dataclasses.fields(instance)[0].name
@@ -224,11 +228,11 @@ def test_run_dub_refuses_to_overwrite_the_input(sandbox, media):
     assert "overwrite the input file" in exc.value.message
 
 
-@pytest.mark.parametrize(
-    "url", ["https://youtube.com/watch?v=x", "s3://bucket/talk.mp4"], ids=["https", "s3"]
-)
-def test_run_dub_rejects_urls_with_the_url_intact(sandbox, url):
-    # Path() would collapse "//" and echo a corrupted "s3:/bucket/…" back.
+def test_run_dub_rejects_remote_urls_with_the_url_intact(sandbox):
+    # http(s) URLs are downloaded (or rejected by the yt-dlp branch); a bucket
+    # URL would otherwise reach Path(), which collapses "//" and echoes a
+    # corrupted "s3:/bucket/…" back.
+    url = "s3://bucket/talk.mp4"
     opts = dataclasses.replace(DEFAULTS, media=url)
     with pytest.raises(UsageError) as exc:
         dub_exec.run_dub(opts, AppState(), json_mode=False)
@@ -251,20 +255,20 @@ def test_validate_out_rejects_the_input_via_hard_link(media):
     clone = media.parent / "TALK.MP4"
     os.link(media, clone)
     with pytest.raises(UsageError) as exc:
-        dub_exec._validate_out(clone, media)
+        mediafile.validate_out(clone, media)
     assert "overwrite the input file" in exc.value.message
 
 
 def test_validate_out_rejects_a_directory(media, tmp_path):
     with pytest.raises(UsageError) as exc:
-        dub_exec._validate_out(tmp_path, media)
+        mediafile.validate_out(tmp_path, media)
     assert "--out is a directory" in exc.value.message
     assert "file path" in (exc.value.suggestion or "")
 
 
 def test_validate_out_rejects_a_missing_parent_directory(media, tmp_path):
     with pytest.raises(UsageError) as exc:
-        dub_exec._validate_out(tmp_path / "missing" / "dub.mp4", media)
+        mediafile.validate_out(tmp_path / "missing" / "dub.mp4", media)
     assert "output directory doesn't exist" in exc.value.message
     assert "missing" in exc.value.message
 
@@ -273,7 +277,7 @@ def test_validate_out_rejects_an_extensionless_output(media, tmp_path):
     # ffmpeg picks the container from the extension, so this would fail only
     # after the whole billed pipeline (e.g. an extension-less input's default out).
     with pytest.raises(UsageError) as exc:
-        dub_exec._validate_out(tmp_path / "noext", media)
+        mediafile.validate_out(tmp_path / "noext", media)
     assert "has no extension" in exc.value.message
     assert ".mp4" in (exc.value.suggestion or "")
 

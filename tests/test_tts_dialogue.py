@@ -101,7 +101,3 @@ def test_assign_voices_override_beats_rotation_without_consuming_a_slot():
     resolved, mapping = dialogue.assign_voices(segs, ["jane", "michael"], {"a": "vera"})
     assert [v for v, _ in resolved] == ["vera", "jane"]
     assert mapping == {"A": "vera", "B": "jane"}
-
-
-def test_default_rotation_is_the_confirmed_working_voices():
-    assert dialogue.DEFAULT_VOICE_ROTATION == ("jane", "michael", "mary", "paul", "eve", "george")

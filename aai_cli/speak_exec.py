@@ -14,12 +14,12 @@ from pathlib import Path
 from aai_cli import output, stdio
 from aai_cli.context import AppState
 from aai_cli.errors import UsageError
-from aai_cli.tts import audio, dialogue, session
+from aai_cli.tts import audio, dialogue, session, voices
 
-# The streaming-TTS reference client defaults to the PocketTTS "jane" voice and
-# English, so the CLI sends the same and a bare `assembly speak` works out of the box.
-# Override either with --voice/--language.
-DEFAULT_VOICE = "jane"
+# The streaming-TTS reference client defaults to English, so the CLI does the
+# same. The default voice follows the language (voices.default_voice): each
+# voice speaks one language, so e.g. --language Italian switches to giovanni
+# unless --voice overrides it.
 DEFAULT_LANGUAGE = "English"
 
 
@@ -161,7 +161,7 @@ def _speak_dialogue(
             json_mode=json_mode,
         )
     resolved, speakers = dialogue.assign_voices(
-        segments, dialogue.DEFAULT_VOICE_ROTATION, overrides
+        segments, voices.rotation_for(opts.language), overrides
     )
     with output.status("Synthesizing speech…", json_mode=json_mode, quiet=quiet):
         result = session.synthesize_dialogue(
@@ -202,7 +202,7 @@ def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
         _speak_single(
             api_key,
             spoken,
-            bare_voice or DEFAULT_VOICE,
+            bare_voice or voices.default_voice(opts.language),
             opts,
             json_mode=json_mode,
             quiet=state.quiet,

@@ -19,6 +19,10 @@ app = typer.Typer()
             ("Dub a talk into German (sandbox only)", "assembly --sandbox dub talk.mp4 --lang de"),
             ("Use a language name instead of a code", "assembly --sandbox dub talk.mp4 -l Spanish"),
             (
+                "Dub the full video from YouTube",
+                'assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video',
+            ),
+            (
                 "Dub every speaker with one voice",
                 "assembly --sandbox dub talk.mp4 -l fr --voice paul",
             ),
@@ -41,7 +45,8 @@ def dub(
     ctx: typer.Context,
     media: str = typer.Argument(
         ...,
-        help="Local audio/video file to dub (the video stream is copied untouched).",
+        help="Audio/video to dub: a local file (the video stream is copied untouched), "
+        "or a YouTube/media-page URL (downloaded via yt-dlp).",
     ),
     lang: str = typer.Option(
         ...,
@@ -65,7 +70,8 @@ def dub(
         [],
         "--voice",
         help="Voice id for every speaker (e.g. jane, michael, paul), or SPEAKER=VOICE "
-        "to pin a diarized speaker (repeatable, e.g. --voice A=jane).",
+        "to pin a diarized speaker (repeatable, e.g. --voice A=jane). Default: the "
+        "target language's native voice(s).",
     ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
@@ -83,6 +89,12 @@ def dub(
     out: Path | None = typer.Option(
         None, "--out", help="Output file (default: <name>.dub.<lang><ext> next to the input)."
     ),
+    video: bool = typer.Option(
+        False,
+        "--video",
+        help="Download the full video (not just the audio track) for a URL source, "
+        "so the dub keeps the picture. Local files keep their video already.",
+    ),
     json_out: bool = options.json_option("Emit JSON describing the dubbed file."),
 ) -> None:
     """Dub a video or audio file into another language (sandbox only).
@@ -91,9 +103,10 @@ def dub(
     utterance timestamps, each utterance is translated by an LLM Gateway model,
     the translations are synthesized with streaming TTS (one voice per
     speaker), and ffmpeg lays the new audio over the original — video copied
-    untouched. Streaming TTS only exists in the sandbox today — run it as
-    'assembly --sandbox dub' (--sandbox goes before the subcommand). Requires
-    ffmpeg.
+    untouched. A YouTube/media-page URL is downloaded first (audio only, or
+    the full video with --video). Streaming TTS only exists in the sandbox
+    today — run it as 'assembly --sandbox dub' (--sandbox goes before the
+    subcommand). Requires ffmpeg.
     """
     opts = dub_exec.DubOptions(
         media=media,
@@ -104,6 +117,7 @@ def dub(
         model=model,
         max_tokens=max_tokens,
         out=out,
+        video=video,
     )
     run_command(
         ctx,

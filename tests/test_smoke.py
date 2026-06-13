@@ -159,6 +159,7 @@ def test_help_lists_commands_in_workflow_order():
         "llm",
         "clip",
         "dub",
+        "caption",
         "eval",
         "webhooks",
         # Setup & Tools

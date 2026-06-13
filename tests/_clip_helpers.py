@@ -32,6 +32,7 @@ DEFAULTS = ClipOptions(
     padding=0.0,
     snap=True,
     out_dir=None,
+    video=False,
 )
 
 

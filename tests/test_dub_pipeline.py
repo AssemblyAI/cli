@@ -97,10 +97,11 @@ def test_run_dub_pipeline_end_to_end(
         assert "dubbing" in system["content"]
         assert "German" in system["content"]
 
-    # Synthesis: the translated text, rotation voices in speaker order, target language.
+    # Synthesis: the translated text in the target language, every speaker on
+    # German's one native voice (the language selects the voice).
     assert [(cfg.voice, cfg.text) for cfg in fake_synthesize] == [
-        ("jane", "DE:Hello."),
-        ("michael", "DE:World."),
+        ("juergen", "DE:Hello."),
+        ("juergen", "DE:World."),
     ]
     assert all(cfg.language == "German" for cfg in fake_synthesize)
 
@@ -141,7 +142,7 @@ def test_run_dub_pipeline_end_to_end(
         "language": "German",
         "transcript_id": "tr_dub",
         "utterances": 2,
-        "speakers": {"A": "jane", "B": "michael"},
+        "speakers": {"A": "juergen", "B": "juergen"},
         "sample_rate": SAMPLE_RATE,
         "audio_duration_seconds": 5.0,
     }
@@ -161,7 +162,7 @@ def test_run_dub_human_summary(
     assert "dub.de.mp4" in out
     assert "dubbed to German" in out
     assert "2 utterances" in out
-    assert "A=jane, B=michael" in out
+    assert "A=juergen, B=juergen" in out
 
 
 def test_human_summary_escapes_user_controlled_markup(
@@ -221,8 +222,8 @@ def test_voice_overrides_pin_speakers_without_consuming_rotation(
 ):
     opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["A=mary"])
     _run(opts, json_mode=True)
-    # A is pinned; B still takes the first rotation voice (overrides don't consume slots).
-    assert [cfg.voice for cfg in fake_synthesize] == ["mary", "jane"]
+    # A is pinned; B still takes German's native voice from the rotation.
+    assert [cfg.voice for cfg in fake_synthesize] == ["mary", "juergen"]
     # Every mapping applied -> no "Ignoring" warning fires.
     assert "Ignoring" not in capsys.readouterr().err
 
@@ -246,6 +247,27 @@ def test_source_lang_pins_the_transcription_language(
     _run(opts, json_mode=True)
     assert fake_transcribe["config"].language_code == "fr"
     assert fake_transcribe["config"].language_detection is None
+
+
+def test_english_dub_keeps_the_multi_voice_rotation(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg
+):
+    # English has many voices, so speakers still rotate through the curated set
+    # instead of collapsing onto one voice.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), language="en")
+    _run(opts, json_mode=True)
+    assert [cfg.voice for cfg in fake_synthesize] == ["jane", "michael"]
+
+
+def test_language_without_a_native_voice_falls_back_to_english_rotation(
+    media, fake_transcribe, fake_translate, fake_synthesize, fake_ffmpeg
+):
+    # Japanese is translatable but has no catalog voice: the dub still runs,
+    # on the English rotation.
+    opts = dataclasses.replace(DEFAULTS, media=str(media), language="ja")
+    _run(opts, json_mode=True)
+    assert [cfg.voice for cfg in fake_synthesize] == ["jane", "michael"]
+    assert all(cfg.language == "Japanese" for cfg in fake_synthesize)
 
 
 def test_transcript_id_reuses_existing_transcript(

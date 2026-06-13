@@ -118,8 +118,9 @@ assembly llm --list-models
 ## `assembly clip MEDIA` — cut a media file by transcript content
 
 Cuts clips out of an audio/video file with ffmpeg (must be installed). `MEDIA`
-is a local file or a YouTube/media-page URL (audio downloaded via yt-dlp; the
-clips then land in `--out-dir` or the current directory). `--speaker`/`--search`
+is a local file or a YouTube/media-page URL (audio downloaded via yt-dlp — or
+the full video with `--video`, so the clips carry video; the clips then land
+in `--out-dir` or the current directory). `--speaker`/`--search`
 select diarized utterances — the file is transcribed with speaker labels on the
 fly, or pass `-t/--transcript-id` (an id, or `-` to read an id or
 `transcribe --json` output from stdin). `--llm "instruction"` sends the
@@ -136,7 +137,8 @@ High-value flags:
   (repeatable).
 - LLM: `--model` (default `claude-haiku-4-5-20251001`), `--max-tokens N`.
 - Shaping: `--padding 0.5` (seconds around each clip), `--no-snap` (cut at the
-  exact selected times instead of snapping into silence), `--out-dir clips/`.
+  exact selected times instead of snapping into silence), `--out-dir clips/`,
+  `--video` (URL sources: download the full video, not just the audio track).
 - Output: `--json` (paths + start/end/duration of each clip written).
 
 Examples:
@@ -145,6 +147,30 @@ Examples:
 assembly clip meeting.mp4 --speaker A
 assembly clip call.mp3 --search "pricing" --padding 0.5
 assembly clip talk.mp4 --range 1:30-2:45 --range 10:00-10:30
-assembly clip "https://youtube.com/watch?v=ID" --llm "the strongest quote"
+assembly clip "https://youtube.com/watch?v=ID" --video --llm "the strongest quote"
 assembly transcribe meeting.mp4 --speaker-labels --json | assembly clip meeting.mp4 -t - --llm "the funniest exchange"
+```
+
+## `assembly caption MEDIA` — burn always-visible captions into a video
+
+Transcribes a video (or reuses a transcript with `-t/--transcript-id`), fetches
+the transcript's SRT captions, and burns them into the picture with ffmpeg
+(must be installed) as open captions — the audio stream is copied untouched.
+`MEDIA` is a local file or a YouTube/media-page URL (always downloaded as the
+full video via yt-dlp; the output then lands in `--out` or the current
+directory). The default output is `<name>.captioned<ext>` next to the input.
+
+High-value flags:
+
+- Shaping: `--chars-per-caption 32` (max characters per caption line),
+  `--font-size 28` (ffmpeg's default styling when omitted).
+- Output: `--out captioned.mp4`, `--json` (source, output path, transcript id,
+  caption count).
+
+Examples:
+
+```bash
+assembly caption talk.mp4
+assembly caption "https://youtube.com/watch?v=ID"
+assembly caption talk.mp4 -t TRANSCRIPT_ID --chars-per-caption 32 --font-size 28
 ```

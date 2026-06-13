@@ -10,9 +10,10 @@ transcribed with diarized utterance timestamps, each utterance is translated to
 the target language by an LLM Gateway model, each translation is synthesized
 with streaming TTS (one voice per speaker), the segments are laid out on a
 silence timeline at their original start times, and ffmpeg swaps the new track
-over the original media (video stream copied untouched). Streaming TTS only
-exists in the sandbox today, so — like `assembly speak` — the command is
-sandbox-only.
+over the original media (video stream copied untouched). A YouTube/media-page
+URL is downloaded first — audio only, or the full video with ``--video`` so the
+dub keeps the picture. Streaming TTS only exists in the sandbox today, so —
+like `assembly speak` — the command is sandbox-only.
 """
 
 from __future__ import annotations
@@ -24,11 +25,11 @@ from pathlib import Path
 
 from rich.markup import escape
 
-from aai_cli import jsonshape, mediafile, output
+from aai_cli import jsonshape, mediafile, output, youtube
 from aai_cli import llm as gateway
 from aai_cli.context import AppState
 from aai_cli.errors import APIError, CLIError, UsageError
-from aai_cli.tts import audio, dialogue, session
+from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.tts.session import SpeakConfig
 
 # ISO-639-1 codes accepted by --lang, mapped to the language *name* both the
@@ -78,6 +79,7 @@ class DubOptions:
     model: str
     max_tokens: int
     out: Path | None
+    video: bool
 
 
 def resolve_language(value: str) -> str:
@@ -133,36 +135,6 @@ def assemble_timeline(
 def _pcm_seconds(pcm: bytes | bytearray, sample_rate: int) -> float:
     """Seconds of audio in 16-bit mono PCM: two bytes per sample."""
     return len(pcm) / 2 / sample_rate
-
-
-def _validate_out(out: Path, media: Path) -> None:
-    """An unwritable or self-overwriting --out must fail here, before the billed
-    transcription/translation/synthesis pipeline runs.
-
-    The samefile check catches what path comparison can't: on case-insensitive
-    filesystems (macOS APFS) ``--out TALK.MP4`` against ``talk.mp4`` — or a hard
-    link — is the same file under a different spelling, and ffmpeg would read
-    and write it concurrently, corrupting the input."""
-    if out.resolve() == media.resolve() or (out.exists() and out.samefile(media)):
-        raise UsageError(
-            "--out would overwrite the input file.",
-            suggestion="Pick a different output path.",
-        )
-    if out.is_dir():
-        raise UsageError(
-            f"--out is a directory: {out}",
-            suggestion="Point --out at a file path, e.g. --out dubbed.mp4.",
-        )
-    if not out.parent.is_dir():
-        raise UsageError(
-            f"The output directory doesn't exist: {out.parent}",
-            suggestion="Create it first, or point --out somewhere that exists.",
-        )
-    if not out.suffix:
-        raise UsageError(
-            f"The output file {out.name!r} has no extension.",
-            suggestion="ffmpeg picks the container from the extension; pass e.g. --out dubbed.mp4.",
-        )
 
 
 def _mux(ffmpeg: str, media: Path, track: Path, out: Path) -> None:
@@ -324,26 +296,39 @@ def _warn_ignored_voice_pins(
         )
 
 
+@dataclass(frozen=True)
+class _VoicePlan:
+    """The parsed --voice flags: the bare voice (if any) plus SPEAKER=VOICE pins.
+
+    Parsed in run_dub — before the billed pipeline, so a malformed mapping
+    fails fast — and carried as one value through _dub_and_emit."""
+
+    bare: str | None
+    overrides: dict[str, str]
+
+
 def _assign_voices(
     utterances: list[_Utterance],
     translations: list[str],
-    bare_voice: str | None,
-    overrides: dict[str, str],
+    plan: _VoicePlan,
+    language: str,
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
     """Resolve each translated utterance to ``(voice, text)`` plus the speaker→voice map.
 
     A bare ``--voice`` dubs every speaker with that one voice; ``SPEAKER=VOICE``
-    mappings pin individual speakers; everyone else takes the rotation in
-    first-appearance order (the same rules as `assembly speak`).
+    mappings pin individual speakers; everyone else takes the target language's
+    rotation in first-appearance order (the same rules as `assembly speak`) —
+    each voice speaks one language, so a non-English dub switches to that
+    language's native voice(s).
     """
-    rotation = (bare_voice,) if bare_voice is not None else dialogue.DEFAULT_VOICE_ROTATION
+    rotation = (plan.bare,) if plan.bare is not None else voices.rotation_for(language)
     segments = [
         dialogue.Segment(utterance.speaker, translated)
         # strict=True is an invariant guard only: _translate returns exactly one
         # translation per utterance, so the lengths can never differ.
         for utterance, translated in zip(utterances, translations, strict=True)  # pragma: no mutate
     ]
-    return dialogue.assign_voices(segments, rotation, overrides)
+    return dialogue.assign_voices(segments, rotation, plan.overrides)
 
 
 def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
@@ -351,7 +336,36 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     language = resolve_language(opts.language)
     session.require_available("dub")
     # Parse --voice now: a malformed mapping must fail before the billed pipeline.
-    bare_voice, overrides = dialogue.parse_voice_overrides(opts.voice)
+    voice_plan = _VoicePlan(*dialogue.parse_voice_overrides(opts.voice))
+    youtube.validate_video_flag(opts.media, video=opts.video)
+    if youtube.is_downloadable_url(opts.media):
+        # A media-page URL (YouTube, podcast page, …) is downloaded once — the
+        # audio track by default, the full video with --video so the dub keeps
+        # the picture — and dubbed locally. ffmpeg is checked before the
+        # download so a missing dependency fails before any fetch.
+        ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
+        downloading = "Downloading video…" if opts.video else "Downloading audio…"
+        with tempfile.TemporaryDirectory(prefix="aai-dub-src-") as td:
+            with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
+                local = youtube.download_media(opts.media, Path(td), video=opts.video)
+            # The download dir is temporary, so the default output lands in the
+            # current directory — never next to the temp file.
+            out = (
+                opts.out
+                if opts.out is not None
+                else Path.cwd() / default_out_path(local, language).name
+            )
+            mediafile.validate_out(out, local)
+            _dub_and_emit(
+                opts, local, out, language, ffmpeg, voice_plan, state, json_mode=json_mode
+            )
+        return
+    if opts.media.startswith(("http://", "https://")):
+        raise UsageError(
+            "assembly dub can't fetch this URL; it dubs a local file or a "
+            "media-page URL yt-dlp can download (YouTube, podcasts, …).",
+            suggestion="Download the media first, then dub the local copy.",
+        )
     if "://" in opts.media:
         # Path() would collapse the "//" and report a corrupted echo of the URL.
         raise UsageError(
@@ -361,9 +375,23 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     media = Path(opts.media)
     mediafile.validate_local_media(media, "dub")
     out = opts.out if opts.out is not None else default_out_path(media, language)
-    _validate_out(out, media)
+    mediafile.validate_out(out, media)
     ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
+    _dub_and_emit(opts, media, out, language, ffmpeg, voice_plan, state, json_mode=json_mode)
 
+
+def _dub_and_emit(
+    opts: DubOptions,
+    media: Path,
+    out: Path,
+    language: str,
+    ffmpeg: str,
+    voice_plan: _VoicePlan,
+    state: AppState,
+    *,
+    json_mode: bool,
+) -> None:
+    """Dub an already-local media file into ``out`` and report the result."""
     api_key = state.resolve_api_key()
     transcript = mediafile.resolve_diarized_transcript(
         api_key,
@@ -382,8 +410,8 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     translations = _translate(
         api_key, utterances, language, opts, json_mode=json_mode, quiet=state.quiet
     )
-    resolved, speakers = _assign_voices(utterances, translations, bare_voice, overrides)
-    _warn_ignored_voice_pins(overrides, speakers, json_mode=json_mode)
+    resolved, speakers = _assign_voices(utterances, translations, voice_plan, language)
+    _warn_ignored_voice_pins(voice_plan.overrides, speakers, json_mode=json_mode)
     pcm_segments, sample_rate = _synthesize(
         api_key, resolved, language, json_mode=json_mode, quiet=state.quiet
     )
@@ -401,7 +429,8 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
             _mux(ffmpeg, media, wav, out)
 
     duration = round(_pcm_seconds(track, sample_rate), 3)
-    voices = ", ".join(f"{speaker}={voice}" for speaker, voice in speakers.items())
+    # Not named `voices`: that would shadow the tts.voices module imported above.
+    voices_text = ", ".join(f"{speaker}={voice}" for speaker, voice in speakers.items())
     payload: dict[str, object] = {
         "source": opts.media,
         "out": str(out),
@@ -417,7 +446,7 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
         # language and voices carry user-typed text, so they need escaping too.
         lambda _: output.success(
             f"{escape(str(out))}  dubbed to {escape(language)} "
-            f"({len(utterances)} utterances, {escape(voices)})"
+            f"({len(utterances)} utterances, {escape(voices_text)})"
         ),
         json_mode=json_mode,
     )

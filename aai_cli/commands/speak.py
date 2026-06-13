@@ -19,8 +19,8 @@ app = typer.Typer()
         [
             ("Speak text aloud (sandbox only)", 'assembly --sandbox speak "Hello there, friend."'),
             (
-                "Pick a voice and language",
-                'assembly --sandbox speak "Bonjour" --voice jane --language French',
+                "Pick a language (its native voice is selected automatically)",
+                'assembly --sandbox speak "Bonjour" --language French',
             ),
             (
                 "Speak a diarized transcript, one voice per speaker",
@@ -46,7 +46,12 @@ def speak(
         help="Voice id (e.g. jane, michael, mary, paul, eve, george), or SPEAKER=VOICE "
         "for diarized input (repeatable, e.g. --voice A=jane).",
     ),
-    language: str = typer.Option(DEFAULT_LANGUAGE, "--language", help="Language of the text."),
+    language: str = typer.Option(
+        DEFAULT_LANGUAGE,
+        "--language",
+        help="Language of the text. The default voice follows it "
+        "(e.g. --language Italian speaks with giovanni).",
+    ),
     sample_rate: int | None = typer.Option(
         None,
         "--sample-rate",

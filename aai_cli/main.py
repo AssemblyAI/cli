@@ -25,6 +25,7 @@ from aai_cli.commands import (
     account,
     agent,
     audit,
+    caption,
     clip,
     deploy,
     dev,
@@ -74,6 +75,7 @@ _COMMAND_ORDER = (
     "llm",
     "clip",
     "dub",
+    "caption",
     "eval",
     "webhooks",
     # Setup & Tools — get set up & maintain
@@ -415,6 +417,7 @@ app.add_typer(speak.app)
 app.add_typer(llm.app)
 app.add_typer(clip.app)
 app.add_typer(dub.app)
+app.add_typer(caption.app)
 app.add_typer(evaluate.app)  # eval
 app.add_typer(account.app)  # balance, usage, limits
 app.add_typer(login.app)  # login, logout, whoami

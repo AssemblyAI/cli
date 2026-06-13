@@ -7,9 +7,8 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli import config, environments, output, transcribe_exec, transcribe_render
+from aai_cli import config, environments, init_exec, output, transcribe_exec, transcribe_render
 from aai_cli.commands import doctor as doctor_cmd
-from aai_cli.commands import init as init_cmd
 from aai_cli.commands import setup as setup_cmd
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import CLIError
@@ -151,15 +150,17 @@ def build_path(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     # launch=False: the dev server blocks until Ctrl-C, so launching here would stop
     # the remaining sections from running. launch_app starts it once the wizard is done.
     try:
-        ctx.scaffolded = init_cmd.run_init(
+        ctx.scaffolded = init_exec.run_init(
+            init_exec.InitOptions(
+                template=choice,
+                directory=None,
+                no_install=False,
+                no_open=True,
+                force=False,
+                here=False,
+                port=3000,
+            ),
             ctx.state,
-            template=choice,
-            directory=None,
-            no_install=False,
-            no_open=True,
-            force=False,
-            here=False,
-            port=3000,
             json_mode=ctx.json_mode,
             launch=False,
         )
@@ -210,7 +211,7 @@ def launch_app(prompter: Prompter, ctx: WizardContext) -> SectionResult:
         prompter.note(f"Launch it any time with `{run_hint}`.")
         return SectionResult.SKIPPED
     try:
-        init_cmd.launch_app(
+        init_exec.launch_app(
             ctx.scaffolded,
             port=3000,
             use_uv=runner.has_uv(),

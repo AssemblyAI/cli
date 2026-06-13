@@ -16,10 +16,10 @@ from pathlib import Path
 import assemblyai as aai
 
 from aai_cli import client, output
-from aai_cli.errors import APIError, CLIError
+from aai_cli.errors import APIError, CLIError, UsageError
 
 
-def validate_local_media(media: Path, command: str) -> None:
+def validate_local_media(media: Path, command: str, *, kind: str = "audio/video") -> None:
     """Reject a missing local source before credential resolution, so a typo'd
     path reads as "file not found", never as a login prompt or an opaque
     ffmpeg error."""
@@ -28,7 +28,7 @@ def validate_local_media(media: Path, command: str) -> None:
             f"File not found: {media}",
             error_type="file_not_found",
             exit_code=2,
-            suggestion=f"Check the path. assembly {command} needs a local audio/video file.",
+            suggestion=f"Check the path. assembly {command} needs a local {kind} file.",
         )
     if not media.is_file():
         raise CLIError(
@@ -36,6 +36,36 @@ def validate_local_media(media: Path, command: str) -> None:
             error_type="not_a_file",
             exit_code=2,
             suggestion="Pass a media file, not a directory.",
+        )
+
+
+def validate_out(out: Path, media: Path) -> None:
+    """An unwritable or self-overwriting output file must fail here, before the
+    billed transcription/translation/synthesis pipeline runs.
+
+    The samefile check catches what path comparison can't: on case-insensitive
+    filesystems (macOS APFS) ``--out TALK.MP4`` against ``talk.mp4`` — or a hard
+    link — is the same file under a different spelling, and ffmpeg would read
+    and write it concurrently, corrupting the input."""
+    if out.resolve() == media.resolve() or (out.exists() and out.samefile(media)):
+        raise UsageError(
+            "--out would overwrite the input file.",
+            suggestion="Pick a different output path.",
+        )
+    if out.is_dir():
+        raise UsageError(
+            f"--out is a directory: {out}",
+            suggestion="Point --out at a file path, e.g. --out dubbed.mp4.",
+        )
+    if not out.parent.is_dir():
+        raise UsageError(
+            f"The output directory doesn't exist: {out.parent}",
+            suggestion="Create it first, or point --out somewhere that exists.",
+        )
+    if not out.suffix:
+        raise UsageError(
+            f"The output file {out.name!r} has no extension.",
+            suggestion="ffmpeg picks the container from the extension; pass e.g. --out dubbed.mp4.",
         )
 
 
@@ -69,6 +99,7 @@ def ffmpeg_failure(
     dest: Path,
     *,
     error_type: str,
+    suggestion: str = "Check that the input is a readable audio/video file.",
 ) -> CLIError:
     """A failed ffmpeg run as a clean CLIError: the reason is ffmpeg's last
     stderr line (earlier noise dropped), or the exit code when it said nothing."""
@@ -77,8 +108,26 @@ def ffmpeg_failure(
     return CLIError(
         f"Could not {action} {dest.name}: {reason}",
         error_type=error_type,
-        suggestion="Check that the input is a readable audio/video file.",
+        suggestion=suggestion,
     )
+
+
+def resolve_transcript(
+    api_key: str,
+    transcript_id: str | None,
+    media: Path,
+    *,
+    status_message: str,
+    json_mode: bool,
+    quiet: bool,
+    config: aai.TranscriptionConfig,
+) -> object:
+    """The transcript driving the command: fetched by id (and verified usable),
+    or made fresh from the (already local) media file with ``config``."""
+    if transcript_id is not None:
+        return _fetched_transcript(api_key, transcript_id)
+    with output.status(status_message, json_mode=json_mode, quiet=quiet):
+        return client.transcribe(api_key, str(media), config=config)
 
 
 def resolve_diarized_transcript(
@@ -92,18 +141,22 @@ def resolve_diarized_transcript(
     language_code: str | None = None,
     detect_language: bool = False,
 ) -> object:
-    """The diarized transcript driving the command: fetched by id (and verified
-    usable), or made fresh from the (already local) media file — always with
-    speaker labels, so the caller can select or voice content per speaker."""
-    if transcript_id is not None:
-        return _fetched_transcript(api_key, transcript_id)
+    """The diarized transcript driving the command — always with speaker labels,
+    so the caller can select or voice content per speaker."""
     config = aai.TranscriptionConfig(
         speaker_labels=True,
         language_code=language_code,
         language_detection=detect_language or None,
     )
-    with output.status(status_message, json_mode=json_mode, quiet=quiet):
-        return client.transcribe(api_key, str(media), config=config)
+    return resolve_transcript(
+        api_key,
+        transcript_id,
+        media,
+        status_message=status_message,
+        json_mode=json_mode,
+        quiet=quiet,
+        config=config,
+    )
 
 
 def _fetched_transcript(api_key: str, transcript_id: str) -> object:

@@ -30,6 +30,7 @@ DEFAULTS = DubOptions(
     model=llm.DEFAULT_MODEL,
     max_tokens=llm.DEFAULT_MAX_TOKENS,
     out=None,
+    video=False,
 )
 
 SAMPLE_RATE = 100  # tiny rate keeps the timeline byte math exact and readable
