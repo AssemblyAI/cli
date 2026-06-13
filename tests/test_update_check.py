@@ -11,12 +11,12 @@ import httpx2
 import pytest
 from rich.console import Console
 
-from aai_cli import __version__, config, output, theme, update_check
+from aai_cli import __version__, config, config_store, output, theme, update_check
 
 
 def test_update_cache_roundtrips(tmp_path, monkeypatch):
     # Isolate config.toml to a temp dir so the real one is never touched.
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
 
     assert config.get_update_cache() == (None, None)
 
@@ -25,7 +25,7 @@ def test_update_cache_roundtrips(tmp_path, monkeypatch):
 
 
 def test_update_cache_records_check_even_when_version_unknown(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     # A failed fetch still records the timestamp (so we don't re-spawn every run)
     # but leaves the version unknown.
     config.set_update_cache(last_check=1718000001.0, latest_version=None)
@@ -68,7 +68,7 @@ def _fake_response(payload: dict[str, object]) -> types.SimpleNamespace:
 
 
 def test_fetch_and_cache_writes_latest(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
 
     # Untyped capture dict (mirrors the pattern in tests/test_telemetry.py).
     captured = {}
@@ -98,7 +98,7 @@ def test_check_interval_is_24_hours():
 
 
 def test_fetch_and_cache_empty_tag_leaves_version_unknown(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     # An empty tag_name is present but unusable: it must NOT be cached as a version.
     monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({"tag_name": ""}))
 
@@ -109,7 +109,7 @@ def test_fetch_and_cache_empty_tag_leaves_version_unknown(tmp_path, monkeypatch)
 
 
 def test_fetch_and_cache_swallows_errors_but_records_check(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
 
     def boom(url, **kwargs):
         raise httpx2.HTTPError("network down")
@@ -133,7 +133,7 @@ def _tty_console() -> tuple[Console, io.StringIO]:
 
 
 def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     # Cache says a newer version exists, checked just now (so no spawn).
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     monkeypatch.setattr(sys, "executable", "/opt/homebrew/Cellar/assembly/9/libexec/bin/python")
@@ -152,7 +152,7 @@ def test_maybe_notify_shows_box_for_newer_cached_version(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_silent_under_json(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
@@ -163,7 +163,7 @@ def test_maybe_notify_silent_under_json(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_silent_when_not_a_tty(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     buf = io.StringIO()
     con = theme.make_console(file=buf, force_terminal=False, _environ={})  # not a tty
@@ -175,7 +175,7 @@ def test_maybe_notify_silent_when_not_a_tty(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_silent_in_ci_and_when_disabled(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
@@ -191,7 +191,7 @@ def test_maybe_notify_silent_in_ci_and_when_disabled(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_no_box_when_cache_not_newer(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version=__version__)  # equal
     con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
@@ -203,7 +203,7 @@ def test_maybe_notify_no_box_when_cache_not_newer(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_spawns_refresh_only_when_stale(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     con, _buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
     monkeypatch.delenv("CI", raising=False)
@@ -253,7 +253,7 @@ def test_notice_appears_after_a_real_command(tmp_path, monkeypatch):
 
     from aai_cli.main import app
 
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     monkeypatch.setattr(sys, "executable", "/opt/homebrew/Cellar/assembly/9/libexec/bin/python")
     monkeypatch.delenv("CI", raising=False)
@@ -275,7 +275,7 @@ def test_no_notice_under_json(tmp_path, monkeypatch):
 
     from aai_cli.main import app
 
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
@@ -286,7 +286,7 @@ def test_no_notice_under_json(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_generic_hint_when_install_unknown(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     monkeypatch.setattr(sys, "executable", "/usr/bin/python3")  # unknown -> no command
     con, buf = _tty_console()
@@ -303,7 +303,7 @@ def test_maybe_notify_generic_hint_when_install_unknown(tmp_path, monkeypatch):
 
 
 def test_fetch_and_cache_no_tag_leaves_version_unknown(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({}))  # no tag_name
 
     update_check.fetch_and_cache()
@@ -314,7 +314,7 @@ def test_fetch_and_cache_no_tag_leaves_version_unknown(tmp_path, monkeypatch):
 
 
 def test_fetch_and_cache_swallows_cache_write_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     monkeypatch.setattr(httpx2, "get", lambda url, **kwargs: _fake_response({"tag_name": "v0.4.0"}))
 
     def boom(**kwargs):
@@ -326,7 +326,7 @@ def test_fetch_and_cache_swallows_cache_write_error(tmp_path, monkeypatch):
 
 
 def test_maybe_notify_swallows_config_errors(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     con, _buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)
     monkeypatch.delenv("CI", raising=False)

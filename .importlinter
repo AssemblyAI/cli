@@ -21,6 +21,7 @@ source_modules =
     aai_cli.coding_agent
     aai_cli.config
     aai_cli.config_builder
+    aai_cli.config_store
     aai_cli.context
     aai_cli.debuglog
     aai_cli.doctor_checks
@@ -81,6 +82,7 @@ source_modules =
     aai_cli.commands.evaluate._data
     aai_cli.config
     aai_cli.config_builder
+    aai_cli.config_store
     aai_cli.debuglog
     aai_cli.environments
     aai_cli.errors

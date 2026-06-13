@@ -5,7 +5,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli import config, config_store
 from aai_cli.errors import CLIError
 from aai_cli.main import app
 
@@ -49,7 +49,7 @@ def test_set_active_profile_with_no_profiles_says_none_yet():
 def test_config_file_path_is_the_toml_under_config_dir():
     path = config.config_file_path()
     assert path.name == "config.toml"
-    assert path.parent == config.config_dir()
+    assert path.parent == config_store.config_dir()
 
 
 def test_bare_config_shows_subcommand_help():

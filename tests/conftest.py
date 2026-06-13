@@ -187,5 +187,7 @@ def memory_fs():
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr("aai_cli.config.config_dir", lambda: cfg_dir)
+    # config.toml IO (incl. config_dir) lives in config_store now; patch it there so
+    # the store's load/dump resolve into the per-test temp dir.
+    monkeypatch.setattr("aai_cli.config_store.config_dir", lambda: cfg_dir)
     return cfg_dir
