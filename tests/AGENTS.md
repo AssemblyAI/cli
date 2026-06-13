@@ -40,6 +40,14 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
 - **Help text and docstrings are pinned by the syrupy snapshots, not unit asserts** — a
   mutated help string is killed by the regenerated `.ambr`, so `--snapshot-update` and commit
   rather than adding redundant `--help` substring asserts.
+- **Render width is pinned suite-wide (`COLUMNS=80`), so a `--help` substring assert is
+  deterministic** — the autouse `fixed_render_size` fixture (`conftest.py`) sets `COLUMNS`/`LINES`
+  for *every* test, because the no-clip help table ellipsizes a long flag name
+  (`--end-of-turn-c…`) once its column overflows. Without the pin a `--with-api-key`-style
+  substring assert passes at a wide local terminal and fails at CI's narrower width — that gap
+  cost a PR three CI rounds. Don't fight it: a local green is now a CI green for output tests.
+  A test that genuinely needs a different width passes it on the call
+  (`runner.invoke(app, argv, env={"COLUMNS": "300"})`), which overrides the default.
 - **Typer's `CliRunner` merges stderr into `result.output`, and not in call order**, so don't
   assume `splitlines()[-1]` is the command payload. In `--json` mode the env-mismatch warning
   is its own `{"warning": …}` line, so filter parsed lines by a key the payload carries
