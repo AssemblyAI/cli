@@ -4,11 +4,17 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import clip_exec, help_panels, llm, options
+from aai_cli import clip_exec, command_registry, help_panels, llm, options
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=70,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("clip",),
+)
 
 
 @app.command(

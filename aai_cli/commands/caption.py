@@ -4,11 +4,17 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import caption_exec, help_panels, options
+from aai_cli import caption_exec, command_registry, help_panels, options
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=90,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("caption",),
+)
 
 
 @app.command(

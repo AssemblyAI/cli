@@ -23,6 +23,7 @@ source_modules =
     aai_cli.deploy_exec
     aai_cli.dev_exec
     aai_cli.dictate_exec
+    aai_cli.doctor_checks
     aai_cli.dub_exec
     aai_cli.environments
     aai_cli.errors
@@ -42,6 +43,7 @@ source_modules =
     aai_cli.procs
     aai_cli.remotefs
     aai_cli.render
+    aai_cli.setup_exec
     aai_cli.share_exec
     aai_cli.speak_exec
     aai_cli.stdio
@@ -63,30 +65,11 @@ forbidden_modules =
 [importlinter:contract:2]
 name = Command modules are independent
 type = independence
+; Wildcard so every module under aai_cli/commands/ is covered automatically —
+; the previous enumerated list had silently drifted (onboard and speak were
+; missing, so nothing forbade them from importing sibling commands).
 modules =
-    aai_cli.commands.account
-    aai_cli.commands.agent
-    aai_cli.commands.audit
-    aai_cli.commands.caption
-    aai_cli.commands.clip
-    aai_cli.commands.deploy
-    aai_cli.commands.dev
-    aai_cli.commands.dictate
-    aai_cli.commands.doctor
-    aai_cli.commands.dub
-    aai_cli.commands.evaluate
-    aai_cli.commands.init
-    aai_cli.commands.keys
-    aai_cli.commands.llm
-    aai_cli.commands.login
-    aai_cli.commands.sessions
-    aai_cli.commands.setup
-    aai_cli.commands.share
-    aai_cli.commands.stream
-    aai_cli.commands.telemetry
-    aai_cli.commands.transcribe
-    aai_cli.commands.transcripts
-    aai_cli.commands.webhooks
+    aai_cli.commands.*
 
 [importlinter:contract:3]
 name = Library layers do not depend on Rich rendering

@@ -3,9 +3,12 @@
 The ``--help`` goldens are split into one module per command group
 (``tests/test_snapshots_help_<group>.py``) so concurrent branches that touch
 different commands regenerate *different* ``.ambr`` files instead of all
-conflicting in a single snapshot file. ``HELP_GROUPS`` is the partition;
-``tests/test_snapshots_help_groups.py`` guards that it stays complete and
-disjoint, so a new top-level command fails loudly until it is assigned a group.
+conflicting in a single snapshot file. ``HELP_GROUPS`` is the partition,
+**derived** from each command module's ``SPEC.panel`` declaration (see
+``aai_cli.command_registry``) so a new command is assigned a group by the same
+declaration that registers it — no parallel dict to keep in sync.
+``tests/test_snapshots_help_groups.py`` still guards that the derived partition
+matches the live Typer tree, so a misdeclared ``SPEC`` fails loudly.
 """
 
 from __future__ import annotations
@@ -15,35 +18,33 @@ import re
 from syrupy.assertion import SnapshotAssertion
 from typer.testing import CliRunner
 
+from aai_cli import command_registry, help_panels
 from aai_cli.main import app
 from tests._cli_tree import leaf_command_argvs
 
-# Top-level command name -> snapshot module group, mirroring the help panels in
-# aai_cli.main._COMMAND_ORDER (plus the hidden _update-check). The keys are the
-# ``tests/test_snapshots_help_<group>.py`` module suffixes.
-HELP_GROUPS: dict[str, frozenset[str]] = {
-    "build": frozenset({"onboard", "init", "dev", "share", "deploy"}),
-    "run": frozenset(
-        {
-            "transcribe",
-            "stream",
-            "dictate",
-            "agent",
-            "speak",
-            "llm",
-            "clip",
-            "dub",
-            "caption",
-            "eval",
-            "webhooks",
-        }
-    ),
-    "tools": frozenset({"doctor", "setup", "telemetry", "_update-check"}),
-    "history": frozenset({"transcripts", "sessions"}),
-    "account": frozenset(
-        {"login", "logout", "whoami", "balance", "usage", "limits", "keys", "audit"}
-    ),
+# Help panel -> snapshot module group (the ``tests/test_snapshots_help_<group>.py``
+# module suffix). A brand-new panel must be mapped here before its commands ship.
+PANEL_TO_GROUP: dict[str, str] = {
+    help_panels.QUICK_START: "build",
+    help_panels.BUILD: "build",
+    help_panels.TRANSCRIPTION: "run",
+    help_panels.SETUP: "tools",
+    help_panels.HISTORY: "history",
+    help_panels.ACCOUNT: "account",
 }
+
+
+def _derive_help_groups() -> dict[str, frozenset[str]]:
+    groups: dict[str, set[str]] = {group: set() for group in PANEL_TO_GROUP.values()}
+    for registered in command_registry.discover():
+        groups[PANEL_TO_GROUP[registered.spec.panel]].update(registered.spec.commands)
+    # The hidden _update-check is registered directly in main.py, not via a SPEC.
+    groups["tools"].add("_update-check")
+    return {group: frozenset(names) for group, names in groups.items()}
+
+
+# Top-level command name -> snapshot module group, derived from the registry.
+HELP_GROUPS: dict[str, frozenset[str]] = _derive_help_groups()
 
 _runner = CliRunner()
 

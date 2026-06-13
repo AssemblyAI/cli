@@ -39,9 +39,9 @@ def _patch_checks(
         }
         return lambda: check
 
-    monkeypatch.setattr("aai_cli.commands.doctor.check_python", _mk("python", python))
-    monkeypatch.setattr("aai_cli.commands.doctor.check_ffmpeg", _mk("ffmpeg", ffmpeg))
-    monkeypatch.setattr("aai_cli.commands.doctor.check_audio", _mk("audio", audio))
+    monkeypatch.setattr("aai_cli.doctor_checks.check_python", _mk("python", python))
+    monkeypatch.setattr("aai_cli.doctor_checks.check_ffmpeg", _mk("ffmpeg", ffmpeg))
+    monkeypatch.setattr("aai_cli.doctor_checks.check_audio", _mk("audio", audio))
 
 
 def test_environment_all_ok_says_everything_looks_good(

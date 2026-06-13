@@ -3,8 +3,9 @@
 Rich groups top-level commands under these headings (via each command's
 ``rich_help_panel``), so the root help reads as a journey rather than a flat
 list — the same approach the Vercel and Supabase CLIs take. Panels render in
-the order their first command appears (see ``_COMMAND_ORDER`` in ``main.py``);
-most-used commands first, account/setup last.
+``PANEL_ORDER``; within a panel, each command module's ``SPEC.order`` rank
+decides (see ``aai_cli.command_registry``); most-used commands first,
+account/setup last.
 
 Centralized here so the heading strings have one source of truth — a typo in a
 decorator would otherwise silently spawn a duplicate panel.
@@ -18,6 +19,12 @@ TRANSCRIPTION = "Run AssemblyAI"  # use AssemblyAI directly: transcribe, stream,
 HISTORY = "History"  # browse past work: transcripts, sessions
 ACCOUNT = "Account"  # auth, billing, keys: login/logout/whoami, balance/usage/limits, keys, audit
 SETUP = "Setup & Tools"  # get set up & maintain: doctor, setup
+
+# The order panels render under `assembly --help`. Each command module declares the
+# panel it belongs to (`SPEC` in aai_cli/commands/*.py — see aai_cli.command_registry),
+# and ordering within a panel comes from that module's sparse `order` rank, so adding
+# a command never edits a shared ordering list; only a brand-new panel touches this.
+PANEL_ORDER = (QUICK_START, BUILD, TRANSCRIPTION, SETUP, HISTORY, ACCOUNT)
 
 # Option panels group a single command's flags within its own ``--help``. The
 # `transcribe` command exposes 40+ options; without panels they render as one

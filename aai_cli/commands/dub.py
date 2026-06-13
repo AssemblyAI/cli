@@ -4,11 +4,17 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import dub_exec, help_panels, llm, options
+from aai_cli import command_registry, dub_exec, help_panels, llm, options
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=80,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("dub",),
+)
 
 
 @app.command(

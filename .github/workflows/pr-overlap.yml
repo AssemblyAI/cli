@@ -1,0 +1,63 @@
+name: PR overlap
+
+# Advisory only: with many agent sessions working concurrently, two open PRs that
+# touch the same files are usually duplicated or conflicting work discovered too
+# late (post-merge). This surfaces the intersection as a warning annotation +
+# step summary while both PRs are still open; it never fails the build.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review, synchronize]
+
+# Least privilege: listing open PRs and their files only needs read access.
+# No checkout, no third-party actions — the job is a single `gh api` script.
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  overlap:
+    name: warn when another open PR touches the same files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Numeric / repo-slug values, passed through env (not inlined into the
+      # script) so no event-controlled text is interpolated into bash.
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Compare changed files against every other open PR
+        run: |
+          set -euo pipefail
+          mine="$(mktemp)"
+          theirs="$(mktemp)"
+          gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
+            --jq '.[].filename' | sort -u > "$mine"
+          found=0
+          while read -r number; do
+            [ "$number" = "$PR_NUMBER" ] && continue
+            gh api "repos/${REPO}/pulls/${number}/files" --paginate \
+              --jq '.[].filename' | sort -u > "$theirs"
+            shared="$(comm -12 "$mine" "$theirs")"
+            if [ -n "$shared" ]; then
+              found=1
+              count="$(printf '%s\n' "$shared" | wc -l | tr -d '[:space:]')"
+              echo "::warning title=PR overlap::PR #${number} also changes ${count} of this PR's files - check for duplicated or conflicting work."
+              {
+                echo "### Overlap with PR #${number}"
+                echo ""
+                printf '%s\n' "$shared" | sed 's/^/- /'
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < <(gh api "repos/${REPO}/pulls?state=open&per_page=100" --paginate \
+            --jq '.[].number')
+          if [ "$found" = 0 ]; then
+            echo "No open PR shares files with this one." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -4,6 +4,15 @@ This file provides guidance to coding agents (Claude Code, Codex, Cursor, and
 others) when working with code in this repository. `CLAUDE.md` is a symlink to
 this file, so Claude Code reads the same instructions.
 
+**Guidance is split per directory** so many agents can update it concurrently
+without conflicting in one file. This root file holds repo-wide invariants;
+read the `AGENTS.md` nearest the code you're changing:
+
+- `aai_cli/AGENTS.md` — architecture, the command-registration convention,
+  cross-cutting state, feature subsystems.
+- `tests/AGENTS.md` — test markers, snapshot goldens, hermeticity rules, and
+  the hard-won lessons for getting the patch-coverage and mutation gates green.
+
 ## Development commands
 
 This project uses [uv](https://docs.astral.sh/uv/). **Run every Python tool through `uv run`** so it uses the locked environment (`pyproject.toml` + `uv.lock`), not whatever is on `PATH`:
@@ -16,7 +25,7 @@ uv run assembly --help            # run the CLI from the locked environment
 
 Dev tooling is a PEP 735 `[dependency-groups]` group with `default-groups = ["dev"]`, not a `[project]` extra — `uv sync --extra dev` errors.
 
-`scripts/check.sh` is the authoritative gate; keep this list in sync with it. It runs, in order: `uv lock --check` → `ruff check` → `ruff format --check` → `mypy` → `pyright` (src strict) → `pyright` (tests) → `vulture` (dead code) → `deptry` (dependency hygiene) → `lint-imports` (import-linter architecture contracts) → max-file-length (500 lines) → `xenon` (cyclomatic complexity, max grade B / project avg A) → `swiftlint` + swift compile (macOS only, skipped elsewhere) → `markdownlint` → `prettier` (init template JS/CSS) → `shellcheck` → `actionlint` + `zizmor` (workflow lint/audit) → `gitleaks` (secret scan) → generated `--show-code` compile gate → init template contract gate → `pytest` (90% branch coverage) → `diff-cover` (100% patch coverage vs `origin/main`) → **mutation gate** (diff-scoped: mutates each changed line and reruns the tests that cover it — a surviving mutant fails the gate, so changed lines need assertions that would *fail* if the line broke, not just coverage; suppress a genuinely unassertable line with `# pragma: no mutate`) → a "no new escape hatches" diff gate (`# type: ignore` / `# noqa` / `pragma: no cover` / net-new `Any` / `cast(`) → **CodeQL gate** (`scripts/codeql_gate.py`: the same security + quality suites the CodeQL workflow uploads to GitHub's code-scanning/quality tabs, run locally over python/actions/javascript so alerts fail before push instead of on the PR; needs the CodeQL bundle on PATH — self-skips otherwise, `codeql.yml` covers CI, and the web session-start hook provisions it) → `uv build` + `twine check --strict`. The `vulture`/`deptry`/`lint-imports`/`xenon`, patch-coverage, and mutation stages catch the failures that `ruff`+`mypy` alone won't — don't claim the gate is green until the script prints `All checks passed.`
+`scripts/check.sh` is the authoritative gate; keep this list in sync with it. It runs, in order: `uv lock --check` → `ruff check` → `ruff format --check` → `mypy` → `pyright` (src strict) → `pyright` (tests) → `vulture` (dead code) → `deptry` (dependency hygiene) → `lint-imports` (import-linter architecture contracts) → max-file-length (500 lines) → `xenon` (cyclomatic complexity, max grade B / project avg A) → `swiftlint` + swift compile (macOS only, skipped elsewhere) → `markdownlint` → `prettier` (init template JS/CSS) → `shellcheck` → `actionlint` + `zizmor` (workflow lint/audit) → `gitleaks` (secret scan) → generated `--show-code` compile gate → init template contract gate → `pytest` (90% branch coverage) → `diff-cover` (100% patch coverage vs `origin/main`) → **mutation gate** (diff-scoped: mutates each changed line and reruns the tests that cover it — a surviving mutant fails the gate, so changed lines need assertions that would *fail* if the line broke, not just coverage; suppress a genuinely unassertable line with `# pragma: no mutate`) → a "no new escape hatches" gate (`# type: ignore` / `# noqa` / `pragma: no cover` / `Any` / `cast(` / test skip/xfail/sleep, all **count-gated against the merge-base** so moving an existing hatch in a refactor doesn't false-positive but a net-new one fails) → **CodeQL gate** (`scripts/codeql_gate.py`: the same security + quality suites the CodeQL workflow uploads to GitHub's code-scanning/quality tabs, run locally over python/actions/javascript so alerts fail before push instead of on the PR; needs the CodeQL bundle on PATH — self-skips otherwise, `codeql.yml` covers CI, and the web session-start hook provisions it) → `uv build` + `twine check --strict`. The `vulture`/`deptry`/`lint-imports`/`xenon`, patch-coverage, and mutation stages catch the failures that `ruff`+`mypy` alone won't — don't claim the gate is green until the script prints `All checks passed.`
 
 **Commits are gated.** On success `check.sh` records a working-tree signature (`scripts/gate_marker.py record` → `.git/aai-gate-pass`), and a PreToolUse hook (`.claude/hooks/require-gate-before-commit.sh`) blocks `git commit` unless that signature still matches — so run the full gate to completion *before* committing (a single-file `pytest` does not satisfy it), and re-run it after any further edit. Iterate with the fast targeted commands above, gate once at the end. For a deliberate work-in-progress commit, prefix `AAI_ALLOW_COMMIT=1 git commit …`.
 
@@ -32,83 +41,46 @@ uv run pytest tests/test_transcribe.py -q              # a single file
 uv run pytest tests/test_transcribe.py::test_name -q   # a single test
 ```
 
-The two diff-scoped tail gates are the slowest failures to discover via the full
-script; after a gate run (or any pytest run with the coverage flags below) they can
-be re-run alone:
-
-```sh
-uv run pytest -q -n auto --cov=aai_cli --cov-branch --cov-context=test --cov-report=xml  # refresh coverage data
-uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=100             # patch-coverage gate
-uv run python scripts/mutation_gate.py origin/main                                       # mutation gate
-```
-
-The gate is diff-scoped, so code predating it is never mutation-tested. To audit
-existing code (or a whole module) against the same bar, `scripts/mutation_sweep.py`
-reuses the gate's engine over *every* line of the files you name (or the whole
-package). Refresh coverage first, and pass `--timeout` to that pytest step — the
-default suite has no per-test timeout (it's opt-in; see `pyproject.toml`), so a
-deadlocked test would wedge the run instead of failing fast:
-
-```sh
-uv run pytest -q -n auto --timeout=60 --cov=aai_cli --cov-branch --cov-context=test --cov-report=
-uv run python scripts/mutation_sweep.py aai_cli/config.py   # or omit paths for the whole package
-```
-
-### Test markers
-
-The default suite **excludes** two slow/credentialed marker sets — `pyproject.toml`'s `addopts` carries `-m "not e2e and not install"`, so a bare `pytest` matches what `check.sh` gates. An explicit command-line `-m` overrides it for the opt-in runs:
-
-```sh
-uv run pytest -m e2e             # real-API end-to-end; needs ASSEMBLYAI_API_KEY, else skips
-uv run pytest -m install         # installs each init template's requirements for real; needs network + uv
-```
-
-`check.sh` runs the default suite with a **90% branch-coverage gate** (`--cov-fail-under=90`). New code generally needs tests to clear that gate.
-
-CLI output is pinned by **syrupy snapshot tests** (`tests/__snapshots__/*.ambr`). Changing help text, tables, or rendered output will fail those tests until you regenerate them with `uv run pytest --snapshot-update` and commit the updated `.ambr` files. The auto-format hook only touches `*.py`, and pre-commit's whitespace fixers deliberately skip `tests/__snapshots__/` (syrupy's indentation must stay byte-for-byte), so never hand-edit a snapshot — always regenerate. The `--help` goldens are split per command group (`tests/test_snapshots_help_<group>.py`) so concurrent branches touching different commands regenerate *different* `.ambr` files; a new top-level command must be added to `HELP_GROUPS` in `tests/_snapshot_surface.py` (the partition guard in `tests/test_snapshots_help_groups.py` fails until it is).
-
 The post-edit hook (`.claude/settings.json`) runs `ruff check --fix --unfixable F401` + `ruff format` on every edited `*.py`. `--unfixable F401` means a just-added import is **not** auto-deleted while it's momentarily unused — so adding an import in one edit and its usage in the next is safe. The flip side: a genuinely unused import survives the hook and only fails at `ruff check` in the gate, so still prefer making the import and its first usage land in the same edit.
 
-The suite is hermetic by construction, enforced three ways (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
+## Working alongside other agents
 
-### Writing tests that pass the diff gates
+Dozens of sessions may be working on this repo concurrently; the codebase is
+structured so independent changes stay in disjoint files. Keep it that way:
 
-Lessons that cost iterations getting the patch-coverage and mutation tail gates green:
+- **Check for in-flight duplicates before starting a fix.** Before implementing
+  a bug fix or small feature, scan open PRs and the last few `origin/main`
+  commits touching the same files (two sessions once shipped the identical fix;
+  the slower PR was closed as redundant). The `pr-overlap` workflow also warns
+  when a PR's changed files intersect another open PR's — treat that warning as
+  a prompt to reconcile, not noise.
+- **A new command edits no shared file.** Registration, help ordering, and the
+  snapshot partition are all derived from the command module's own `SPEC`
+  declaration (see `aai_cli/AGENTS.md`). If you find yourself editing a shared
+  list to add a command, you're fighting the convention.
+- **Dependency changes are not part of feature PRs.** `uv.lock` is the one file
+  two branches can never merge cleanly; add or bump dependencies in a
+  dedicated, single-purpose PR so feature branches don't collide in the
+  lockfile.
+- **Land through the merge queue.** The diff-scoped gates compare against
+  `origin/main`, which moves constantly; two individually-green PRs can be
+  jointly red. PRs should merge via GitHub's merge queue (a repository setting)
+  so the gate re-runs against the combined state before landing — don't bypass
+  it with direct pushes to `main`.
+- **Update the `AGENTS.md` nearest your change** when you learn something
+  durable; don't grow this root file.
 
-- **A boolean literal/default survives the mutation gate unless a test asserts the
-  difference between its two values**, not just that the line ran. `json_mode=False` passed
-  to `output.emit`, or `quiet=False` on `output.status`, get mutated to `True` — kill them by
-  asserting the *behavioral* split: the human branch prints bare text
-  (`result.output.strip() == "…"`, not a JSON object), or the spinner is actually entered
-  (monkeypatch `error_console.status` and assert it ran). A changed message / `prompter.note`
-  string is mutated whole, so one substring assert on the actionable keyword kills it.
-- **Help text and docstrings are pinned by the syrupy snapshots, not unit asserts** — a
-  mutated help string is killed by the regenerated `.ambr`, so `--snapshot-update` and commit
-  rather than adding redundant `--help` substring asserts.
-- **Typer's `CliRunner` merges stderr into `result.output`, and not in call order**, so don't
-  assume `splitlines()[-1]` is the command payload. In `--json` mode the env-mismatch warning
-  is its own `{"warning": …}` line, so filter parsed lines by a key the payload carries
-  (`next(o for o in objs if "env" in o)`). A monkeypatched fake must also mirror the real
-  signature — when a helper gains a kwarg (e.g. `output.status(…, quiet=…)`), doubles that
-  patch it must accept it or the call `TypeError`s.
-- **`--json` / `-j` is a per-command flag, not a root flag**: `assembly --json transcribe …` fails
-  with "No such option"; it's `assembly transcribe … --json`. (The root callback still sniffs the
-  whole token list via `argscan.requests_json`, so a callback-level failure like a bad
-  `--env` keeps the JSON error shape — but the flag itself lives on the subcommand.)
-- **Tests that touch global logging state must snapshot/restore it** — root handlers/level
-  and per-logger levels are process-global, so a leak only fails on some pytest-randomly
-  seeds (green locally, red in CI). Opt in to the shared `preserve_logging_state` conftest
-  fixture (it also resets the websockets wire loggers a silencer test may have clamped)
-  instead of hand-rolling the snapshot per module.
+## Naming & packaging gotchas
 
-### Manual QA / running the CLI in sandboxed sessions
+- The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `assembly` (`[project.scripts] assembly = "aai_cli.main:run"`).
+- `assembly init` templates live in `aai_cli/init/templates/` and are **committed**, including renamed dotfiles (`gitignore` → `.gitignore`, `env.example`). The wheel force-includes them via `[tool.hatch.build.targets.wheel] artifacts`, excluding `__pycache__/*.pyc`. Editing templates needs care — see the parametrized contract tests (`tests/test_init_template_*.py`).
+- `audioop` left the stdlib in 3.13; `audioop-lts` backfills it (conditional dependency). Supported Pythons: 3.12–3.13.
+- **Releasing is tag-triggered.** The version is **derived from the git tag** by hatch-vcs and written to a gitignored `aai_cli/_version.py` at build time — there is no version string to keep in sync across `pyproject.toml` or `aai_cli/__init__.py`, and `bump_patch.sh` no longer exists. To cut a release, run `scripts/cut_release.sh` from a clean `main` in sync with `origin/main`: no argument → next patch above the latest `vX.Y.Z` tag; `cut_release.sh X.Y.Z` → explicit version. It tags + pushes, which fires `.github/workflows/release.yml` — that builds the prebuilt arm64 Homebrew bottle (`Formula/assembly.rb`), cuts the GitHub Release, and opens the formula PR. Bottling matters because the deps include Rust-backed sdists (`pydantic-core`, `jiter`, `cryptography`) that would otherwise compile from source on `brew install`. The Homebrew formula builds from a git-less GitHub source tarball, so `Formula/assembly.rb`'s `def install` sets the generic `SETUPTOOLS_SCM_PRETEND_VERSION` env var (installing resources first under a clean env, then setting the var for our package only) to feed the tag version to the build. **`cut_release.sh` only runs from a clean `main` in sync with `origin/main`** (it hard-errors on a feature branch / dirty tree), so cut releases from `main`, not your working branch. The "update available" notice users see is `aai_cli/update_check.py`.
+
+## Manual QA / running the CLI in sandboxed sessions
 
 Lessons that cost time in agent sessions — read before exercising `uv run assembly` by hand:
 
-- **Check for in-flight duplicates before starting a fix.** Sessions run concurrently:
-  before implementing a bug fix or small feature, scan open PRs and the last few
-  `origin/main` commits touching the same files (two sessions once shipped the identical
-  fix; the slower PR was closed as redundant). Seconds of checking beats a discarded PR.
 - **Web/remote containers are fully provisioned at session start**
   (`.claude/hooks/session-start.sh`): system deps, `markdownlint`/`prettier`, and the Go
   gate binaries (`actionlint`, `gitleaks`) are installed at CI's pinned versions, so
@@ -132,73 +104,9 @@ Lessons that cost time in agent sessions — read before exercising `uv run asse
   blocking path can't wedge the session. For pytest, `--timeout N` (pytest-timeout, in the
   dev group) does the same per-test.
 
-### Replay fixtures (offline end-to-end coverage)
-
-`tests/test_replay_e2e.py` drives whole commands (`transcribe`/`transcripts`/`llm`/
-`balance`/`usage`/`limits`) against **real** API responses recorded once and replayed
-offline — the command's own parsing/rendering runs, but pytest-socket stays armed, so
-these live in the default suite. Three moving parts:
-
-- **`tests/fixtures/api/*.json`** — scrubbed snapshots (API key/JWT redacted, `email` and
-  `account_id` faked, private `cdn.assemblyai.com/upload/…` URLs redacted). Committed and
-  gitleaks-clean; treat them like syrupy snapshots (regenerate, don't hand-edit).
-- **`scripts/record_fixtures.py`** — the recorder. It is **deliberately outside the gate**
-  (it hits the network) and is *not* mypy/pyright-checked (only ruff covers `scripts/`).
-  Refresh after an API shape change: `ASSEMBLYAI_API_KEY=… uv run python scripts/record_fixtures.py`.
-  The key comes from the env; the AMS session JWT + `account_id` from the keyring/`config.toml`
-  of whoever ran `assembly login` (profile `default`) — neither is ever written to a fixture.
-- **`tests/replay_fixtures.py`** — rebuilds the boundary objects from JSON. A transcript is a
-  real `aai.Transcript` via `Transcript.from_response`; an LLM response is rebuilt with
-  `ChatCompletion.model_construct` (**not** `model_validate`) because the gateway returns
-  Anthropic-flavored fields — `finish_reason="end_turn"`, token counts under
-  `input_tokens`/`output_tokens` — that strict validation rejects but the OpenAI SDK itself
-  parses leniently.
-
-The replay tests patch the same boundary the unit tests do
-(`commands.<cmd>.client.<fn>` / `.ams.<fn>` / `.gateway.complete`); the only difference is
-the return value comes from a recorded payload instead of a hand-built mock.
-
-## Naming & packaging gotchas
-
-- The **package/module** is `aai_cli`; the **distribution** name is `aai-cli`; the **console command** is `assembly` (`[project.scripts] assembly = "aai_cli.main:run"`).
-- `assembly init` templates live in `aai_cli/init/templates/` and are **committed**, including renamed dotfiles (`gitignore` → `.gitignore`, `env.example`). The wheel force-includes them via `[tool.hatch.build.targets.wheel] artifacts`, excluding `__pycache__/*.pyc`. Editing templates needs care — see the parametrized contract tests (`tests/test_init_template_*.py`).
-- `audioop` left the stdlib in 3.13; `audioop-lts` backfills it (conditional dependency). Supported Pythons: 3.12–3.13.
-- **Releasing is tag-triggered.** The version is **derived from the git tag** by hatch-vcs and written to a gitignored `aai_cli/_version.py` at build time — there is no version string to keep in sync across `pyproject.toml` or `aai_cli/__init__.py`, and `bump_patch.sh` no longer exists. To cut a release, run `scripts/cut_release.sh` from a clean `main` in sync with `origin/main`: no argument → next patch above the latest `vX.Y.Z` tag; `cut_release.sh X.Y.Z` → explicit version. It tags + pushes, which fires `.github/workflows/release.yml` — that builds the prebuilt arm64 Homebrew bottle (`Formula/assembly.rb`), cuts the GitHub Release, and opens the formula PR. Bottling matters because the deps include Rust-backed sdists (`pydantic-core`, `jiter`, `cryptography`) that would otherwise compile from source on `brew install`. The Homebrew formula builds from a git-less GitHub source tarball, so `Formula/assembly.rb`'s `def install` sets the generic `SETUPTOOLS_SCM_PRETEND_VERSION` env var (installing resources first under a clean env, then setting the var for our package only) to feed the tag version to the build. **`cut_release.sh` only runs from a clean `main` in sync with `origin/main`** (it hard-errors on a feature branch / dirty tree), so cut releases from `main`, not your working branch. The "update available" notice users see is `aai_cli/update_check.py`.
-
-## Architecture
-
-A Typer CLI. `aai_cli/main.py` builds the `app`, registers each command sub-app, and controls `assembly --help` ordering via `_COMMAND_ORDER` + a custom `_OrderedGroup`. `run()` is the entry point and swallows `BrokenPipeError` (closed downstream pipe → exit 0).
-
-### Command layer
-
-Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`, `dictate`, `agent`, `speak`, `llm`, `clip`, `transcripts`, `login` (login/logout/whoami), `doctor`, `init`, `dev`, `share`, `deploy`, `setup`, `onboard`, `account` (balance/usage/limits), `keys`, `sessions`, `audit`, `telemetry` (status/enable/disable), `webhooks` (listen)). Command bodies run through `context.run_command(ctx, fn, json=...)`, which maps any `CLIError` to clean stderr output + the error's exit code. Commands never print tracebacks for expected failures.
-
-**Options/run split for flag-heavy commands** (gh-CLI style): the Typer function only parses argv into a frozen `<Cmd>Options` dataclass and hands it to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda adapter in `run_command(ctx, ..., json=...)`. The seven run commands follow it — `aai_cli/stream_exec.py` (the reference implementation), `transcribe_exec.py`, `agent_exec.py`, `speak_exec.py`, `llm_exec.py`, `clip_exec.py`, `dictate_exec.py`. Because the run path is a plain function of data, tests construct options directly (`dataclasses.replace` off a defaults instance, see `tests/test_stream_exec.py` and `tests/test_command_options_seam.py`) instead of round-tripping argv through `CliRunner` — which is also the cheap way to kill mutation-gate mutants on orchestration lines. Follow this for new or heavily-reworked commands with long bodies; small commands keep the inline `body()` closure — the dataclass is pure ceremony there.
-
-### Cross-cutting state (resolution order matters)
-
-- **`context.py`** — `AppState` (profile, env) is attached to the Typer context in the root `@app.callback()`. `run_command` is the standard command wrapper.
-- **`config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring** (`KEYRING_SERVICE = "assemblyai-cli"`), never in a dotfile. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history.
-- **`environments.py`** — a frozen `Environment` (api_base, streaming_host, llm_gateway_base, ams_base, stytch_*). `DEFAULT_ENV` is **`production`**; use `--sandbox` (or `--env sandbox000` / `AAI_ENV`) to target the sandbox. The active environment is a process-global set once at startup; precedence: `--env` → `AAI_ENV` → profile's stored env → default. A credential is only valid against the environment that minted it.
-- **`client.py`** — thin wrappers over the `assemblyai` SDK (`transcribe`, `list_transcripts`, `stream_audio`, etc.). It normalizes SDK exceptions: auth failures become a single clean `auth_failure()` `CLIError`; everything else becomes `APIError`. New SDK calls should follow this try/except shape.
-- **`errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` switches to machine-readable output; it is never auto-enabled — `output.resolve_json()` deliberately keeps human text the default even when piped or agent-run.
-- **`debuglog.py`** — the root `-v/--verbose` flag (count: `-v` request-level at INFO, `-vv` wire-level at DEBUG). The CLI normally configures no logging, and the realtime paths *silence* library loggers (`ws.py`, `streaming/diagnostics.py`); verbose mode installs one redacting stderr handler and those silencers stand down. Secrets are registered at their resolution choke points (`config.resolve_api_key`, `AppState.resolve_session`) and masked in every rendered record — websockets logs the raw Authorization header at DEBUG, so masking lives in the formatter, not at call sites. Stdlib-only on purpose: `config` (a Rich-free layer) imports it.
-
-### Feature subsystems
-
-- **`streaming/`** + `client.stream_audio` — v3 realtime API. Event callbacks run on the SDK reader thread and guard against `BrokenPipeError` (`stdio.silence_stdout()`) so a closed pipe never dumps a thread traceback.
-- **`sync_stt.py`** + **`hotkey.py`** + `commands/dictate.py` — `assembly dictate`: push-to-talk dictation over the **Sync STT API** (`Environment.sync_base`, one POST `/transcribe` per utterance with the required `X-AAI-Model: u3-sync-pro` header; 80 ms–120 s of PCM/WAV). `hotkey.TerminalKeys` scopes stdin into cbreak (Ctrl-C still signals) and reads single keypresses; `dictate_exec._record` polls it with a zero timeout between ~100 ms mic chunks. All three boundaries (keys, mic, HTTP) are injectable, so the suite never needs a real terminal — `tests/test_hotkey.py` drives a pty pair for the termios behavior.
-- **`agent/`** — full-duplex voice agent (mic in, TTS out via `voices.py`).
-- **`tts/`** + `commands/speak.py` — `assembly speak` synthesizes text to speech over the sandbox streaming-TTS WebSocket (`streaming-tts.sandbox000.…`). **Sandbox-only:** `session.is_available()` is false in production (empty `Environment.streaming_tts_host`), so the command exits 2 with a `--sandbox` hint. `session.synthesize` drives a Begin→Generate→Flush→Audio→Terminate protocol with an injectable `connect` for hermetic tests (mirrors `agent/session.py`); `audio.py` plays the PCM (default) or writes a WAV (`--out`).
-- **`code_gen/`** — backs `--show-code` on `transcribe`/`stream`/`agent`: builds a ready-to-run Python SDK script from exactly the flags passed (no API key needed; generated code reads `ASSEMBLYAI_API_KEY`).
-- **`auth/`** — browser-assisted `assembly login` via AMS + **Stytch B2B OAuth discovery** (`discovery.py`, `flow.py`, `loopback.py`, `ams.py`). Not Stytch Connected Apps.
-- **`init/`** — scaffolds a self-contained FastAPI + HTML starter (`audio-transcription`/`live-captions`/`voice-agent` templates), optionally installs deps and opens the browser; writes the key to a git-ignored `.env`.
-- **`telemetry.py`** — anonymous, opt-out usage telemetry (Supabase-CLI model): `context.run_command` wraps each command body in `telemetry.track(ctx.command_path)`, which dispatches one allow-listed event (command path, outcome/exit code, duration, version/OS, and on failure the error message capped at 500 chars — never args or account data) to the Datadog logs intake via a **detached flusher subprocess** (the hidden `assembly telemetry flush`), so commands never wait on telemetry. `SHIPPED_CLIENT_TOKEN` is a committed write-only Datadog *client* token (`pub…`, embeddable by design — never an API key; `AAI_TELEMETRY_CLIENT_TOKEN` overrides). The test suite blanks it via an autouse conftest fixture so no test ever spawns a real flusher. Opt-out: `AAI_TELEMETRY_DISABLED=1` / `DO_NOT_TRACK=1` / `assembly telemetry disable` (persisted as `telemetry_enabled` in config.toml, alongside the random `device_id`). Send-side failures are swallowed (`OSError`/`CLIError`) — telemetry must never break a command.
-- **`commands/setup.py`** — `assembly setup install/status/remove` wires a coding agent up to AssemblyAI by installing three artifacts: the `assemblyai-docs` docs MCP (via `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled `aai-cli` skill (copied out of the wheel, no network). Missing `claude`/`npx` is reported and skipped, not an error. The presence probes (docs MCP registered, skills on disk) live in `aai_cli/coding_agent.py` so `assembly doctor`'s coding-agent check can share them — command modules are import-linter-independent, so neither command may import the other.
-
 ## Conventions
 
 - `from __future__ import annotations` at the top of every module; modern typing (`X | None`).
-- Ruff lint set: `E,F,I,UP,B,BLE,C4,SIM,RET,PTH,ARG,S,RUF`. `S603/S607` are ignored project-wide because the CLI intentionally shells out to `claude`/`npx` with controlled args. `B008` is ignored (Typer uses `typer.Option/Argument` calls as defaults).
+- Ruff lint set: see `[tool.ruff.lint]` in `pyproject.toml`. `S603/S607` are ignored project-wide because the CLI intentionally shells out to `claude`/`npx` with controlled args. `B008` is ignored (Typer uses `typer.Option/Argument` calls as defaults).
 - mypy is strict on `aai_cli` (`disallow_untyped_defs`); tests are type-checked but exempt from return annotations.
 - Errors → stderr, data → stdout. Preserve this split; it's what makes the CLI pipeline-safe.

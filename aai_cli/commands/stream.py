@@ -5,11 +5,17 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
-from aai_cli import choices, help_panels, llm, options, stream_exec
+from aai_cli import choices, command_registry, help_panels, llm, options, stream_exec
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=20,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("stream",),
+)
 
 DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
 

@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import help_panels, options, share_exec
+from aai_cli import command_registry, help_panels, options, share_exec
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 # Flattened single-command sub-typer (same pattern as `assembly dev`).
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.BUILD,
+    order=30,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("share",),
+)
 
 
 @app.command(

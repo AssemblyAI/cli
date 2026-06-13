@@ -131,7 +131,7 @@ artifacts = [
     "aai_cli/skills/**",
     "aai_cli/streaming/macos_system_audio.swift",
 ]
-exclude = ["**/__pycache__", "**/*.pyc"]
+exclude = ["**/__pycache__", "**/*.pyc", "**/AGENTS.md", "**/CLAUDE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

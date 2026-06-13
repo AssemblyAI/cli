@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import agent_exec, choices, help_panels, options, output
+from aai_cli import agent_exec, choices, command_registry, help_panels, options, output
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import (
     DEFAULT_VOICE,
@@ -16,6 +16,12 @@ from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=40,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("agent",),
+)
 
 
 def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
