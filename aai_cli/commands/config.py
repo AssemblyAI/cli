@@ -28,7 +28,7 @@ SPEC = command_registry.CommandModuleSpec(
 )
 
 app = typer.Typer(
-    help="Inspect and edit persisted CLI settings (profiles, env, telemetry).",
+    help="Inspect and edit persisted CLI settings (profiles, env, telemetry)",
     no_args_is_help=True,
 )
 
@@ -101,7 +101,7 @@ def path(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Print where config.toml lives."""
+    """Print where config.toml lives"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         file = config.config_file_path()
@@ -128,7 +128,7 @@ def list_settings(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show every persisted setting and the stored profiles."""
+    """Show every persisted setting and the stored profiles"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         data: dict[str, object] = {
@@ -171,10 +171,10 @@ def list_settings(
 )
 def get(
     ctx: typer.Context,
-    key: ConfigKey = typer.Argument(..., help="Which setting to read."),
+    key: ConfigKey = typer.Argument(..., help="Which setting to read"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Print one setting's stored value (`env` reads the selected profile's)."""
+    """Print one setting's stored value (`env` reads the selected profile's)"""
 
     def body(state: AppState, json_mode: bool) -> None:
         value = _current_value(key, state)
@@ -199,11 +199,11 @@ def get(
 )
 def set_setting(
     ctx: typer.Context,
-    key: ConfigKey = typer.Argument(..., help="Which setting to change."),
-    value: str = typer.Argument(..., help="The new value."),
+    key: ConfigKey = typer.Argument(..., help="Which setting to change"),
+    value: str = typer.Argument(..., help="The new value"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Change one setting (`env` writes to the selected profile)."""
+    """Change one setting (`env` writes to the selected profile)"""
 
     def body(state: AppState, json_mode: bool) -> None:
         stored = _store_value(key, value, state)

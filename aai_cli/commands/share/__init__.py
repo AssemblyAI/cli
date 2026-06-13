@@ -30,13 +30,13 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def share(
     ctx: typer.Context,
-    port: int = typer.Option(3000, "--port", help="Local server port."),
+    port: int = typer.Option(3000, "--port", help="Local server port"),
     no_install: bool = typer.Option(
-        False, "--no-install", help="Skip dependency install; launch directly."
+        False, "--no-install", help="Skip dependency install; launch directly"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Boot the app and expose it on a public URL via a cloudflared tunnel.
+    """Expose the local app on a public URL via a cloudflared tunnel
 
     Run this from inside a project created by `assembly init`. It starts the dev server and
     opens a cloudflared quick tunnel, printing a shareable https://*.trycloudflare.com

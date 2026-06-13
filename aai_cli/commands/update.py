@@ -66,11 +66,11 @@ def _run_upgrade(command: str) -> None:
 def update(
     ctx: typer.Context,
     check: bool = typer.Option(
-        False, "--check", help="Report whether a newer release exists without installing it."
+        False, "--check", help="Report whether a newer release exists without installing it"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Update the CLI to the latest release via your install method (brew/pipx/uv)."""
+    """Update the CLI to the latest release (brew/pipx/uv)"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         latest = _latest_version()

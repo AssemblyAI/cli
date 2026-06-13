@@ -45,10 +45,10 @@ def onboard(
     non_interactive: bool = typer.Option(
         False,
         "--non-interactive",
-        help="Run without interactive prompts (default when agent detected).",
+        help="Run without interactive prompts (default when agent detected)",
     ),
 ) -> None:
-    """Guided setup: sign in, run your first transcription, and start building."""
+    """Guided setup: sign in and run your first transcription"""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()

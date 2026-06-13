@@ -10,7 +10,7 @@ from aai_cli.core.errors import APIError
 from aai_cli.ui import output, theme
 from aai_cli.ui.help_text import examples_epilog
 
-app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=True)
+app = typer.Typer(help="Browse and fetch past transcripts", no_args_is_help=True)
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.HISTORY,
@@ -39,10 +39,10 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def list_(
     ctx: typer.Context,
-    limit: int = typer.Option(10, "--limit", help="How many transcripts to show.", min=1),
+    limit: int = typer.Option(10, "--limit", help="How many transcripts to show", min=1),
     json_out: bool = options.json_option(),
 ) -> None:
-    """List recent transcripts."""
+    """List recent transcripts"""
 
     def body(state: AppState, json_mode: bool) -> None:
         api_key = state.resolve_api_key()
@@ -78,17 +78,17 @@ def list_(
 )
 def get(
     ctx: typer.Context,
-    transcript_id: str = typer.Argument(..., help="Transcript id."),
+    transcript_id: str = typer.Argument(..., help="Transcript id"),
     output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Print one field of the result.",
+        help="Print one field of the result",
     ),
     chars_per_caption: int | None = options.chars_per_caption_option(),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Fetch a past transcript by id and print its text."""
+    """Fetch a past transcript by id and print its text"""
 
     def body(state: AppState, json_mode: bool) -> None:
         # Cheap local validation first: a malformed id or flag conflict is a usage

@@ -38,28 +38,28 @@ def dictate(
         None,
         "--language",
         help="ISO 639-1 language code, or a comma-separated list for "
-        "code-switching audio (default: en).",
+        "code-switching audio (default: en)",
     ),
     prompt: str | None = typer.Option(
         None,
         "--prompt",
-        help="Custom transcription prompt (overrides --language).",
+        help="Custom transcription prompt (overrides --language)",
     ),
     word_boost: list[str] | None = typer.Option(
-        None, "--word-boost", help="Bias recognition toward a term (repeatable)."
+        None, "--word-boost", help="Bias recognition toward a term (repeatable)"
     ),
-    device: int | None = typer.Option(None, "--device", help="Microphone device index."),
-    once: bool = typer.Option(False, "--once", help="Transcribe one utterance, then exit."),
+    device: int | None = typer.Option(None, "--device", help="Microphone device index"),
+    once: bool = typer.Option(False, "--once", help="Transcribe one utterance, then exit"),
     max_seconds: float = typer.Option(
         float(MAX_AUDIO_SECONDS),
         "--max-seconds",
-        help="Auto-stop a recording after this many seconds.",
+        help="Auto-stop a recording after this many seconds",
         min=1.0,
         max=float(MAX_AUDIO_SECONDS),
     ),
-    json_out: bool = options.json_option("Emit one JSON object per utterance."),
+    json_out: bool = options.json_option("Emit one JSON object per utterance"),
 ) -> None:
-    """Dictate with a hotkey: record the mic, get the transcript back instantly.
+    """Push-to-talk dictation: record the mic, get the transcript back
 
     Press Enter (or Space) to start recording and press it again to stop; the
     utterance is sent to the AssemblyAI Sync API and the transcript prints

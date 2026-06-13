@@ -62,7 +62,7 @@ def login(
         None,
         "--api-key",
         hidden=True,
-        help="Deprecated: use --with-api-key (reads stdin; keeps the key out of shell history).",
+        help="Deprecated: use --with-api-key (reads stdin; keeps the key out of shell history)",
     ),
     with_api_key: bool = typer.Option(
         False,
@@ -71,7 +71,7 @@ def login(
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Authenticate via your browser; stores a CLI API key."""
+    """Authenticate via your browser and store a CLI API key"""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()
@@ -176,7 +176,7 @@ def logout(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Clear stored credentials for the active profile."""
+    """Clear stored credentials for the active profile"""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()
@@ -217,7 +217,7 @@ def whoami(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show the active profile and whether its key is usable."""
+    """Show the active profile and whether its key works"""
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()

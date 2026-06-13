@@ -268,3 +268,11 @@ def test_list_table_colors_status(monkeypatch, mocker):
     assert "error" in result.output
     assert "\x1b[1;32m" in result.output  # aai.success (bold green) → "completed" cell
     assert "\x1b[1;38;2;240;68;56m" in result.output  # aai.error (bold #F04438) → "error" cell
+
+
+def test_transcripts_no_subcommand_shows_help():
+    # no_args_is_help=True: bare `assembly transcripts` prints its help (the subcommand list)
+    # rather than the bare "Missing command." usage error that no_args_is_help=False emits.
+    result = runner.invoke(app, ["transcripts"])
+    assert "Missing command" not in result.output
+    assert "list" in result.output and "get" in result.output

@@ -24,14 +24,14 @@
    Usage: assembly config get [OPTIONS]
    KEY:{active_profile|env|telemetry_enabled}
   
-   Print one setting's stored value (`env` reads the selected profile's).
+   Print one setting's stored value (`env` reads the selected profile's)
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    key      KEY:{active_profile|env|teleme  Which setting to read.         │
+  │ *    key      KEY:{active_profile|env|teleme  Which setting to read          │
   │               try_enabled}                    [required]                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -50,10 +50,10 @@
   
    Usage: assembly config list [OPTIONS]
   
-   Show every persisted setting and the stored profiles.
+   Show every persisted setting and the stored profiles
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -72,10 +72,10 @@
   
    Usage: assembly config path [OPTIONS]
   
-   Print where config.toml lives.
+   Print where config.toml lives
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -94,15 +94,15 @@
    KEY:{active_profile|env|telemetry_enabled}
                               VALUE
   
-   Change one setting (`env` writes to the selected profile).
+   Change one setting (`env` writes to the selected profile)
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    key        KEY:{active_profile|env|tele  Which setting to change.       │
+  │ *    key        KEY:{active_profile|env|tele  Which setting to change        │
   │                 metry_enabled}                [required]                     │
-  │ *    value      TEXT                          The new value. [required]      │
+  │ *    value      TEXT                          The new value [required]       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -123,10 +123,10 @@
   
    Usage: assembly doctor [OPTIONS]
   
-   Check that your environment is ready to use AssemblyAI.
+   Check that your environment is ready for AssemblyAI
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -145,7 +145,7 @@
   
    Usage: assembly setup install [OPTIONS]
   
-   Set up your coding agent for AssemblyAI (docs MCP server + skills).
+   Set up your coding agent for AssemblyAI (docs MCP + skills)
   
    Installs three things: the assemblyai-docs MCP server (live API docs, via
    `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the
@@ -158,8 +158,8 @@
   │                                        under. Presence is detected across    │
   │                                        all scopes.                           │
   │                                        [default: user]                       │
-  │ --force                                Reinstall even if already present.    │
-  │ --json   -j                            Output raw JSON.                      │
+  │ --force                                Reinstall even if already present     │
+  │ --json   -j                            Output raw JSON                       │
   │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -180,13 +180,13 @@
   
    Usage: assembly setup remove [OPTIONS]
   
-   Remove the AssemblyAI MCP server and skills from your coding agent.
+   Remove the AssemblyAI MCP and skills from your coding agent
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --scope          [user|project|local]  Only remove the MCP from this scope.  │
   │                                        Default: remove from whichever scope  │
   │                                        it exists in.                         │
-  │ --json   -j                            Output raw JSON.                      │
+  │ --json   -j                            Output raw JSON                       │
   │ --help                                 Show this message and exit.           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -205,11 +205,10 @@
   
    Usage: assembly setup status [OPTIONS]
   
-   Show whether the AssemblyAI MCP server and skills are set up in your coding
-   agent.
+   Show whether the AssemblyAI MCP and skills are set up in your coding agent
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -228,10 +227,10 @@
   
    Usage: assembly telemetry disable [OPTIONS]
   
-   Opt out of anonymous usage telemetry for this machine.
+   Opt out of anonymous usage telemetry for this machine
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -248,10 +247,10 @@
   
    Usage: assembly telemetry enable [OPTIONS]
   
-   Re-enable anonymous usage telemetry for this machine.
+   Re-enable anonymous usage telemetry for this machine
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -268,7 +267,7 @@
   
    Usage: assembly telemetry flush [OPTIONS] PAYLOAD
   
-   Deliver one serialized telemetry event to the intake (internal).
+   Deliver one serialized telemetry event to the intake (internal)
   
    This is the detached flusher `telemetry.dispatch` spawns so user commands
    never
@@ -277,7 +276,7 @@
    produces output.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    payload      TEXT  Serialized telemetry payload (internal). [required]  │
+  │ *    payload      TEXT  Serialized telemetry payload (internal) [required]   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --help          Show this message and exit.                                  │
@@ -296,10 +295,10 @@
   
    Usage: assembly telemetry status [OPTIONS]
   
-   Show whether anonymous usage telemetry is active, and why.
+   Show whether anonymous usage telemetry is active, and why
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON.                                           │
+  │ --json  -j        Output raw JSON                                            │
   │ --help            Show this message and exit.                                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -318,12 +317,12 @@
   
    Usage: assembly update [OPTIONS]
   
-   Update the CLI to the latest release via your install method (brew/pipx/uv).
+   Update the CLI to the latest release (brew/pipx/uv)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --check            Report whether a newer release exists without installing  │
-  │                    it.                                                       │
-  │ --json   -j        Output raw JSON.                                          │
+  │                    it                                                        │
+  │ --json   -j        Output raw JSON                                           │
   │ --help             Show this message and exit.                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   

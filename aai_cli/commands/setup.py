@@ -10,7 +10,7 @@ from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(
-    help="Set up your coding agent for AssemblyAI (docs MCP + skills).",
+    help="Set up your coding agent for AssemblyAI (docs MCP + skills)",
     no_args_is_help=True,
 )
 
@@ -38,10 +38,10 @@ def install(
         "--scope",
         help="Config scope to register the MCP under. Presence is detected across all scopes.",
     ),
-    force: bool = typer.Option(False, "--force", help="Reinstall even if already present."),
+    force: bool = typer.Option(False, "--force", help="Reinstall even if already present"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Set up your coding agent for AssemblyAI (docs MCP server + skills).
+    """Set up your coding agent for AssemblyAI (docs MCP + skills)
 
     Installs three things: the assemblyai-docs MCP server (live API docs, via
     `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled
@@ -74,7 +74,7 @@ def status(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show whether the AssemblyAI MCP server and skills are set up in your coding agent."""
+    """Show whether the AssemblyAI MCP and skills are set up in your coding agent"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         steps = [setup_exec.mcp_status(), setup_exec.skill_status(), setup_exec.cli_skill_status()]
@@ -103,7 +103,7 @@ def remove(
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Remove the AssemblyAI MCP server and skills from your coding agent."""
+    """Remove the AssemblyAI MCP and skills from your coding agent"""
 
     def body(_state: AppState, json_mode: bool) -> None:
         steps = [

@@ -33,19 +33,19 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def dev(
     ctx: typer.Context,
-    port: int = typer.Option(3000, "--port", help="Local server port."),
+    port: int = typer.Option(3000, "--port", help="Local server port"),
     host: str = typer.Option(
         devserver.LOCAL_HOST,
         "--host",
         help="Interface to bind. Loopback by default; pass 0.0.0.0 to expose on your network.",
     ),
-    no_open: bool = typer.Option(False, "--no-open", help="Launch, but don't open the browser."),
+    no_open: bool = typer.Option(False, "--no-open", help="Launch, but don't open the browser"),
     no_install: bool = typer.Option(
-        False, "--no-install", help="Skip dependency install; launch directly."
+        False, "--no-install", help="Skip dependency install; launch directly"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Launch the dev server for the app in the current directory.
+    """Run the dev server for the app in the current directory
 
     Run this from inside a project created by `assembly init`. It installs dependencies
     if needed, then starts the FastAPI server with live reload and opens the browser.

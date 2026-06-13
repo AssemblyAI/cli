@@ -12,7 +12,7 @@ from aai_cli.core import jsonshape, timeparse
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
 
-app = typer.Typer(help="View your account's audit log.")
+app = typer.Typer(help="View your account's audit log")
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.ACCOUNT,
@@ -95,15 +95,15 @@ def _audit_rows(payload: Mapping[str, object]) -> list[dict[str, object]]:
 )
 def audit(
     ctx: typer.Context,
-    limit: int = typer.Option(20, "--limit", min=1, help="How many entries to show."),
-    action: str | None = typer.Option(None, "--action", help="Filter by raw action name."),
-    resource: str | None = typer.Option(None, "--resource", help="Filter by raw resource type."),
+    limit: int = typer.Option(20, "--limit", min=1, help="How many entries to show"),
+    action: str | None = typer.Option(None, "--action", help="Filter by raw action name"),
+    resource: str | None = typer.Option(None, "--resource", help="Filter by raw resource type"),
     include_logins: bool = typer.Option(
-        False, "--include-logins", help="Show successful login events."
+        False, "--include-logins", help="Show successful login events"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """List recent audit-log entries for your account."""
+    """List recent audit-log entries for your account"""
 
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = state.resolve_session()

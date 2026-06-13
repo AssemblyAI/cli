@@ -50,7 +50,7 @@ def agent(
         None, help="Audio file path or URL to speak to the agent. Omit to use the microphone."
     ),
     sample: bool = typer.Option(
-        False, "--sample", help="Speak the hosted wildfires.mp3 sample to the agent."
+        False, "--sample", help="Speak the hosted wildfires.mp3 sample to the agent"
     ),
     voice: str = typer.Option(
         DEFAULT_VOICE,
@@ -59,32 +59,32 @@ def agent(
         autocompletion=complete_voice,
     ),
     system_prompt: str = typer.Option(
-        DEFAULT_PROMPT, "--system-prompt", help="System prompt (the agent's persona)."
+        DEFAULT_PROMPT, "--system-prompt", help="System prompt (the agent's persona)"
     ),
     system_prompt_file: Path | None = typer.Option(
         None,
         "--system-prompt-file",
-        help="Read the system prompt from a file (overrides --system-prompt).",
+        help="Read the system prompt from a file (overrides --system-prompt)",
         exists=True,
         dir_okay=False,
     ),
-    greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting."),
-    device: int | None = typer.Option(None, "--device", help="Microphone device index."),
-    list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit."),
-    json_out: bool = options.json_option("Emit newline-delimited JSON events."),
+    greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting"),
+    device: int | None = typer.Option(None, "--device", help="Microphone device index"),
+    list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit"),
+    json_out: bool = options.json_option("Emit newline-delimited JSON events"),
     output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Output mode: text (you:/agent: lines as plain stdout, pipe-friendly) or json.",
+        help="Output mode: text (you:/agent: lines as plain stdout, pipe-friendly) or json",
     ),
     show_code: bool = typer.Option(
         False,
         "--show-code",
-        help="Print the equivalent Python SDK code and exit (does not start a session).",
+        help="Print the equivalent Python SDK code and exit (does not start a session)",
     ),
 ) -> None:
-    """Have a live two-way voice conversation with an AssemblyAI voice agent.
+    """Hold a live two-way voice conversation with a voice agent
 
     Use headphones: the mic stays open while the agent speaks, so on
     speakers it would hear itself and loop. Pass an audio file/URL (or

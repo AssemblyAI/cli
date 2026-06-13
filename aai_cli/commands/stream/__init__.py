@@ -49,66 +49,66 @@ def stream(
         help="Audio file path, URL, or YouTube/podcast page URL to stream. Use - for raw "
         "PCM16/mono/16k on stdin. Omit to use the microphone.",
     ),
-    sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample."),
+    sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample"),
     # audio capture
     sample_rate: int | None = typer.Option(
         None,
         "--sample-rate",
         help="Audio rate in Hz (positive): capture rate for the mic, or the declared "
-        "rate of raw PCM on stdin (default: device native / 16000).",
+        "rate of raw PCM on stdin (default: device native / 16000)",
         min=1,
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
     device: int | None = typer.Option(
-        None, "--device", help="Microphone device index.", rich_help_panel=help_panels.OPT_CAPTURE
+        None, "--device", help="Microphone device index", rich_help_panel=help_panels.OPT_CAPTURE
     ),
     system_audio: bool = typer.Option(
         False,
         "--system-audio",
-        help="macOS only: stream system/app audio and microphone as separate sessions.",
+        help="macOS only: stream system/app audio and microphone as separate sessions",
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
     system_audio_only: bool = typer.Option(
         False,
         "--system-audio-only",
-        help="macOS only: stream system/app audio without the microphone.",
+        help="macOS only: stream system/app audio without the microphone",
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
     # model & input
     speech_model: SpeechModel = typer.Option(
         DEFAULT_SPEECH_MODEL,
         "--speech-model",
-        help="Streaming speech model.",
+        help="Streaming speech model",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     encoding: Encoding | None = typer.Option(
         None,
         "--encoding",
-        help="Audio encoding.",
+        help="Audio encoding",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     language_detection: bool | None = typer.Option(
         None,
         "--language-detection",
-        help="Auto-detect the spoken language.",
+        help="Auto-detect the spoken language",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     domain: str | None = typer.Option(
         None,
         "--domain",
-        help="Domain preset (e.g. medical).",
+        help="Domain preset (e.g. medical)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     prompt: str | None = typer.Option(
         None,
         "--prompt",
-        help="Prompt to bias the speech model (supported models only).",
+        help="Prompt to bias the speech model (supported models only)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     keyterms_prompt: list[str] | None = typer.Option(
         None,
         "--keyterms-prompt",
-        help="Boost a key term (repeatable).",
+        help="Boost a key term (repeatable)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     # turn detection
@@ -118,7 +118,7 @@ def stream(
         # un-clipped in an 80-column help screen, which made it unlearnable from --help.
         # The full SDK field stays reachable via --config.
         "--end-of-turn-confidence",
-        help="End-of-turn confidence (0-1).",
+        help="End-of-turn confidence (0-1)",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_TURNS,
@@ -126,19 +126,19 @@ def stream(
     min_turn_silence: int | None = typer.Option(
         None,
         "--min-turn-silence",
-        help="Min silence to end a turn (ms).",
+        help="Min silence to end a turn (ms)",
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     max_turn_silence: int | None = typer.Option(
         None,
         "--max-turn-silence",
-        help="Max silence before ending a turn (ms).",
+        help="Max silence before ending a turn (ms)",
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     vad_threshold: float | None = typer.Option(
         None,
         "--vad-threshold",
-        help="Voice activity threshold (0-1).",
+        help="Voice activity threshold (0-1)",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_TURNS,
@@ -146,13 +146,13 @@ def stream(
     format_turns: bool | None = typer.Option(
         None,
         "--format-turns/--no-format-turns",
-        help="Format (punctuate) finalized turns.",
+        help="Format (punctuate) finalized turns",
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     include_partial_turns: bool | None = typer.Option(
         None,
         "--include-partial-turns",
-        help="Emit partial turns.",
+        help="Emit partial turns",
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     # speakers
@@ -166,7 +166,7 @@ def stream(
     max_speakers: int | None = typer.Option(
         None,
         "--max-speakers",
-        help="Max speakers.",
+        help="Max speakers",
         min=1,
         rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
@@ -174,13 +174,13 @@ def stream(
     voice_focus: NoiseSuppressionModel | None = typer.Option(
         None,
         "--voice-focus",
-        help="Voice focus (noise suppression model).",
+        help="Voice focus (noise suppression model)",
         rich_help_panel=help_panels.OPT_FEATURES,
     ),
     voice_focus_threshold: float | None = typer.Option(
         None,
         "--voice-focus-threshold",
-        help="Voice-focus threshold (0-1).",
+        help="Voice-focus threshold (0-1)",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_FEATURES,
@@ -188,42 +188,42 @@ def stream(
     inactivity_timeout: int | None = typer.Option(
         None,
         "--inactivity-timeout",
-        help="Auto-close after N seconds idle.",
+        help="Auto-close after N seconds idle",
         rich_help_panel=help_panels.OPT_FEATURES,
     ),
     # guardrails
     filter_profanity: bool | None = typer.Option(
         None,
         "--filter-profanity",
-        help="Mask profanity.",
+        help="Mask profanity",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii: bool | None = typer.Option(
         None,
         "--redact-pii",
-        help="Redact PII from turns.",
+        help="Redact PII from turns",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_policy: str | None = typer.Option(
         None,
         "--redact-pii-policy",
-        help="Comma-separated PII policies.",
+        help="Comma-separated PII policies",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_sub: str | None = typer.Option(
         None,
         "--redact-pii-sub",
-        help="Replace redacted PII with: hash or entity_name.",
+        help="Replace redacted PII with: hash or entity_name",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     # webhooks
     webhook_url: str | None = typer.Option(
-        None, "--webhook-url", help="Webhook URL.", rich_help_panel=help_panels.OPT_WEBHOOKS
+        None, "--webhook-url", help="Webhook URL", rich_help_panel=help_panels.OPT_WEBHOOKS
     ),
     webhook_auth_header: str | None = typer.Option(
         None,
         "--webhook-auth-header",
-        help="Webhook auth header as NAME:VALUE.",
+        help="Webhook auth header as NAME:VALUE",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
         metavar="NAME:VALUE",
     ),
@@ -239,53 +239,53 @@ def stream(
     llm_interval: float = typer.Option(
         10.0,
         "--llm-interval",
-        help="Seconds between --llm summary refreshes (0 refreshes on every turn).",
+        help="Seconds between --llm summary refreshes (0 refreshes on every turn)",
         min=0.0,
         rich_help_panel=help_panels.OPT_LLM,
     ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
         "--model",
-        help="LLM Gateway model.",
+        help="LLM Gateway model",
         rich_help_panel=help_panels.OPT_LLM,
         autocompletion=llm.complete_model,
     ),
     max_tokens: int = typer.Option(
         llm.DEFAULT_MAX_TOKENS,
         "--max-tokens",
-        help="Max tokens.",
+        help="Max tokens",
         rich_help_panel=help_panels.OPT_LLM,
     ),
     # escape hatch
     config_kv: list[str] | None = typer.Option(
         None,
         "--config",
-        help="Set any StreamingParameters field as KEY=VALUE (repeatable).",
+        help="Set any StreamingParameters field as KEY=VALUE (repeatable)",
         rich_help_panel=help_panels.OPT_ADVANCED,
         metavar="KEY=VALUE",
     ),
     config_file: Path | None = typer.Option(
         None,
         "--config-file",
-        help="JSON file of streaming fields.",
+        help="JSON file of streaming fields",
         rich_help_panel=help_panels.OPT_ADVANCED,
         exists=True,
         dir_okay=False,
     ),
-    json_out: bool = options.json_option("Emit newline-delimited JSON events."),
+    json_out: bool = options.json_option("Emit newline-delimited JSON events"),
     output_field: choices.TextOrJson | None = typer.Option(
         None,
         "-o",
         "--output",
-        help="Output mode: text (finalized turns as plain lines, pipe-friendly) or json.",
+        help="Output mode: text (finalized turns as plain lines, pipe-friendly) or json",
     ),
     show_code: bool = typer.Option(
         False,
         "--show-code",
-        help="Print the equivalent Python SDK code and exit (does not stream).",
+        help="Print the equivalent Python SDK code and exit (does not stream)",
     ),
 ) -> None:
-    """Transcribe live audio in real time — from your mic, a file, a URL, or a pipe.
+    """Transcribe live audio in real time from a mic, file, URL, or pipe
 
     Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
     ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | assembly stream -.

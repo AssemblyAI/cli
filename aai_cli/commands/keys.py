@@ -11,7 +11,7 @@ from aai_cli.core.errors import APIError, UsageError
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
 
-app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
+app = typer.Typer(help="List, create, and rename your AssemblyAI API keys", no_args_is_help=True)
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.ACCOUNT,
@@ -66,7 +66,7 @@ def list_(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """List API keys across your projects (keys shown masked)."""
+    """List API keys across your projects (shown masked)"""
 
     def body(state: AppState, json_mode: bool) -> None:
         account_id, jwt = state.resolve_session()
@@ -119,13 +119,13 @@ def list_(
 )
 def create(
     ctx: typer.Context,
-    name: str = typer.Option(..., "--name", help="A label for the new key."),
+    name: str = typer.Option(..., "--name", help="A label for the new key"),
     project_id: int | None = typer.Option(
-        None, "--project", help="Project id to create the key in (defaults to your first)."
+        None, "--project", help="Project id to create the key in (defaults to your first)"
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Create a new API key. Prints the key value once — copy it now."""
+    """Create an API key (printed once — copy it now)"""
 
     def body(state: AppState, json_mode: bool) -> None:
         # Validate locally before any auth/network work: an empty or whitespace-only
@@ -160,11 +160,11 @@ def create(
 )
 def rename(
     ctx: typer.Context,
-    token_id: int = typer.Argument(..., help="The key id (see `assembly keys list`)."),
-    new_name: str = typer.Argument(..., help="The new label."),
+    token_id: int = typer.Argument(..., help="The key id (see `assembly keys list`)"),
+    new_name: str = typer.Argument(..., help="The new label"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Rename an existing API key."""
+    """Rename an existing API key"""
 
     def body(state: AppState, json_mode: bool) -> None:
         account_id, jwt = state.resolve_session()

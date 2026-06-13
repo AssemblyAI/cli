@@ -31,14 +31,14 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def deploy(
     ctx: typer.Context,
-    prod: bool = typer.Option(False, "--prod", help="Deploy to production (Vercel only)."),
-    vercel: bool = typer.Option(False, "--vercel", help="Deploy to Vercel (the default)."),
-    railway: bool = typer.Option(False, "--railway", help="Deploy to Railway."),
-    fly: bool = typer.Option(False, "--fly", help="Deploy to Fly.io."),
-    assume_yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    prod: bool = typer.Option(False, "--prod", help="Deploy to production (Vercel only)"),
+    vercel: bool = typer.Option(False, "--vercel", help="Deploy to Vercel (the default)"),
+    railway: bool = typer.Option(False, "--railway", help="Deploy to Railway"),
+    fly: bool = typer.Option(False, "--fly", help="Deploy to Fly.io"),
+    assume_yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Deploy the current project to Vercel (default), Railway, or Fly.io.
+    """Deploy the current project to Vercel, Railway, or Fly.io
 
     Asks for confirmation first, then runs the target's CLI (`vercel deploy`,
     `railway up`, or `fly launch`). Requires that target's CLI to be installed.

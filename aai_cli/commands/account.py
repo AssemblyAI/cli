@@ -127,7 +127,7 @@ class _Usage(BaseModel):
     usage_items: Annotated[list[_Window], _MappingList] = Field(default_factory=list[_Window])
 
 
-app = typer.Typer(help="Account billing, usage, and limits.")
+app = typer.Typer(help="Account billing, usage, and limits")
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.ACCOUNT,
@@ -149,7 +149,7 @@ def balance(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show your remaining account balance."""
+    """Show your remaining account balance"""
 
     def body(state: AppState, json_mode: bool) -> None:
         _, jwt = state.resolve_session()
@@ -185,17 +185,17 @@ def usage(
     ),
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD). Default: today."),
     window: str | None = typer.Option(
-        None, "--window", help="Window size: 'day', 'week', or 'month'."
+        None, "--window", help="Window size: 'day', 'week', or 'month'"
     ),
     include_zero: bool = typer.Option(
         False,
         "--include-zero",
         "--all",
-        help="Include zero-usage windows (matches --include-logins on `assembly audit`).",
+        help="Include zero-usage windows (matches --include-logins on `assembly audit`)",
     ),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show usage over a date range (defaults to the last 30 days)."""
+    """Show usage over a date range (default: last 30 days)"""
 
     def body(state: AppState, json_mode: bool) -> None:
         # Parse/validate the flags before any session resolution or network work,
@@ -272,7 +272,7 @@ def limits(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
 ) -> None:
-    """Show your account's rate limits per service."""
+    """Show your account's rate limits per service"""
 
     def body(state: AppState, json_mode: bool) -> None:
         account_id, jwt = state.resolve_session()

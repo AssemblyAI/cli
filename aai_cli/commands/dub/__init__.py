@@ -59,13 +59,13 @@ def dub(
     media: str = typer.Argument(
         ...,
         help="Audio/video to dub: a local file (the video stream is copied untouched), "
-        "or a YouTube/media-page URL (downloaded via yt-dlp).",
+        "or a YouTube/media-page URL (downloaded via yt-dlp)",
     ),
     lang: str = typer.Option(
         ...,
         "--lang",
         "-l",
-        help="Target language: an ISO code (de, fr, es, …) or a language name (German).",
+        help="Target language: an ISO code (de, fr, es, …) or a language name (German)",
     ),
     source_lang: str | None = typer.Option(
         None,
@@ -76,8 +76,7 @@ def dub(
         None,
         "--transcript-id",
         "-t",
-        help="Reuse an existing diarized transcript of this media instead of "
-        "transcribing it again.",
+        help="Reuse an existing diarized transcript of this media instead of transcribing it again",
     ),
     voice: list[str] = typer.Option(
         [],
@@ -89,18 +88,18 @@ def dub(
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
         "--model",
-        help="LLM Gateway model that translates the utterances.",
+        help="LLM Gateway model that translates the utterances",
         rich_help_panel=help_panels.OPT_LLM,
         autocompletion=llm.complete_model,
     ),
     max_tokens: int = typer.Option(
         llm.DEFAULT_MAX_TOKENS,
         "--max-tokens",
-        help="Max tokens per utterance translation.",
+        help="Max tokens per utterance translation",
         rich_help_panel=help_panels.OPT_LLM,
     ),
     out: Path | None = typer.Option(
-        None, "--out", help="Output file (default: <name>.dub.<lang><ext> next to the input)."
+        None, "--out", help="Output file (default: <name>.dub.<lang><ext> next to the input)"
     ),
     video: bool = typer.Option(
         False,
@@ -113,11 +112,11 @@ def dub(
         "--download-sections",
         help="For a URL source, download (and dub) only part of it (yt-dlp "
         '"--download-sections" syntax, e.g. "*0:00-15:00" for the first fifteen '
-        "minutes; repeatable).",
+        "minutes; repeatable)",
     ),
-    json_out: bool = options.json_option("Emit JSON describing the dubbed file."),
+    json_out: bool = options.json_option("Emit JSON describing the dubbed file"),
 ) -> None:
-    r"""\[sandbox] Dub a video or audio file into another language.
+    r"""\[sandbox] Dub a video or audio file into another language
 
     The whole platform in one command: the media is transcribed with diarized
     utterance timestamps, each utterance is translated by an LLM Gateway model,
