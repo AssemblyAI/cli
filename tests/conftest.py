@@ -87,12 +87,23 @@ def pin_timezone(monkeypatch):
         time.tzset()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def fixed_render_size(monkeypatch):
-    # Pin the render width/height so the CLI-surface goldens (the
-    # test_snapshots_* modules) are byte-identical across machines and CI.
-    # Named (not autouse): only the snapshot modules opt in via
-    # `pytestmark = pytest.mark.usefixtures("fixed_render_size")`.
+    # Pin the render width/height for the *whole* suite so anything that renders
+    # CLI/help output is byte-identical across machines and CI. Rich/Click derive
+    # the help width from COLUMNS (falling back to the inherited terminal size),
+    # and the no-clip table ellipsizes long flag names ("--end-of-turn-c…") once
+    # the column overflows — so a `--help` substring assertion that passes at a
+    # contributor's wide local terminal can silently fail at CI's narrower width.
+    # That exact gap (a hidden `--with-api-key` flag asserted present, clipped away
+    # in CI) burned three CI rounds on one PR; autouse closes it so a local green
+    # means a CI green.
+    #
+    # Autouse, not opt-in: every test gets the pinned size. A test that needs a
+    # different width passes it explicitly to the invocation (the canonical pattern
+    # in test_help_rendering.py: `runner.invoke(app, argv, env={"COLUMNS": "80"})`),
+    # which CliRunner merges over this default. The snapshot modules still carry an
+    # explicit `usefixtures("fixed_render_size")` marker to document the dependency.
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("LINES", "40")
 
