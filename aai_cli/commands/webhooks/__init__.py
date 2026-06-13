@@ -1,4 +1,3 @@
-# aai_cli/commands/webhooks/__init__.py
 from __future__ import annotations
 
 import typer
