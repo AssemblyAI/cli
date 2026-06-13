@@ -33,8 +33,7 @@ def test_with_api_key_reads_stdin_and_stores(mocker):
     assert payload["api_key_only"] is True  # no AMS session from a key-only login
 
 
-def test_with_api_key_human_mode_mentions_account_command_limit(mocker, monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+def test_with_api_key_human_mode_mentions_account_command_limit(mocker):
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["login", "--with-api-key"], input="sk_piped\n")
     assert result.exit_code == 0
@@ -71,8 +70,7 @@ def test_api_key_and_with_api_key_conflict(mocker):
     assert config.get_api_key("default") is None
 
 
-def test_api_key_flag_warns_toward_stdin_form(mocker, monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+def test_api_key_flag_warns_toward_stdin_form(mocker):
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["login", "--api-key", "sk_flag"])
     assert result.exit_code == 0

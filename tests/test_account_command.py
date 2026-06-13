@@ -21,13 +21,8 @@ def _login_result(*, json_mode=False):
     )
 
 
-def _human(monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
-
-
-def test_balance_formats_dollars(monkeypatch, mocker):
+def test_balance_formats_dollars(mocker):
     _auth()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
         autospec=True,
@@ -89,9 +84,8 @@ def test_usage_defaults_date_range_and_renders(mocker):
     assert data["usage_items"][0]["line_items"][0]["price"] == 1250.0
 
 
-def test_usage_renders_table_human(monkeypatch, mocker):
+def test_usage_renders_table_human(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -194,9 +188,8 @@ def test_usage_models_format_windows_and_line_items():
     assert _window({"line_items": [{"name": "free", "price": 0.0}]}).breakdown == ""
 
 
-def test_usage_human_renders_breakdown(monkeypatch, mocker):
+def test_usage_human_renders_breakdown(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -216,9 +209,8 @@ def test_usage_human_renders_breakdown(monkeypatch, mocker):
     assert "minutes: $10.00" in result.output
 
 
-def test_usage_human_summarizes_empty_range(monkeypatch, mocker):
+def test_usage_human_summarizes_empty_range(mocker):
     _auth()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_usage", autospec=True, return_value={"usage_items": []}
     )
@@ -227,9 +219,8 @@ def test_usage_human_summarizes_empty_range(monkeypatch, mocker):
     assert "No usage windows returned" in result.output
 
 
-def test_usage_human_hides_zero_windows_by_default(monkeypatch, mocker):
+def test_usage_human_hides_zero_windows_by_default(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -257,9 +248,8 @@ def test_usage_human_hides_zero_windows_by_default(monkeypatch, mocker):
     assert "Use --include-zero to show them." in result.output
 
 
-def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
+def test_usage_human_can_include_zero_windows(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -278,9 +268,8 @@ def test_usage_human_can_include_zero_windows(monkeypatch, mocker):
     assert "No usage in this range" not in result.output
 
 
-def test_usage_all_is_a_back_compat_alias_for_include_zero(monkeypatch, mocker):
+def test_usage_all_is_a_back_compat_alias_for_include_zero(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -297,9 +286,8 @@ def test_usage_all_is_a_back_compat_alias_for_include_zero(monkeypatch, mocker):
     assert "2026-01-01" in result.output
 
 
-def test_usage_human_summarizes_all_zero_range(monkeypatch, mocker):
+def test_usage_human_summarizes_all_zero_range(mocker):
     _auth()
-    _human(monkeypatch)
     payload = {
         "usage_items": [
             {
@@ -355,9 +343,8 @@ def test_usage_invalid_date_fails_before_session_resolution(monkeypatch, mocker)
     get_usage.assert_not_called()
 
 
-def test_limits_renders_services(monkeypatch, mocker):
+def test_limits_renders_services(mocker):
     _auth()
-    _human(monkeypatch)
     mocker.patch(
         "aai_cli.commands.account.ams.get_rate_limits",
         autospec=True,
@@ -368,9 +355,8 @@ def test_limits_renders_services(monkeypatch, mocker):
     assert "transcript" in result.output and "200" in result.output
 
 
-def test_limits_human_summarizes_empty(monkeypatch, mocker):
+def test_limits_human_summarizes_empty(mocker):
     _auth()
-    _human(monkeypatch)
     # The AMS endpoint returns an empty array when no custom rate limits are
     # configured; show a clear message instead of a bare header-only table.
     mocker.patch(

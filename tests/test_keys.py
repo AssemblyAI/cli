@@ -36,9 +36,8 @@ def test_keys_list_flattens_tokens(mocker):
     assert "sk_abcdef1234" not in result.output  # api key is masked
 
 
-def test_keys_list_renders_table_human(monkeypatch, mocker):
+def test_keys_list_renders_table_human(mocker):
     _auth()
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
     projects = [
         {
             "project": {"id": 1, "name": "Default"},
@@ -161,7 +160,6 @@ def test_keys_list_renders_human_table(mocker):
             ],
         }
     ]
-    mocker.patch("aai_cli.output.resolve_json", autospec=True, return_value=False)
     mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)
     result = runner.invoke(app, ["keys", "list"])
     assert result.exit_code == 0
@@ -184,9 +182,8 @@ def test_keys_create_rejects_empty_project_list(mocker):
     assert "dashboard" in result.output
 
 
-def test_keys_list_empty_shows_human_empty_state(monkeypatch, mocker):
+def test_keys_list_empty_shows_human_empty_state(mocker):
     _auth()
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
     # A project with no tokens yields no rows -> a friendly empty state, not a bare header.
     projects = [{"project": {"id": 1, "name": "Default"}, "tokens": []}]
     mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)

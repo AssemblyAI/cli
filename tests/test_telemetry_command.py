@@ -11,10 +11,6 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-def _human(monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
-
-
 def _capture_events(monkeypatch, *, token="pub_test"):
     monkeypatch.setenv(telemetry.ENV_CLIENT_TOKEN, token)
     # Pre-mint the device id: the one-time first-run disclosure (covered in
@@ -77,8 +73,7 @@ def test_status_json_source_for_env_kill_switch(monkeypatch):
     }
 
 
-def test_status_human_disabled(monkeypatch):
-    _human(monkeypatch)
+def test_status_human_disabled():
     result = runner.invoke(app, ["telemetry", "status"])
     assert result.exit_code == 0
     assert "Telemetry is disabled." in result.output
@@ -89,7 +84,6 @@ def test_status_human_disabled(monkeypatch):
 
 
 def test_status_human_enabled(monkeypatch):
-    _human(monkeypatch)
     _capture_events(monkeypatch)
     result = runner.invoke(app, ["telemetry", "status"])
     assert result.exit_code == 0
@@ -100,7 +94,6 @@ def test_status_human_enabled(monkeypatch):
 
 
 def test_status_human_says_why_when_env_overrides_persisted_enable(monkeypatch):
-    _human(monkeypatch)
     _capture_events(monkeypatch)
     config.set_telemetry_enabled(enabled=True)
     monkeypatch.setenv("DO_NOT_TRACK", "1")
@@ -126,8 +119,7 @@ def test_enable_persists_and_confirms_json():
     assert config.get_telemetry_enabled() is True
 
 
-def test_enable_and_disable_human(monkeypatch):
-    _human(monkeypatch)
+def test_enable_and_disable_human():
     result = runner.invoke(app, ["telemetry", "disable"])
     assert result.exit_code == 0
     assert "Telemetry disabled." in result.output

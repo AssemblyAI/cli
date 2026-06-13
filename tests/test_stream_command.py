@@ -77,7 +77,6 @@ def test_stream_file_uses_filesource(monkeypatch, tmp_path):
 
 def test_stream_mic_listening_notice_waits_for_mic_open(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     captured = {}
 
@@ -112,7 +111,6 @@ def test_stream_mic_listening_notice_waits_for_mic_open(monkeypatch):
 
 def test_stream_file_shows_no_listening_notice(monkeypatch, tmp_path):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
         if on_begin:
@@ -194,7 +192,6 @@ def test_stream_ctrl_c_exits_cleanly(monkeypatch):
 
 def test_stream_ctrl_c_human_mode_prints_stopped(monkeypatch):
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: False)
 
     def raise_kbd(*a, **k):
         raise KeyboardInterrupt

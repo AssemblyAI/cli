@@ -89,8 +89,7 @@ def test_config_list_json_is_the_full_settings_object():
     }
 
 
-def test_config_list_human_render_shows_rows_and_hint(monkeypatch):
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
+def test_config_list_human_render_shows_rows_and_hint():
     config.set_api_key("staging", "sk_2")
     config.set_profile_env("staging", "sandbox000")
     result = runner.invoke(app, ["config", "list"])

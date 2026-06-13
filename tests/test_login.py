@@ -58,9 +58,8 @@ def test_whoami_reports_authenticated(mocker):
     assert data["api_key"].startswith("sk_") and "…" in data["api_key"]
 
 
-def test_whoami_human_render_shows_detail_rows(monkeypatch, mocker):
+def test_whoami_human_render_shows_detail_rows(mocker):
     config.set_api_key("default", "sk_1234567890")
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: explicit)
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["whoami"])
     assert result.exit_code == 0
@@ -355,7 +354,6 @@ def test_whoami_renders_human_table_reachable(mocker):
     # a reachable status, and the account/session rows.
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
-    mocker.patch("aai_cli.output.resolve_json", autospec=True, return_value=False)
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=True)
     result = runner.invoke(app, ["whoami"])
     assert result.exit_code == 0
@@ -372,7 +370,6 @@ def test_whoami_renders_human_table_rejected_key(mocker):
     # account/session "none" fallbacks (the em-dash placeholder). A rejected key
     # is a failed preflight: the status still renders, but the exit code is 4.
     config.set_api_key("default", "sk_1234567890")
-    mocker.patch("aai_cli.output.resolve_json", autospec=True, return_value=False)
     mocker.patch("aai_cli.commands.login.client.validate_key", autospec=True, return_value=False)
     result = runner.invoke(app, ["whoami"])
     assert result.exit_code == 4

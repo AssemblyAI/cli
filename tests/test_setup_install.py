@@ -23,14 +23,6 @@ def _isolate_home(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 
-@pytest.fixture(autouse=True)
-def _force_json(monkeypatch):
-    """These tests pin the structured step/status JSON. The CLI now defaults to human
-    text everywhere (JSON is opt-in), so force the machine output the assertions parse —
-    the equivalent of invoking each command with --json."""
-    monkeypatch.setattr("aai_cli.output.resolve_json", lambda *, explicit: True)
-
-
 # --- install: all three steps ------------------------------------------------
 
 
@@ -40,7 +32,7 @@ def test_install_happy_path_runs_all_steps(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0
 
     statuses = _statuses(result)
@@ -77,7 +69,7 @@ def test_install_skill_failed_when_npx_succeeds_but_nothing_installed(monkeypatc
     fake = FakeRun({("claude", "mcp", "get"): 1}, creates_skill=False)
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 1  # skill step failed
     assert _statuses(result)["skill"] == "failed"
     # The detail quotes the install command starting at `add` (_SKILL_ADD[3:]), so the
@@ -88,7 +80,7 @@ def test_install_skill_failed_when_npx_succeeds_but_nothing_installed(monkeypatc
     assert "'add AssemblyAI/assemblyai-skill --global --yes'" in skill_detail
 
     # And status agrees: still not installed.
-    status_result = runner.invoke(app, ["setup", "status"])
+    status_result = runner.invoke(app, ["setup", "status", "--json"])
     assert _statuses(status_result)["skill"] == "not_installed"
 
 
@@ -171,7 +163,7 @@ def test_install_idempotent_when_mcp_present(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 0})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["mcp"] == "already"
     # No `mcp add` should have run.
@@ -184,7 +176,7 @@ def test_install_failure_exits_nonzero(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1, ("claude", "mcp", "add"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 1
     assert _statuses(result)["mcp"] == "failed"
 
@@ -195,7 +187,7 @@ def test_install_force_remove_failure_reports_failed(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 0, ("claude", "mcp", "remove"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install", "--force"])
+    result = runner.invoke(app, ["setup", "install", "--force", "--json"])
     assert result.exit_code == 1
     assert _statuses(result)["mcp"] == "failed"
     assert not any(c[:3] == ["claude", "mcp", "add"] for c in fake.calls)
@@ -220,7 +212,7 @@ def test_install_skips_mcp_when_claude_missing(monkeypatch):
     fake = FakeRun()
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0  # skip is not a failure
     statuses = _statuses(result)
     assert statuses["mcp"] == "skipped"
@@ -243,7 +235,7 @@ def test_install_skill_idempotent_when_present(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["skill"] == "already"
     # No `npx … add` should have run — the skill was already present.
@@ -259,7 +251,7 @@ def test_install_force_reinstalls_skill(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install", "--force"])
+    result = runner.invoke(app, ["setup", "install", "--force", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["skill"] == "installed"
     assert [
@@ -281,7 +273,7 @@ def test_install_skips_skill_when_npx_missing(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0
     statuses = _statuses(result)
     assert statuses["skill"] == "skipped"
@@ -302,7 +294,7 @@ def test_install_aai_cli_skill_idempotent_when_present(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install"])
+    result = runner.invoke(app, ["setup", "install", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["aai-cli skill"] == "already"
     # Not overwritten without --force.
@@ -317,7 +309,7 @@ def test_install_aai_cli_skill_force_reinstalls(monkeypatch):
     fake = FakeRun({("claude", "mcp", "get"): 1})
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", fake)
 
-    result = runner.invoke(app, ["setup", "install", "--force"])
+    result = runner.invoke(app, ["setup", "install", "--force", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["aai-cli skill"] == "installed"
     # Overwritten with the bundled copy (references/ exist; placeholder gone).
@@ -340,7 +332,7 @@ def test_status_reports_all_installed(monkeypatch, tmp_path):
         FakeRun({("claude", "mcp", "get"): 0}),
     )
 
-    result = runner.invoke(app, ["setup", "status"])
+    result = runner.invoke(app, ["setup", "status", "--json"])
     assert result.exit_code == 0
     assert _statuses(result) == {
         "mcp": "installed",
@@ -356,7 +348,7 @@ def test_status_reports_not_installed(monkeypatch):
         FakeRun({("claude", "mcp", "get"): 1}),
     )
 
-    result = runner.invoke(app, ["setup", "status"])
+    result = runner.invoke(app, ["setup", "status", "--json"])
     assert result.exit_code == 0
     assert _statuses(result) == {
         "mcp": "not_installed",
@@ -372,6 +364,6 @@ def test_status_mcp_unknown_when_claude_missing(monkeypatch):
     )
     monkeypatch.setattr("aai_cli.setup_exec.subprocess.run", FakeRun())
 
-    result = runner.invoke(app, ["setup", "status"])
+    result = runner.invoke(app, ["setup", "status", "--json"])
     assert result.exit_code == 0
     assert _statuses(result)["mcp"] == "unknown"
