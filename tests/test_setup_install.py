@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aai_cli.main import app
-from tests.setup_helpers import (
+from tests._setup_helpers import (
     FakeRun,
     _all_tools_present,
     _cli_skill_path,
