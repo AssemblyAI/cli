@@ -310,9 +310,11 @@ max-statements = 40
 # call signatures where those make the intent clearer than production-style indirection.
 # TID251: tests drive the CLI as a subprocess and monkeypatch os.environ freely; the
 # banned-api ban targets the shipped aai_cli package, not the test harness or dev gates.
+# DTZ: tests build naive datetimes as deterministic fixtures (the suite pins TZ in
+# conftest and uses time-machine), so timezone-aware construction isn't required here.
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005",
               "PTH123", "SIM117", "TRY300", "FBT", "PLR2004", "PLC0415", "PLR0913",
-              "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH", "TID251"]
+              "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH", "TID251", "DTZ"]
 "scripts/**" = ["TID251"]
 # Typer command functions naturally have many boolean options and broad signatures
 # (PLR0913/FBT). Their *bodies*, though, are held to the same length/branch limits as
