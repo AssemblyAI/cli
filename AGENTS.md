@@ -110,3 +110,6 @@ Lessons that cost time in agent sessions — read before exercising `uv run asse
 - Ruff lint set: see `[tool.ruff.lint]` in `pyproject.toml`. `S603/S607` are ignored project-wide because the CLI intentionally shells out to `claude`/`npx` with controlled args. `B008` is ignored (Typer uses `typer.Option/Argument` calls as defaults).
 - mypy is strict on `aai_cli` (`disallow_untyped_defs`); tests are type-checked but exempt from return annotations.
 - Errors → stderr, data → stdout. Preserve this split; it's what makes the CLI pipeline-safe.
+- **Deprecate flags with hidden traps, not removal**: keep the old flag parsing (`hidden=True`), emit a one-line "use X instead" warning, and drop it a release or two later — never hard-break a script mid-cycle. `login --api-key` (→ `--with-api-key`) is the pattern to copy.
+- **Secrets never ride argv**: a key/token-valued option must read from stdin (`--with-api-key`) or the env, so it can't leak into shell history or `ps`. Run commands deliberately have no `--api-key` at all.
+- **Every NDJSON stream line carries a `"type"` field** (see REFERENCE.md "JSON output"); new event types are additive, existing fields stay stable.

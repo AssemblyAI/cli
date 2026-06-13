@@ -10,7 +10,7 @@ from rich.markup import escape
 
 from aai_cli import output
 from aai_cli.auth import ams, discovery, endpoints, loopback
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.errors import STDIN_KEY_RECIPE, APIError, NotAuthenticated
 
 
 @dataclass
@@ -117,10 +117,26 @@ def _open_browser(url: str, *, json_mode: bool) -> None:
     # usable browser, so the fallback must fire on the boolean too; otherwise the
     # user sits out the 120s timeout with no hint that nothing opened.
     if not opened:
+        # The OAuth callback lands on this machine's loopback port, so a browser on
+        # another machine (the common SSH case) can only complete the flow through a
+        # port forward — say so now, with the exact command, instead of letting the
+        # user open the URL remotely and watch the callback go nowhere.
+        port = endpoints.loopback_port()
+        forward = f"ssh -L {port}:{endpoints.LOOPBACK_HOST}:{port} <this-host>"
         _note(
             json_mode=json_mode,
-            human="[aai.muted]Could not open a browser; open the URL above manually.[/aai.muted]",
-            hint="Could not open a browser; open the URL manually.",
+            human=(
+                "[aai.muted]Could not open a browser; open the URL above manually.\n"
+                f"On a remote/SSH machine, forward the callback port first ({forward}) "
+                "and open the URL in your local browser — or skip the browser entirely: "
+                f"{STDIN_KEY_RECIPE}.[/aai.muted]"
+            ),
+            hint=(
+                "Could not open a browser; open the URL manually. On a remote/SSH "
+                f"machine, forward the callback port first ({forward}) and open the "
+                "URL in your local browser — or skip the browser entirely: "
+                f"{STDIN_KEY_RECIPE}."
+            ),
             url=url,
         )
 
@@ -177,11 +193,11 @@ def run_login_flow(*, json_mode: bool = False) -> LoginResult:
         json_mode=json_mode,
         human=(
             "[aai.muted]Waiting up to 2 minutes for you to finish signing in…[/aai.muted]\n"
-            "[aai.muted]No browser here? Run 'assembly login --api-key <KEY>' instead.[/aai.muted]"
+            f"[aai.muted]No browser here? Run '{STDIN_KEY_RECIPE}' instead.[/aai.muted]"
         ),
         hint=(
             "Waiting up to 2 minutes for you to finish signing in. "
-            "No browser here? Run 'assembly login --api-key <KEY>' instead."
+            f"No browser here? Run '{STDIN_KEY_RECIPE}' instead."
         ),
     )
     result = capture.wait()
@@ -189,7 +205,7 @@ def run_login_flow(*, json_mode: bool = False) -> LoginResult:
     if result.error == "timeout":
         raise NotAuthenticated(
             "Login timed out waiting for the browser.",
-            suggestion="Run 'assembly login' again, or use 'assembly login --api-key <KEY>'.",
+            suggestion=f"Run 'assembly login' again, or use '{STDIN_KEY_RECIPE}'.",
         )
     if result.token_type != "discovery_oauth" or not result.token:  # noqa: S105
         raise APIError(

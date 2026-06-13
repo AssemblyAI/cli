@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from aai_cli import (
     __version__,
     argscan,
+    choices,
     command_registry,
     debuglog,
     environments,
@@ -154,6 +155,11 @@ def main(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
     ),
+    color: choices.ColorMode = typer.Option(
+        choices.ColorMode.auto,
+        "--color",
+        help="Color output: auto (TTY detection), always, or never. NO_COLOR is also honored.",
+    ),
     verbose: int = typer.Option(
         0,
         "--verbose",
@@ -181,6 +187,7 @@ def main(
     # Enabled before anything else runs so even environment/profile resolution
     # failures can be diagnosed with -v.
     debuglog.enable(verbose)
+    output.set_color_mode(color)
     raw_args: list[str] = ctx.meta.get(argscan.RAW_ARGS_META_KEY, [])
     json_mode = output.resolve_json(explicit=argscan.requests_json(raw_args))
     conflict_warning = _sandbox_conflict_warning(sandbox, env)

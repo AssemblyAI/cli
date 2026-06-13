@@ -14,7 +14,7 @@ app = typer.Typer()
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.TRANSCRIPTION,
     order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
-    commands=("transcribe",),
+    commands=("transcribe", "t"),  # "t" is the hidden one-letter alias (see below)
 )
 
 
@@ -420,3 +420,13 @@ def transcribe(
         lambda state, json_mode: transcribe_exec.run_transcribe(opts, state, json_mode=json_mode),
         json=json_out,
     )
+
+
+# `assembly t` — a one-letter alias for the CLI's highest-frequency command (the
+# pattern codex uses for `e`/`a`). Registered hidden so the root help table keeps
+# one row per command; `assembly t --help` still renders the full transcribe help.
+app.command(
+    name="t",
+    hidden=True,
+    epilog=examples_epilog([("Same flags as transcribe", "assembly t call.mp3 --speaker-labels")]),
+)(transcribe)

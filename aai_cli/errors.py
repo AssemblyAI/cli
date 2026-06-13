@@ -1,6 +1,6 @@
 """The CLIError hierarchy and the exit-code contract scripts can rely on.
 
-Exit codes (stable; mirrored in the README "Exit codes" table):
+Exit codes (stable; mirrored in the REFERENCE.md "Exit codes" table):
 
 * ``0`` — success.
 * ``1`` — a generic runtime failure: an API/network error (:class:`APIError`),
@@ -126,6 +126,9 @@ _AUTH_FAILURE_HINTS = (
 
 REJECTED_KEY_MESSAGE = "Your API key was rejected."
 REJECTED_KEY_SUGGESTION = "Run 'assembly login' with a valid key, or set ASSEMBLYAI_API_KEY."
+# The non-interactive sign-in recipe (stdin-only so the key never reaches shell
+# history or `ps`); referenced by login's flags and the browser-flow fallbacks.
+STDIN_KEY_RECIPE = "printenv ASSEMBLYAI_API_KEY | assembly login --with-api-key"
 _VOICE_AGENT_POLICY_VIOLATION_CODE = 1008
 
 

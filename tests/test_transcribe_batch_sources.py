@@ -314,6 +314,7 @@ def test_glob_batch_writes_per_source_sidecars(tmp_path, mocker, monkeypatch):
     assert sorted(seen) == ["a.mp3", "b.mp3"]
     records = {r["source"]: r for r in map(json.loads, result.output.splitlines())}
     assert records["a.mp3"] == {
+        "type": "result",
         "source": "a.mp3",
         "status": "completed",
         "id": "t_a.mp3",

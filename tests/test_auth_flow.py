@@ -166,9 +166,9 @@ def test_run_login_flow_timeout_raises_auth_typed_error(monkeypatch):
     assert exc.value.message == "Login timed out waiting for the browser."
     assert exc.value.error_type == "not_authenticated"  # auth-typed, not api_error
     assert exc.value.exit_code == 4
-    assert (
-        exc.value.suggestion
-        == "Run 'assembly login' again, or use 'assembly login --api-key <KEY>'."
+    assert exc.value.suggestion == (
+        "Run 'assembly login' again, or use "
+        "'printenv ASSEMBLYAI_API_KEY | assembly login --with-api-key'."
     )
 
 
@@ -411,7 +411,7 @@ def test_run_login_flow_prints_waiting_hint(monkeypatch, capsys):
     assert flow.run_login_flow().api_key == "sk_final"
     err = capsys.readouterr().err
     assert "Waiting up to 2 minutes" in err
-    assert "assembly login --api-key" in err
+    assert "printenv ASSEMBLYAI_API_KEY" in err  # the stdin login recipe (may wrap)
     assert '"hint"' not in err  # json_mode defaults to False: prose, not JSON objects
 
 
@@ -458,7 +458,7 @@ def test_run_login_flow_json_mode_keeps_stderr_machine_readable(monkeypatch, cap
     assert flow.run_login_flow(json_mode=True).api_key == "sk_final"
     lines = [json.loads(line) for line in capsys.readouterr().err.strip().splitlines()]
     waiting = next(obj for obj in lines if "Waiting up to 2 minutes" in obj["hint"])
-    assert "assembly login --api-key" in waiting["hint"]
+    assert "printenv ASSEMBLYAI_API_KEY | assembly login --with-api-key" in waiting["hint"]
     assert "url" not in waiting  # the url field only ships on the browser-open notes
     opening = next(obj for obj in lines if "Opening your browser" in obj["hint"])
     assert opening["url"].startswith("https://")

@@ -275,7 +275,8 @@ class _Item:
 
     def record(self) -> dict[str, str]:
         """The NDJSON record emitted for this source under ``--json``."""
-        rec = {"source": self.source, "status": self.status}
+        # "type" discriminates NDJSON lines CLI-wide (see docs/cli-reference.md).
+        rec = {"type": "result", "source": self.source, "status": self.status}
         if self.transcript_id:
             rec["id"] = self.transcript_id
         if self.status == "failed":

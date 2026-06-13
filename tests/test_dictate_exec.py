@@ -134,6 +134,7 @@ def test_json_mode_emits_one_ndjson_object_per_utterance(seams, capsys):
     _run(json_mode=True)
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {
+        "type": "utterance",
         "text": "hello world",
         "confidence": 0.9,
         "audio_duration_ms": 1500,

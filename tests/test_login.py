@@ -22,7 +22,12 @@ def test_login_with_api_key_flag_stores_key(mocker):
     result = runner.invoke(app, ["login", "--api-key", "sk_flag", "--json"])
     assert result.exit_code == 0
     assert config.get_api_key("default") == "sk_flag"
-    assert json.loads(result.output)["authenticated"] is True  # pins the success flag
+    # CliRunner merges stderr into output, so the deprecation {"warning": …} line
+    # rides along — filter by the key the success payload carries.
+    objs = [json.loads(line) for line in result.output.strip().splitlines()]
+    assert next(o for o in objs if "authenticated" in o)["authenticated"] is True
+    warning = next(o for o in objs if "warning" in o)["warning"]
+    assert "--with-api-key" in warning  # the deprecation points at the stdin form
 
 
 def test_login_rejects_invalid_key(mocker):
