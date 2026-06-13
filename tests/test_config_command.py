@@ -52,6 +52,19 @@ def test_config_file_path_is_the_toml_under_config_dir():
     assert path.parent == config_store.config_dir()
 
 
+def test_config_dir_resolves_to_the_platformdirs_app_dir(monkeypatch):
+    # The autouse tmp_config fixture patches config_store.config_dir for isolation;
+    # undo that to exercise the real resolver and pin it to the platformdirs location
+    # (so an accidental rename of the "assemblyai" app dir would orphan every user's
+    # config and fail here).
+    from pathlib import Path
+
+    import platformdirs
+
+    monkeypatch.undo()
+    assert config_store.config_dir() == Path(platformdirs.user_config_dir("assemblyai"))
+
+
 def test_bare_config_shows_subcommand_help():
     # no_args_is_help: `assembly config` alone renders the command table instead
     # of a bare "Missing command" usage error.
