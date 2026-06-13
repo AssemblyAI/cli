@@ -8,7 +8,7 @@ import pytest
 import typer
 
 from aai_cli import init_exec, output, transcribe_exec, transcribe_render
-from aai_cli.commands import setup as setup_cmd
+from aai_cli import setup_exec as setup_cmd
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError
 from aai_cli.onboard import sections

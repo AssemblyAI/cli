@@ -6,12 +6,19 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import jsonshape, options, output, theme, timeparse
+from aai_cli import command_registry, help_panels, jsonshape, options, output, theme, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Browse your past streaming (real-time) sessions.", no_args_is_help=True)
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.HISTORY,
+    order=20,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("sessions",),
+    group_name="sessions",
+)
 
 # Fields shown by `sessions get`, in display order.
 _DETAIL_FIELDS = (

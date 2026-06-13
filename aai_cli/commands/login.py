@@ -4,12 +4,18 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from aai_cli import client, config, environments, help_panels, options, output
+from aai_cli import client, command_registry, config, environments, help_panels, options, output
 from aai_cli.context import AppState, persist_browser_login, run_command
 from aai_cli.errors import APIError, CLIError, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.ACCOUNT,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("login", "logout", "whoami"),
+)
 
 
 @app.command(

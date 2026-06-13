@@ -7,9 +7,16 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli import config, environments, init_exec, output, transcribe_exec, transcribe_render
-from aai_cli.commands import doctor as doctor_cmd
-from aai_cli.commands import setup as setup_cmd
+from aai_cli import (
+    config,
+    doctor_checks,
+    environments,
+    init_exec,
+    output,
+    setup_exec,
+    transcribe_exec,
+    transcribe_render,
+)
 from aai_cli.context import AppState, persist_browser_login
 from aai_cli.errors import CLIError
 from aai_cli.init import runner
@@ -98,7 +105,7 @@ _BUILD_CHOICES = [
 ]
 
 
-def _environment_summary(checks: list[doctor_cmd.Check]) -> str:
+def _environment_summary(checks: list[doctor_checks.Check]) -> str:
     """The closing line, computed from the actual statuses: doctor.render's
     all-or-nothing `ok` flag can't say "warnings only", which previously put
     "Everything looks good." right under a warning."""
@@ -113,19 +120,19 @@ def _environment_summary(checks: list[doctor_cmd.Check]) -> str:
     return output.success("Everything looks good.")
 
 
-def _render_environment(checks: list[doctor_cmd.Check]) -> str:
+def _render_environment(checks: list[doctor_checks.Check]) -> str:
     """The wizard's render of the doctor checks: doctor's own per-check lines, with
     the summary derived from what the checks actually reported."""
-    lines = [output.heading("Environment check"), *doctor_cmd.render_check_lines(checks)]
+    lines = [output.heading("Environment check"), *doctor_checks.render_check_lines(checks)]
     lines.append("  " + _environment_summary(checks))
     return "\n".join(lines)
 
 
 def environment(prompter: Prompter, ctx: WizardContext) -> SectionResult:
     checks = [
-        doctor_cmd.check_python(),
-        doctor_cmd.check_ffmpeg(),
-        doctor_cmd.check_audio(),
+        doctor_checks.check_python(),
+        doctor_checks.check_ffmpeg(),
+        doctor_checks.check_audio(),
     ]
     if not ctx.json_mode:  # --json owns stdout (the final summary); skip the human render
         # `_render_environment` prints its own "Environment check" heading, so we don't
@@ -175,11 +182,11 @@ def claude_code(prompter: Prompter, _ctx: WizardContext) -> SectionResult:
     if not prompter.confirm("Wire up Claude Code (docs MCP + skills)?", default=False):
         return SectionResult.SKIPPED
     steps = [
-        setup_cmd.install_mcp("user", force=False),
-        setup_cmd.install_skill(force=False),
-        setup_cmd.install_cli_skill(force=False),
+        setup_exec.install_mcp("user", force=False),
+        setup_exec.install_skill(force=False),
+        setup_exec.install_cli_skill(force=False),
     ]
-    output.console.print(setup_cmd.render({"steps": steps}))
+    output.console.print(setup_exec.render({"steps": steps}))
     if any(s["status"] == "failed" for s in steps):
         return SectionResult.FAILED
     return SectionResult.DONE

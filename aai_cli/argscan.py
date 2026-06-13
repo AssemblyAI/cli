@@ -9,10 +9,16 @@ callers can't drift on which flag forms count.
 
 from __future__ import annotations
 
-# The standalone "give me JSON" flag spellings. Shared with main's misplaced-flag
+# The standalone "give me JSON" flag spellings. Shared with the misplaced-flag
 # hint (which recognizes a `--json`/`-j` passed at the root level), so the two
 # can't drift on which forms count.
 JSON_FLAGS = ("--json", "-j")
+
+# Where the root group stashes the raw token list on the Click context before
+# parsing (see `_OrderedGroup.parse_args` in main.py). The root callback and the
+# Click error formatter (typer_patches.py) both read it to honor a JSON opt-in
+# for failures raised before the subcommand parses its own --json.
+RAW_ARGS_META_KEY = "aai_raw_args"
 
 
 def requests_json(raw_args: list[str]) -> bool:

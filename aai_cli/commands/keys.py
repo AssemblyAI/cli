@@ -3,13 +3,20 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import jsonshape, options, output
+from aai_cli import command_registry, help_panels, jsonshape, options, output
 from aai_cli.auth import ams
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError, UsageError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="List, create, and rename your AssemblyAI API keys.", no_args_is_help=True)
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.ACCOUNT,
+    order=30,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("keys",),
+    group_name="keys",
+)
 
 
 def _project_id(project: dict[str, object]) -> int | None:

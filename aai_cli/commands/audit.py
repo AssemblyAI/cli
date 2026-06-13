@@ -5,12 +5,18 @@ from collections.abc import Mapping
 import typer
 from rich.markup import escape
 
-from aai_cli import help_panels, jsonshape, options, output, timeparse
+from aai_cli import command_registry, help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="View your account's audit log.")
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.ACCOUNT,
+    order=40,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("audit",),
+)
 
 # `__`-separated variants are handled by _normalize_action (which maps `__` -> `.`),
 # so only the dotted forms need entries here.

@@ -1,274 +1,18 @@
 from __future__ import annotations
 
-import shutil
-import sys
-from abc import abstractmethod
-from collections.abc import Mapping, Sequence
-from typing import NotRequired, Protocol, TypedDict
-
 import typer
-from rich.markup import escape
 
-from aai_cli import client, coding_agent, config, environments, help_panels, options, output, theme
+from aai_cli import command_registry, doctor_checks, environments, help_panels, options, output
 from aai_cli.context import AppState, run_command
-from aai_cli.errors import CLIError, NotAuthenticated
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
 
-
-class Check(TypedDict):
-    """One diagnostic: a named check, its status, what it affects, and how to fix it."""
-
-    name: str
-    status: str  # "ok" | "warn" | "fail" — only "fail" makes `doctor` exit non-zero
-    affects: list[str]
-    detail: str
-    fix: str | None
-
-
-class DoctorResult(TypedDict):
-    ok: bool
-    # Which profile/environment the checks ran against. `assembly doctor` always fills
-    # these in; the onboarding wizard reuses `render` for a partial check without
-    # them, so they stay optional.
-    profile: NotRequired[str]
-    environment: NotRequired[str]
-    checks: list[Check]
-
-
-class _SoundDeviceModule(Protocol):
-    @abstractmethod
-    def query_devices(self) -> Sequence[Mapping[str, object]]:
-        """List the audio devices sounddevice can see."""
-
-
-# Status -> (affordance symbol, render style). "fail" is a blocker; "warn" is
-# degraded-but-usable. Drives the per-check glyph in `render`.
-_SYMBOL = {
-    "ok": (theme.SYMBOL_SUCCESS, "aai.success"),
-    "warn": (theme.SYMBOL_WARN, "aai.warn"),
-    "fail": (theme.SYMBOL_ERROR, "aai.error"),
-}
-
-
-def _check(
-    name: str,
-    status: str,
-    detail: str,
-    *,
-    fix: str | None = None,
-    affects: list[str] | None = None,
-) -> Check:
-    """Assemble a Check. ``affects`` defaults to empty — an 'ok' check blocks nothing."""
-    return {"name": name, "status": status, "affects": affects or [], "detail": detail, "fix": fix}
-
-
-def check_python() -> Check:
-    v = sys.version_info
-    version = f"{v.major}.{v.minor}.{v.micro}"
-    if v >= (3, 12):
-        return _check("python", "ok", version)
-    return _check(
-        "python",
-        "fail",
-        f"Python {version} is too old; the CLI needs 3.12+",
-        fix="Install Python 3.12 or newer, then reinstall the CLI.",
-        affects=["everything"],
-    )
-
-
-# Named _check_credentials (not *api_key*): the report dict carries only status text,
-# but CodeQL's name heuristic would treat the call's return value as a secret and flag
-# the doctor payload emit (py/clear-text-logging-sensitive-data).
-def _check_credentials(profile: str) -> Check:
-    try:
-        key = config.resolve_api_key(profile=profile)
-    except NotAuthenticated:
-        if not config.keyring_usable():
-            # On a box with no keyring, `assembly login` can't persist a key either, so
-            # point at the env var that actually works here instead of a dead end.
-            return _check(
-                "api-key",
-                "fail",
-                "No API key found, and this machine has no usable OS keyring.",
-                fix="Set ASSEMBLYAI_API_KEY (browser login can't store a key without a keyring).",
-                affects=["everything"],
-            )
-        return _check(
-            "api-key",
-            "fail",
-            "No API key found.",
-            fix="Run 'assembly login' (or set ASSEMBLYAI_API_KEY).",
-            affects=["everything"],
-        )
-    # validate_key doubles as the connectivity probe: it makes one cheap authed call,
-    # so a pass means the key is valid AND the active environment's API is reachable.
-    api_host = environments.active().api_base.removeprefix("https://")
-    try:
-        valid = client.validate_key(key)
-    except CLIError as exc:
-        return _check(
-            "api-key",
-            "fail",
-            f"Could not reach AssemblyAI: {exc.message}",
-            fix=f"Check your network/proxy and that {api_host} is reachable.",
-            affects=["everything"],
-        )
-    if valid:
-        return _check("api-key", "ok", "API key is valid and AssemblyAI is reachable.")
-    # validate_key collapses every auth-shaped failure (401, 403, proxy "forbidden")
-    # to False, so don't claim a specific status code we never saw.
-    return _check(
-        "api-key",
-        "fail",
-        "API key was rejected by the server.",
-        fix="Run 'assembly login' with a valid key.",
-        affects=["everything"],
-    )
-
-
-def check_ffmpeg() -> Check:
-    # ffmpeg is ONLY used to stream non-WAV files or URLs (stream/agent), where it
-    # decodes them to 16 kHz mono PCM on the fly. Plain `transcribe` (including
-    # YouTube URLs) uploads the file to AssemblyAI and never invokes ffmpeg, so it is
-    # not required for transcription.
-    if shutil.which("ffmpeg"):
-        return _check("ffmpeg", "ok", "found")
-    return _check(
-        "ffmpeg",
-        "warn",
-        (
-            "ffmpeg not found. Only needed to stream non-WAV files or URLs; "
-            "transcription (including YouTube) works without it, as does streaming a "
-            "16 kHz mono WAV."
-        ),
-        fix=(
-            "Install ffmpeg (macOS: brew install ffmpeg; Debian/Ubuntu: apt-get install "
-            "ffmpeg; Fedora: dnf install ffmpeg; Windows: winget install ffmpeg)."
-        ),
-        affects=["stream/agent (non-WAV file or URL input)"],
-    )
-
-
-def _probe_input_devices() -> int:
-    """Number of available microphone (input) devices. Raises if audio is unavailable."""
-    sd = _sounddevice()
-    devices = sd.query_devices()
-    return sum(1 for device in devices if _input_channels(device) > 0)
-
-
-def _sounddevice() -> _SoundDeviceModule:
-    import sounddevice as module
-
-    sd: _SoundDeviceModule = module
-    return sd
-
-
-def _input_channels(device: Mapping[str, object]) -> int:
-    channels = device.get("max_input_channels")
-    return channels if isinstance(channels, int) else 0
-
-
-def check_audio() -> Check:
-    affects = ["stream (microphone)", "agent"]
-    try:
-        inputs = _probe_input_devices()
-    except ImportError:
-        return _check(
-            "audio",
-            "warn",
-            "sounddevice is not importable; the microphone can't be used.",
-            fix="pip install --force-reinstall sounddevice",
-            affects=affects,
-        )
-    except Exception as exc:  # noqa: BLE001 - any PortAudio/device failure is a soft warning
-        return _check(
-            "audio",
-            "warn",
-            f"audio system unavailable: {exc}",
-            fix=(
-                "Install PortAudio (Debian/Ubuntu: sudo apt-get install libportaudio2; "
-                "Fedora: sudo dnf install portaudio; macOS: brew install portaudio)."
-            ),
-            affects=affects,
-        )
-    if inputs == 0:
-        return _check(
-            "audio",
-            "warn",
-            "No microphone (input device) found.",
-            fix="Connect a microphone; live mic input is needed for stream/agent.",
-            affects=affects,
-        )
-    return _check("audio", "ok", f"{inputs} microphone input device(s) available.")
-
-
-def _check_coding_agent() -> Check:
-    missing = [tool for tool in ("claude", "npx") if shutil.which(tool) is None]
-    if not missing:
-        # Tools are present, so report what `assembly setup install` actually
-        # installed rather than always suggesting it.
-        not_installed = coding_agent.missing_components()
-        if not not_installed:
-            return _check(
-                "coding-agent", "ok", "claude and npx found; docs MCP + skills installed."
-            )
-        return _check(
-            "coding-agent",
-            "ok",
-            "claude and npx found; run 'assembly setup install' to add: "
-            f"{', '.join(not_installed)}.",
-        )
-    return _check(
-        "coding-agent",
-        "warn",
-        f"not found: {', '.join(missing)}.",
-        fix=(
-            "Install Claude Code (https://claude.com/claude-code) and Node.js, "
-            "then run 'assembly setup install'."
-        ),
-        affects=["assembly setup install"],
-    )
-
-
-def render_check_lines(checks: list[Check]) -> list[str]:
-    """The per-check report lines (glyph, name — detail, indented fix hint).
-
-    Shared with the onboarding wizard's environment section (which renders the same
-    checks with its own summary line), so the two renders can't drift."""
-    lines: list[str] = []
-    for c in checks:
-        symbol, style = _SYMBOL.get(c["status"], (theme.SYMBOL_HINT, "aai.muted"))
-        lines.append(
-            f"  [{style}]{escape(symbol)}[/{style}] {escape(c['name'])} — {escape(c['detail'])}"
-        )
-        if c["fix"]:
-            lines.append("      " + output.hint(f"fix: {escape(c['fix'])}"))
-    return lines
-
-
-def render(data: DoctorResult) -> str:
-    checks = data["checks"]
-    lines = [output.heading("Environment check")]
-    profile, environment = data.get("profile"), data.get("environment")
-    if profile is not None and environment is not None:
-        lines.append(
-            "  " + output.hint(f"profile: {escape(profile)} · environment: {escape(environment)}")
-        )
-    lines.extend(render_check_lines(checks))
-    if data["ok"]:
-        lines.append("  " + output.success("Everything looks good."))
-        # Only the real `assembly doctor` carries profile context; the onboarding wizard
-        # reuses render() for a partial check and has its own next-steps, so don't
-        # tack a "try transcribe" hint onto that one.
-        if data.get("profile") is not None:
-            lines.append("  " + output.hint("Try it: assembly transcribe --sample"))
-    else:
-        failed = sum(1 for c in checks if c["status"] == "fail")
-        noun = "problem" if failed == 1 else "problems"
-        lines.append("  " + output.fail(f"{failed} {noun} found — see fixes above."))
-    return "\n".join(lines)
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.SETUP,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("doctor",),
+)
 
 
 @app.command(
@@ -288,21 +32,23 @@ def doctor(
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()
+        # Called through the module (not name-imported) so a monkeypatched check in
+        # aai_cli.doctor_checks is seen here and by the onboarding wizard alike.
         checks = [
-            check_python(),
-            _check_credentials(profile),
-            check_ffmpeg(),
-            check_audio(),
-            _check_coding_agent(),
+            doctor_checks.check_python(),
+            doctor_checks.check_credentials(profile),
+            doctor_checks.check_ffmpeg(),
+            doctor_checks.check_audio(),
+            doctor_checks.check_coding_agent(),
         ]
         ok = not any(c["status"] == "fail" for c in checks)
-        payload: DoctorResult = {
+        payload: doctor_checks.DoctorResult = {
             "ok": ok,
             "profile": profile,
             "environment": environments.active().name,
             "checks": checks,
         }
-        output.emit(payload, render, json_mode=json_mode)
+        output.emit(payload, doctor_checks.render, json_mode=json_mode)
         if not ok:
             raise typer.Exit(code=1)
 

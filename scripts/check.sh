@@ -208,10 +208,10 @@ fi
 
 echo "==> no new static-analysis escape hatches"
 # Existing escape hatches are tolerated for now; new ones must be refactored away or
-# justified by changing this gate deliberately. Broad noqa/type-ignore/no-cover are
-# checked by added diff lines. `Any` and `cast(` are count-gated against the
-# merge-base with origin/main so mechanical edits to existing uses don't fail, but
-# net-new uses do.
+# justified by changing this gate deliberately. All hatch classes are count-gated
+# against the merge-base with origin/main so mechanical edits — and *moving* an
+# existing hatch (refactors relocate code wholesale, which an added-line scan would
+# false-positive on) — don't fail, but net-new uses do.
 if git rev-parse --verify --quiet origin/main >/dev/null; then
   # Diff and count against the MERGE-BASE, not the origin/main tip (which the
   # mutation gate and diff-cover already do). With many concurrent branches,
@@ -220,25 +220,28 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   # though the branch itself added nothing. The merge-base only moves when the
   # branch itself rebases.
   gate_base="$(git merge-base origin/main HEAD || echo origin/main)"
-  escape_hatches="$(git diff -U0 "$gate_base" -- aai_cli tests \
-    | rg '^\+.*(# type: ignore|# noqa|pragma: no cover)' || true)"
-  if [[ -n "$escape_hatches" ]]; then
-    printf '%s\n' "$escape_hatches"
-    echo "New static-analysis ignore/no-cover escape hatch found; refactor it or update the gate explicitly."
+  hatch_pattern='# type: ignore|# noqa|pragma: no cover'
+  base_hatch_count="$({ git grep -nE "$hatch_pattern" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  work_hatch_count="$({ rg -n "$hatch_pattern" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  if (( work_hatch_count > base_hatch_count )); then
+    { rg -n "$hatch_pattern" aai_cli tests || true; } | tail -n 20
+    echo "New static-analysis ignore/no-cover escape hatch found: ${work_hatch_count} current vs ${base_hatch_count} at the merge-base with origin/main. Refactor it or update the gate explicitly."
     exit 1
   fi
 
   # Test-suite escape hatches, same net-new-only policy: a skip/xfail is how an agent
   # makes a red test go away instead of fixing it, and time.sleep() is the classic
   # source of flakiness (use events/polling). The legitimate existing skips guard the
-  # env-gated marker suites (e2e/install) and live on origin/main, so they aren't
-  # added diff lines and don't trip this; a genuinely-needed new one must update this
-  # gate deliberately. Scoped to tests/ — production sleeps are fine.
-  test_shortcuts="$(git diff -U0 "$gate_base" -- tests \
-    | rg '^\+.*(pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\()' || true)"
-  if [[ -n "$test_shortcuts" ]]; then
-    printf '%s\n' "$test_shortcuts"
-    echo "New test skip/xfail/time.sleep found; fix the test (or sync properly) or update the gate explicitly."
+  # env-gated marker suites (e2e/install) and are counted at the merge-base, so they
+  # don't trip this — and neither does moving one in a refactor; a genuinely-needed
+  # new one must update this gate deliberately. Scoped to tests/ — production sleeps
+  # are fine.
+  shortcut_pattern='pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\('
+  base_shortcut_count="$({ git grep -nE "$shortcut_pattern" "$gate_base" -- tests || true; } | wc -l | tr -d '[:space:]')"
+  work_shortcut_count="$({ rg -n "$shortcut_pattern" tests || true; } | wc -l | tr -d '[:space:]')"
+  if (( work_shortcut_count > base_shortcut_count )); then
+    { rg -n "$shortcut_pattern" tests || true; } | tail -n 20
+    echo "New test skip/xfail/time.sleep found: ${work_shortcut_count} current vs ${base_shortcut_count} at the merge-base with origin/main. Fix the test (or sync properly) or update the gate explicitly."
     exit 1
   fi
 

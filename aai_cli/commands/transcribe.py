@@ -5,11 +5,17 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli import choices, help_panels, llm, options, transcribe_exec
+from aai_cli import choices, command_registry, help_panels, llm, options, transcribe_exec
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("transcribe",),
+)
 
 
 @app.command(

@@ -1,0 +1,92 @@
+# serializer version: 1
+# name: test_root_help_matches_snapshot
+  '''
+  
+   Usage: assembly [OPTIONS] COMMAND [ARGS]...
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --profile             -p      TEXT     Named credential profile.             │
+  │ --env                         TEXT     Backend environment (production,      │
+  │                                        sandbox000).                          │
+  │ --sandbox                              Shortcut for --env sandbox000.        │
+  │ --quiet               -q               Suppress non-essential messages       │
+  │                                        (warnings, hints).                    │
+  │ --verbose             -v      INTEGER  Log diagnostics to stderr (-v:        │
+  │                                        requests, -vv: wire-level detail).    │
+  │                                        [default: 0]                          │
+  │ --version             -V               Show the CLI version and exit.        │
+  │ --install-completion                   Install completion for the current    │
+  │                                        shell.                                │
+  │ --show-completion                      Show completion for the current       │
+  │                                        shell.                                │
+  │ --help                                 Show this message and exit.           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Quick Start ────────────────────────────────────────────────────────────────╮
+  │ onboard      Guided setup: sign in, run your first transcription, and start  │
+  │              building.                                                       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Build an App ───────────────────────────────────────────────────────────────╮
+  │ init         Scaffold a new project from a template, then launch it.         │
+  │ dev          Launch the dev server for the app in the current directory.     │
+  │ share        Boot the app and expose it on a public URL via a cloudflared    │
+  │              tunnel.                                                         │
+  │ deploy       Deploy the current project to Vercel (default), Railway, or     │
+  │              Fly.io.                                                         │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Run AssemblyAI ─────────────────────────────────────────────────────────────╮
+  │ transcribe   Transcribe an audio file, URL, or YouTube/podcast link — or a   │
+  │              whole batch.                                                    │
+  │ stream       Transcribe live audio in real time — from your mic, a file, a   │
+  │              URL, or a pipe.                                                 │
+  │ dictate      Dictate with a hotkey: record the mic, get the transcript back  │
+  │              instantly.                                                      │
+  │ agent        Have a live two-way voice conversation with an AssemblyAI voice │
+  │              agent.                                                          │
+  │ speak        Synthesize speech from text with AssemblyAI streaming TTS       │
+  │              (sandbox only).                                                 │
+  │ llm          Send a prompt to AssemblyAI's LLM Gateway and print the         │
+  │              response.                                                       │
+  │ clip         Cut clips out of a media file by speaker, text match, LLM pick, │
+  │              or time range.                                                  │
+  │ dub          Dub a video or audio file into another language (sandbox only). │
+  │ caption      Burn always-visible captions into a video.                      │
+  │ eval         Transcribe an evaluation dataset and score WER against its      │
+  │              reference texts.                                                │
+  │ webhooks     Receive webhook deliveries on a public dev URL.                 │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Setup & Tools ──────────────────────────────────────────────────────────────╮
+  │ doctor       Check that your environment is ready to use AssemblyAI.         │
+  │ setup        Set up your coding agent for AssemblyAI (docs MCP + skills).    │
+  │ telemetry    Anonymous usage telemetry: status, enable, disable.             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ History ────────────────────────────────────────────────────────────────────╮
+  │ transcripts  Browse and fetch past transcripts.                              │
+  │ sessions     Browse your past streaming (real-time) sessions.                │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Account ────────────────────────────────────────────────────────────────────╮
+  │ login        Authenticate via your browser; stores a CLI API key.            │
+  │ logout       Clear stored credentials for the active profile.                │
+  │ whoami       Show the active profile and whether its key is usable.          │
+  │ balance      Show your remaining account balance.                            │
+  │ usage        Show usage over a date range (defaults to the last 30 days).    │
+  │ limits       Show your account's rate limits per service.                    │
+  │ keys         List, create, and rename your AssemblyAI API keys.              │
+  │ audit        List recent audit-log entries for your account.                 │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Guided setup (start here)
+   $ assembly onboard
+   Transcribe a file
+   $ assembly transcribe call.mp3
+   Stream live audio in real time
+   $ assembly stream
+   Talk to a voice agent
+   $ assembly agent
+   Summarize while transcribing
+   $ assembly transcribe call.mp3 --llm "summarize action items"
+  
+  
+  
+  '''
+# ---

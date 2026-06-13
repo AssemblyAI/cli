@@ -8,7 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from rich.markup import escape
 from rich.text import Text
 
-from aai_cli import help_panels, jsonshape, options, output, timeparse
+from aai_cli import command_registry, help_panels, jsonshape, options, output, timeparse
 from aai_cli.auth import ams
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import UsageError
@@ -126,6 +126,12 @@ class _Usage(BaseModel):
 
 
 app = typer.Typer(help="Account billing, usage, and limits.")
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.ACCOUNT,
+    order=20,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("balance", "usage", "limits"),
+)
 
 
 @app.command(

@@ -9,12 +9,18 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import evaluate_exec, help_panels, options
+from aai_cli import command_registry, evaluate_exec, help_panels, options
 from aai_cli.context import run_command
 from aai_cli.evaluate_exec import EvalSpeechModel
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=100,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("eval",),
+)
 
 
 @app.command(

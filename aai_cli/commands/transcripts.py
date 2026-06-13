@@ -3,12 +3,28 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import choices, client, options, output, theme, timeparse
+from aai_cli import (
+    choices,
+    client,
+    command_registry,
+    help_panels,
+    options,
+    output,
+    theme,
+    timeparse,
+)
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import APIError
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=True)
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.HISTORY,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("transcripts",),
+    group_name="transcripts",
+)
 
 
 # `list` is registered before `get` so the subcommand help lists them in that

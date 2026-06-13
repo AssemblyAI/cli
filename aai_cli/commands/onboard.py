@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import help_panels, options, output, stdio
+from aai_cli import command_registry, help_panels, options, output, stdio
 from aai_cli.context import AppState, run_command
 from aai_cli.errors import CLIError
 from aai_cli.help_text import examples_epilog
@@ -11,6 +11,12 @@ from aai_cli.onboard.prompter import InteractivePrompter, NonInteractivePrompter
 from aai_cli.onboard.sections import WizardContext
 
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.QUICK_START,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("onboard",),
+)
 
 
 def build_prompter(*, non_interactive: bool = False) -> Prompter:

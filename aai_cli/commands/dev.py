@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import dev_exec, help_panels, options
+from aai_cli import command_registry, dev_exec, help_panels, options
 from aai_cli.context import run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import devserver
@@ -11,6 +11,12 @@ from aai_cli.init import devserver
 # Flattened single-command sub-typer (same pattern as `assembly init`): one
 # @app.command() registered via app.add_typer(dev.app) with no name.
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.BUILD,
+    order=20,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("dev",),
+)
 
 
 @app.command(

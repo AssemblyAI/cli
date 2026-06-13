@@ -3,11 +3,18 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import options, webhook_listen
+from aai_cli import command_registry, help_panels, options, webhook_listen
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer(help="Receive webhook deliveries on a public dev URL.", no_args_is_help=True)
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=110,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("webhooks",),
+    group_name="webhooks",
+)
 
 
 @app.command(

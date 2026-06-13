@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import help_panels, init_exec, options
+from aai_cli import command_registry, help_panels, init_exec, options
 from aai_cli.context import AppState, run_command
 from aai_cli.help_text import examples_epilog
 from aai_cli.init import templates
@@ -12,6 +12,12 @@ from aai_cli.init import templates
 # uses): one @app.command() named `init`, registered via app.add_typer(init.app) with
 # no name. Bare `assembly init` runs the command with template=None -> the interactive picker.
 app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.BUILD,
+    order=10,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("init",),
+)
 
 
 @app.command(
