@@ -1,3 +1,4 @@
+import os
 import stat
 
 import pytest
@@ -7,13 +8,17 @@ from aai_cli.init import scaffold
 
 
 def test_scaffold_env_is_owner_only_readable(tmp_path):
-    # The .env holds the real API key, so it must not be world/group-readable. (CI is
-    # POSIX; the project gates its Windows-specific paths in scripts/check.sh, not here.)
+    # The .env holds the real API key, so it must not be world/group-readable.
     target = tmp_path / "app"
     scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
-    mode = stat.S_IMODE((target / ".env").stat().st_mode)
-    assert mode == 0o600
-    assert not mode & (stat.S_IRGRP | stat.S_IROTH)  # no group/other read of the key
+    env_path = target / ".env"
+    assert env_path.is_file()
+    # POSIX permission bits are meaningful only on POSIX; Windows has no 0600 mode,
+    # so the scaffolder's chmod is a best-effort no-op there.
+    if os.name == "posix":
+        mode = stat.S_IMODE(env_path.stat().st_mode)
+        assert mode == 0o600
+        assert not mode & (stat.S_IRGRP | stat.S_IROTH)  # no group/other read of the key
 
 
 def test_scaffold_tightens_existing_env_on_overwrite(tmp_path):
@@ -23,9 +28,13 @@ def test_scaffold_tightens_existing_env_on_overwrite(tmp_path):
     target.mkdir()
     stale = target / ".env"
     stale.write_text("ASSEMBLYAI_API_KEY=old\n")
-    stale.chmod(0o644)
+    if os.name == "posix":
+        stale.chmod(0o644)
     scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")
-    assert stat.S_IMODE(stale.stat().st_mode) == 0o600
+    # The rewrite lands on every platform; the 0600 tightening is POSIX-only.
+    assert "ASSEMBLYAI_API_KEY=sk-real-key" in stale.read_text()
+    if os.name == "posix":
+        assert stat.S_IMODE(stale.stat().st_mode) == 0o600
 
 
 def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):

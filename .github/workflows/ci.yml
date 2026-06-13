@@ -103,6 +103,61 @@ jobs:
           fi
           echo "all py-version matrix cells passed"
 
+  windows:
+    name: tests (windows, py${{ matrix.python-version }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    # Windows can't run scripts/check.sh (it's bash plus Go/Homebrew/shell tooling), so
+    # this job runs only the pytest suite — enough to catch Windows-specific regressions
+    # (path handling, subprocess/encoding, POSIX-only assumptions). The lint/type/security
+    # gates stay on the Linux `check` job. Same Python ends as that matrix: 3.12 floor,
+    # 3.13 shipped; fail-fast off so one version's failure doesn't mask the other's.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    # Pin the interpreter every `uv run` resolves to, so the matrix exercises each version.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false  # no job pushes; don't leave the token in .git/config
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # No native media tooling is installed: the sounddevice wheel bundles PortAudio on
+      # Windows, and the unit suite mocks every ffmpeg/ffprobe shell-out. The e2e/install
+      # suites that would need real binaries are excluded by the default pytest
+      # `-m 'not e2e and not install'` selection.
+      - name: Install uv
+        run: python -m pip install uv
+
+      # `uv run` syncs the locked project + dev group into .venv, then runs the default
+      # suite (e2e/install excluded via addopts).
+      - name: Run test suite
+        run: uv run pytest -q
+
+  # Stable, un-suffixed name for branch protection, mirroring `check-result`: green only
+  # when every Windows matrix cell passed (a failed/skipped/cancelled matrix can't satisfy
+  # it). Point branch protection at this one name and matrix changes won't break it.
+  windows-result:
+    name: tests (windows)
+    needs: [windows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every Windows matrix cell to have passed
+        run: |
+          if [ "${{ needs.windows.result }}" != "success" ]; then
+            echo "windows matrix result: ${{ needs.windows.result }}"
+            exit 1
+          fi
+          echo "all windows matrix cells passed"
+
   lint-formula:
     name: brew style (Homebrew formula)
     runs-on: ubuntu-latest
