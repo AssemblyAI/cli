@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
 from aai_cli.core.errors import APIError, UsageError
@@ -182,7 +182,7 @@ def content_of(response: ChatCompletion) -> str:
     return content or ""
 
 
-def usage_of(response: ChatCompletion) -> dict[str, Any] | None:
+def usage_of(response: ChatCompletion) -> dict[str, object] | None:
     """Return the token-usage block as a plain dict, if present."""
     usage = response.usage
     if usage is None:
