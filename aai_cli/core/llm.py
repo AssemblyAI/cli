@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
-from aai_cli.core.errors import APIError, UsageError
+from aai_cli.core.errors import APIError, UsageError, auth_failure
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -116,12 +116,18 @@ _ACCESS_DENIED_SUGGESTION = (
 )
 
 
+def _is_entitlement_denial(exc: object) -> bool:
+    """True when a gateway 401/403 reads as a plan-entitlement block rather than a
+    bad key or an intercepting proxy."""
+    text = f"{exc} {getattr(exc, 'body', None) or ''}".lower()
+    return any(hint in text for hint in _ENTITLEMENT_HINTS)
+
+
 def _denial_suggestion(exc: object) -> str:
     """Pick the suggestion for a gateway 401/403: point at billing only when the
     response actually mentions the plan entitlement, otherwise at key/network —
     a corporate-proxy 403 must not send users to the billing page."""
-    text = f"{exc} {getattr(exc, 'body', None) or ''}".lower()
-    if any(hint in text for hint in _ENTITLEMENT_HINTS):
+    if _is_entitlement_denial(exc):
         return _PAID_PLAN_SUGGESTION
     return _ACCESS_DENIED_SUGGESTION
 
@@ -159,9 +165,14 @@ def complete(
         )
     except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
         # The gateway returns 401/403 for an invalid key, a proxy block, and a
-        # plan entitlement block ("no access to LLM Gateway"), so surface its
-        # actual message and pick the suggestion from what it says — only an
-        # entitlement message should point at billing.
+        # plan entitlement block ("no access to LLM Gateway"). A plain 401
+        # (AuthenticationError) with no entitlement hint is just a rejected key, so
+        # surface the same clean exit-4 auth_failure transcribe gives instead of
+        # echoing the gateway's raw 401 body. A 403 (proxy or entitlement) keeps the
+        # gateway's own message and picks the suggestion from what it says — only an
+        # entitlement message should point at billing, never a corporate-proxy 403.
+        if isinstance(exc, openai.AuthenticationError) and not _is_entitlement_denial(exc):
+            raise auth_failure() from exc
         raise APIError(
             f"LLM Gateway access denied: {exc}",
             suggestion=_denial_suggestion(exc),

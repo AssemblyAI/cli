@@ -7,7 +7,7 @@ import pytest
 from openai.types.chat import ChatCompletion
 
 from aai_cli.core import environments, llm
-from aai_cli.core.errors import APIError
+from aai_cli.core.errors import APIError, NotAuthenticated
 
 _GATEWAY_BASE = environments.get(environments.DEFAULT_ENV).llm_gateway_base
 _REQUEST = httpx.Request("POST", f"{_GATEWAY_BASE}/chat/completions")
@@ -65,18 +65,35 @@ def test_complete_passes_transcript_id_as_extra_body(monkeypatch):
     assert seen["extra_body"] == {"transcript_id": "t_42"}
 
 
-def test_complete_auth_error_surfaces_gateway_message(monkeypatch):
+def test_complete_bad_key_401_raises_clean_auth_failure(monkeypatch):
+    # A plain 401 with no entitlement hint is just a rejected key: surface the same
+    # clean exit-4 auth_failure transcribe gives, not the gateway's raw 401 body.
     err = openai.AuthenticationError(
-        "bad key", response=httpx.Response(401, request=_REQUEST), body=None
+        "Authentication error, API token missing/invalid",
+        response=httpx.Response(401, request=_REQUEST),
+        body=None,
+    )
+    _fake_client(monkeypatch, error=err)
+    with pytest.raises(NotAuthenticated) as exc:
+        llm.complete("sk", model="m", messages=[])
+    assert exc.value.exit_code == 4
+    assert exc.value.rejected_key is True
+    # Not the raw gateway passthrough (which would leak the 401 body).
+    assert "access denied" not in exc.value.message
+
+
+def test_complete_entitlement_401_still_points_at_billing(monkeypatch):
+    # A 401 that *does* read as an entitlement block keeps the exit-1 billing pointer
+    # rather than the rejected-key path.
+    err = openai.AuthenticationError(
+        "Your account has no access to the LLM Gateway.",
+        response=httpx.Response(401, request=_REQUEST),
+        body=None,
     )
     _fake_client(monkeypatch, error=err)
     with pytest.raises(APIError, match="access denied") as exc:
         llm.complete("sk", model="m", messages=[])
-    # Nothing in "bad key" mentions the plan entitlement, so the hint points at the
-    # key/network, not billing.
-    assert exc.value.suggestion is not None
-    assert "paid plan" not in exc.value.suggestion
-    assert "API key" in exc.value.suggestion and "network" in exc.value.suggestion
+    assert exc.value.suggestion is not None and "paid plan" in exc.value.suggestion
 
 
 def test_complete_entitlement_denial_suggests_paid_plan(monkeypatch):

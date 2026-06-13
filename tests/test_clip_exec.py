@@ -134,6 +134,18 @@ def test_run_clip_rejects_missing_out_dir(media, tmp_path):
     assert "Create it first" in (exc.value.suggestion or "")
 
 
+def test_run_clip_rejects_out_dir_that_is_a_file(media, tmp_path):
+    # A path that exists but is a regular file isn't "doesn't exist" — say so precisely.
+    a_file = tmp_path / "notes.txt"
+    a_file.write_text("x")
+    opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"], out_dir=a_file)
+    with pytest.raises(UsageError) as exc:
+        clip_exec.run_clip(opts, AppState(), json_mode=False)
+    assert "--out-dir is not a directory" in exc.value.message
+    assert "doesn't exist" not in exc.value.message
+    assert "not a file" in (exc.value.suggestion or "")
+
+
 def test_run_clip_requires_ffmpeg(media, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: None)
     opts = dataclasses.replace(DEFAULTS, media=str(media), ranges=["1-2"])

@@ -13,6 +13,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from assemblyai import PIISubstitutionPolicy
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import code_gen
@@ -67,7 +68,7 @@ class StreamOptions:
     filter_profanity: bool | None
     redact_pii: bool | None
     redact_pii_policy: str | None
-    redact_pii_sub: str | None
+    redact_pii_sub: PIISubstitutionPolicy | None
     webhook_url: str | None
     webhook_auth_header: str | None
     llm_prompt: list[str] | None
@@ -111,7 +112,7 @@ class StreamOptions:
             "voice_focus_threshold": self.voice_focus_threshold,
             "redact_pii": self.redact_pii,
             "redact_pii_policies": config_builder.split_csv(self.redact_pii_policy),
-            "redact_pii_sub": self.redact_pii_sub,
+            "redact_pii_sub": config_builder.enum_value(self.redact_pii_sub),
             "inactivity_timeout": self.inactivity_timeout,
             "webhook_url": self.webhook_url,
             "prompt": self.prompt,

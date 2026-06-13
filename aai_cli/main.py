@@ -190,8 +190,19 @@ def main(
     try:
         environments.set_active(state.resolve_environment())
     except CLIError as err:
-        output.emit_error(err, json_mode=json_mode)
-        raise typer.Exit(code=err.exit_code) from None
+        if err.error_type != "invalid_config":
+            output.emit_error(err, json_mode=json_mode)
+            raise typer.Exit(code=err.exit_code) from None
+        # A corrupt config.toml can't tell us the profile's stored env. Defer the error
+        # (run_command re-raises it for real commands) and fall back to the explicit
+        # --env or the default, so `assembly config path` can still locate the file.
+        # An explicit bad --env still wins — surface it now rather than the deferred one.
+        state.deferred_config_error = err
+        try:
+            environments.set_active(environments.resolve(state.env, None))
+        except CLIError as env_err:
+            output.emit_error(env_err, json_mode=json_mode)
+            raise typer.Exit(code=env_err.exit_code) from None
     active_env = environments.active()
     _LOG.debug("environment: %s (%s)", active_env.name, active_env.api_base)
     for warning in (conflict_warning, state.env_override_warning()):

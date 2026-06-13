@@ -75,6 +75,33 @@ def test_config_path_json():
     assert json.loads(result.output) == {"path": str(config.config_file_path())}
 
 
+def test_config_path_works_even_when_config_is_corrupt(tmp_config):
+    # The location is independent of the file's contents, so `config path` — the command
+    # you'd reach for to go fix a broken config — must still report it, not fail on it.
+    (tmp_config / "config.toml").write_text("this is = = not toml [[[")
+    result = runner.invoke(app, ["config", "path"])
+    assert result.exit_code == 0
+    assert result.output.strip() == str(config.config_file_path())
+
+
+def test_config_list_still_errors_when_config_is_corrupt(tmp_config):
+    # Other commands re-raise the deferred corrupt-config error (they actually read it).
+    (tmp_config / "config.toml").write_text("this is = = not toml [[[")
+    result = runner.invoke(app, ["config", "list", "--json"])
+    assert result.exit_code == 2
+    assert json.loads(result.output)["error"]["type"] == "invalid_config"
+
+
+def test_bad_env_flag_wins_over_a_corrupt_config(tmp_config):
+    # Corrupt config defers, but an explicit bad --env is still surfaced as the
+    # invalid_environment usage error rather than the deferred config error.
+    (tmp_config / "config.toml").write_text("this is = = not toml [[[")
+    result = runner.invoke(app, ["--env", "bogusenv", "config", "path"])
+    assert result.exit_code == 2
+    assert "bogusenv" in result.output
+    assert "invalid TOML" not in result.output
+
+
 def test_config_list_json_is_the_full_settings_object():
     config.set_api_key("staging", "sk_2")
     config.set_profile_env("staging", "sandbox000")

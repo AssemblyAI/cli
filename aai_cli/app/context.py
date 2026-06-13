@@ -26,6 +26,10 @@ class AppState:
     profile: str | None = None
     env: str | None = None
     quiet: bool = False
+    # Set by the root callback when config.toml is unreadable during environment
+    # resolution: most commands re-raise it (run_command), but `config path` — the
+    # command you reach for to *find* the broken file — tolerates it.
+    deferred_config_error: CLIError | None = None
 
     def resolve_profile(self) -> str:
         """The profile to act on: explicit --profile, else the active profile.
@@ -64,10 +68,12 @@ class AppState:
             # never satisfy these endpoints — they authenticate with the browser
             # session, not the API key — so spell out the only fix that works.
             raise NotAuthenticated(
-                "These commands need a browser login. Run 'assembly login' (without --api-key).",
+                "Account commands read account-level data and authenticate with your "
+                "browser-login session, which this profile doesn't have.",
                 suggestion=(
-                    "Run 'assembly login' to sign in via your browser — an API key alone "
-                    "can't access account commands."
+                    "Run 'assembly login' to sign in via your browser. Unlike transcription "
+                    "commands (which work with an API key), account data like balance, usage, "
+                    "and keys needs that session."
                 ),
             )
         # Registered like the API key in config.resolve_api_key: -v/-vv diagnostics
@@ -197,16 +203,34 @@ def run_command(
     *,
     json: bool = False,
     auto_login: bool = True,
+    tolerate_unreadable_config: bool = False,
 ) -> None:
-    """Execute a command body, mapping CLIError to clean output + exit code."""
+    """Execute a command body, mapping CLIError to clean output + exit code.
+
+    `tolerate_unreadable_config` lets a command (only `config path`) run even when the
+    root callback deferred a corrupt-config error, so it can still report the file's
+    location; every other command re-raises that error here.
+    """
     state: AppState = ctx.obj
     json_mode = output.resolve_json(explicit=json)
+    deferred = state.deferred_config_error
+    if deferred is not None and not tolerate_unreadable_config:
+        # The root callback couldn't read config.toml. Surface that for ordinary
+        # commands (which depend on it) the same way the callback used to — emit and
+        # exit, without telemetry/update-check, both of which would just re-parse it.
+        _fail(deferred, json_mode=json_mode)
     try:
-        # Inside the try so telemetry sees the raw CLIError (and its error_type)
-        # before it's folded into a typer.Exit below.
-        with telemetry.track(ctx.command_path):
+        if deferred is not None:
+            # `config path` opted in (tolerate_unreadable_config): it reports a
+            # contents-independent location, so run just the body and skip the
+            # telemetry/update-check wrappers that re-parse the broken config.
             fn(state, json_mode)
-        update_check.maybe_notify(json_mode=json_mode)
+        else:
+            # Inside the try so telemetry sees the raw CLIError (and its error_type)
+            # before it's folded into a typer.Exit below.
+            with telemetry.track(ctx.command_path):
+                fn(state, json_mode)
+            update_check.maybe_notify(json_mode=json_mode)
     except NotAuthenticated as err:
         if not auto_login or not _should_auto_login(err):
             _fail(err, json_mode=json_mode)

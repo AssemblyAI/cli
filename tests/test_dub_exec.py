@@ -7,6 +7,7 @@ parsing in test_dub_command.py."""
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import os
 from pathlib import Path
@@ -257,7 +258,11 @@ def test_validate_out_rejects_the_input_via_hard_link(media):
     # Two spellings of one file (mimics --out TALK.MP4 on a case-insensitive
     # filesystem): path comparison passes, samefile must still catch it.
     clone = media.parent / "TALK.MP4"
-    os.link(media, clone)
+    # On a case-insensitive filesystem (e.g. macOS default) TALK.MP4 already *is*
+    # talk.mp4, so the link "exists" — the two spellings resolve to one file without an
+    # explicit hard link, which is exactly the case samefile must still catch.
+    with contextlib.suppress(FileExistsError):
+        os.link(media, clone)
     with pytest.raises(UsageError) as exc:
         mediafile.validate_out(clone, media)
     assert "overwrite the input file" in exc.value.message

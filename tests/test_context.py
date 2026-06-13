@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 from aai_cli.app.context import AppState, _interactive_session, run_command
 from aai_cli.auth.flow import LoginResult
 from aai_cli.core import config, environments
-from aai_cli.core.errors import APIError, NotAuthenticated, auth_failure
+from aai_cli.core.errors import APIError, CLIError, NotAuthenticated, auth_failure
 
 runner = CliRunner()
 
@@ -331,8 +331,15 @@ def test_resolve_session_raises_when_no_session():
     from aai_cli.app.context import AppState
     from aai_cli.core.errors import NotAuthenticated
 
-    with pytest.raises(NotAuthenticated):
+    with pytest.raises(NotAuthenticated) as exc:
         AppState().resolve_session()
+    # The message explains *why* account commands differ from API-key commands, so
+    # users aren't confused that `transcripts` works but `balance` says "not signed in".
+    assert "account-level data" in exc.value.message
+    assert "browser-login session" in exc.value.message
+    suggestion = exc.value.suggestion or ""
+    assert "sign in via your browser" in suggestion
+    assert "balance, usage" in suggestion
 
 
 def test_resolve_session_raises_when_only_account_id_missing(monkeypatch):
@@ -448,14 +455,13 @@ def test_resolve_session_suggestion_never_offers_api_key_env_var():
         AppState().resolve_session()
     assert exc.value.suggestion is not None
     assert "browser" in exc.value.suggestion
-    assert "API key alone" in exc.value.suggestion
+    assert "API key" in exc.value.suggestion  # explains why the key won't do
     assert "ASSEMBLYAI_API_KEY" not in exc.value.suggestion
 
 
 def test_resolve_profile_rejects_invalid_explicit_profile_fast():
     # Validated at resolution time (the root callback), so a typo'd --profile is a
     # fast exit-2 before any network round-trip, not a keyring-write-time failure.
-    from aai_cli.core.errors import CLIError
 
     with pytest.raises(CLIError) as exc:
         AppState(profile="bad name!").resolve_profile()

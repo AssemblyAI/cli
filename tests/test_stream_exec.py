@@ -112,6 +112,17 @@ def test_run_stream_validates_before_resolving_credentials():
         )
 
 
+def test_redact_pii_sub_enum_maps_to_its_string_value():
+    # --redact-pii-sub is an SDK enum (validated at parse time), so base_flags must
+    # unwrap it to the canonical string the streaming config expects, not pass the
+    # enum member through.
+    from assemblyai import PIISubstitutionPolicy
+
+    opts = dataclasses.replace(DEFAULTS, redact_pii_sub=PIISubstitutionPolicy.hash)
+    assert opts.base_flags()["redact_pii_sub"] == "hash"
+    assert DEFAULTS.base_flags()["redact_pii_sub"] is None  # unset stays None
+
+
 def test_stream_options_are_immutable():
     field_name = "sample"
     with pytest.raises(dataclasses.FrozenInstanceError):
