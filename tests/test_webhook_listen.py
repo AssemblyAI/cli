@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import webhook_listen
+from aai_cli.commands.webhooks import _listen as webhook_listen
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -306,7 +306,7 @@ def _stub_tunnel(monkeypatch, tmp_path, *, url):
     )
     # Stop immediately: the listener loop isn't under test here.
     monkeypatch.setattr(
-        "aai_cli.webhook_listen.ThreadingHTTPServer.serve_forever", _raise_interrupt
+        "aai_cli.commands.webhooks._listen.ThreadingHTTPServer.serve_forever", _raise_interrupt
     )
     return proc, log, seen, real_port
 
@@ -342,7 +342,7 @@ def test_listen_tunnel_url_timeout_errors_and_keeps_the_log(tmp_path, monkeypatc
 def test_listen_accepts_explicit_max_events_zero(monkeypatch):
     # 0 is the documented "until Ctrl-C" value; the option's floor must not reject it.
     monkeypatch.setattr(
-        "aai_cli.webhook_listen.ThreadingHTTPServer.serve_forever", _raise_interrupt
+        "aai_cli.commands.webhooks._listen.ThreadingHTTPServer.serve_forever", _raise_interrupt
     )
     result = runner.invoke(app, ["webhooks", "listen", "--no-tunnel", "--max-events", "0"])
     assert result.exit_code == 0, result.output

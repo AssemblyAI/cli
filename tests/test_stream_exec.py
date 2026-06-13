@@ -1,4 +1,4 @@
-"""Direct tests of the `assembly stream` options/run seam (aai_cli.stream_exec).
+"""Direct tests of the `assembly stream` options/run seam (aai_cli.commands.stream._exec).
 
 The command module only parses argv into a StreamOptions; everything after that is
 run_stream, a plain function of data. These tests drive validation, flag mapping,
@@ -12,8 +12,9 @@ import dataclasses
 
 import pytest
 
-from aai_cli import config, llm, stream_exec
+from aai_cli import config, llm
 from aai_cli.commands.stream import DEFAULT_SPEECH_MODEL
+from aai_cli.commands.stream import _exec as stream_exec
 from aai_cli.context import AppState
 from aai_cli.errors import UsageError
 

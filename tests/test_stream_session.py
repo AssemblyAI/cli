@@ -64,7 +64,7 @@ def test_stream_session_closes_renderer_on_error(monkeypatch):
     def boom(*_args, **_kwargs):
         raise CLIError("stream blew up")
 
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", boom)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", boom)
     session = StreamSession(
         api_key="sk",
         base_flags={},
@@ -122,9 +122,9 @@ def test_stream_system_audio_uses_macos_source(monkeypatch) -> None:
         if on_turn:
             on_turn(types.SimpleNamespace(transcript=source_type, end_of_turn=True))
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     result = runner.invoke(app, ["stream", "--system-audio", "--json"])
     assert result.exit_code == 0
     assert set(source_types) == {"FakeSystemAudio", "FakeMic"}
@@ -154,9 +154,9 @@ def test_stream_system_audio_only_disables_mic(monkeypatch):
     def fail_mic(**_kwargs):
         raise AssertionError("system-audio-only must not open the microphone")
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", fail_mic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", _capture_source(seen))
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", fail_mic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", _capture_source(seen))
     result = runner.invoke(app, ["stream", "--system-audio-only", "--json"])
     assert result.exit_code == 0
     assert type(seen["source"]).__name__ == "FakeSystemAudio"
@@ -195,9 +195,9 @@ def test_stream_system_audio_forwards_mic_device_flags(monkeypatch):
     ):
         list(source)
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     result = runner.invoke(
         app,
         ["stream", "--system-audio", "--device", "2", "--sample-rate", "44100", "--json"],
@@ -235,9 +235,9 @@ def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
         transcript_inputs.append(transcript_text)
         return "summary"
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
     result = runner.invoke(app, ["stream", "--system-audio", "--llm", "summarize", "--json"])
     assert result.exit_code == 0
@@ -271,9 +271,9 @@ def test_stream_system_audio_speaker_labels_only_diarizes_system(monkeypatch):
         chunk = next(iter(source))
         speaker_labels_by_chunk[chunk] = params.speaker_labels
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     result = runner.invoke(app, ["stream", "--system-audio", "--speaker-labels", "--json"])
     assert result.exit_code == 0
     assert speaker_labels_by_chunk[b"system"] is True
@@ -319,9 +319,9 @@ def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
     ):
         raise APIError(f"{type(source).__name__} failed")
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
     result = runner.invoke(app, ["stream", "--system-audio", "--json"])
     assert result.exit_code == 1
@@ -367,9 +367,9 @@ def test_stream_system_audio_parallel_unexpected_worker_error_fails_the_run(monk
     def fake_stream_audio(api_key, source, *, params, **_kwargs):
         raise RuntimeError("event parsing blew up")
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.stream_exec.client.stream_audio", fake_stream_audio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
     monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
     result = runner.invoke(app, ["stream", "--system-audio", "--json"])
     assert result.exit_code == 1
@@ -398,8 +398,8 @@ def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypat
         def start(self):
             raise KeyboardInterrupt
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
     monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", InterruptingThread)
     result = runner.invoke(app, ["stream", "--system-audio"])
     assert result.exit_code == 0
@@ -424,8 +424,8 @@ def test_stream_system_audio_parallel_broken_pipe_exits_zero(monkeypatch):
         def start(self):
             raise BrokenPipeError
 
-    monkeypatch.setattr("aai_cli.stream_exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.stream_exec.MicrophoneSource", FakeMic)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
     monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", BrokenPipeThread)
     result = runner.invoke(app, ["stream", "--system-audio"])
     assert result.exit_code == 0

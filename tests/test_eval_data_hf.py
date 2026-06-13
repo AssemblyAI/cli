@@ -1,4 +1,4 @@
-"""Hugging Face dataset loading for `assembly eval` (`aai_cli.eval_data`).
+"""Hugging Face dataset loading for `assembly eval` (`aai_cli.commands.evaluate._data`).
 
 Runs against an httpx MockTransport (the test_auth_ams.py pattern), so
 pytest-socket stays armed; local-manifest paths live in
@@ -10,7 +10,8 @@ import dataclasses
 import httpx2 as httpx
 import pytest
 
-from aai_cli import eval_data, eval_hf_api
+from aai_cli.commands.evaluate import _data as eval_data
+from aai_cli.commands.evaluate import _hf_api as eval_hf_api
 from aai_cli.errors import APIError, UsageError
 
 # ------------------------------------------------------- Hugging Face datasets

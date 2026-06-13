@@ -168,7 +168,7 @@ def test_transcribe_empty_stdin_exits_2():
 def test_stream_missing_file_fails_before_credentials(monkeypatch):
     called = {"stream": False}
     monkeypatch.setattr(
-        "aai_cli.stream_exec.client.stream_audio",
+        "aai_cli.commands.stream._exec.client.stream_audio",
         lambda *a, **k: called.__setitem__("stream", True),
     )
     result = runner.invoke(app, ["stream", "missing.wav"])

@@ -47,7 +47,7 @@ def test_production_env_is_rejected_with_sandbox_hint():
 def test_plays_audio_by_default(monkeypatch, fake_synthesize):
     played: dict = {}
     monkeypatch.setattr(
-        "aai_cli.speak_exec.audio.play_pcm",
+        "aai_cli.commands.speak._exec.audio.play_pcm",
         lambda pcm, rate, **_: played.update(pcm=pcm, rate=rate),
     )
     result = runner.invoke(app, ["--sandbox", "speak", "Hello there"])
@@ -63,12 +63,12 @@ def test_plays_audio_by_default(monkeypatch, fake_synthesize):
 
 def test_out_writes_wav_and_does_not_play(monkeypatch, tmp_path, fake_synthesize):
     monkeypatch.setattr(
-        "aai_cli.speak_exec.audio.play_pcm",
+        "aai_cli.commands.speak._exec.audio.play_pcm",
         lambda *a, **k: pytest.fail("should not play when --out is given"),
     )
     written: dict = {}
     monkeypatch.setattr(
-        "aai_cli.speak_exec.audio.write_wav",
+        "aai_cli.commands.speak._exec.audio.write_wav",
         lambda path, pcm, rate: written.update(path=path, pcm=pcm, rate=rate),
     )
     out = tmp_path / "x.wav"
@@ -82,7 +82,7 @@ def test_out_writes_wav_and_does_not_play(monkeypatch, tmp_path, fake_synthesize
 
 
 def test_reads_text_from_stdin_when_arg_omitted(monkeypatch, fake_synthesize):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak"], input="piped text\n")
     assert result.exit_code == 0
     assert fake_synthesize["cfg"].text == "piped text"
@@ -104,7 +104,7 @@ def test_blank_arg_does_not_fall_back_to_stdin(monkeypatch):
 
 
 def test_voice_and_language_flow_into_config(monkeypatch, fake_synthesize):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(
         app, ["--sandbox", "speak", "Hi", "--voice", "jane", "--language", "English"]
     )
@@ -118,7 +118,7 @@ def test_voice_and_language_flow_into_config(monkeypatch, fake_synthesize):
 def test_default_voice_follows_the_language(monkeypatch, fake_synthesize):
     # Each voice speaks one language: with no --voice, a non-English --language
     # switches to that language's native voice instead of English "jane".
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Ciao", "--language", "Italian"])
     assert result.exit_code == 0
     cfg = fake_synthesize["cfg"]
@@ -127,7 +127,7 @@ def test_default_voice_follows_the_language(monkeypatch, fake_synthesize):
 
 
 def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(
         app, ["--sandbox", "speak", "Bonjour", "--voice", "jane", "--language", "French"]
     )
@@ -137,7 +137,7 @@ def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize)
 
 
 def test_json_mode_emits_metadata_object_on_stdout(monkeypatch, fake_synthesize):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--voice", "jane", "--json"])
     assert result.exit_code == 0
     # The behavioral split: --json yields a parseable object, not human prose.
@@ -152,7 +152,7 @@ def test_json_mode_emits_metadata_object_on_stdout(monkeypatch, fake_synthesize)
 
 
 def test_human_mode_keeps_stdout_clean(monkeypatch, fake_synthesize):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi"])
     assert result.exit_code == 0
     # Human summary goes to stderr; stdout stays empty (audio went to the speaker).
@@ -171,7 +171,7 @@ def fake_dialogue(monkeypatch: pytest.MonkeyPatch):
         )
 
     monkeypatch.setattr(session, "synthesize_dialogue", _fake)
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     return calls
 
 
@@ -234,7 +234,7 @@ def test_dialogue_json_reports_speaker_voice_map(fake_dialogue):
 def test_dialogue_json_out_path_is_reported(fake_dialogue, monkeypatch, tmp_path):
     # With --out, the multi JSON reports the file path (not null) — pins the
     # `str(out) if out is not None else None` branch in _emit_multi.
-    monkeypatch.setattr("aai_cli.speak_exec.audio.write_wav", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.write_wav", lambda *a, **k: None)
     out = tmp_path / "dialogue.wav"
     text = "Speaker A: One.\nSpeaker B: Two."
     result = runner.invoke(app, ["--sandbox", "speak", "--out", str(out), "--json"], input=text)
@@ -254,7 +254,7 @@ def test_empty_speaker_labels_raises_usage_error():
 
 def test_unlabeled_text_still_uses_single_voice_path(fake_synthesize, monkeypatch):
     # A bare --voice still selects the single-voice voice for ordinary prose.
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Just prose.", "--voice", "mary"])
     assert result.exit_code == 0
     assert fake_synthesize["cfg"].voice == "mary"
@@ -266,7 +266,7 @@ def test_unlabeled_text_still_uses_single_voice_path(fake_synthesize, monkeypatc
 def test_speaker_mappings_on_unlabeled_input_warn_not_silently_drop(fake_synthesize, monkeypatch):
     # The mirror of the bare-voice-in-dialogue note: SPEAKER=VOICE mappings can't
     # apply to plain prose, and the user is told instead of the flag vanishing.
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Just prose.", "--voice", "A=vera"])
     assert result.exit_code == 0
     assert "Ignoring --voice SPEAKER=VOICE mappings" in result.stderr
@@ -276,7 +276,7 @@ def test_speaker_mappings_on_unlabeled_input_warn_not_silently_drop(fake_synthes
 
 
 def test_speaker_mappings_warning_is_structured_in_json_mode(fake_synthesize, monkeypatch):
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(
         app, ["--sandbox", "speak", "Just prose.", "--voice", "A=vera", "--json"]
     )
@@ -298,7 +298,7 @@ def test_sample_rate_must_be_positive():
 
 def test_sample_rate_floor_accepts_one(fake_synthesize, monkeypatch):
     # min=1 exactly: 1 Hz is degenerate but valid (the server enforces its own floor).
-    monkeypatch.setattr("aai_cli.speak_exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--sample-rate", "1"])
     assert result.exit_code == 0
     assert fake_synthesize["cfg"].sample_rate == 1

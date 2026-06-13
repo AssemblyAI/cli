@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli import client, clip_exec, config, mediafile
-from aai_cli.clip_select import Segment
+from aai_cli import client, config, mediafile
+from aai_cli.commands.clip import _exec as clip_exec
+from aai_cli.commands.clip._select import Segment
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._clip_helpers import (
