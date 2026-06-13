@@ -198,7 +198,7 @@ def test_init_template_arg_help_is_derived_from_registry():
     assert isinstance(default, ArgumentInfo)
     assert default.help == (
         "Template to scaffold: audio-transcription, live-captions, voice-agent "
-        "(omit to pick interactively)."
+        "(omit to pick interactively)"
     )
 
 

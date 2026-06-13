@@ -46,29 +46,29 @@ def init(
         # that actually ship.
         help=(
             f"Template to scaffold: {', '.join(templates.TEMPLATE_ORDER)} "
-            "(omit to pick interactively)."
+            "(omit to pick interactively)"
         ),
     ),
-    directory: str | None = typer.Argument(None, help="Target directory (default: <template>)."),
+    directory: str | None = typer.Argument(None, help="Target directory (default: <template>)"),
     no_install: bool = typer.Option(
-        False, "--no-install", help="Scaffold only; don't install or launch."
+        False, "--no-install", help="Scaffold only; don't install or launch"
     ),
     no_open: bool = typer.Option(
-        False, "--no-open", help="Install + launch, but don't open the browser."
+        False, "--no-open", help="Install + launch, but don't open the browser"
     ),
     force: bool = typer.Option(
         False,
         "--force",
         help=(
             "Overwrite a non-empty target directory (overlays the template; "
-            "files not in the template are kept)."
+            "files not in the template are kept)"
         ),
     ),
-    here: bool = typer.Option(False, "--here", help="Scaffold into the current directory."),
-    port: int = typer.Option(init_exec.DEFAULT_PORT, "--port", help="Local server port."),
+    here: bool = typer.Option(False, "--here", help="Scaffold into the current directory"),
+    port: int = typer.Option(init_exec.DEFAULT_PORT, "--port", help="Local server port"),
     json_out: bool = options.json_option(),
 ) -> None:
-    """Scaffold a new project from a template, then launch it.
+    """Scaffold a new app from a template and launch it
 
     This is the starting point for creating an app — including a voice agent app
     ('assembly init voice-agent'). The 'assembly agent' command only runs a live mic

@@ -235,7 +235,7 @@ def test_setup_help_install_summary_is_a_complete_sentence():
     result = runner.invoke(app, ["setup", "--help"])
     # Strip ANSI (CI forces color) and unwrap lines before matching.
     flat = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
-    assert "Set up your coding agent for AssemblyAI (docs MCP server + skills)." in flat
+    assert "Set up your coding agent for AssemblyAI (docs MCP + skills)" in flat
     assert "three things:" not in flat
 
 

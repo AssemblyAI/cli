@@ -13,7 +13,7 @@ from aai_cli import help_panels
 DEFAULT_BATCH_CONCURRENCY = 4
 
 
-def json_option(help_text: str = "Output raw JSON.") -> bool:
+def json_option(help_text: str = "Output raw JSON") -> bool:
     """The standard ``--json``/``-j`` flag; pass ``help_text`` where the shape differs."""
     flag: bool = typer.Option(False, "--json", "-j", help=help_text)
     return flag
@@ -25,7 +25,7 @@ def chars_per_caption_option() -> int | None:
         None,
         "--chars-per-caption",
         min=1,
-        help="Max characters per caption line (only with -o srt or -o vtt).",
+        help="Max characters per caption line (only with -o srt or -o vtt)",
     )
     return value
 
@@ -40,7 +40,7 @@ def batch_from_stdin_option() -> bool:
         False,
         "--from-stdin",
         help="Batch mode: read audio paths/URLs from stdin, one per line "
-        "(composes with find/ls/yt-dlp output).",
+        "(composes with find/ls/yt-dlp output)",
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return flag
@@ -52,7 +52,7 @@ def batch_concurrency_option() -> int:
         DEFAULT_BATCH_CONCURRENCY,
         "--concurrency",
         min=1,
-        help="How many sources to transcribe at once in batch mode.",
+        help="How many sources to transcribe at once in batch mode",
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return value
@@ -63,7 +63,7 @@ def batch_force_option() -> bool:
     flag: bool = typer.Option(
         False,
         "--force",
-        help="Batch mode: re-transcribe sources whose sidecar already records a completed run.",
+        help="Batch mode: re-transcribe sources whose sidecar already records a completed run",
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return flag

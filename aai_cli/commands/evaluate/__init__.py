@@ -52,36 +52,36 @@ def evaluate(
     ctx: typer.Context,
     dataset: str = typer.Argument(
         ...,
-        help="Hugging Face dataset id, or a local .csv/.jsonl manifest with audio + text columns.",
+        help="Hugging Face dataset id, or a local .csv/.jsonl manifest with audio + text columns",
     ),
     split: str | None = typer.Option(
-        None, "--split", help="Hugging Face split to score (default: test)."
+        None, "--split", help="Hugging Face split to score (default: test)"
     ),
     subset: str | None = typer.Option(
-        None, "--subset", help="Hugging Face config/subset name (e.g. a language)."
+        None, "--subset", help="Hugging Face config/subset name (e.g. a language)"
     ),
-    limit: int = typer.Option(10, "--limit", min=1, max=100, help="Rows to evaluate (1-100)."),
+    limit: int = typer.Option(10, "--limit", min=1, max=100, help="Rows to evaluate (1-100)"),
     audio_column: str | None = typer.Option(
-        None, "--audio-column", help="Audio column name (default: auto-detect)."
+        None, "--audio-column", help="Audio column name (default: auto-detect)"
     ),
     text_column: str | None = typer.Option(
-        None, "--text-column", help="Reference text column name (default: auto-detect)."
+        None, "--text-column", help="Reference text column name (default: auto-detect)"
     ),
     speech_model: EvalSpeechModel | None = typer.Option(
-        None, "--speech-model", help="Speech model to evaluate."
+        None, "--speech-model", help="Speech model to evaluate"
     ),
     language_code: str | None = typer.Option(
-        None, "--language-code", help="Force a language (e.g. en_us)."
+        None, "--language-code", help="Force a language (e.g. en_us)"
     ),
     concurrency: int = typer.Option(
         1,
         "--concurrency",
         min=1,
-        help="How many items to transcribe at once (sequential by default).",
+        help="How many items to transcribe at once (sequential by default)",
     ),
-    json_out: bool = options.json_option("Output the rows and summary as one JSON object."),
+    json_out: bool = options.json_option("Output the rows and summary as one JSON object"),
 ) -> None:
-    """Transcribe an evaluation dataset and score WER against its reference texts.
+    """Transcribe a dataset and score WER against its reference texts
 
     Each row's audio is transcribed, then scored against the row's reference
     text; both are normalized first (lowercased, punctuation stripped) so style

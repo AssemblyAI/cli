@@ -42,9 +42,9 @@ def transcribe(
     source: str | None = typer.Argument(
         None,
         help="Audio file, URL, YouTube/podcast URL, bucket URL (s3://, gs://, …), or a "
-        "directory/glob (batch mode).",
+        "directory/glob (batch mode)",
     ),
-    sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample."),
+    sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample"),
     # batch mode
     from_stdin: bool = options.batch_from_stdin_option(),
     concurrency: int = options.batch_concurrency_option(),
@@ -53,31 +53,31 @@ def transcribe(
     speech_model: aai.SpeechModel | None = typer.Option(
         None,
         "--speech-model",
-        help="Speech model.",
+        help="Speech model",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     language_code: str | None = typer.Option(
         None,
         "--language-code",
-        help="Force a language (e.g. en_us).",
+        help="Force a language (e.g. en_us)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     language_detection: bool | None = typer.Option(
         None,
         "--language-detection",
-        help="Auto-detect the spoken language.",
+        help="Auto-detect the spoken language",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     keyterms_prompt: list[str] | None = typer.Option(
         None,
         "--keyterms-prompt",
-        help="Boost a key term (repeatable).",
+        help="Boost a key term (repeatable)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     temperature: float | None = typer.Option(
         None,
         "--temperature",
-        help="Speech model temperature (0 most deterministic, 1 least).",
+        help="Speech model temperature (0 most deterministic, 1 least)",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_MODEL,
@@ -85,89 +85,89 @@ def transcribe(
     prompt: str | None = typer.Option(
         None,
         "--prompt",
-        help="Prompt to bias the speech model (supported models only).",
+        help="Prompt to bias the speech model (supported models only)",
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     # formatting
     punctuate: bool | None = typer.Option(
         None,
         "--punctuate/--no-punctuate",
-        help="Add punctuation.",
+        help="Add punctuation",
         rich_help_panel=help_panels.OPT_FORMATTING,
     ),
     format_text: bool | None = typer.Option(
         None,
         "--format-text/--no-format-text",
-        help="Apply text formatting (casing, numbers).",
+        help="Apply text formatting (casing, numbers)",
         rich_help_panel=help_panels.OPT_FORMATTING,
     ),
     disfluencies: bool | None = typer.Option(
         None,
         "--disfluencies",
-        help="Keep filler words (e.g. um, uh).",
+        help="Keep filler words (e.g. um, uh)",
         rich_help_panel=help_panels.OPT_FORMATTING,
     ),
     # speakers & channels
     speaker_labels: bool = typer.Option(
         False,
         "--speaker-labels",
-        help="Enable diarization.",
+        help="Enable diarization",
         rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     speakers_expected: int | None = typer.Option(
         None,
         "--speakers-expected",
-        help="Hint speaker count.",
+        help="Hint speaker count",
         min=1,
         rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     multichannel: bool | None = typer.Option(
         None,
         "--multichannel",
-        help="Transcribe each audio channel separately.",
+        help="Transcribe each audio channel separately",
         rich_help_panel=help_panels.OPT_SPEAKERS,
     ),
     # guardrails
     redact_pii: bool | None = typer.Option(
         None,
         "--redact-pii",
-        help="Redact PII from the transcript.",
+        help="Redact PII from the transcript",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_policy: str | None = typer.Option(
         None,
         "--redact-pii-policy",
-        help="Comma-separated PII policies (e.g. person_name,...).",
+        help="Comma-separated PII policies (e.g. person_name,...)",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_sub: aai.PIISubstitutionPolicy | None = typer.Option(
         None,
         "--redact-pii-sub",
-        help="How to replace redacted PII.",
+        help="How to replace redacted PII",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     redact_pii_audio: bool | None = typer.Option(
         None,
         "--redact-pii-audio",
-        help="Also redact audio.",
+        help="Also redact audio",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     filter_profanity: bool | None = typer.Option(
         None,
         "--filter-profanity",
-        help="Mask profanity.",
+        help="Mask profanity",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     content_safety: bool | None = typer.Option(
         None,
         "--content-safety",
-        help="Detect sensitive content.",
+        help="Detect sensitive content",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
     content_safety_confidence: int | None = typer.Option(
         None,
         "--content-safety-confidence",
-        help="Content-safety confidence threshold (25-100).",
+        help="Content-safety confidence threshold (25-100)",
         min=25,
         max=100,
         rich_help_panel=help_panels.OPT_GUARDRAILS,
@@ -175,7 +175,7 @@ def transcribe(
     speech_threshold: float | None = typer.Option(
         None,
         "--speech-threshold",
-        help="Minimum proportion of speech required (0-1).",
+        help="Minimum proportion of speech required (0-1)",
         min=0.0,
         max=1.0,
         rich_help_panel=help_panels.OPT_GUARDRAILS,
@@ -184,59 +184,59 @@ def transcribe(
     summarization: bool | None = typer.Option(
         None,
         "--summarization",
-        help="Summarize the transcript.",
+        help="Summarize the transcript",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     summary_model: aai.SummarizationModel | None = typer.Option(
         None,
         "--summary-model",
-        help="Summary model.",
+        help="Summary model",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     summary_type: aai.SummarizationType | None = typer.Option(
         None,
         "--summary-type",
-        help="Summary format.",
+        help="Summary format",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     auto_chapters: bool | None = typer.Option(
-        None, "--auto-chapters", help="Generate chapters.", rich_help_panel=help_panels.OPT_ANALYSIS
+        None, "--auto-chapters", help="Generate chapters", rich_help_panel=help_panels.OPT_ANALYSIS
     ),
     sentiment_analysis: bool | None = typer.Option(
         None,
         "--sentiment-analysis",
-        help="Analyze sentiment.",
+        help="Analyze sentiment",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     entity_detection: bool | None = typer.Option(
         None,
         "--entity-detection",
-        help="Detect entities.",
+        help="Detect entities",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     auto_highlights: bool | None = typer.Option(
         None,
         "--auto-highlights",
-        help="Detect key phrases.",
+        help="Detect key phrases",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     topic_detection: bool | None = typer.Option(
         None,
         "--topic-detection",
-        help="Detect IAB topics.",
+        help="Detect IAB topics",
         rich_help_panel=help_panels.OPT_ANALYSIS,
     ),
     # customization
     word_boost: list[str] | None = typer.Option(
         None,
         "--word-boost",
-        help="Boost a word (repeatable).",
+        help="Boost a word (repeatable)",
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     custom_spelling_file: Path | None = typer.Option(
         None,
         "--custom-spelling-file",
-        help="JSON map of custom spellings.",
+        help="JSON map of custom spellings",
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
         exists=True,
         dir_okay=False,
@@ -244,14 +244,14 @@ def transcribe(
     audio_start: int | None = typer.Option(
         None,
         "--audio-start",
-        help="Start offset in ms.",
+        help="Start offset in ms",
         min=0,
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     audio_end: int | None = typer.Option(
         None,
         "--audio-end",
-        help="End offset in ms.",
+        help="End offset in ms",
         min=0,
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
@@ -260,20 +260,20 @@ def transcribe(
         "--download-sections",
         help="For a YouTube/podcast URL, download only part of the source (yt-dlp "
         '"--download-sections" syntax, e.g. "*0:00-5:00" for the first five minutes; '
-        "repeatable).",
+        "repeatable)",
         rich_help_panel=help_panels.OPT_CUSTOMIZATION,
     ),
     # webhooks
     webhook_url: str | None = typer.Option(
         None,
         "--webhook-url",
-        help="Webhook URL for completion (get a dev URL with `assembly webhooks listen`).",
+        help="Webhook URL for completion (get a dev URL with `assembly webhooks listen`)",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
     ),
     webhook_auth_header: str | None = typer.Option(
         None,
         "--webhook-auth-header",
-        help="Webhook auth header as NAME:VALUE.",
+        help="Webhook auth header as NAME:VALUE",
         rich_help_panel=help_panels.OPT_WEBHOOKS,
         metavar="NAME:VALUE",
     ),
@@ -281,21 +281,21 @@ def transcribe(
     translate_to: list[str] | None = typer.Option(
         None,
         "--translate-to",
-        help="Translate transcript to a language (repeatable).",
+        help="Translate transcript to a language (repeatable)",
         rich_help_panel=help_panels.OPT_TRANSLATION,
     ),
     # escape hatch
     config_kv: list[str] | None = typer.Option(
         None,
         "--config",
-        help="Set any TranscriptionConfig field as KEY=VALUE (repeatable).",
+        help="Set any TranscriptionConfig field as KEY=VALUE (repeatable)",
         rich_help_panel=help_panels.OPT_ADVANCED,
         metavar="KEY=VALUE",
     ),
     config_file: Path | None = typer.Option(
         None,
         "--config-file",
-        help="JSON file of config fields.",
+        help="JSON file of config fields",
         rich_help_panel=help_panels.OPT_ADVANCED,
         exists=True,
         dir_okay=False,
@@ -311,14 +311,14 @@ def transcribe(
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
         "--model",
-        help="LLM Gateway model.",
+        help="LLM Gateway model",
         rich_help_panel=help_panels.OPT_LLM,
         autocompletion=llm.complete_model,
     ),
     max_tokens: int = typer.Option(
         llm.DEFAULT_MAX_TOKENS,
         "--max-tokens",
-        help="Max tokens.",
+        help="Max tokens",
         rich_help_panel=help_panels.OPT_LLM,
     ),
     json_out: bool = options.json_option(
@@ -329,22 +329,22 @@ def transcribe(
         None,
         "-o",
         "--output",
-        help="Print one field: text, id, status, utterances, srt or vtt (captions), or json.",
+        help="Print one field: text, id, status, utterances, srt or vtt (captions), or json",
     ),
     chars_per_caption: int | None = options.chars_per_caption_option(),
     out: Path | None = typer.Option(
         None,
         "--out",
-        help="Save the result to a file instead of printing it (clean text; pairs with -o).",
+        help="Save the result to a file instead of printing it (clean text; pairs with -o)",
         dir_okay=False,
     ),
     show_code: bool = typer.Option(
         False,
         "--show-code",
-        help="Print the equivalent Python SDK code and exit (does not transcribe).",
+        help="Print the equivalent Python SDK code and exit (does not transcribe)",
     ),
 ) -> None:
-    """Transcribe an audio file, URL, or YouTube/podcast link — or a whole batch.
+    """Transcribe a file, URL, or YouTube/podcast link — or a whole batch
 
     Quickest start: assembly transcribe call.mp3 (or --sample for the hosted demo).
 

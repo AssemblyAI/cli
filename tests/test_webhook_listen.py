@@ -355,3 +355,11 @@ def test_listen_missing_cloudflared_errors_before_binding(monkeypatch):
     assert result.exit_code == 1
     assert "cloudflared is required to expose a public webhook URL." in result.output
     assert "Install it:" in result.output
+
+
+def test_webhooks_no_subcommand_shows_help():
+    # no_args_is_help=True: bare `assembly webhooks` prints its help (the subcommand list)
+    # rather than the bare "Missing command." usage error that no_args_is_help=False emits.
+    result = runner.invoke(app, ["webhooks"])
+    assert "Missing command" not in result.output
+    assert "listen" in result.output
