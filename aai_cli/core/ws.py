@@ -50,12 +50,15 @@ def handshake_status(exc: object) -> int | None:
     ``.response.status_code`` — never the message text. The single classifier for
     every realtime path (stream, agent, speak), so 401-vs-403 handling can't drift.
     """
+    # Both attributes come off an arbitrary exception via getattr, so they're untyped
+    # and may be anything (or absent → None); narrow to int before the membership test
+    # rather than coercing with int(), which would raise on a non-numeric .code.
     code = getattr(exc, "code", None)
-    if code in _HANDSHAKE_AUTH_STATUSES:
-        return int(code)
+    if isinstance(code, int) and code in _HANDSHAKE_AUTH_STATUSES:
+        return code
     status = getattr(getattr(exc, "response", None), "status_code", None)
-    if status in _HANDSHAKE_AUTH_STATUSES:
-        return int(status)
+    if isinstance(status, int) and status in _HANDSHAKE_AUTH_STATUSES:
+        return status
     return None
 
 
