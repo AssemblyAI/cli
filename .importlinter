@@ -53,6 +53,8 @@ source_modules =
     aai_cli.transcribe_batch
     aai_cli.transcribe_exec
     aai_cli.transcribe_render
+    aai_cli.transcribe_sources
+    aai_cli.transcribe_validate
     aai_cli.tts
     aai_cli.typer_patches
     aai_cli.update_check

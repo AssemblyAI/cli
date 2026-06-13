@@ -8,7 +8,6 @@ so ``run_transcription`` lives in a core module that ``onboard`` can import dire
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,101 +26,13 @@ from aai_cli import (
     remotefs,
     stdio,
     transcribe_render,
+    transcribe_sources,
+    transcribe_validate,
     youtube,
 )
 from aai_cli.code_gen.transcribe import render as render_transcribe_code
 from aai_cli.context import AppState
-from aai_cli.errors import UsageError, mutually_exclusive
-
-# The PII policy strings the SDK accepts, validated client-side so a typo'd
-# --redact-pii-policy fails before any upload — mirroring how an unknown --config
-# key is rejected with the valid field list.
-PII_POLICY_VALUES = frozenset(policy.value for policy in aai.PIIRedactionPolicy)
-
-
-def validate_pii_policies(policies: list[str] | None) -> None:
-    unknown = [p for p in policies or [] if p not in PII_POLICY_VALUES]
-    if unknown:
-        valid = ", ".join(sorted(PII_POLICY_VALUES))
-        raise UsageError(f"Unknown PII policy(s) {unknown}. Valid policies: {valid}.")
-
-
-def validate_language_flags(language_code: str | None, *, language_detection: bool | None) -> None:
-    mutually_exclusive(
-        ("--language-code", language_code),
-        ("--language-detection", language_detection),
-        suggestion="Force a language or auto-detect it, not both.",
-    )
-
-
-def validate_speakers_expected(merged: dict[str, object]) -> None:
-    # Checked on the merged dict so `--config speaker_labels=true` also counts.
-    if merged.get("speakers_expected") and not merged.get("speaker_labels"):
-        raise UsageError(
-            "--speakers-expected only applies when diarization is enabled.",
-            suggestion="Add --speaker-labels.",
-        )
-
-
-def validate_out_with_llm(out: Path | None, llm_prompts: list[str] | None) -> None:
-    # --out captures the transcript itself; an LLM transform is a separate step.
-    mutually_exclusive(
-        ("--out", out),
-        ("--llm", llm_prompts),
-        suggestion='Pipe the transform instead, e.g. -o text | assembly llm -f "…".',
-    )
-
-
-def validate_out_path(out: Path | None) -> None:
-    """Reject an unusable ``--out`` up front, before the (billed, possibly long)
-    transcription runs — not after it finishes."""
-    if out is None:
-        return
-    if ".." in out.parts:  # reject path-traversal segments in --out
-        raise UsageError(f"--out path can't contain '..': {out}")
-    parent = out.parent
-    if not parent.is_dir():
-        raise UsageError(
-            f"--out directory doesn't exist: {parent}",
-            suggestion="Create it first, or point --out at an existing directory.",
-        )
-    if not os.access(parent, os.W_OK):
-        raise UsageError(f"--out directory isn't writable: {parent}")
-
-
-def validate_json_with_output(
-    output_field: choices.TranscriptOutput | None, *, json_mode: bool
-) -> None:
-    """``--json`` promises the full JSON payload (same as ``-o json``); any other
-    ``-o`` field contradicts it rather than silently winning."""
-    if output_field is None or output_field is choices.TranscriptOutput.json:
-        return
-    mutually_exclusive(
-        ("--json", json_mode),
-        (f"-o {output_field.value}", output_field),
-        suggestion="Drop --json, or use -o json for the full JSON payload.",
-    )
-
-
-def warn_unrecognized_extension(source: str | None, *, json_mode: bool, quiet: bool) -> None:
-    """Warn when a single local source doesn't carry a known audio extension.
-
-    Directory batch mode filters by ``AUDIO_EXTENSIONS``; single-file mode uploads
-    anything, so a likely-non-audio file (e.g. ``.txt``) gets a stderr heads-up —
-    never an error, since the server is the truth about what it can transcribe.
-    """
-    from aai_cli.transcribe_batch import AUDIO_EXTENSIONS  # avoid a module-load cycle
-
-    if quiet or not source or source.startswith(("http://", "https://")):
-        return
-    suffix = Path(source).suffix.lower()
-    if not suffix or suffix in AUDIO_EXTENSIONS:
-        return
-    output.emit_warning(
-        f"'{source}' has extension '{suffix}', which doesn't look like audio; "
-        "the API decides what it can transcribe.",
-        json_mode=json_mode,
-    )
+from aai_cli.errors import UsageError
 
 
 def render_transform_steps(d: dict[str, Any]) -> str:
@@ -402,26 +313,28 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     # Module-load order: transcribe_batch imports this module, so import it lazily.
     from aai_cli import transcribe_batch
 
-    validate_language_flags(opts.language_code, language_detection=opts.language_detection)
+    transcribe_validate.validate_language_flags(
+        opts.language_code, language_detection=opts.language_detection
+    )
     pii_policies = config_builder.split_csv(opts.redact_pii_policy)
-    validate_pii_policies(pii_policies)
+    transcribe_validate.validate_pii_policies(pii_policies)
     flags = opts.flags(pii_policies)
 
-    validate_out_with_llm(opts.out, opts.llm_prompt)
-    validate_out_path(opts.out)
-    validate_json_with_output(opts.output_field, json_mode=json_mode)
+    transcribe_validate.validate_out_with_llm(opts.out, opts.llm_prompt)
+    transcribe_validate.validate_out_path(opts.out)
+    transcribe_validate.validate_json_with_output(opts.output_field, json_mode=json_mode)
     client.validate_chars_per_caption(opts.chars_per_caption, opts.output_field)
 
     merged = config_builder.merge_transcribe_config(
         flags=flags, overrides=opts.config_kv, config_file=opts.config_file
     )
-    validate_speakers_expected(merged)
+    transcribe_validate.validate_speakers_expected(merged)
 
-    sources = transcribe_batch.expand_sources(
+    sources = transcribe_sources.expand_sources(
         opts.source, from_stdin=opts.from_stdin, sample=opts.sample
     )
     if sources is not None:
-        transcribe_batch.reject_single_source_flags(
+        transcribe_sources.reject_single_source_flags(
             out=opts.out,
             output_field=opts.output_field,
             show_code=opts.show_code,
@@ -448,7 +361,9 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
 
     # A typo'd path must read as "file not found", not trigger a login.
     check_source_exists(opts.source, sample=opts.sample)
-    warn_unrecognized_extension(opts.source, json_mode=json_mode, quiet=state.quiet)
+    transcribe_validate.warn_unrecognized_extension(
+        opts.source, json_mode=json_mode, quiet=state.quiet
+    )
 
     api_key = state.resolve_api_key()
     with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
