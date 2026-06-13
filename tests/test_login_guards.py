@@ -7,8 +7,8 @@ import json
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -115,7 +115,7 @@ def test_whoami_network_failure_still_renders_table(mocker):
     # A network failure must not suppress the local identity table; the status is
     # "unreachable (network error)" — distinct from "key rejected" — and the exit
     # code is 1 (api_error), keeping 4 reserved for a key the server refused.
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     config.set_api_key("default", "sk_1234567890")
     config.set_session("default", session_jwt="j", session_token="t", account_id=77)
@@ -133,7 +133,7 @@ def test_whoami_network_failure_still_renders_table(mocker):
 
 
 def test_whoami_network_failure_json_reachable_is_null(mocker):
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     config.set_api_key("default", "sk_1234567890")
     mocker.patch(

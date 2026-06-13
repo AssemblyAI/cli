@@ -1,4 +1,4 @@
-from aai_cli import config
+from aai_cli.core import config
 
 
 def test_set_and_get_session_roundtrips():

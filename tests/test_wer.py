@@ -1,10 +1,10 @@
-"""WER scoring (`aai_cli.wer`): normalization, alignment counts, pooling."""
+"""WER scoring (`aai_cli.core.wer`): normalization, alignment counts, pooling."""
 
 import dataclasses
 
 import pytest
 
-from aai_cli import wer
+from aai_cli.core import wer
 
 
 def _assign(obj, attribute, value):

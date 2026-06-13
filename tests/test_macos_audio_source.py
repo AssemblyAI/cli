@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli.errors import APIError, CLIError
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import macos
 from aai_cli.streaming.sources import CHUNK_BYTES
 

@@ -6,7 +6,7 @@ import shlex
 from collections.abc import Mapping
 from pathlib import Path
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 
 # Matches ${VAR}, ${VAR:-default}, or $VAR — the shell-style refs that appear in a
 # Procfile's web: line (we expand them ourselves rather than invoking a shell).

@@ -14,7 +14,7 @@ from typing import IO, Protocol
 
 from platformdirs import user_cache_path
 
-from aai_cli.errors import APIError, CLIError
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming.sources import CHUNK_BYTES, TARGET_RATE
 
 _HELPER_RESOURCE = "macos_system_audio.swift"

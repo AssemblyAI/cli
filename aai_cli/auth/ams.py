@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import httpx2 as httpx
 
-from aai_cli import jsonshape
 from aai_cli.auth import endpoints
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.core import jsonshape
+from aai_cli.core.errors import APIError, NotAuthenticated
 
 _TIMEOUT = 30.0
 _HTTP_ERROR_MIN_STATUS = 400

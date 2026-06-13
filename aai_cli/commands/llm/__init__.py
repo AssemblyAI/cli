@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import typer
 
-from aai_cli import choices, command_registry, help_panels, options, output
-from aai_cli import llm as gateway
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import run_command
 from aai_cli.commands.llm import _exec as llm_exec
-from aai_cli.context import run_command
-from aai_cli.errors import UsageError
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import choices
+from aai_cli.core import llm as gateway
+from aai_cli.core.errors import UsageError
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

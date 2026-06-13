@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from aai_cli import theme
 from aai_cli.agent.render import AgentRenderer
+from aai_cli.ui import theme
 
 
 def _json_lines(buf: io.StringIO):

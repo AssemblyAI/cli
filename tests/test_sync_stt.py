@@ -5,8 +5,8 @@ import dataclasses
 import httpx2 as httpx
 import pytest
 
-from aai_cli import environments, sync_stt
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.core import environments, sync_stt
+from aai_cli.core.errors import APIError, NotAuthenticated
 
 
 def _patch_transport(monkeypatch, handler):

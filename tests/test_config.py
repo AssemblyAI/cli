@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from aai_cli import config
-from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.core import config
+from aai_cli.core.errors import CLIError, NotAuthenticated
 
 
 def test_set_and_get_api_key_roundtrip():
@@ -178,7 +178,7 @@ def test_persist_login_restores_prior_credentials_when_session_write_fails(monke
 def test_invalid_profile_name_rejected():
     import pytest
 
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     with pytest.raises(CLIError):
         config.set_api_key("bad name!", "sk_x")
@@ -187,7 +187,7 @@ def test_invalid_profile_name_rejected():
 def test_empty_api_key_flag_rejected():
     import pytest
 
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     with pytest.raises(CLIError) as exc:
         config.resolve_api_key(api_key_flag="")
@@ -205,7 +205,7 @@ def test_invalid_profile_name_has_suggestion():
 
 
 def test_malformed_config_raises_clean_error(tmp_config):
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     (tmp_config / "config.toml").write_text("this is not = = valid toml ===\n")
     with pytest.raises(CLIError) as exc:
@@ -270,7 +270,7 @@ def test_dump_creates_missing_parent_directories(monkeypatch, tmp_path):
     # The config dir's parents may not exist yet (first run on a fresh machine);
     # _dump must create the whole chain (mkdir parents=True), not just the leaf.
     nested = tmp_path / "deeply" / "nested" / "config"
-    monkeypatch.setattr("aai_cli.config.config_dir", lambda: nested)
+    monkeypatch.setattr("aai_cli.core.config.config_dir", lambda: nested)
     config.set_api_key("default", "sk_abc")
     assert nested.is_dir()
     assert (nested / "config.toml").exists()

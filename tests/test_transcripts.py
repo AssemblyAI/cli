@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -163,7 +163,7 @@ def test_list_empty_shows_human_empty_state(mocker):
 def test_get_malformed_id_is_rejected_before_auth(monkeypatch, mocker):
     # No key configured: the cheap local id check must win over auth, so the user
     # is told to fix the id instead of being sent through login first.
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     login = mocker.patch("aai_cli.auth.run_login_flow", side_effect=AssertionError("no login"))
     get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
     result = runner.invoke(app, ["transcripts", "get", "not-a-real-id!!"])
@@ -191,7 +191,7 @@ def test_list_renders_rows(mocker):
 
 
 def test_list_unauthenticated_runs_login(monkeypatch, mocker):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     rows = [{"id": "t1", "status": "completed"}]
     list_ = mocker.patch(
@@ -244,7 +244,7 @@ def test_get_errored_transcript_exits_nonzero(mocker):
 
 
 def test_list_table_colors_status(monkeypatch, mocker):
-    from aai_cli.theme import make_console
+    from aai_cli.ui.theme import make_console
 
     config.set_api_key("default", "sk_live")
     # Pin a truecolor console with an empty _environ so the rendered ANSI is
@@ -252,7 +252,7 @@ def test_list_table_colors_status(monkeypatch, mocker):
     # at render time, which leaks across tests and flips the color depth. With
     # _environ={} the depth is fixed by color_system alone.
     monkeypatch.setattr(
-        "aai_cli.output.console",
+        "aai_cli.ui.output.console",
         make_console(force_terminal=True, color_system="truecolor", _environ={}),
     )
     rows = [

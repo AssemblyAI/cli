@@ -3,19 +3,12 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import (
-    choices,
-    client,
-    command_registry,
-    help_panels,
-    options,
-    output,
-    theme,
-    timeparse,
-)
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import APIError
-from aai_cli.help_text import examples_epilog
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
+from aai_cli.core import choices, client, timeparse
+from aai_cli.core.errors import APIError
+from aai_cli.ui import output, theme
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer(help="Browse and fetch past transcripts.", no_args_is_help=True)
 

@@ -9,15 +9,15 @@ import types
 
 import pytest
 
-from aai_cli import debuglog
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.core import debuglog
+from aai_cli.core.errors import APIError, NotAuthenticated
+from aai_cli.core.ws import WEBSOCKETS_LOGGERS
 from aai_cli.streaming.diagnostics import (
     SDK_STREAMING_LOGGER,
     handshake_error,
     handshake_suggestion,
     silence_streaming_logging,
 )
-from aai_cli.ws import WEBSOCKETS_LOGGERS
 
 # The logger the assemblyai SDK's sync streaming client actually emits through.
 _SDK_CLIENT_LOGGER = "assemblyai.streaming.v3.client"

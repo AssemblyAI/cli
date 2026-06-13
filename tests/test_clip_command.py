@@ -9,9 +9,10 @@ import subprocess
 
 from typer.testing import CliRunner
 
-from aai_cli import llm, mediafile
+from aai_cli.app import mediafile
 from aai_cli.commands.clip import _exec as clip_exec
 from aai_cli.commands.clip._exec import ClipOptions
+from aai_cli.core import llm
 from aai_cli.main import app
 
 runner = CliRunner()

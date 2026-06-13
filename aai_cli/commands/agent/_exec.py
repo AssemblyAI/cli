@@ -15,15 +15,17 @@ from typing import Any
 
 import typer
 
-from aai_cli import choices, client, code_gen, output
+from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent.session import AgentRunConfig, run_session
 from aai_cli.agent.voices import VOICE_NAMES
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.app.context import AppState
+from aai_cli.core import choices, client
+from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.streaming.session import validate_output_flags
 from aai_cli.streaming.sources import FileSource
+from aai_cli.ui import output
 
 
 @dataclass(frozen=True)

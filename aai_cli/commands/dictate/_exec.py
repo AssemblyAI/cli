@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aai_cli import output, sync_stt
-from aai_cli.context import AppState
-from aai_cli.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
-from aai_cli.microphone import MicrophoneSource
+from aai_cli.app.context import AppState
+from aai_cli.core import sync_stt
+from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
+from aai_cli.core.microphone import MicrophoneSource
+from aai_cli.ui import output
 
 # Capture is resampled to one rate the Sync API accepts; 16 kHz mono PCM16 keeps
 # a 120 s utterance well under the 40 MB upload cap.

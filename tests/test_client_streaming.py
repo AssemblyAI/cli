@@ -8,8 +8,8 @@ import types as _types
 
 import pytest
 
-from aai_cli import client
-from aai_cli.errors import APIError
+from aai_cli.core import client
+from aai_cli.core.errors import APIError
 
 
 def _stream_params(sample_rate: int = 16000):
@@ -135,7 +135,7 @@ def test_stream_audio_connect_error_becomes_apierror(monkeypatch):
 
 
 def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     class ConnectUnauthorized(_FakeStreamingClient):
         def connect(self, params):
@@ -147,7 +147,7 @@ def test_stream_audio_connect_auth_error_becomes_not_authenticated(monkeypatch):
 
 
 def test_stream_audio_auth_error_event_becomes_not_authenticated(monkeypatch):
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     class AuthErrClient(_FakeStreamingClient):
         def stream(self, source):
@@ -188,7 +188,7 @@ def test_stream_audio_handshake_403_event_carries_suggestion(monkeypatch):
 def test_stream_audio_handshake_401_event_is_not_authenticated_with_suggestion(monkeypatch):
     from assemblyai.streaming.v3 import StreamingError
 
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     class Handshake401Client(_FakeStreamingClient):
         def stream(self, source):
@@ -244,7 +244,7 @@ def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
     # reader thread; the guard must swallow it instead of dumping a thread traceback.
     monkeypatch.setattr(client, "StreamingClient", _FakeStreamingClient)
     # never touch the real stdout fd during the test
-    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
+    monkeypatch.setattr("aai_cli.core.stdio.silence_stdout", lambda: None)
 
     def on_turn(_event):
         raise BrokenPipeError
@@ -253,7 +253,7 @@ def test_stream_audio_swallows_broken_pipe_in_callback(monkeypatch):
 
 
 def test_stream_audio_passes_through_clierror(monkeypatch):
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     class StreamRaisesCLIError(_FakeStreamingClient):
         def stream(self, source):
@@ -268,7 +268,7 @@ def test_stream_audio_passes_through_clierror(monkeypatch):
 def test_stream_audio_accepts_params(monkeypatch):
     from assemblyai.streaming.v3 import SpeechModel, StreamingParameters
 
-    from aai_cli import client
+    from aai_cli.core import client
 
     captured = {}
 
@@ -288,7 +288,7 @@ def test_stream_audio_accepts_params(monkeypatch):
         def disconnect(self, terminate=True):
             pass
 
-    monkeypatch.setattr("aai_cli.client.StreamingClient", FakeSC)
+    monkeypatch.setattr("aai_cli.core.client.StreamingClient", FakeSC)
     params = StreamingParameters(
         sample_rate=16000, speech_model=SpeechModel.universal_streaming_multilingual
     )

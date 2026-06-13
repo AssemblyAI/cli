@@ -5,8 +5,8 @@ from typing import TextIO, cast
 
 import pytest
 
-from aai_cli import theme
 from aai_cli.streaming.render import StreamRenderer
+from aai_cli.ui import theme
 
 
 def _turn(transcript, end_of_turn, speaker_label=None):
@@ -66,8 +66,8 @@ def test_human_turn_labels_system_speaker_with_source():
 
 
 def test_speaker_prefix_tints_each_speaker_distinctly():
-    from aai_cli import theme
     from aai_cli.streaming.render import speaker_prefix
+    from aai_cli.ui import theme
 
     # A speaker label is colored by theme.speaker_style, so different speakers in the
     # same source render in different colors; an unlabeled sourced turn keeps the
@@ -281,7 +281,7 @@ def test_human_live_region_construction_and_refresh(monkeypatch):
     # The live region must be built non-transient, never auto-refresh (we drive it),
     # and never redirect the process streams the JSON/threaded paths also write to.
     # Pin those kwargs and the forced per-update refresh with a fake Live.
-    import aai_cli.render as render_mod
+    import aai_cli.ui.render as render_mod
 
     fake = _FakeLive()
 

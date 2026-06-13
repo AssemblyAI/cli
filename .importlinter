@@ -3,94 +3,61 @@ root_package = aai_cli
 include_external_packages = True
 
 [importlinter:contract:1]
-name = Core modules do not import command modules
+name = Layered architecture
+type = layers
+; The flat root pile of library modules is gone: each layer is now a package,
+; so intra-layer imports stay free and only the *direction* between layers is
+; enforced. Higher may import lower, never the reverse. This single declarative
+; contract replaces the old hand-maintained 47-module `forbidden` list (which
+; the comments admitted had "silently drifted"). The CLI framework glue that
+; assembles the command layer — main, command_registry, help_panels, options —
+; stays at the package root, above `commands`, and is intentionally unlisted
+; (it legitimately imports the command modules to discover/register them).
+; Feature slices (agent, tts, streaming, code_gen, init, auth, onboard) are
+; likewise unlisted vertical slices governed by contract 2.
+layers =
+    commands
+    app
+    ui
+    core
+containers =
+    aai_cli
+
+[importlinter:contract:2]
+name = Feature slices do not import commands
 type = forbidden
-; A command's private run-logic now lives inside its own package
-; (aai_cli/commands/<cmd>/_exec.py, …) and is governed by contract 2's
-; independence rule, so those modules are intentionally absent here. The
-; *_exec modules that remain are the ones still at the package root because
-; they're shared beyond their command (transcribe_exec/render/batch and
-; init_exec are reused by the onboarding wizard; setup_exec/doctor_checks too).
+; The vertical feature slices sit beside the layered stack (they internally mix
+; protocol + rendering, so they aren't a single horizontal layer). They must
+; never reach up into the command layer. Adding a feature slice is rare and
+; deliberate, so this short list does not drift the way the old core list did.
 source_modules =
     aai_cli.agent
-    aai_cli.argscan
     aai_cli.auth
-    aai_cli.choices
-    aai_cli.client
     aai_cli.code_gen
-    aai_cli.coding_agent
-    aai_cli.config
-    aai_cli.config_builder
-    aai_cli.context
-    aai_cli.debuglog
-    aai_cli.doctor_checks
-    aai_cli.environments
-    aai_cli.errors
-    aai_cli.follow
-    aai_cli.help_panels
-    aai_cli.help_text
-    aai_cli.hotkey
     aai_cli.init
-    aai_cli.init_exec
-    aai_cli.jsonshape
-    aai_cli.llm
-    aai_cli.mediafile
-    aai_cli.microphone
     aai_cli.onboard
-    aai_cli.options
-    aai_cli.output
-    aai_cli.procs
-    aai_cli.remotefs
-    aai_cli.render
-    aai_cli.setup_exec
-    aai_cli.stdio
-    aai_cli.steps
     aai_cli.streaming
-    aai_cli.sync_stt
-    aai_cli.telemetry
-    aai_cli.theme
-    aai_cli.timeparse
-    aai_cli.transcribe_batch
-    aai_cli.transcribe_exec
-    aai_cli.transcribe_render
-    aai_cli.transcribe_sources
-    aai_cli.transcribe_validate
     aai_cli.tts
-    aai_cli.typer_patches
-    aai_cli.update_check
-    aai_cli.wer
-    aai_cli.ws
-    aai_cli.youtube
 forbidden_modules =
     aai_cli.commands
 
-[importlinter:contract:2]
+[importlinter:contract:3]
 name = Command modules are independent
 type = independence
-; Wildcard so every module under aai_cli/commands/ is covered automatically —
-; the previous enumerated list had silently drifted (onboard and speak were
-; missing, so nothing forbade them from importing sibling commands).
+; Wildcard so every module under aai_cli/commands/ is covered automatically.
 modules =
     aai_cli.commands.*
 
-[importlinter:contract:3]
-name = Library layers do not depend on Rich rendering
+[importlinter:contract:4]
+name = Core library and the testable command helpers stay Rich-free
 type = forbidden
+; The layered contract keeps `core` from importing the `ui` layer, but Rich is
+; an external package, so "no Rich below the UI layer" still needs an explicit
+; forbidden edge. The two command helpers are pure data/selection logic kept
+; Rich-free so their tests never need a console.
 source_modules =
-    aai_cli.argscan
-    aai_cli.client
+    aai_cli.core
     aai_cli.commands.clip._select
     aai_cli.commands.evaluate._data
-    aai_cli.config
-    aai_cli.config_builder
-    aai_cli.debuglog
-    aai_cli.environments
-    aai_cli.errors
-    aai_cli.hotkey
-    aai_cli.llm
-    aai_cli.remotefs
-    aai_cli.sync_stt
-    aai_cli.telemetry
-    aai_cli.wer
 forbidden_modules =
     rich

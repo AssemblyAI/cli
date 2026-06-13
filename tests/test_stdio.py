@@ -1,6 +1,6 @@
 import io
 
-from aai_cli import stdio
+from aai_cli.core import stdio
 
 
 class _Tty(io.StringIO):

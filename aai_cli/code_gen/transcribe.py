@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from aai_cli import environments, llm, youtube
 from aai_cli.code_gen import serialize, snippets
+from aai_cli.core import environments, llm, youtube
 
 # ``-o/--output`` choice -> printed-result code, mirroring the run path's
 # ``client._FIELD_RENDERERS`` semantics: plain fields, the speaker-labeled

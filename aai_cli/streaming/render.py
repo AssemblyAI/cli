@@ -6,8 +6,9 @@ from typing import TextIO
 from rich.console import Console
 from rich.text import Text
 
-from aai_cli import jsonshape, theme
-from aai_cli.render import BaseRenderer
+from aai_cli.core import jsonshape
+from aai_cli.ui import theme
+from aai_cli.ui.render import BaseRenderer
 
 # Source label -> (display text, Rich style). System audio borrows the agent color;
 # the microphone ("you") its own. Unknown sources fall back to the raw label.

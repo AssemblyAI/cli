@@ -6,7 +6,7 @@ import time
 import pytest
 
 from aai_cli.auth import endpoints, loopback
-from aai_cli.errors import APIError
+from aai_cli.core.errors import APIError
 
 # These tests bind a real loopback HTTP server and connect to it, so they opt back
 # into sockets past the suite-wide --disable-socket (see pyproject pytest config).

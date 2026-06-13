@@ -6,7 +6,7 @@ import re
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.main import app
 from aai_cli.tts import session
 

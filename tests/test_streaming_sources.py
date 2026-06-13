@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 from aai_cli.streaming import sources
 from aai_cli.streaming.sources import FileSource
 
@@ -180,7 +180,7 @@ def test_filesource_ffmpeg_failure_raises(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(sources.subprocess, "Popen", lambda *a, **k: FailProc())
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     with pytest.raises(APIError):
         list(sources.FileSource(str(p), sleep=lambda _s: None))
@@ -217,7 +217,7 @@ def test_filesource_ffmpeg_not_terminated_on_natural_eof(tmp_path, monkeypatch):
 def test_filesource_ffmpeg_failure_empty_stderr_reports_exit_code(tmp_path, monkeypatch):
     # When ffmpeg fails but writes nothing to stderr, the error message falls back to
     # the exit code. Pins the `detail or f'exit {returncode}'` (an `and` would blank it).
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     p = tmp_path / "bad.mp3"
     p.write_bytes(b"x")

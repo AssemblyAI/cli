@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 from typer.testing import CliRunner
 
-from aai_cli import config
-from aai_cli.errors import APIError
+from aai_cli.core import config
+from aai_cli.core.errors import APIError
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -53,7 +53,7 @@ def test_stream_session_closes_renderer_on_error(monkeypatch):
 
     import pytest
 
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
     from aai_cli.streaming.render import StreamRenderer
     from aai_cli.streaming.session import StreamSession
 
@@ -238,7 +238,7 @@ def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
     monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
     monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.core.llm.run_chain", fake_run_chain)
     result = runner.invoke(app, ["stream", "--system-audio", "--llm", "summarize", "--json"])
     assert result.exit_code == 0
     assert any("System: FakeSystemAudio" in value for value in transcript_inputs)

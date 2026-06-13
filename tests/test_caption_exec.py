@@ -16,11 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import client, config, mediafile, youtube
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
 from aai_cli.commands.caption import _exec as caption_exec
 from aai_cli.commands.caption._exec import CaptionOptions
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core import client, config, youtube
+from aai_cli.core.errors import CLIError, UsageError
 from tests._clip_helpers import plain
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.

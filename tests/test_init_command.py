@@ -7,9 +7,9 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from aai_cli import init_exec
+from aai_cli.app import init_exec
 from aai_cli.commands import init as init_cmd
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 from aai_cli.main import app
 
 runner = CliRunner()

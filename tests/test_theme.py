@@ -1,6 +1,6 @@
 import io
 
-from aai_cli import theme
+from aai_cli.ui import theme
 
 
 def test_make_console_resolves_named_styles():
@@ -56,8 +56,8 @@ def test_you_color_reserved_outside_speaker_palette():
 
 
 def test_output_console_is_themed_and_error_is_styled(monkeypatch):
-    from aai_cli import output, theme
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
+    from aai_cli.ui import output, theme
 
     buf = io.StringIO()
     monkeypatch.setattr(
@@ -79,7 +79,7 @@ def test_pipe_safe_console_reraises_broken_pipe():
 
     import pytest
 
-    from aai_cli import theme
+    from aai_cli.ui import theme
 
     class BrokenFile(io.StringIO):
         def write(self, s):

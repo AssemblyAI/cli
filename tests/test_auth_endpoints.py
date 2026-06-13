@@ -1,7 +1,7 @@
 import pytest
 
 from aai_cli.auth import endpoints
-from aai_cli.errors import CLIError
+from aai_cli.core.errors import CLIError
 
 
 def test_redirect_uri_is_fixed_loopback():

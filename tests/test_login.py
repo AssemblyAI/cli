@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -70,7 +70,7 @@ def test_whoami_human_render_shows_detail_rows(mocker):
 
 
 def test_whoami_unauthenticated_runs_login(monkeypatch, mocker):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _fake_login_result)
     validate = mocker.patch(
         "aai_cli.commands.login.client.validate_key", autospec=True, return_value=True
@@ -154,7 +154,7 @@ def test_logout_clears_session():
 
 
 def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     def boom(**_kwargs):
         raise APIError("Login failed: the server returned an unexpected response.")
@@ -167,7 +167,7 @@ def test_login_oauth_flow_failure_exits_nonzero(monkeypatch):
 
 def test_login_timeout_is_auth_typed_with_exit_4(monkeypatch):
     # The loopback timeout surfaces as not_authenticated/exit 4, not api_error/1.
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     def timed_out(**_kwargs):
         raise NotAuthenticated("Login timed out waiting for the browser.")
@@ -283,7 +283,7 @@ def test_unknown_env_exits_2(mocker):
     # callback can't see a per-command --json, and we never auto-switch to JSON on a
     # pipe/agent), so it's the "Error:" + "Suggestion:" pair on stderr, not a JSON blob —
     # regardless of whether stdout is a TTY.
-    is_agentic = mocker.patch("aai_cli.output.is_agentic", autospec=True)
+    is_agentic = mocker.patch("aai_cli.ui.output.is_agentic", autospec=True)
     for agentic in (True, False):
         is_agentic.return_value = agentic
         result = runner.invoke(app, ["--env", "bogus", "whoami"])
@@ -320,7 +320,7 @@ def test_env_override_prints_warning_to_stderr(mocker):
 
 
 def test_rejected_api_key_has_suggestion(monkeypatch):
-    from aai_cli import client
+    from aai_cli.core import client
 
     monkeypatch.setattr(client, "validate_key", lambda key: False)
     result = runner.invoke(app, ["login", "--api-key", "sk_bad", "--json"])
@@ -405,7 +405,7 @@ def test_login_failure_never_auto_logs_in_again(monkeypatch):
     # The login command owns sign-in (auto_login=False): a NotAuthenticated from its
     # own browser flow must surface as exit 4, not trigger run_command's auto-login
     # retry — even in an interactive session.
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     calls = {"n": 0}
 
@@ -413,7 +413,7 @@ def test_login_failure_never_auto_logs_in_again(monkeypatch):
         calls["n"] += 1
         raise NotAuthenticated("Login timed out waiting for the browser.")
 
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", timed_out)
     result = runner.invoke(app, ["login"])
     assert result.exit_code == 4
@@ -423,9 +423,9 @@ def test_login_failure_never_auto_logs_in_again(monkeypatch):
 def test_logout_never_auto_logs_in(monkeypatch):
     # Signing out must never start a sign-in flow (auto_login=False), even if the
     # body surfaces a NotAuthenticated and the session is interactive.
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("logout must never start a login")),

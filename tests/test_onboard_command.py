@@ -66,7 +66,7 @@ def test_onboard_json_emits_machine_readable_summary(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     monkeypatch.setattr(
-        "aai_cli.transcribe_exec.run_transcription", lambda *a, **k: _FakeTranscript()
+        "aai_cli.app.transcribe_exec.run_transcription", lambda *a, **k: _FakeTranscript()
     )
     result = CliRunner().invoke(app, ["onboard", "--json"])
     assert result.exit_code == 0, result.output
@@ -80,7 +80,7 @@ def test_onboard_does_not_auto_login_on_auth_error(monkeypatch: pytest.MonkeyPat
     # auto_login=False: an unauthenticated wizard surfaces the auth error (exit 4)
     # rather than kicking off a browser login. A True mutant would instead try to
     # log in and never exit 4 here.
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.core.errors import NotAuthenticated
 
     def _raise(p: object, c: object) -> int:
         raise NotAuthenticated("nope")
@@ -133,7 +133,7 @@ def test_onboard_non_interactive_flag_forces_noninteractive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # `--non-interactive` forces non-interactive mode even when no agent is detected.
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: False)
     captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard", "--non-interactive"])
     assert result.exit_code == 0, result.output
@@ -145,7 +145,7 @@ def test_onboard_defaults_to_noninteractive_when_agent_detected(
 ) -> None:
     # No flag, but an agent is detected: the wizard still defaults to non-interactive.
     # A mutant dropping the `is_agentic()` term would leave `forced` False here.
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: True)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: True)
     captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard"])
     assert result.exit_code == 0, result.output
@@ -158,7 +158,7 @@ def test_onboard_stays_interactive_without_flag_or_agent(
     # No flag, no agent: `forced` is False, so build_prompter is free to drive real
     # prompts. An `and` mutant on the `or` would also land here, but the two cases
     # above (each True via a different operand) pin the operator.
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: False)
     captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard"])
     assert result.exit_code == 0, result.output
@@ -168,7 +168,7 @@ def test_onboard_stays_interactive_without_flag_or_agent(
 def test_onboard_json_forces_noninteractive(monkeypatch: pytest.MonkeyPatch) -> None:
     # --json forces non-interactive even with no agent detected: a machine-output run
     # can't block on prompts (and the interactive prompter writes prose to stdout).
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: False)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: False)
     captured = _spy_forced(monkeypatch)
     result = CliRunner().invoke(app, ["onboard", "--json"])
     assert result.exit_code == 0, result.output
@@ -181,7 +181,7 @@ def test_onboard_sorts_first_in_quick_start() -> None:
 
 
 def test_interactive_stdio_requires_both_ends_tty(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aai_cli import stdio
+    from aai_cli.core import stdio
 
     # Both TTY -> interactive.
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -226,7 +226,7 @@ def test_bare_aai_quiet_suppresses_banner(monkeypatch: pytest.MonkeyPatch) -> No
 def test_bare_aai_offers_wizard_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     from aai_cli.onboard.sections import WizardContext
 
-    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
     monkeypatch.setattr("aai_cli.main.typer.confirm", lambda *a, **k: True)
     captured: dict[str, object] = {}
 
@@ -246,7 +246,7 @@ def test_bare_aai_offers_wizard_when_no_key(monkeypatch: pytest.MonkeyPatch) -> 
 def test_bare_aai_empty_confirm_defaults_to_yes(monkeypatch: pytest.MonkeyPatch) -> None:
     # The offer prompt defaults to Yes: an empty <Enter> answer runs the wizard.
     # A `default=False` mutant would instead decline and print help.
-    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
     ran = {"called": False}
 
     def _fake_run(prompter: object, ctx: object) -> int:
@@ -264,7 +264,7 @@ def test_bare_aai_interactive_with_key_shows_help_no_offer(
 ) -> None:
     # Interactive session but a key is already present: _profile_has_key returns True,
     # so the wizard is never offered and help is printed instead.
-    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk_test")
     called = {"confirm": False}
     monkeypatch.setattr(
@@ -277,7 +277,7 @@ def test_bare_aai_interactive_with_key_shows_help_no_offer(
 
 
 def test_bare_aai_declined_offer_shows_help(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("aai_cli.stdio.interactive_stdio", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
     monkeypatch.setattr("aai_cli.main.typer.confirm", lambda *a, **k: False)
     called = {"v": False}
 

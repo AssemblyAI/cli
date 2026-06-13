@@ -4,7 +4,7 @@ import sys
 import pytest
 
 import aai_cli.main as main_mod
-from aai_cli import argscan
+from aai_cli.core import argscan
 
 
 def test_command_line_requests_json_recognizes_every_form():
@@ -34,7 +34,7 @@ def test_run_exits_clean_on_broken_pipe(monkeypatch):
 
     monkeypatch.setattr(main_mod, "app", boom)
     # Don't dup2 the real stdout fd during the test; just verify the exit contract.
-    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
+    monkeypatch.setattr("aai_cli.core.stdio.silence_stdout", lambda: None)
     with pytest.raises(SystemExit) as exc:
         main_mod.run()
     assert exc.value.code == 0
@@ -83,7 +83,7 @@ def test_run_converts_click_epipe_exit_to_success(monkeypatch):
         raise SystemExit(1)
 
     monkeypatch.setattr(main_mod, "app", epipe_path)
-    monkeypatch.setattr("aai_cli.stdio.silence_stdout", lambda: None)
+    monkeypatch.setattr("aai_cli.core.stdio.silence_stdout", lambda: None)
     with pytest.raises(SystemExit) as exc:
         main_mod.run()
     assert exc.value.code == 0

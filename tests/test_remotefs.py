@@ -1,4 +1,4 @@
-"""aai_cli.remotefs: fsspec-backed bucket/remote audio sources.
+"""aai_cli.core.remotefs: fsspec-backed bucket/remote audio sources.
 
 Driven against fsspec's in-process memory filesystem (the shared ``memory_fs``
 fixture) so the tests exercise real fsspec glob/find/download code paths while
@@ -12,8 +12,8 @@ import pytest
 from fsspec.implementations.memory import MemoryFileSystem
 from fsspec.registry import known_implementations
 
-from aai_cli import remotefs
-from aai_cli.errors import CLIError
+from aai_cli.core import remotefs
+from aai_cli.core.errors import CLIError
 
 
 @pytest.mark.parametrize(

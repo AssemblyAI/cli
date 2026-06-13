@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from aai_cli.auth import endpoints
-from aai_cli.errors import APIError
+from aai_cli.core.errors import APIError
 
 # The callback URL carries the single-use OAuth token in its
 # query string, so it would otherwise linger in the browser's history and address

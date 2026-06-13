@@ -10,8 +10,8 @@ import types
 import pytest
 
 from aai_cli.agent.session import AgentRunConfig, run_session
-from aai_cli.errors import APIError, CLIError, NotAuthenticated
-from aai_cli.ws import WEBSOCKETS_LOGGERS
+from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.core.ws import WEBSOCKETS_LOGGERS
 
 
 class FakeRenderer:
@@ -118,7 +118,7 @@ def test_run_session_mid_stream_1008_raises_not_authenticated():
 def test_run_session_surfaces_mic_open_failure_from_capture_thread():
     import threading as _threading
 
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     class _BoomMic:
         def __iter__(self):
@@ -376,7 +376,7 @@ def test_run_session_ws_url_follows_active_environment() -> None:
     # The Voice Agent socket must target the active environment's host, not a
     # hardcoded production URL. Capture the URL connect() is handed, short-
     # circuiting with a benign close once we've seen it.
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     seen: dict[str, str] = {}
 

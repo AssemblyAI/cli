@@ -19,10 +19,11 @@ from enum import StrEnum
 import assemblyai as aai
 from rich.console import RenderableType
 
-from aai_cli import client, jsonshape, output, wer
+from aai_cli.app.context import AppState
 from aai_cli.commands.evaluate import _data as eval_data
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, NotAuthenticated
+from aai_cli.core import client, jsonshape, wer
+from aai_cli.core.errors import CLIError, NotAuthenticated
+from aai_cli.ui import output
 
 
 class EvalSpeechModel(StrEnum):

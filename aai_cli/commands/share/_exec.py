@@ -15,10 +15,10 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from aai_cli import output, steps
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError
+from aai_cli.app.context import AppState
+from aai_cli.core.errors import CLIError
 from aai_cli.init import devserver, procfile, runner, tunnel
+from aai_cli.ui import output, steps
 
 
 @dataclass(frozen=True)

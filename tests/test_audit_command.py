@@ -3,9 +3,9 @@ import re
 
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
 from aai_cli.commands import audit
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -167,7 +167,7 @@ def test_audit_summarizes_all_login_rows(mocker):
 
 
 def test_audit_without_session_runs_login(monkeypatch, mocker):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     logs = mocker.patch(
         "aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value={"data": []}

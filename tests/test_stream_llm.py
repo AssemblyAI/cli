@@ -3,7 +3,7 @@ import types
 
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -28,7 +28,7 @@ def test_stream_llm_refreshes_live_over_growing_transcript(monkeypatch):
         return f"answer:{transcript_text}"
 
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.core.llm.run_chain", fake_run_chain)
     result = runner.invoke(
         app,
         [
@@ -68,7 +68,7 @@ def test_stream_llm_chains_multiple_prompts(monkeypatch):
         return "done"
 
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.core.llm.run_chain", fake_run_chain)
     result = runner.invoke(
         app, ["stream", "--llm", "summarize", "--llm", "translate to french", "--json"]
     )
@@ -101,7 +101,7 @@ def test_stream_without_prompt_does_not_transform(monkeypatch):
         return "x"
 
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake)
-    monkeypatch.setattr("aai_cli.llm.run_chain", fake_run_chain)
+    monkeypatch.setattr("aai_cli.core.llm.run_chain", fake_run_chain)
     result = runner.invoke(app, ["stream", "--json"])
     assert result.exit_code == 0
     assert called["ran"] is False  # no --llm -> no gateway call
@@ -127,13 +127,13 @@ def _eot_turn(text):
 def _llm_session(*, interval, clock, monkeypatch, emitted):
     import io
 
-    from aai_cli.follow import FollowRenderer
     from aai_cli.streaming.render import StreamRenderer
     from aai_cli.streaming.session import StreamSession
+    from aai_cli.ui.follow import FollowRenderer
 
     # Capture each follow refresh (json mode emits one NDJSON object per refresh) and
     # make run_chain echo the transcript it summarized so assertions read the cadence.
-    monkeypatch.setattr("aai_cli.follow.output.emit_ndjson", lambda obj: emitted.append(obj))
+    monkeypatch.setattr("aai_cli.ui.follow.output.emit_ndjson", lambda obj: emitted.append(obj))
     monkeypatch.setattr(
         "aai_cli.streaming.session.llm.run_chain",
         lambda api_key, prompts, *, transcript_text, model, max_tokens: transcript_text,
@@ -243,7 +243,7 @@ def test_stream_llm_chain_error_is_latched_on_reader_thread(monkeypatch, capsys)
     # warning), stop hammering the failing gateway, and keep the panel alive.
     import pytest
 
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     emitted: list[dict] = []
     session = _llm_session(
@@ -272,7 +272,7 @@ def test_stream_llm_chain_error_on_final_flush_raises(monkeypatch):
     # it propagates immediately instead of being deferred.
     import pytest
 
-    from aai_cli.errors import APIError
+    from aai_cli.core.errors import APIError
 
     emitted: list[dict] = []
     session = _llm_session(

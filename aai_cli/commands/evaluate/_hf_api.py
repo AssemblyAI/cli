@@ -13,8 +13,8 @@ from http import HTTPStatus
 
 import httpx2 as httpx
 
-from aai_cli import jsonshape
-from aai_cli.errors import APIError, UsageError
+from aai_cli.core import jsonshape
+from aai_cli.core.errors import APIError, UsageError
 
 _DATASETS_SERVER = "https://datasets-server.huggingface.co"
 _TIMEOUT = 30.0  # pragma: no mutate (request timeout; nothing observable to assert)

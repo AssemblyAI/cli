@@ -150,7 +150,7 @@ def test_version_command_suggests_version_flag():
 def test_misplaced_flag_hint_without_context_is_none():
     from typer._click.exceptions import NoSuchOption
 
-    from aai_cli.typer_patches import _misplaced_flag_hint
+    from aai_cli.ui.typer_patches import _misplaced_flag_hint
 
     assert _misplaced_flag_hint(NoSuchOption("--json")) is None
 
@@ -160,7 +160,7 @@ def test_click_error_without_context_falls_back_to_argv(monkeypatch, capsys):
     # formatter then sniffs the real process argv for the JSON opt-in.
     from typer._click.exceptions import ClickException
 
-    from aai_cli.typer_patches import _format_click_error_fixed
+    from aai_cli.ui.typer_patches import _format_click_error_fixed
 
     monkeypatch.setattr(sys, "argv", ["assembly", "--json"])
     _format_click_error_fixed(ClickException("boom"))
@@ -175,7 +175,7 @@ def test_click_error_without_context_falls_back_to_argv(monkeypatch, capsys):
 
 
 def test_noclip_table_pins_leading_columns_and_passes_row_args_through():
-    from aai_cli.typer_patches import _NoClipTable
+    from aai_cli.ui.typer_patches import _NoClipTable
 
     table = _NoClipTable()
     table.add_row("--flag", "META", "help text")

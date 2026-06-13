@@ -1,8 +1,8 @@
 import io
 
-from aai_cli import theme
-from aai_cli.setup_exec import render
-from aai_cli.steps import Step
+from aai_cli.app.setup_exec import render
+from aai_cli.ui import theme
+from aai_cli.ui.steps import Step
 
 
 def test_render_steps_colors_status() -> None:

@@ -10,7 +10,7 @@ import json
 import pytest
 
 from aai_cli.agent.session import VoiceAgentSession, _send_audio_loop
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.core.errors import APIError, NotAuthenticated
 
 
 class FakeRenderer:

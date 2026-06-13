@@ -9,9 +9,9 @@ from __future__ import annotations
 import logging
 import types
 
-from aai_cli import debuglog
-from aai_cli.errors import APIError, NotAuthenticated
-from aai_cli.ws import (
+from aai_cli.core import debuglog
+from aai_cli.core.errors import APIError, NotAuthenticated
+from aai_cli.core.ws import (
     WEBSOCKETS_LOGGERS,
     auth_or_api_error,
     handshake_status,

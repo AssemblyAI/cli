@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlencode
 
-from aai_cli import environments
-from aai_cli import ws as wsutil
-from aai_cli.errors import APIError, CLIError
+from aai_cli.core import environments
+from aai_cli.core import ws as wsutil
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import diagnostics
 from aai_cli.tts import audio
 

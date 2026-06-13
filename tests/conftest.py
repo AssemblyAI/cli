@@ -120,7 +120,7 @@ def preserve_logging_state():
     # opting test asserts on.
     import logging
 
-    from aai_cli import ws as wsutil
+    from aai_cli.core import ws as wsutil
 
     root = logging.getLogger()
     previous_handlers = list(root.handlers)
@@ -140,7 +140,7 @@ def preserve_logging_state():
 def reset_active_environment():
     # The active environment is a process-global (set at CLI startup); pin it to
     # the default before each test so unit tests aren't affected by ordering.
-    from aai_cli import environments
+    from aai_cli.core import environments
 
     environments.set_active(environments.get(environments.DEFAULT_ENV))
 
@@ -159,7 +159,7 @@ def neutralize_shipped_token(monkeypatch):
     # *subprocess* telemetry spawns, so blank the token suite-wide: tests exercise
     # telemetry by opting in via AAI_TELEMETRY_CLIENT_TOKEN and patching dispatch.
     # Returns the real shipped value so its own tests can still assert its shape.
-    from aai_cli import telemetry
+    from aai_cli.core import telemetry
 
     original = telemetry.SHIPPED_CLIENT_TOKEN
     monkeypatch.setattr(telemetry, "SHIPPED_CLIENT_TOKEN", "")
@@ -187,5 +187,5 @@ def memory_fs():
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr("aai_cli.config.config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("aai_cli.core.config.config_dir", lambda: cfg_dir)
     return cfg_dir

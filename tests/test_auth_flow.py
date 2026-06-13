@@ -1,7 +1,7 @@
 import pytest
 
 from aai_cli.auth import flow, loopback
-from aai_cli.errors import APIError, NotAuthenticated
+from aai_cli.core.errors import APIError, NotAuthenticated
 
 
 class _FakeCapture:

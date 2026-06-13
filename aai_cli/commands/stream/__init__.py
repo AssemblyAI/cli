@@ -5,10 +5,11 @@ from pathlib import Path
 import typer
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
-from aai_cli import choices, command_registry, help_panels, llm, options
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import run_command
 from aai_cli.commands.stream import _exec as stream_exec
-from aai_cli.context import run_command
-from aai_cli.help_text import examples_epilog
+from aai_cli.core import choices, llm
+from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
 

@@ -14,11 +14,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import mediafile
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
 from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.commands.dub import _pipeline as dub_pipeline
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.core.errors import CLIError, UsageError
 from tests._dub_helpers import (
     DEFAULTS,
     enable_sandbox,

@@ -5,9 +5,9 @@ import os
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import output
-from aai_cli.choices import ColorMode
+from aai_cli.core.choices import ColorMode
 from aai_cli.main import app
+from aai_cli.ui import output
 
 runner = CliRunner()
 

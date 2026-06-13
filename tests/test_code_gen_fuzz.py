@@ -11,9 +11,10 @@ from assemblyai.streaming.v3 import SpeechModel
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from aai_cli import code_gen, config_builder
+from aai_cli import code_gen
 from aai_cli.code_gen import serialize, snippets
 from aai_cli.code_gen.transcribe import render as render_transcribe_code
+from aai_cli.core import config_builder
 
 settings.register_profile("codegen", max_examples=150)
 settings.load_profile("codegen")

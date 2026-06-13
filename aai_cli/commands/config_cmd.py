@@ -12,11 +12,13 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from aai_cli import command_registry, config, environments, help_panels, options, output
-from aai_cli.choices import ConfigKey
-from aai_cli.context import AppState, run_command
-from aai_cli.errors import UsageError
-from aai_cli.help_text import examples_epilog
+from aai_cli import command_registry, help_panels, options
+from aai_cli.app.context import AppState, run_command
+from aai_cli.core import config, environments
+from aai_cli.core.choices import ConfigKey
+from aai_cli.core.errors import UsageError
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
 
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.SETUP,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from aai_cli import config
+from aai_cli.core import config
 from aai_cli.main import app
 from tests import replay_fixtures as rf
 
@@ -29,7 +29,7 @@ def _with_session():
 def test_transcribe_sample_renders_real_transcript(mocker):
     _with_api_key()
     mocker.patch(
-        "aai_cli.transcribe_exec.client.transcribe",
+        "aai_cli.app.transcribe_exec.client.transcribe",
         autospec=True,
         return_value=rf.transcript("transcribe_sample"),
     )

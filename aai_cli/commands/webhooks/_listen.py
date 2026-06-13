@@ -21,9 +21,10 @@ from typing import TYPE_CHECKING
 
 from rich.markup import escape
 
-from aai_cli import jsonshape, output
-from aai_cli.errors import CLIError
+from aai_cli.core import jsonshape
+from aai_cli.core.errors import CLIError
 from aai_cli.init import runner, tunnel
+from aai_cli.ui import output
 
 if TYPE_CHECKING:
     import subprocess

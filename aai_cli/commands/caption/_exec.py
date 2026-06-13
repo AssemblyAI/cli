@@ -22,9 +22,11 @@ from pathlib import Path
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import client, mediafile, output
-from aai_cli.context import AppState
-from aai_cli.errors import CLIError
+from aai_cli.app import mediafile
+from aai_cli.app.context import AppState
+from aai_cli.core import client
+from aai_cli.core.errors import CLIError
+from aai_cli.ui import output
 
 
 @dataclass(frozen=True)

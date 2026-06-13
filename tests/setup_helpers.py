@@ -57,7 +57,7 @@ class FakeRun:
 
 def _all_tools_present(monkeypatch):
     monkeypatch.setattr(
-        "aai_cli.setup_exec.shutil.which",
+        "aai_cli.app.setup_exec.shutil.which",
         lambda tool: f"/usr/bin/{tool}",
     )
 

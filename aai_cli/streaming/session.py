@@ -9,10 +9,11 @@ from pathlib import Path
 
 import typer
 
-from aai_cli import choices, client, config_builder, llm, output
-from aai_cli.errors import APIError, CLIError, UsageError, mutually_exclusive
-from aai_cli.follow import FollowRenderer
+from aai_cli.core import choices, client, config_builder, llm
+from aai_cli.core.errors import APIError, CLIError, UsageError, mutually_exclusive
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
+from aai_cli.ui import output
+from aai_cli.ui.follow import FollowRenderer
 
 # Sources that can be transcribed in parallel sessions: (label, audio chunks, sample rate).
 _ParallelStreams = list[tuple[str, Iterable[bytes], int]]

@@ -12,11 +12,11 @@ import dataclasses
 
 import pytest
 
-from aai_cli import config, llm
+from aai_cli.app.context import AppState
 from aai_cli.commands.stream import DEFAULT_SPEECH_MODEL
 from aai_cli.commands.stream import _exec as stream_exec
-from aai_cli.context import AppState
-from aai_cli.errors import UsageError
+from aai_cli.core import config, llm
+from aai_cli.core.errors import UsageError
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
 DEFAULTS = stream_exec.StreamOptions(

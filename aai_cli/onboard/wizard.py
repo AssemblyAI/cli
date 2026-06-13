@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from aai_cli import output
-from aai_cli.errors import NotAuthenticated
+from aai_cli.core.errors import NotAuthenticated
 from aai_cli.onboard import sections
 from aai_cli.onboard.prompter import Prompter, WizardCancelled
 from aai_cli.onboard.sections import SectionResult, WizardContext
+from aai_cli.ui import output
 
 _SectionFn = Callable[[Prompter, WizardContext], SectionResult]
 

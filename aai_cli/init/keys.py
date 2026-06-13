@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from aai_cli import config
+from aai_cli.core import config
 
 
 def resolve_optional_api_key(*, profile: str | None) -> tuple[str | None, str | None]:

@@ -10,8 +10,8 @@ import termios
 
 import pytest
 
-from aai_cli.errors import CLIError
-from aai_cli.hotkey import TerminalKeys, _stdin_fd
+from aai_cli.core.errors import CLIError
+from aai_cli.core.hotkey import TerminalKeys, _stdin_fd
 
 
 @pytest.fixture

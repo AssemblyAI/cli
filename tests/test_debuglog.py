@@ -10,8 +10,8 @@ import logging
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config, debuglog
-from aai_cli.context import AppState
+from aai_cli.app.context import AppState
+from aai_cli.core import config, debuglog
 from aai_cli.main import app
 
 runner = CliRunner()

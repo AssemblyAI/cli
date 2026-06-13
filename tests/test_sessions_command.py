@@ -3,9 +3,9 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
 from aai_cli.commands import sessions
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -196,7 +196,7 @@ def test_sessions_get_renders_detail(mocker):
 
 
 def test_sessions_without_session_runs_login(monkeypatch, mocker):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     list_ = mocker.patch(
         "aai_cli.commands.sessions.ams.list_streaming", autospec=True, return_value={"data": []}

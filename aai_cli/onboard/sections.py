@@ -7,20 +7,13 @@ from pathlib import Path
 import assemblyai as aai
 import typer
 
-from aai_cli import (
-    config,
-    doctor_checks,
-    environments,
-    init_exec,
-    output,
-    setup_exec,
-    transcribe_exec,
-    transcribe_render,
-)
-from aai_cli.context import AppState, persist_browser_login
-from aai_cli.errors import CLIError
+from aai_cli.app import doctor_checks, init_exec, setup_exec, transcribe_exec, transcribe_render
+from aai_cli.app.context import AppState, persist_browser_login
+from aai_cli.core import config, environments
+from aai_cli.core.errors import CLIError
 from aai_cli.init import runner
 from aai_cli.onboard.prompter import Prompter
+from aai_cli.ui import output
 
 
 class SectionResult(Enum):

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from aai_cli import environments
-from aai_cli.errors import CLIError
+from aai_cli.core import environments
+from aai_cli.core.errors import CLIError
 
 # Constant across environments.
 STYTCH_OAUTH_PROVIDER = "google"

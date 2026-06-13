@@ -3,9 +3,9 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.auth.flow import LoginResult
 from aai_cli.commands import account
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -34,7 +34,7 @@ def test_balance_formats_dollars(mocker):
 
 
 def test_balance_without_session_runs_login(monkeypatch, mocker):
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
     get_balance = mocker.patch(
         "aai_cli.commands.account.ams.get_balance",
@@ -334,7 +334,7 @@ def test_usage_invalid_date_fails_before_session_resolution(monkeypatch, mocker)
     def _no_login(**_kwargs):
         raise AssertionError("login flow must not start for an invalid date")
 
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _no_login)
     get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
     result = runner.invoke(app, ["usage", "--end", "not-a-date"])
@@ -391,7 +391,7 @@ def test_format_usage_number_fractional_trims_trailing_zeros():
 def test_usage_rejects_end_before_start(monkeypatch, mocker):
     # A reversed range is a fast exit-2 usage error before session resolution or
     # any AMS call — even when not logged in.
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),
@@ -417,7 +417,7 @@ def test_usage_allows_equal_start_and_end(mocker):
 def test_usage_rejects_unknown_window(monkeypatch, mocker):
     # --window was free text silently misinterpreted server-side; now it's validated
     # client-side, before session resolution or any AMS call.
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow",
         lambda **_: (_ for _ in ()).throw(AssertionError("login must not start")),

@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from aai_cli import environments
-from aai_cli.errors import APIError, CLIError, NotAuthenticated
+from aai_cli.core import environments
+from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.tts import session
 
 

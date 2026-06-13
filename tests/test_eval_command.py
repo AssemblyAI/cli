@@ -13,8 +13,8 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import config
 from aai_cli.commands.evaluate import _data as eval_data
+from aai_cli.core import config
 from aai_cli.main import app
 
 runner = CliRunner()

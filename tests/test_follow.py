@@ -1,4 +1,4 @@
-from aai_cli import follow, output
+from aai_cli.ui import follow, output
 
 
 def test_json_mode_emits_ndjson_per_refresh(monkeypatch):

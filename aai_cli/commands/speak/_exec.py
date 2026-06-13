@@ -11,10 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from aai_cli import output, stdio
-from aai_cli.context import AppState
-from aai_cli.errors import UsageError
+from aai_cli.app.context import AppState
+from aai_cli.core import stdio
+from aai_cli.core.errors import UsageError
 from aai_cli.tts import audio, dialogue, session, voices
+from aai_cli.ui import output
 
 # The streaming-TTS reference client defaults to English, so the CLI does the
 # same. The default voice follows the language (voices.default_voice): each

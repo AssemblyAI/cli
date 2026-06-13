@@ -5,10 +5,10 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from aai_cli import config, environments
+from aai_cli.app.context import AppState, _interactive_session, run_command
 from aai_cli.auth.flow import LoginResult
-from aai_cli.context import AppState, _interactive_session, run_command
-from aai_cli.errors import APIError, NotAuthenticated, auth_failure
+from aai_cli.core import config, environments
+from aai_cli.core.errors import APIError, NotAuthenticated, auth_failure
 
 runner = CliRunner()
 
@@ -29,7 +29,7 @@ def _make_app(body, **run_options):
 
 def _force_interactive(monkeypatch):
     """Pretend a human is at the terminal (CliRunner/pytest streams are never TTYs)."""
-    monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
+    monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
 
 
 class _TtyProbe:
@@ -54,7 +54,7 @@ def test_interactive_session_requires_both_ttys_and_no_agent(
 ):
     monkeypatch.setattr(sys, "stdin", _TtyProbe(stdin_tty))
     monkeypatch.setattr(sys, "stderr", _TtyProbe(stderr_tty))
-    monkeypatch.setattr("aai_cli.output.is_agentic", lambda: agentic)
+    monkeypatch.setattr("aai_cli.ui.output.is_agentic", lambda: agentic)
     assert _interactive_session() is expected
 
 
@@ -165,7 +165,7 @@ def test_run_command_auto_login_persistence_failure_is_clean(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "aai_cli.context.config.set_api_key",
+        "aai_cli.app.context.config.set_api_key",
         lambda *_args: (_ for _ in ()).throw(OSError("keyring is unavailable")),
     )
 
@@ -193,7 +193,7 @@ def test_run_command_auto_login_persistence_type_error_is_clean(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "aai_cli.context.config.set_api_key",
+        "aai_cli.app.context.config.set_api_key",
         lambda *_args: (_ for _ in ()).throw(TypeError("not TOML-serializable")),
     )
 
@@ -316,8 +316,8 @@ def test_env_override_warning_none_when_aai_env_matches_profile(monkeypatch):
 
 
 def test_resolve_session_returns_account_and_jwt():
-    from aai_cli import config
-    from aai_cli.context import AppState
+    from aai_cli.app.context import AppState
+    from aai_cli.core import config
 
     config.set_session("default", session_jwt="jwt_1", session_token="tok_1", account_id=42)
     account_id, jwt = AppState().resolve_session()
@@ -328,8 +328,8 @@ def test_resolve_session_returns_account_and_jwt():
 def test_resolve_session_raises_when_no_session():
     import pytest
 
-    from aai_cli.context import AppState
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.app.context import AppState
+    from aai_cli.core.errors import NotAuthenticated
 
     with pytest.raises(NotAuthenticated):
         AppState().resolve_session()
@@ -341,8 +341,8 @@ def test_resolve_session_raises_when_only_account_id_missing(monkeypatch):
     # fall through and return a None account id instead of failing cleanly).
     import pytest
 
-    from aai_cli.context import AppState
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.app.context import AppState
+    from aai_cli.core.errors import NotAuthenticated
 
     monkeypatch.setattr(config, "get_session", lambda _profile: {"jwt": "j", "token": "t"})
     monkeypatch.setattr(config, "get_account_id", lambda _profile: None)
@@ -354,8 +354,8 @@ def test_resolve_session_raises_when_only_jwt_missing(monkeypatch):
     # The mirror case: an account id but no stored session must also raise.
     import pytest
 
-    from aai_cli.context import AppState
-    from aai_cli.errors import NotAuthenticated
+    from aai_cli.app.context import AppState
+    from aai_cli.core.errors import NotAuthenticated
 
     monkeypatch.setattr(config, "get_session", lambda _profile: None)
     monkeypatch.setattr(config, "get_account_id", lambda _profile: 42)
@@ -455,7 +455,7 @@ def test_resolve_session_suggestion_never_offers_api_key_env_var():
 def test_resolve_profile_rejects_invalid_explicit_profile_fast():
     # Validated at resolution time (the root callback), so a typo'd --profile is a
     # fast exit-2 before any network round-trip, not a keyring-write-time failure.
-    from aai_cli.errors import CLIError
+    from aai_cli.core.errors import CLIError
 
     with pytest.raises(CLIError) as exc:
         AppState(profile="bad name!").resolve_profile()
@@ -468,7 +468,7 @@ def test_resolve_profile_returns_valid_explicit_profile():
 
 
 def test_persist_browser_login_passes_json_mode_to_flow(monkeypatch):
-    from aai_cli.context import persist_browser_login
+    from aai_cli.app.context import persist_browser_login
 
     seen = {}
 

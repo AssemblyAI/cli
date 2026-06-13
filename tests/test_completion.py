@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli.agent.voices import VOICE_NAMES, complete_voice
-from aai_cli.llm import KNOWN_MODELS, complete_model
+from aai_cli.core.llm import KNOWN_MODELS, complete_model
 from aai_cli.main import app
 
 
