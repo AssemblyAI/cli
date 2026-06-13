@@ -56,8 +56,6 @@ class AppState:
         key. Raises NotAuthenticated when the active profile has no stored session
         (e.g. it was set up with `assembly login --api-key`, or the session expired).
         """
-        from aai_cli.errors import NotAuthenticated
-
         profile = self.resolve_profile()
         session = config.get_session(profile)
         account_id = config.get_account_id(profile)
