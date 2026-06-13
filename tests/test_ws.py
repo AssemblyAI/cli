@@ -58,6 +58,9 @@ def test_handshake_status_reads_both_structured_shapes():
     assert handshake_status(RuntimeError("network unreachable")) is None
     # A WebSocket close code (e.g. 1008 policy violation) is not a handshake status.
     assert handshake_status(types.SimpleNamespace(code=1008)) is None
+    # A structured but non-auth HTTP status (e.g. a 500 on the response shape) is not a
+    # handshake auth status either — only 401/403 qualify, on either shape.
+    assert handshake_status(_HandshakeRejected(500)) is None
 
 
 def test_is_rejected_key_true_for_handshake_401():
