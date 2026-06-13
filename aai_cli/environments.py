@@ -102,6 +102,7 @@ def resolve(flag: str | None, profile_env: str | None) -> Environment:
 
 
 def set_active(env: Environment) -> None:
+    """Set the process-global active environment (called once at startup from `resolve`)."""
     global _active
     _active = env
 

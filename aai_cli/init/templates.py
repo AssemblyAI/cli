@@ -16,6 +16,7 @@ TEMPLATE_ORDER: tuple[str, ...] = ("audio-transcription", "live-captions", "voic
 
 
 def is_template(name: str) -> bool:
+    """Whether ``name`` is a known `assembly init` template id."""
     return name in TEMPLATES
 
 

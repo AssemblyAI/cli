@@ -25,6 +25,8 @@ from aai_cli.init import procfile
 
 @dataclass(frozen=True)
 class Target:
+    """A deploy provider: its CLI binary, selector flag, install hint, and argv recipe."""
+
     name: str  # human label, e.g. "Vercel"
     bin: str  # executable resolved via shutil.which
     flag: str  # CLI selector, e.g. "--vercel"
@@ -35,6 +37,7 @@ class Target:
     install_non_darwin: str | None = None  # hint off-macOS, when `install` is brew-specific
 
     def command(self, *, prod: bool) -> list[str]:
+        """The deploy argv, appending ``--prod`` when requested and the target supports it."""
         argv = [self.bin, *self.deploy_args]
         if prod and self.supports_prod:
             argv.append("--prod")

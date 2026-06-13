@@ -62,6 +62,7 @@ class SpeakConfig:
     sample_rate: int | None = None
 
     def query_params(self) -> dict[str, str]:
+        """The set TTS options as the WebSocket query string (omitting unset fields)."""
         params: dict[str, str] = {}
         if self.voice is not None:
             params["voice"] = self.voice

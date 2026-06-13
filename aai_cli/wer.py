@@ -59,6 +59,7 @@ class Score:
 
     @property
     def wer(self) -> float:
+        """Word error rate: edit errors divided by reference words."""
         return self.errors / self.words
 
 

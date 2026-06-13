@@ -94,6 +94,8 @@ class PipeSafeConsole(Console):
     """
 
     def on_broken_pipe(self) -> None:
+        """Re-raise BrokenPipeError instead of swallowing it, so a closed downstream
+        pipe propagates to ``run()``'s exit-0 handler rather than being hidden by Rich."""
         raise BrokenPipeError()
 
 

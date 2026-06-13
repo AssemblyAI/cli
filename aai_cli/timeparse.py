@@ -19,6 +19,11 @@ def _parse_iso_datetime(value: str) -> datetime | None:
 
 
 def parse_iso_utc(value: object) -> datetime | None:
+    """Parse an ISO-8601 string to a UTC-aware datetime, or None if it isn't parseable.
+
+    A naive timestamp is assumed to be UTC; an aware one is converted to UTC, so
+    callers always get a comparable UTC instant regardless of the input's offset.
+    """
     if not isinstance(value, str) or not value:
         return None
     parsed = _parse_iso_datetime(value)

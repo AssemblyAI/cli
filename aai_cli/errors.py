@@ -43,6 +43,7 @@ class CLIError(Exception):
         self.suggestion = suggestion
 
     def to_dict(self) -> dict[str, object]:
+        """The error as the ``{"error": {...}}`` JSON object emitted under ``--json``."""
         # suggestion/transcript_id are omitted entirely when unset (not null).
         body = jsonshape.compact(
             {
@@ -56,6 +57,8 @@ class CLIError(Exception):
 
 
 class NotAuthenticated(CLIError):
+    """No usable credential (or a rejected one): exit code 4, distinct from usage errors."""
+
     # Exit code 4 (not 2) so scripts can tell "you're not signed in" apart from a
     # usage error: UsageError keeps the conventional 2, auth gets its own code, the
     # same split gh uses.
@@ -78,6 +81,8 @@ class NotAuthenticated(CLIError):
 
 
 class APIError(CLIError):
+    """A backend/network failure (exit code 1); optionally carries the transcript id."""
+
     def __init__(
         self,
         message: str,
@@ -95,6 +100,8 @@ class APIError(CLIError):
 
 
 class UsageError(CLIError):
+    """A bad-input error (exit code 2): bad flags, a bad path, a malformed id."""
+
     def __init__(self, message: str, *, suggestion: str | None = None) -> None:
         super().__init__(message, error_type="usage_error", exit_code=2, suggestion=suggestion)
 

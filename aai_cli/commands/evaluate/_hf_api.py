@@ -82,6 +82,7 @@ def _checked_payload(resp: httpx.Response, *, dataset: str) -> dict[str, object]
 
 
 def fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> dict[str, object]:
+    """GET a Hugging Face datasets-server endpoint as JSON (sends ``HF_TOKEN`` if set)."""
     token = os.environ.get("HF_TOKEN")
     headers = {"authorization": f"Bearer {token}"} if token else {}
     try:
@@ -93,6 +94,7 @@ def fetch_json(endpoint: str, params: dict[str, str | int], *, dataset: str) -> 
 
 
 def split_entries(dataset: str) -> list[dict[str, object]]:
+    """The dataset's available (config, split) entries, or an APIError if it has none."""
     payload = fetch_json("/splits", {"dataset": dataset}, dataset=dataset)
     entries = jsonshape.mapping_list(payload.get("splits"))
     if not entries:
@@ -101,6 +103,7 @@ def split_entries(dataset: str) -> list[dict[str, object]]:
 
 
 def pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: str) -> str:
+    """Validate the requested ``subset`` (or pick the sole one), erroring with the choices."""
     configs = list(dict.fromkeys(str(entry.get("config")) for entry in entries))
     if subset is not None:
         if subset in configs:
@@ -119,6 +122,7 @@ def pick_subset(entries: list[dict[str, object]], subset: str | None, dataset: s
 def pick_split(
     entries: list[dict[str, object]], config: str, split: str | None, dataset: str
 ) -> str:
+    """Validate the requested ``split`` within ``config`` (or pick the sole one)."""
     splits = [str(entry.get("split")) for entry in entries if str(entry.get("config")) == config]
     if split is not None:
         if split in splits:

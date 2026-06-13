@@ -28,6 +28,7 @@ _URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
 
 def install_hint() -> str:
+    """A platform-appropriate hint for installing cloudflared (brew on macOS, else docs)."""
     # A ternary (not an if/return) so neither branch reads as unreachable under
     # mypy --warn-unreachable, which targets one platform at a time: on macOS the
     # second return looked dead, on Linux the first would.

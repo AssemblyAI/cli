@@ -15,10 +15,12 @@ from aai_cli.errors import CLIError
 
 
 def has_uv() -> bool:
+    """Whether the ``uv`` launcher is on PATH (preferred runner for scaffolded apps)."""
     return shutil.which("uv") is not None
 
 
 def venv_python(target: Path) -> Path:
+    """The path to the scaffolded project's venv Python (OS-appropriate layout)."""
     if os.name == "nt":
         return target / ".venv" / "Scripts" / "python.exe"
     return target / ".venv" / "bin" / "python"
@@ -45,6 +47,7 @@ def env_setup_commands(target: Path, *, use_uv: bool) -> list[list[str]]:
 
 
 def serve_command(target: Path, *, port: int, use_uv: bool) -> list[str]:
+    """The argv to serve the scaffolded app on ``port`` — via ``uv run`` or the venv Python."""
     if use_uv:
         return ["uv", "run", "uvicorn", "api.index:app", "--port", str(port)]
     return [str(venv_python(target)), "-m", "uvicorn", "api.index:app", "--port", str(port)]
@@ -73,6 +76,7 @@ def find_free_port(preferred: int, *, tries: int = 20) -> int:
 
 
 def wait_for_port(port: int, *, timeout: float = 30.0) -> bool:
+    """Poll until ``port`` accepts connections, returning False if ``timeout`` elapses first."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if _port_open(port):

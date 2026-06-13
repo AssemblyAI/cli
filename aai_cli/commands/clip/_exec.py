@@ -286,6 +286,7 @@ class WrittenClip:
     segment: Segment
 
     def payload(self) -> dict[str, object]:
+        """The clip as the JSON object emitted under ``--json`` (path + timing, 3-dp)."""
         return {
             "path": str(self.path),
             "start": round(self.segment.start, 3),
@@ -294,6 +295,7 @@ class WrittenClip:
         }
 
     def human_line(self) -> str:
+        """The clip as a one-line human summary: ``path  start - end  (duration)``."""
         start = clip_select.format_clock(self.segment.start)
         end = clip_select.format_clock(self.segment.end)
         duration = round(self.segment.end - self.segment.start, 3)

@@ -10,7 +10,7 @@ from pathlib import Path
 # current level and only ever ratchets up: a change may not drop public-API documentation
 # below it, but nobody is forced to backfill the existing gap in one go. Raising FLOOR as
 # coverage climbs is a deliberate, reviewed edit here — the same model as a coverage gate.
-FLOOR = 74.0
+FLOOR = 79.0
 
 PACKAGE = Path(__file__).resolve().parent.parent / "aai_cli"
 

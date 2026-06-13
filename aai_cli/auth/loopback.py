@@ -25,6 +25,8 @@ _SUCCESS_HTML = (
 
 @dataclass
 class CallbackResult:
+    """What the loopback OAuth callback captured: the token (+ type), or an error string."""
+
     token: str | None = None
     token_type: str | None = None
     error: str | None = None

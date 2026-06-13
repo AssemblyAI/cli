@@ -40,6 +40,7 @@ PII_POLICY_VALUES = frozenset(policy.value for policy in aai.PIIRedactionPolicy)
 
 
 def validate_pii_policies(policies: list[str] | None) -> None:
+    """Reject any ``--pii-policy`` value that isn't a known policy, listing the valid set."""
     unknown = [p for p in policies or [] if p not in PII_POLICY_VALUES]
     if unknown:
         valid = ", ".join(sorted(PII_POLICY_VALUES))
@@ -47,6 +48,7 @@ def validate_pii_policies(policies: list[str] | None) -> None:
 
 
 def validate_language_flags(language_code: str | None, *, language_detection: bool | None) -> None:
+    """Reject combining a forced ``--language-code`` with ``--language-detection``."""
     mutually_exclusive(
         ("--language-code", language_code),
         ("--language-detection", language_detection),
@@ -55,6 +57,7 @@ def validate_language_flags(language_code: str | None, *, language_detection: bo
 
 
 def validate_speakers_expected(merged: dict[str, object]) -> None:
+    """Reject ``--speakers-expected`` unless diarization (``--speaker-labels``) is on."""
     # Checked on the merged dict so `--config speaker_labels=true` also counts.
     if merged.get("speakers_expected") and not merged.get("speaker_labels"):
         raise UsageError(
@@ -64,6 +67,7 @@ def validate_speakers_expected(merged: dict[str, object]) -> None:
 
 
 def validate_out_with_llm(out: Path | None, llm_prompts: list[str] | None) -> None:
+    """Reject combining ``--out`` with ``--llm`` (capture vs. transform are separate steps)."""
     # --out captures the transcript itself; an LLM transform is a separate step.
     mutually_exclusive(
         ("--out", out),
@@ -167,6 +171,8 @@ def run_transcription(
     transcription_config: aai.TranscriptionConfig,
     download_sections: list[str] | None = None,
 ) -> aai.Transcript:
+    """Resolve the audio source (stdin, the bundled sample, a path/URL, or a YouTube
+    section) and transcribe it, returning the completed transcript."""
     if source == "-":
         # Audio piped on stdin (e.g. `ffmpeg -i v.mp4 -f wav - | assembly transcribe -`).
         # The SDK uploads a path, so buffer the bytes to a temp file first.

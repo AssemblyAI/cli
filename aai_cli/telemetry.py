@@ -58,6 +58,8 @@ def client_token() -> str:
 
 
 def intake_url() -> str:
+    """The Datadog logs-intake URL events are posted to (``AAI_TELEMETRY_INTAKE_URL``
+    overrides the default, for tests/staging)."""
     return os.environ.get(ENV_INTAKE_URL) or DEFAULT_INTAKE_URL
 
 

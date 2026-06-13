@@ -198,6 +198,11 @@ def stack(*items: RenderableType | None) -> RenderableType:
 
 
 def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
+    """Emit a command's result to stdout: ``data`` as JSON, or ``human_renderer(data)``.
+
+    The single split every command's success path goes through, so the JSON/human
+    choice and the stdout/stderr discipline stay in one place.
+    """
     if json_mode:
         print(jsonshape.dumps(data))
     else:
@@ -244,6 +249,8 @@ def emit_warning(message: str, *, json_mode: bool) -> None:
 
 
 def emit_error(err: CLIError, *, json_mode: bool) -> None:
+    """Write a CLIError to stderr — the ``{"error": …}`` object under ``--json``, else a
+    styled ``Error:`` line plus its suggestion — keeping stdout clean for pipelines."""
     # Always to stderr, so stdout stays clean for `assembly … | next-tool` pipelines.
     if json_mode:
         print(jsonshape.dumps(err.to_dict()), file=sys.stderr)

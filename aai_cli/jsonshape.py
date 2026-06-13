@@ -12,6 +12,7 @@ _FLOAT: TypeAdapter[float] = TypeAdapter(float)
 
 
 def as_mapping(value: object) -> dict[str, object] | None:
+    """``value`` as a ``dict[str, object]`` if it is a JSON object, else None."""
     try:
         return _JSON_OBJECT.validate_python(value)
     except ValidationError:
@@ -19,6 +20,7 @@ def as_mapping(value: object) -> dict[str, object] | None:
 
 
 def object_list(value: object) -> list[object]:
+    """``value`` as a list if it is one, else ``[]`` — for iterating an untyped payload."""
     try:
         return _OBJECT_LIST.validate_python(value)
     except ValidationError:
@@ -39,6 +41,7 @@ def as_object_list(value: object) -> list[dict[str, object]] | None:
 
 
 def mapping_list(value: object) -> list[dict[str, object]]:
+    """The object items of ``value`` as dicts, silently dropping any non-object element."""
     return [mapped for item in object_list(value) if (mapped := as_mapping(item)) is not None]
 
 
