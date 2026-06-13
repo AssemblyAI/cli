@@ -13,6 +13,20 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
+      # Cross-OS filename collisions: this repo ships a macOS Homebrew bottle, so two
+      # paths differing only in case would break a case-insensitive checkout.
+      - id: check-case-conflict
+      # Defense-in-depth alongside gitleaks: never commit a literal private key.
+      - id: detect-private-key
+
+  # Spell-check code, comments, and docs (Kubernetes' verify-spelling, generalized).
+  # Config (skips + ignore-words) lives in [tool.codespell] in pyproject.toml; check.sh
+  # runs the same tool via `uvx codespell`.
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.16

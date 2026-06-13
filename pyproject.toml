@@ -175,11 +175,37 @@ warn_unreachable = true
 disallow_any_generics = true
 no_implicit_reexport = true
 extra_checks = true
+# The remaining flags from mypy --strict, which aai_cli already satisfies. They close
+# gaps the above leave open: a function with *some* annotations but an unannotated
+# arg/return (disallow_incomplete_defs), the body of any still-untyped function going
+# unchecked (check_untyped_defs), an untyped decorator silently erasing a function's
+# type (disallow_untyped_decorators), subclassing an Any-typed base (disallow_subclassing_any),
+# and a config option that no longer matches any file (warn_unused_configs). The one
+# strict flag left off is disallow_untyped_calls: jiwer ships no stubs, so wer.py's
+# RemovePunctuation() call is unavoidably untyped, and turning it on would force a
+# net-new `# type: ignore` the escape-hatch gate rejects.
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+disallow_subclassing_any = true
+warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-# Tests are type-checked too, but pytest functions don't need return annotations.
+# Tests are type-checked too, but pytest functions don't need return annotations
+# (disallow_untyped_defs/disallow_incomplete_defs), and the bodies of those untyped
+# helpers — full of mock plumbing and ad-hoc fixtures — would drown the signal if
+# type-checked (check_untyped_defs) or block subclassing untyped test doubles
+# (disallow_subclassing_any) / wrapping them in untyped decorators
+# (disallow_untyped_decorators). The strict flags stay on for the shipped package.
+# With check_untyped_defs off, mypy emits an `annotation-unchecked` note per annotated
+# untyped helper; silence those notes so the test output stays signal.
 module = "tests.*"
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+disable_error_code = ["annotation-unchecked"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of
@@ -211,9 +237,25 @@ extend-exclude = ["aai_cli/_version.py"]
 # A/N/FBT/PL/T20/PT/PIE/PERF/TCH add maintainability pressure: naming/shadowing,
 # boolean traps, pylint-style design issues, centralized raw output, pytest style,
 # small simplifications, performance footguns, and type-only import hygiene.
+# ASYNC/LOG/G/DTZ/FLY/ICN/SLOT/ISC/TID add correctness pressure the above miss and the
+# codebase already satisfies (so they're forward-looking, zero-churn enforcement):
+#   ASYNC — blocking calls (time.sleep, open(), sync HTTP) inside the streaming/agent
+#           asyncio code, which would stall the event loop;
+#   LOG/G — logging anti-patterns (f-strings/`.format` in log calls, `exception()`
+#           outside handlers) in debuglog and friends;
+#   DTZ   — naive datetime construction (timezone bugs);
+#   FLY   — static `str.join` that should be an f-string (pairs with UP);
+#   ISC   — implicitly concatenated string literals across lines (the classic
+#           missing-comma-in-a-list bug); ISC001 is owned by the formatter (ignored);
+#   ICN/SLOT — import-convention and __slots__ hygiene;
+#   TID   — relative imports (banned outright below) so every import is absolute,
+#           reinforcing the import-linter architecture contracts;
+#   T10   — a forgotten breakpoint()/pdb/ipdb left in the shipped code (the debugger
+#           counterpart to the T20 print ban already selected).
 select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S", "RUF",
           "PGH", "ERA", "TRY", "TD", "FIX", "A", "N", "FBT", "PL", "C90", "T20", "PT",
-          "PIE", "PERF", "TCH"]
+          "PIE", "PERF", "TCH", "ASYNC", "LOG", "G", "DTZ", "FLY", "ICN", "SLOT", "ISC",
+          "TID", "T10"]
 # E501: line length is owned by the formatter.
 # B008: Typer uses function calls (typer.Option/Argument) as parameter defaults.
 # S603/S607: we intentionally shell out to `claude`/`npx` with controlled args.
@@ -223,13 +265,35 @@ select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "RET", "PTH", "ARG", "S"
 # PLC0415: optional/heavy runtime deps are imported lazily to keep startup fast.
 # TC001-TC003: the project intentionally keeps readable top-level type imports; TC006
 #   still enforces quoted runtime casts.
+# ISC001: single-line implicit string concatenation is managed by the formatter, which
+#   would otherwise fight this lint (ruff's own recommendation when both are enabled).
 ignore = ["E501", "B008", "S603", "S607", "TRY003", "N818", "PLC0415",
-          "TC001", "TC002", "TC003"]
+          "TC001", "TC002", "TC003", "ISC001"]
 
 # Function-size pressure, tuned to keep functions small enough to read and edit in
 # one screen (the friction a coding agent hits most). These complement xenon's
 # cyclomatic-complexity gate in check.sh: mccabe (C901) and max-branches bound
 # branchiness; max-statements bounds raw length; max-args bounds signatures.
+[tool.ruff.lint.flake8-tidy-imports]
+# Every intra-package import is already absolute (`from aai_cli.x import y`); banning
+# relative imports outright keeps it that way, which makes modules movable and the
+# import-linter contracts unambiguous.
+ban-relative-imports = "all"
+
+# Disallowed-methods enforcement, modeled on the Deno toolchain's per-crate clippy.toml
+# bans (only designated crates may call the fenced std methods). Process spawning and
+# raw environment access stay confined to the modules that legitimately own them
+# (allowlisted via per-file-ignores below); any *new* module reaching for them trips
+# TID251, so adding one is a visible, reviewable edit rather than a silent spread.
+# The matcher is AST-based, so the os.environ snippets inside the code_gen --show-code
+# exemplars (string literals) don't trip it.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Spawn detached children via aai_cli.procs; if a module genuinely needs raw subprocess, add it to the TID251 allowlist in pyproject.toml."
+"os.environ".msg = "Resolve configuration through aai_cli.config / aai_cli.context (which centralize precedence and secret handling); env-owning modules are allowlisted for TID251 in pyproject.toml."
+"os.getenv".msg = "Use os.environ.get (the single project idiom) via an env-owning module; see the TID251 allowlist in pyproject.toml."
+"os.putenv".msg = "os.putenv/os.unsetenv bypass os.environ and desync the mapping; mutate os.environ instead."
+"os.unsetenv".msg = "os.putenv/os.unsetenv bypass os.environ and desync the mapping; mutate os.environ instead."
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10  # matches xenon's grade-B ceiling (CC <= 10) so the two agree
 
@@ -244,9 +308,14 @@ max-statements = 40
 # TRY300: test helpers commonly `return` inside a try while asserting on the except path.
 # Tests also keep literal exit codes, local imports, composite assertions, and fake
 # call signatures where those make the intent clearer than production-style indirection.
+# TID251: tests drive the CLI as a subprocess and monkeypatch os.environ freely; the
+# banned-api ban targets the shipped aai_cli package, not the test harness or dev gates.
+# DTZ: tests build naive datetimes as deterministic fixtures (the suite pins TZ in
+# conftest and uses time-machine), so timezone-aware construction isn't required here.
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "ARG001", "ARG002", "ARG005",
               "PTH123", "SIM117", "TRY300", "FBT", "PLR2004", "PLC0415", "PLR0913",
-              "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH"]
+              "PLW1510", "N806", "N818", "PLW0108", "PT018", "TCH", "TID251", "DTZ"]
+"scripts/**" = ["TID251"]
 # Typer command functions naturally have many boolean options and broad signatures
 # (PLR0913/FBT). Their *bodies*, though, are held to the same length/branch limits as
 # the rest of the package: PLR0912/PLR0915/C901 are deliberately NOT ignored here.
@@ -257,18 +326,50 @@ max-statements = 40
 # command signatures do.
 "aai_cli/options.py" = ["FBT003"]
 # Raw stdout/stderr writes are centralized here; command modules call output helpers.
-"aai_cli/output.py" = ["T201"]
+# TID251: output owns the FORCE_COLOR/NO_COLOR env toggles and TTY/agent detection.
+"aai_cli/output.py" = ["T201", "TID251"]
 # The active environment is process-global startup state by design.
-"aai_cli/environments.py" = ["PLW0603"]
+# TID251: environments.py owns AAI_ENV resolution (an env-owning module).
+"aai_cli/environments.py" = ["PLW0603", "TID251"]
 # Verbosity is process-global startup state by design (mirrors environments.py).
 "aai_cli/debuglog.py" = ["PLW0603"]
 # BaseHTTPRequestHandler.log_message requires a parameter named `format`.
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
-"aai_cli/init/templates/**" = ["S105"]
+# TID251: the scaffolds are end-user example apps that read their own config straight
+# from os.environ — that's correct, idiomatic code to ship, not a CLI-internal env read.
+"aai_cli/init/templates/**" = ["S105", "TID251"]
+
+# TID251 banned-api allowlist (see [tool.ruff.lint.flake8-tidy-imports.banned-api]).
+# These are the only modules permitted raw `subprocess` (process spawning) or raw
+# `os.environ`/`os.getenv` (environment access). Splitting the ignore per file keeps the
+# blast radius explicit: a new module needing either must be added here in review.
+# Process-spawning modules (shell out to claude/npx/ffmpeg/yt-dlp/tunnels/etc.):
+"aai_cli/procs.py" = ["TID251"]
+"aai_cli/coding_agent.py" = ["TID251"]
+"aai_cli/mediafile.py" = ["TID251"]
+"aai_cli/setup_exec.py" = ["TID251"]
+"aai_cli/commands/deploy/_exec.py" = ["TID251"]
+"aai_cli/commands/update.py" = ["TID251"]
+"aai_cli/commands/webhooks/_listen.py" = ["TID251"]
+"aai_cli/init/runner.py" = ["TID251"]
+"aai_cli/init/tunnel.py" = ["TID251"]
+"aai_cli/streaming/macos.py" = ["TID251"]
+"aai_cli/streaming/sources.py" = ["TID251"]
+# Environment-owning modules (config/auth/env resolution; output & environments are
+# allowlisted above alongside their existing ignores):
+"aai_cli/config.py" = ["TID251"]
+"aai_cli/context.py" = ["TID251"]
+"aai_cli/update_check.py" = ["TID251"]
+"aai_cli/auth/endpoints.py" = ["TID251"]
+"aai_cli/init/keys.py" = ["TID251"]
+"aai_cli/commands/dev/_exec.py" = ["TID251"]
+"aai_cli/commands/share/_exec.py" = ["TID251"]
+"aai_cli/commands/evaluate/_hf_api.py" = ["TID251"]
 # ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
-# source (release builds inject the write-only client token).
-"aai_cli/telemetry.py" = ["S105"]
+# source (release builds inject the write-only client token). TID251: telemetry reads
+# its opt-out / intake-URL / CI-detection env vars (an env-owning module).
+"aai_cli/telemetry.py" = ["S105", "TID251"]
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]
@@ -277,6 +378,16 @@ min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
 ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
                 "org", "preserve_logging_state", "refresh", "rpath"]
+
+[tool.codespell]
+# Spell-check code, comments, and docs (Kubernetes' verify-spelling, generalized). Run via
+# `uvx codespell` in check.sh and as a pre-commit hook, so it needs no entry in uv.lock.
+# Skip generated/binary/snapshot trees and the lockfile; recorded fixtures and snapshots
+# are byte-pinned and must not be "corrected".
+skip = "./.venv,./dist,./docs,./node_modules,./.git,uv.lock,*.ambr,./tests/fixtures,./aai_cli/_version.py"
+# Domain words codespell misreads: "unparseable" (accepted variant), "ist" (an identifier),
+# "expresso" (a deliberate mis-transcription used as an eval/WER example).
+ignore-words-list = "unparseable,ist,expresso,notin,ans"
 
 [tool.deptry]
 exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]

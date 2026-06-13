@@ -6,7 +6,7 @@ from typing import TextIO
 from rich.console import Console
 from rich.text import Text
 
-from aai_cli import theme
+from aai_cli import jsonshape, theme
 from aai_cli.render import BaseRenderer
 
 # Source label -> (display text, Rich style). System audio borrows the agent color;
@@ -115,13 +115,15 @@ class StreamRenderer(BaseRenderer):
         speaker = getattr(event, "speaker_label", None)  # set when --speaker-labels diarizes
         with self._lock:
             if self.json_mode:
-                payload: dict[str, object] = {
-                    "type": "turn",
-                    "transcript": text,
-                    "end_of_turn": end,
-                }
-                if speaker is not None:
-                    payload["speaker"] = speaker
+                # speaker is omitted entirely when undiarized (not null).
+                payload = jsonshape.compact(
+                    {
+                        "type": "turn",
+                        "transcript": text,
+                        "end_of_turn": end,
+                        "speaker": speaker,
+                    }
+                )
                 self._emit(self._with_source(payload, source))
             elif self.text_mode:
                 if end and text:

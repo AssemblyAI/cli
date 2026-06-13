@@ -9,13 +9,16 @@ clip` and `assembly dub` can't drift apart.
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 import assemblyai as aai
 
-from aai_cli import client, output
+from aai_cli import client, output, youtube
 from aai_cli.errors import APIError, CLIError, UsageError
 
 
@@ -37,6 +40,69 @@ def validate_local_media(media: Path, command: str, *, kind: str = "audio/video"
             exit_code=2,
             suggestion="Pass a media file, not a directory.",
         )
+
+
+@contextlib.contextmanager
+def resolve_media_source(
+    media: str,
+    command: str,
+    *,
+    fetch_clause: str,
+    download_suggestion: str,
+    video: bool,
+    download_sections: list[str] | None,
+    json_mode: bool,
+    quiet: bool,
+) -> Generator[tuple[Path, bool]]:
+    """Resolve the ``media`` argument to a local file for the body of the ``with``.
+
+    The three-way source handling shared verbatim by ``caption``/``clip``/``dub``
+    (only the wording differs):
+
+    * a media-page URL (YouTube, …) is downloaded into a temp dir that stays open
+      until the block exits, yielding ``(path, True)`` — so the caller must resolve
+      any default output *away* from that vanishing temp dir;
+    * any other ``http(s)://`` URL is rejected (the API/yt-dlp can't fetch it), as
+      is a bare ``scheme://`` (``Path()`` would mangle the ``//`` into a corrupted
+      echo of the URL);
+    * a local path yields ``(Path(media), False)`` unvalidated — the caller checks
+      it with ``validate_local_media`` (the ``kind`` differs per command).
+
+    ``fetch_clause`` completes "assembly <command> can't fetch this URL; it …" and
+    ``download_suggestion`` is the shared "Download … first" hint on both rejects.
+    """
+    if youtube.is_downloadable_url(media):
+        download_label = "Downloading video…" if video else "Downloading audio…"
+        with tempfile.TemporaryDirectory(prefix=f"aai-{command}-src-") as td:
+            with output.status(download_label, json_mode=json_mode, quiet=quiet):
+                local = youtube.download_media(
+                    media, Path(td), video=video, download_sections=download_sections
+                )
+            yield local, True
+        return
+    if media.startswith(("http://", "https://")):
+        raise UsageError(
+            f"assembly {command} can't fetch this URL; it {fetch_clause}.",
+            suggestion=download_suggestion,
+        )
+    if "://" in media:
+        raise UsageError(
+            f"assembly {command} needs a local file, not a URL: {media}",
+            suggestion=download_suggestion,
+        )
+    yield Path(media), False
+
+
+def default_output(
+    out: Path | None, media: Path, *, downloaded: bool, namer: Callable[[Path], Path]
+) -> Path:
+    """The output path for a media command: an explicit ``--out`` wins; otherwise
+    ``namer(media)`` next to the source — or, when ``media`` is a vanishing
+    downloaded temp file, that same name dropped into the current directory."""
+    if out is not None:
+        return out
+    chosen = namer(media)
+    return Path.cwd() / chosen.name if downloaded else chosen
 
 
 def validate_out(out: Path, media: Path) -> None:

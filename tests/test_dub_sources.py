@@ -70,6 +70,7 @@ def fake_download(monkeypatch: pytest.MonkeyPatch):
         seen["url"] = url
         seen["video"] = video
         seen["download_sections"] = download_sections
+        seen["dest_dir"] = dest_dir
         path = dest_dir / ("vid123.mp4" if video else "vid123.m4a")
         path.write_bytes(b"\x00media")
         seen["path"] = path
@@ -101,6 +102,7 @@ def test_run_dub_youtube_downloads_and_dubs_into_cwd(
     assert fake_download["url"] == YT_URL
     assert fake_download["video"] is False
     assert fake_download["download_sections"] == []
+    assert Path(fake_download["dest_dir"]).name.startswith("aai-dub-src-")
     assert fake_transcribe["audio"] == str(fake_download["path"])
     # ffmpeg muxes over the downloaded file; the default output lands in the cwd,
     # named after the download (the temp dir is gone after the run).
@@ -223,4 +225,5 @@ def test_run_dub_rejects_non_downloadable_url(monkeypatch):
     with pytest.raises(UsageError) as exc:
         _run(opts, json_mode=False)
     assert "assembly dub can't fetch this URL" in exc.value.message
+    assert "dubs a local file" in exc.value.message
     assert "Download the media first" in (exc.value.suggestion or "")

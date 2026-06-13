@@ -105,52 +105,29 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
     voice_plan = pipeline.VoicePlan(*dialogue.parse_voice_overrides(opts.voice))
     youtube.validate_video_flag(opts.media, video=opts.video)
     youtube.validate_sections_flag(opts.media, opts.download_sections)
-    if youtube.is_downloadable_url(opts.media):
-        # A media-page URL (YouTube, podcast page, …) is downloaded once — the
-        # audio track by default, the full video with --video so the dub keeps
-        # the picture, only the --download-sections slices when given — and
-        # dubbed locally. ffmpeg is checked before the download so a missing
-        # dependency fails before any fetch.
-        ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
-        downloading = "Downloading video…" if opts.video else "Downloading audio…"
-        with tempfile.TemporaryDirectory(prefix="aai-dub-src-") as td:
-            with output.status(downloading, json_mode=json_mode, quiet=state.quiet):
-                local = youtube.download_media(
-                    opts.media,
-                    Path(td),
-                    video=opts.video,
-                    download_sections=opts.download_sections,
-                )
-            # The download dir is temporary, so the default output lands in the
-            # current directory — never next to the temp file.
-            out = (
-                opts.out
-                if opts.out is not None
-                else Path.cwd() / default_out_path(local, language).name
-            )
-            mediafile.validate_out(out, local)
-            _dub_and_emit(
-                opts, local, out, language, ffmpeg, voice_plan, state, json_mode=json_mode
-            )
-        return
-    if opts.media.startswith(("http://", "https://")):
-        raise UsageError(
-            "assembly dub can't fetch this URL; it dubs a local file or a "
-            "media-page URL yt-dlp can download (YouTube, podcasts, …).",
-            suggestion="Download the media first, then dub the local copy.",
-        )
-    if "://" in opts.media:
-        # Path() would collapse the "//" and report a corrupted echo of the URL.
-        raise UsageError(
-            f"assembly dub needs a local file, not a URL: {opts.media}",
-            suggestion="Download the media first, then dub the local copy.",
-        )
-    media = Path(opts.media)
-    mediafile.validate_local_media(media, "dub")
-    out = opts.out if opts.out is not None else default_out_path(media, language)
-    mediafile.validate_out(out, media)
+    # ffmpeg is checked before any (billed) download/transcription so a missing
+    # dependency fails before any fetch.
     ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
-    _dub_and_emit(opts, media, out, language, ffmpeg, voice_plan, state, json_mode=json_mode)
+    # A media-page URL is downloaded once — the audio track by default, the full
+    # video with --video so the dub keeps the picture, only the
+    # --download-sections slices when given — and dubbed locally.
+    with mediafile.resolve_media_source(
+        opts.media,
+        "dub",
+        fetch_clause="dubs a local file or a media-page URL yt-dlp can download (YouTube, podcasts, …)",
+        download_suggestion="Download the media first, then dub the local copy.",
+        video=opts.video,
+        download_sections=opts.download_sections,
+        json_mode=json_mode,
+        quiet=state.quiet,
+    ) as (media, downloaded):
+        if not downloaded:
+            mediafile.validate_local_media(media, "dub")
+        out = mediafile.default_output(
+            opts.out, media, downloaded=downloaded, namer=lambda m: default_out_path(m, language)
+        )
+        mediafile.validate_out(out, media)
+        _dub_and_emit(opts, media, out, language, ffmpeg, voice_plan, state, json_mode=json_mode)
 
 
 def _dub_and_emit(

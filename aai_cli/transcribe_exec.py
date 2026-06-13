@@ -7,7 +7,6 @@ so ``run_transcription`` lives in a core module that ``onboard`` can import dire
 
 from __future__ import annotations
 
-import json
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +20,7 @@ from aai_cli import (
     client,
     code_gen,
     config_builder,
+    jsonshape,
     llm,
     output,
     remotefs,
@@ -57,7 +57,7 @@ def out_payload(
             transcript, output_field, chars_per_caption=chars_per_caption
         )
     if json_mode:
-        return json.dumps(client.transcript_json_payload(transcript), default=str)
+        return jsonshape.dumps(client.transcript_json_payload(transcript))
     return client.select_transcript_field(transcript, choices.TranscriptOutput.text)
 
 

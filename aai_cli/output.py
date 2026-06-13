@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import sys
 from collections.abc import Callable, Generator
@@ -13,7 +12,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from aai_cli import __version__, choices, theme
+from aai_cli import __version__, choices, jsonshape, theme
 
 if TYPE_CHECKING:
     from aai_cli.errors import CLIError
@@ -200,14 +199,14 @@ def stack(*items: RenderableType | None) -> RenderableType:
 
 def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
     if json_mode:
-        print(json.dumps(data, default=str))
+        print(jsonshape.dumps(data))
     else:
         console.print(human_renderer(data))
 
 
 def emit_ndjson(obj: object) -> None:
     """Write one newline-delimited JSON record to stdout, flushed for live pipelines."""
-    print(json.dumps(obj, default=str), flush=True)
+    print(jsonshape.dumps(obj), flush=True)
 
 
 def emit_text(text: str) -> None:
@@ -239,7 +238,7 @@ def emit_warning(message: str, *, json_mode: bool) -> None:
     clean and stderr machine-readable. Human mode gets the familiar yellow line.
     """
     if json_mode:
-        print(json.dumps({"warning": message}, default=str), file=sys.stderr)
+        print(jsonshape.dumps({"warning": message}), file=sys.stderr)
     else:
         error_console.print(warn(message))
 
@@ -247,7 +246,7 @@ def emit_warning(message: str, *, json_mode: bool) -> None:
 def emit_error(err: CLIError, *, json_mode: bool) -> None:
     # Always to stderr, so stdout stays clean for `assembly … | next-tool` pipelines.
     if json_mode:
-        print(json.dumps(err.to_dict(), default=str), file=sys.stderr)
+        print(jsonshape.dumps(err.to_dict()), file=sys.stderr)
     else:
         error_console.print(f"[aai.error]Error:[/aai.error] {escape(err.message)}")
         if err.suggestion:

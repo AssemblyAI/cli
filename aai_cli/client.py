@@ -263,7 +263,7 @@ _FIELD_RENDERERS: dict[str, Callable[[Any], str]] = {
     "id": lambda t: str(getattr(t, "id", "") or ""),
     "status": status_str,
     "utterances": _render_utterances,
-    "json": lambda t: json.dumps(transcript_json_payload(t), default=str),
+    "json": lambda t: jsonshape.dumps(transcript_json_payload(t)),
 }
 
 
