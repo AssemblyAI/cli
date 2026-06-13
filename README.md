@@ -4,11 +4,31 @@
 [![License](https://img.shields.io/badge/license-MIT-D6402E)](https://github.com/AssemblyAI/cli/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-assemblyai-D6402E)](https://www.assemblyai.com/docs)
 
-The AssemblyAI CLI (`assembly`) brings speech AI to your terminal: transcribe files, URLs, and YouTube/podcast pages, stream live audio, talk to a two-way voice agent, prompt the LLM Gateway, benchmark speech models, and scaffold ready-to-deploy starter apps.
+The AssemblyAI CLI (`assembly`) brings speech AI directly into your terminal: transcribe files, URLs, and YouTube/podcast pages, stream live audio, talk to a two-way voice agent, prompt the LLM Gateway, benchmark speech models, and scaffold ready-to-deploy starter apps.
 
 <p align="center">
   <img src="assets/welcome.png" alt="The assembly CLI welcome screen, listing command groups for transcription, streaming, voice agents, app scaffolding, and account management" width="820">
 </p>
+
+Learn more about the platform in the [AssemblyAI docs](https://www.assemblyai.com/docs).
+
+## ⚡ Quickstart
+
+Install on macOS or Linux with Homebrew:
+
+```sh
+brew tap assemblyai/cli https://github.com/AssemblyAI/cli
+brew install assembly
+```
+
+Sign in (stores your API key in the OS keyring) and run your first transcription:
+
+```sh
+assembly login
+assembly transcribe --sample
+```
+
+That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-installation) for pipx/uv and other options.
 
 ## 🚀 Why the AssemblyAI CLI?
 
@@ -19,9 +39,33 @@ The AssemblyAI CLI (`assembly`) brings speech AI to your terminal: transcribe fi
 - **🤖 Agent-ready**: `assembly setup install` wires your coding agent up with the AssemblyAI docs MCP server and skills.
 - **📖 Open source**: MIT licensed.
 
+## 📋 Features at a glance
+
+| Command | What it does |
+| :--- | :--- |
+| `assembly transcribe` | Transcribe files, URLs, YouTube/podcast pages, directories, globs, or bucket storage (`s3://`, `gs://`, `az://`) — with speaker labels, PII redaction, summarization, SRT/VTT captions, and resumable batch runs |
+| `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
+| `assembly dictate` | Push-to-talk dictation: press Enter to record, Enter again for instant text (Sync STT API, up to 120 s per utterance) |
+| `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
+| `assembly llm` | Prompt the LLM Gateway over a transcript, stdin, or a live stream |
+| `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range — clip boundaries snap into nearby silence |
+| `assembly dub` | Re-voice an audio/video file in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
+| `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
+| `assembly eval` | Benchmark WER against Hugging Face datasets (built-in aliases: `librispeech`, `tedlium`, …) or local manifests |
+| `assembly init` / `dev` / `share` / `deploy` | Scaffold a FastAPI + HTML starter app, run it locally, expose it on a public URL, ship it to Vercel / Railway / Fly.io |
+| `assembly webhooks listen` | Open a public dev URL that prints webhook deliveries and can forward them to your local app |
+| `assembly setup` | Wire a coding agent up with the AssemblyAI docs MCP server and skills |
+| `assembly keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service via browser login |
+| `assembly doctor` | Check your environment: API key, network, ffmpeg, microphone |
+
+Add `--show-code` to `transcribe` / `stream` / `agent` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
+
 ## ✨ Things you can do with it
 
-A few one-liners that show what `assembly` can do. These are the fun ones; the everyday basics live under **Quick examples** below.
+A few one-liners that show what `assembly` can do. The everyday basics live under [Getting started](#-getting-started) below.
+
+> [!NOTE]
+> `speak` and `dub` are sandbox-only today — that's why the examples below pass `--sandbox`.
 
 **Recreate a scene with synthetic voices** — transcribe and diarize a YouTube clip, then pipe it straight into TTS with a different voice per speaker:
 
@@ -30,7 +74,7 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
   | assembly --sandbox speak --voice A=jane --voice B=mary --out scene.wav
 ```
 
-`speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices. (`speak` is sandbox-only today, hence `--sandbox`.)
+`speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices.
 
 **Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video:
 
@@ -38,7 +82,7 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
 assembly --sandbox dub talk.mp4 --lang de
 ```
 
-The video stream is copied untouched; each dubbed line lands at its original start time. (Sandbox-only, like `speak`.)
+The video stream is copied untouched; each dubbed line lands at its original start time.
 
 **Turn a podcast into audio** — Apple and Spotify podcast pages work too (yt-dlp ingestion):
 
@@ -115,7 +159,8 @@ assembly eval librispeech --speech-model universal-3-pro --limit 50
 
 Requires Python 3.12+ (Homebrew brings its own; for pipx/uv see the `--python` hint below).
 
-> ⚠️ The `assemblyai-cli` package on PyPI is **not** this project — install with one of the
+> [!WARNING]
+> The `assemblyai-cli` package on PyPI is **not** this project — install with one of the
 > commands below, not `pip install assemblyai-cli`.
 
 ### Homebrew (recommended — macOS / Linux)
@@ -139,25 +184,39 @@ uv tool install "git+https://github.com/AssemblyAI/cli.git"
 If your default interpreter is older than Python 3.12, add `--python python3.12` (pipx) or
 `--python 3.12` (uv) to the install command.
 
+<details>
+<summary>System dependencies for the live-audio commands (pipx/uv installs only)</summary>
+
 Only the live-audio commands need anything extra: `stream`, `dictate`, and `agent` use PortAudio for
-microphone capture (Debian/Ubuntu: `sudo apt-get install libportaudio2`; Fedora:
-`sudo dnf install portaudio`) and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream
-non-WAV audio. Plain `transcribe` uploads your file directly and needs neither.
+microphone capture and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream non-WAV audio.
+Plain `transcribe` uploads your file directly and needs neither.
+
+- Debian/Ubuntu: `sudo apt-get install libportaudio2 ffmpeg`
+- Fedora: `sudo dnf install portaudio ffmpeg`
+- macOS (Homebrew): `brew install portaudio ffmpeg`
+
+</details>
 
 ## 🔐 Authentication
 
 New to AssemblyAI? Create a free account at
 [assemblyai.com/dashboard](https://www.assemblyai.com/dashboard) to get an API key.
 
-The easiest path is browser login, which stores your API key in the OS keyring
-(Keychain / Credential Manager / Secret Service):
+### Option 1: Browser login (recommended)
+
+**✨ Best for:** day-to-day use on your own machine.
+
+Browser login stores your API key in the OS keyring (Keychain / Credential Manager / Secret Service) — nothing lands in a dotfile, and it unlocks the account commands (`keys`, `balance`, `usage`, `limits`, `sessions`, `audit`):
 
 ```sh
 assembly login
 ```
 
-In CI — or anywhere a browser isn't an option — set the key as an environment variable
-instead. It's checked before the keyring, and nothing is written to disk:
+### Option 2: API key environment variable
+
+**✨ Best for:** CI, containers, and anywhere a browser isn't an option.
+
+The environment variable is checked before the keyring, and nothing is written to disk:
 
 ```sh
 export ASSEMBLYAI_API_KEY="YOUR_API_KEY"
@@ -165,13 +224,15 @@ export ASSEMBLYAI_API_KEY="YOUR_API_KEY"
 
 ## 🚀 Getting started
 
-For a guided tour — sign in, run a first transcription, start building:
+### Guided tour
+
+Sign in, run a first transcription, start building:
 
 ```sh
 assembly onboard
 ```
 
-Or jump straight in:
+### Basic usage
 
 ```sh
 assembly transcribe --sample   # transcribe the hosted sample file
@@ -181,22 +242,6 @@ assembly stream                # stream your microphone (Ctrl-C to stop)
 assembly agent                 # talk to a voice agent (use headphones)
 assembly init                  # scaffold a starter app
 ```
-
-## 📋 Key features
-
-- **Transcription**: `assembly transcribe` handles files, URLs, and YouTube/podcast pages, with flags for speaker labels, PII redaction, summarization, sentiment, chapters, and more.
-- **Batch transcription**: point `assembly transcribe` at a directory or glob — local, or in bucket storage (`"s3://bucket/calls/*.mp3"`, `gs://`, `az://`, …, with the matching fsspec backend such as `s3fs` installed) — or pipe paths with `--from-stdin` to transcribe everything concurrently, with sidecar files that make re-runs resumable. Add `--llm "prompt"` to run an LLM prompt over each finished transcript, saved into the sidecars.
-- **Real-time streaming**: `assembly stream` transcribes the microphone, a file, or a URL live — on macOS it can capture system audio too.
-- **Dictation**: `assembly dictate` is push-to-talk for your terminal — press Enter to record, Enter again to get the utterance back instantly from the Sync API (up to 120 s per utterance).
-- **Voice agent**: `assembly agent` runs a full-duplex spoken conversation in your terminal.
-- **LLM Gateway**: `assembly llm` prompts an LLM over a transcript, stdin, or a live stream (`assembly stream --llm "summarize as I talk"`).
-- **Transcript-driven clipping**: `assembly clip` cuts an audio/video file (or a YouTube/podcast URL) with ffmpeg by diarized speaker (`--speaker A`), text match (`--search "pricing"`), LLM pick (`--llm "the three best moments"`), or explicit time range (`--range 1:30-2:45`) — transcribing on the fly, reusing a finished transcript with `-t ID`, or reading one from a pipe (`assembly transcribe x.mp4 --speaker-labels --json | assembly clip x.mp4 -t - --llm "…"`). Clip boundaries snap into nearby silence (ffmpeg `silencedetect`) so cuts don't land mid-word; `--no-snap` cuts at the exact selected times.
-- **Dubbing**: `assembly dub` re-voices an audio/video file in another language (`assembly --sandbox dub talk.mp4 --lang de`): diarized transcription, per-utterance LLM translation, streaming TTS per speaker, and an ffmpeg track-swap that leaves the video untouched. Sandbox-only today, like `speak`.
-- **Model evaluation**: `assembly eval` transcribes a Hugging Face dataset (with built-in aliases for common benchmarks: `assembly eval tedlium`) or a local `.csv`/`.jsonl` manifest and scores WER against its references — handy for picking a speech model.
-- **Starter apps**: `assembly init` scaffolds a self-contained FastAPI + HTML app (`audio-transcription`, `live-captions`, `voice-agent`); `assembly dev` runs it, `assembly share` exposes it on a public URL, and `assembly deploy` ships it to Vercel, Railway, or Fly.io.
-- **Webhook testing**: `assembly webhooks listen` opens a public dev URL (cloudflared quick tunnel) that prints webhook deliveries as they arrive and can forward them to your local app with `--forward-to`.
-- **Code generation**: add `--show-code` to `transcribe`/`stream`/`agent` to print the equivalent Python SDK script instead of running.
-- **Account self-service**: `assembly keys` / `balance` / `usage` / `limits` / `sessions` / `audit` via browser login.
 
 ### Quick examples
 
@@ -231,10 +276,18 @@ assembly transcribe --sample --speaker-labels --show-code
 
 ## 📚 Documentation
 
+### In the terminal
+
 - Run `assembly --help` or `assembly <command> --help` for flags and examples.
 - Run `assembly doctor` to check your environment (API key, network, ffmpeg, microphone).
-- [AssemblyAI docs](https://www.assemblyai.com/docs)
-- [API reference](https://www.assemblyai.com/docs/api-reference)
+- Run `assembly onboard` for the guided tour.
+
+### Resources
+
+- [**AssemblyAI docs**](https://www.assemblyai.com/docs) — guides for every model and feature.
+- [**API reference**](https://www.assemblyai.com/docs/api-reference) — the REST and streaming APIs the CLI drives.
+- [**Dashboard**](https://www.assemblyai.com/dashboard) — manage your account and API keys.
+- [**AGENTS.md**](AGENTS.md) — development conventions and architecture notes for contributors.
 
 ## 🤝 Contributing
 
@@ -250,4 +303,6 @@ See [AGENTS.md](AGENTS.md) for development conventions and architecture notes.
 
 ## 📄 Legal
 
-Released under the [MIT license](LICENSE).
+- **License**: released under the [MIT license](LICENSE).
+- **Privacy**: [AssemblyAI privacy policy](https://www.assemblyai.com/legal/privacy-policy) — the CLI's anonymous usage telemetry is opt-out (`assembly telemetry disable`, `AAI_TELEMETRY_DISABLED=1`, or `DO_NOT_TRACK=1`).
+- **Terms**: [AssemblyAI terms of service](https://www.assemblyai.com/legal/terms-of-service).
