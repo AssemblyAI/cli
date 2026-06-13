@@ -112,7 +112,9 @@ def path(
             # unwrapped (`cd "$(assembly config path | xargs dirname)"`).
             output.emit_text(str(file))
 
-    run_command(ctx, body, json=json_out)
+    # The location is independent of the file's contents, so report it even when the
+    # config is unreadable — this is the command you'd use to go fix the broken file.
+    run_command(ctx, body, json=json_out, tolerate_unreadable_config=True)
 
 
 @app.command(

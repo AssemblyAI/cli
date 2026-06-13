@@ -128,6 +128,29 @@ def test_enable_and_disable_human():
     assert "Telemetry enabled." in result.output
 
 
+def test_enable_notes_env_override_when_kill_switch_set(monkeypatch):
+    # An env kill-switch outranks the persisted choice, so persisting "enabled" can't
+    # actually re-enable telemetry while it's set: say so instead of a bare success.
+    monkeypatch.delenv("AAI_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    result = runner.invoke(app, ["telemetry", "enable"])
+    assert result.exit_code == 0
+    assert "Telemetry enabled." in result.output
+    assert "DO_NOT_TRACK is set" in result.output
+    assert "keeps telemetry off" in result.output
+    assert "env:" not in result.output  # the env: prefix is stripped from the var name
+
+
+def test_enable_has_no_env_note_without_a_kill_switch(monkeypatch):
+    # The unqualified success path: no env override active, so no caveat is appended.
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    monkeypatch.delenv("AAI_TELEMETRY_DISABLED", raising=False)
+    result = runner.invoke(app, ["telemetry", "enable"])
+    assert result.exit_code == 0
+    assert "Telemetry enabled." in result.output
+    assert "keeps telemetry off" not in result.output
+
+
 def test_flush_is_hidden_plumbing():
     # `flush` exists for dispatch() to spawn, but users shouldn't be steered to it.
     result = runner.invoke(app, ["telemetry", "--help"])

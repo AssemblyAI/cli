@@ -32,6 +32,21 @@ def test_init_target_is_existing_file_usage_error(tmp_path, monkeypatch):
     assert (tmp_path / "myapp").read_text() == "I am a file"  # left untouched
 
 
+def test_init_target_descends_through_a_file_usage_error(tmp_path, monkeypatch):
+    # A target whose PARENT is a file (e.g. somefile/sub) is a clean usage error, not
+    # the raw "Unexpected error: [Errno 20] Not a directory … report a bug" that
+    # mkdir(parents=True) would otherwise hit mid-scaffold.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "plainfile").write_text("I am a file")
+    # Nested one level past the file ("plainfile/sub/deeper") so the walk also covers
+    # the not-yet-existing intermediate before it reaches the offending file.
+    result = runner.invoke(app, ["init", TEMPLATE, "plainfile/sub/deeper", "--no-install"])
+    assert result.exit_code == 2
+    assert "is not a directory" in result.output
+    assert "Unexpected error" not in result.output
+    assert (tmp_path / "plainfile").read_text() == "I am a file"  # left untouched
+
+
 def test_init_force_warns_existing_files_are_overwritten(tmp_path, monkeypatch):
     # --force overlays the template onto a non-empty target; the run must say so
     # (on stderr) instead of silently clobbering files.

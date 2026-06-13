@@ -37,7 +37,11 @@ SPEC = command_registry.CommandModuleSpec(
 def listen(
     ctx: typer.Context,
     port: int = typer.Option(
-        8989, "--port", help="Local listener port (the first free port from here)"
+        8989,
+        "--port",
+        min=0,
+        max=65535,
+        help="Local listener port (the first free port from here)",
     ),
     forward_to: str | None = typer.Option(
         None, "--forward-to", help="Re-POST each delivery to this URL (e.g. your local app)"

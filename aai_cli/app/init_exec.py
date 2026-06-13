@@ -141,6 +141,24 @@ def _install_step(
     ], will_launch
 
 
+def _reject_file_ancestor(target: Path) -> None:
+    """Reject a target that descends through an existing file (e.g. ``somefile/app``).
+
+    ``scaffold`` calls ``target.mkdir(parents=True)``, which raises a raw
+    ``NotADirectoryError`` mid-scaffold when a parent component is a regular file —
+    surfacing as an "Unexpected error … report a bug" line for what is really a bad
+    path. Catch it up front as a clean usage error instead.
+    """
+    for ancestor in target.parents:
+        if ancestor.exists():
+            if not ancestor.is_dir():
+                raise UsageError(
+                    f"{ancestor} is not a directory, so {target} can't be created.",
+                    suggestion="Pick a target whose parent directories are real directories.",
+                )
+            return
+
+
 def _resolve_target(
     directory: str | None, chosen: str, *, here: bool, force: bool
 ) -> tuple[Path, bool]:
@@ -155,6 +173,7 @@ def _resolve_target(
     target = _resolve_dir(directory, chosen, here=here)
     if target.exists() and not target.is_dir():
         raise UsageError(f"{target} exists and is not a directory.")
+    _reject_file_ancestor(target)
     conflict = scaffold.target_conflict(target)
     if conflict and not force:
         raise CLIError(

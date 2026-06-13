@@ -96,6 +96,17 @@ def test_listen_human_mode_prints_hint_and_event_line():
     assert "{" not in result.output.replace('{"ok": true}', "")  # no NDJSON in human mode
 
 
+@pytest.mark.parametrize("bad_port", ["-1", "99999"])
+def test_listen_rejects_out_of_range_port(bad_port):
+    # An out-of-range port is a user-input error (exit 2, validated at parse time),
+    # never an "Unexpected error … report a bug" internal failure from the socket layer.
+    result = runner.invoke(app, ["webhooks", "listen", "--port", bad_port])
+    assert result.exit_code == 2
+    # The exact bounds in the message pin the min=0/max=65535 literals against mutation.
+    assert "0<=x<=65535" in result.output
+    assert "report it" not in result.output
+
+
 # --- forwarding --------------------------------------------------------------------
 
 

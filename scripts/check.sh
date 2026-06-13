@@ -200,8 +200,21 @@ echo "==> brew audit (Homebrew formula)"
 # Lint the formula we ship (Formula/assembly.rb) the way Homebrew's own CI does, so a
 # formula regression fails here instead of on the release PR. brew is macOS/Linuxbrew
 # only, so this self-skips where it isn't installed (CI's release path has it).
+#
+# Homebrew 6+ disabled `brew audit [path ...]` — a formula must be audited by NAME,
+# which means it has to live in a tap. Copy ours into an ephemeral local tap, audit by
+# name, then remove it (works on both macOS and Linuxbrew, old and new). The explicit
+# status capture keeps the tap cleanup running under `set -e` even when the audit fails.
 if command -v brew >/dev/null 2>&1; then
-  brew audit --strict --formula Formula/assembly.rb
+  audit_tap="$(brew --repository)/Library/Taps/local/homebrew-aaiaudit"
+  mkdir -p "$audit_tap/Formula"
+  cp Formula/assembly.rb "$audit_tap/Formula/"
+  audit_status=0
+  brew audit --strict --formula local/aaiaudit/assembly || audit_status=$?
+  rm -rf "$audit_tap"
+  if [ "$audit_status" -ne 0 ]; then
+    exit "$audit_status"
+  fi
 else
   echo "   brew not found; skipping (Homebrew CI / release runner has it)"
 fi
@@ -256,11 +269,22 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   # though the branch itself added nothing. The merge-base only moves when the
   # branch itself rebases.
   gate_base="$(git merge-base origin/main HEAD || echo origin/main)"
+
+  # Count hatch hits with ONE matcher on both sides so baseline and working tree compare
+  # apples-to-apples. Using `rg` for the working tree but `git grep -E` for the baseline
+  # diverged on `\b`: ERE ignores it on macOS (matching nothing) while rg honors it, so a
+  # pre-existing time.sleep() inflated the working count over the baseline and failed this
+  # gate on macOS though it passed on Linux. `git grep -P` (PCRE) handles `\b` identically
+  # on both platforms; `--untracked` counts newly-added (unstaged) files the way rg did.
+  # Patterns must be PCRE-valid (escape literal parens, e.g. `cast\(`).
+  hatch_base() { { git grep -hP "$1" "$gate_base" -- "${@:2}" || true; } | wc -l | tr -d '[:space:]'; }
+  hatch_work() { { git grep --untracked -hP "$1" -- "${@:2}" || true; } | wc -l | tr -d '[:space:]'; }
+
   hatch_pattern='# type: ignore|# noqa|pragma: no cover'
-  base_hatch_count="$({ git grep -nE "$hatch_pattern" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
-  work_hatch_count="$({ rg -n "$hatch_pattern" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  base_hatch_count="$(hatch_base "$hatch_pattern" aai_cli tests)"
+  work_hatch_count="$(hatch_work "$hatch_pattern" aai_cli tests)"
   if (( work_hatch_count > base_hatch_count )); then
-    { rg -n "$hatch_pattern" aai_cli tests || true; } | tail -n 20
+    { git grep --untracked -nP "$hatch_pattern" -- aai_cli tests || true; } | tail -n 20
     echo "New static-analysis ignore/no-cover escape hatch found: ${work_hatch_count} current vs ${base_hatch_count} at the merge-base with origin/main. Refactor it or update the gate explicitly."
     exit 1
   fi
@@ -273,23 +297,23 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
   # new one must update this gate deliberately. Scoped to tests/ — production sleeps
   # are fine.
   shortcut_pattern='pytest\.skip\(|pytest\.xfail\(|@pytest\.mark\.(skip|xfail)|\btime\.sleep\('
-  base_shortcut_count="$({ git grep -nE "$shortcut_pattern" "$gate_base" -- tests || true; } | wc -l | tr -d '[:space:]')"
-  work_shortcut_count="$({ rg -n "$shortcut_pattern" tests || true; } | wc -l | tr -d '[:space:]')"
+  base_shortcut_count="$(hatch_base "$shortcut_pattern" tests)"
+  work_shortcut_count="$(hatch_work "$shortcut_pattern" tests)"
   if (( work_shortcut_count > base_shortcut_count )); then
-    { rg -n "$shortcut_pattern" tests || true; } | tail -n 20
+    { git grep --untracked -nP "$shortcut_pattern" -- tests || true; } | tail -n 20
     echo "New test skip/xfail/time.sleep found: ${work_shortcut_count} current vs ${base_shortcut_count} at the merge-base with origin/main. Fix the test (or sync properly) or update the gate explicitly."
     exit 1
   fi
 
-  base_any_count="$({ git grep -n "Any" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
-  work_any_count="$({ rg -n "Any" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  base_any_count="$(hatch_base "Any" aai_cli tests)"
+  work_any_count="$(hatch_work "Any" aai_cli tests)"
   if (( work_any_count > base_any_count )); then
     echo "New Any usage found: ${work_any_count} current vs ${base_any_count} at the merge-base with origin/main."
     exit 1
   fi
 
-  base_cast_count="$({ git grep -n "cast(" "$gate_base" -- aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
-  work_cast_count="$({ rg -n "cast\\(" aai_cli tests || true; } | wc -l | tr -d '[:space:]')"
+  base_cast_count="$(hatch_base 'cast\(' aai_cli tests)"
+  work_cast_count="$(hatch_work 'cast\(' aai_cli tests)"
   if (( work_cast_count > base_cast_count )); then
     echo "New cast() usage found: ${work_cast_count} current vs ${base_cast_count} at the merge-base with origin/main."
     exit 1

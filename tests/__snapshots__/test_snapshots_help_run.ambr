@@ -651,11 +651,11 @@
   │                                                       seconds idle           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
-  │ --filter-profanity               Mask profanity                              │
-  │ --redact-pii                     Redact PII from turns                       │
-  │ --redact-pii-policy        TEXT  Comma-separated PII policies                │
-  │ --redact-pii-sub           TEXT  Replace redacted PII with: hash or          │
-  │                                  entity_name                                 │
+  │ --filter-profanity                             Mask profanity                │
+  │ --redact-pii                                   Redact PII from turns         │
+  │ --redact-pii-policy        TEXT                Comma-separated PII policies  │
+  │ --redact-pii-sub           [hash|entity_name]  Replace redacted PII with:    │
+  │                                                hash or entity_name           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Webhooks ───────────────────────────────────────────────────────────────────╮
   │ --webhook-url                TEXT        Webhook URL                         │
@@ -1100,18 +1100,21 @@
    downloads/).
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --port                INTEGER               Local listener port (the first   │
-  │                                             free port from here)             │
-  │                                             [default: 8989]                  │
-  │ --forward-to          TEXT                  Re-POST each delivery to this    │
-  │                                             URL (e.g. your local app)        │
-  │ --no-tunnel                                 Local-only: skip the cloudflared │
-  │                                             public URL                       │
-  │ --max-events          INTEGER RANGE [x>=0]  Exit after this many deliveries  │
-  │                                             (0 = run until Ctrl-C)           │
-  │                                             [default: 0]                     │
-  │ --json        -j                            One NDJSON record per delivery   │
-  │ --help                                      Show this message and exit.      │
+  │ --port                INTEGER RANGE              Local listener port (the    │
+  │                       [0<=x<=65535]              first free port from here)  │
+  │                                                  [default: 8989]             │
+  │ --forward-to          TEXT                       Re-POST each delivery to    │
+  │                                                  this URL (e.g. your local   │
+  │                                                  app)                        │
+  │ --no-tunnel                                      Local-only: skip the        │
+  │                                                  cloudflared public URL      │
+  │ --max-events          INTEGER RANGE [x>=0]       Exit after this many        │
+  │                                                  deliveries (0 = run until   │
+  │                                                  Ctrl-C)                     │
+  │                                                  [default: 0]                │
+  │ --json        -j                                 One NDJSON record per       │
+  │                                                  delivery                    │
+  │ --help                                           Show this message and exit. │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

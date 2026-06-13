@@ -92,11 +92,24 @@ def enable(
 
     def body(_state: AppState, json_mode: bool) -> None:
         config.set_telemetry_enabled(enabled=True)
-        output.emit(
-            {"telemetry_enabled": True},
-            lambda _d: output.success("Telemetry enabled."),
-            json_mode=json_mode,
-        )
+        # An env kill-switch (AAI_TELEMETRY_DISABLED / DO_NOT_TRACK) outranks the stored
+        # choice, so persisting "enabled" wouldn't actually turn telemetry back on while
+        # it's set — say so instead of an unqualified success.
+        source = telemetry.consent_source()
+        env_var = source.removeprefix("env:") if source.startswith("env:") else None
+
+        def render(_d: dict[str, bool]) -> object:
+            line = output.success("Telemetry enabled.")
+            if env_var is None:
+                return line
+            return output.stack(
+                line,
+                output.hint(
+                    f"Note: {env_var} is set, which keeps telemetry off until you unset it."
+                ),
+            )
+
+        output.emit({"telemetry_enabled": True}, render, json_mode=json_mode)
 
     run_command(ctx, body, json=json_out)
 

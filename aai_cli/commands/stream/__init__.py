@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from assemblyai import PIISubstitutionPolicy
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import command_registry, help_panels, options
@@ -210,7 +211,7 @@ def stream(
         help="Comma-separated PII policies",
         rich_help_panel=help_panels.OPT_GUARDRAILS,
     ),
-    redact_pii_sub: str | None = typer.Option(
+    redact_pii_sub: PIISubstitutionPolicy | None = typer.Option(
         None,
         "--redact-pii-sub",
         help="Replace redacted PII with: hash or entity_name",

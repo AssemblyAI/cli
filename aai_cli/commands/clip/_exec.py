@@ -193,11 +193,19 @@ def _transcript_segments(
 
 
 def _validate_out_dir(out_dir: Path | None) -> None:
-    if out_dir is not None and not out_dir.is_dir():
+    if out_dir is None or out_dir.is_dir():
+        return
+    # Distinguish a missing path from one that exists but isn't a directory: the old
+    # "doesn't exist" wording was misleading when --out-dir pointed at a regular file.
+    if out_dir.exists():
         raise UsageError(
-            f"--out-dir doesn't exist: {out_dir}",
-            suggestion="Create it first, or point --out-dir at an existing directory.",
+            f"--out-dir is not a directory: {out_dir}",
+            suggestion="Point --out-dir at a directory, not a file.",
         )
+    raise UsageError(
+        f"--out-dir doesn't exist: {out_dir}",
+        suggestion="Create it first, or point --out-dir at an existing directory.",
+    )
 
 
 def _validate_selection(opts: ClipOptions) -> None:
