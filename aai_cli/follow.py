@@ -37,7 +37,8 @@ class FollowRenderer:
 
     def __call__(self, answer: str, turns: int) -> None:
         if self.json_mode:
-            output.emit_ndjson({"turns": turns, "output": answer})
+            # "type" discriminates NDJSON lines CLI-wide (see docs/cli-reference.md).
+            output.emit_ndjson({"type": "answer", "turns": turns, "output": answer})
         elif self._live is not None:
             title = f"scribe · {turns} turn{'s' if turns != 1 else ''}"
             self._last = Panel(escape(answer or "…"), title=title, border_style="aai.brand")

@@ -34,3 +34,19 @@ class Scope(enum.StrEnum):
     user = "user"
     project = "project"
     local = "local"
+
+
+class ConfigKey(enum.StrEnum):
+    """The settings `assembly config get/set` exposes (the persisted, non-secret ones)."""
+
+    active_profile = "active_profile"
+    env = "env"
+    telemetry_enabled = "telemetry_enabled"
+
+
+class ColorMode(enum.StrEnum):
+    """The conventional tri-state for ANSI color (`--color`), matching git/gh/cargo."""
+
+    auto = "auto"
+    always = "always"
+    never = "never"

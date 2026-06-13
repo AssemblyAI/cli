@@ -40,6 +40,37 @@ def is_agentic() -> bool:
     return any(os.environ.get(var) for var in _AGENT_ENV_VARS)
 
 
+def set_color_mode(mode: choices.ColorMode) -> None:
+    """Apply the root ``--color`` tri-state process-wide.
+
+    ``auto`` keeps Rich's TTY detection (which already honors ``NO_COLOR`` /
+    ``FORCE_COLOR``). The explicit modes do two things: rebuild this module's
+    shared consoles, and set the corresponding env var so consoles created later
+    (the realtime renderers build their own) and child processes agree.
+    """
+    if mode is choices.ColorMode.auto:
+        return
+    if mode is choices.ColorMode.always:
+        os.environ["FORCE_COLOR"] = "1"
+        os.environ.pop("NO_COLOR", None)
+        rebuilt = {
+            "console": theme.make_console(force_terminal=True),
+            "error_console": theme.make_console(stderr=True, force_terminal=True),
+        }
+    else:
+        os.environ["NO_COLOR"] = "1"
+        os.environ.pop("FORCE_COLOR", None)
+        rebuilt = {
+            "console": theme.make_console(no_color=True),
+            "error_console": theme.make_console(stderr=True, no_color=True),
+        }
+    # Swapped via module setattr (the `_patch_module` pattern in main.py) rather
+    # than a `global` statement; readers always go through `output.console`, so
+    # the rebind is visible everywhere.
+    for name, console_obj in rebuilt.items():
+        setattr(sys.modules[__name__], name, console_obj)
+
+
 def resolve_json(*, explicit: bool) -> bool:
     """JSON output only when explicitly requested with ``--json`` (or ``-o json``).
 

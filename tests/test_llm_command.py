@@ -66,7 +66,7 @@ def test_llm_sends_prompt_and_prints_output(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["model"] = model
         seen["messages"] = messages
         seen["transcript_id"] = transcript_id
@@ -98,7 +98,7 @@ def test_llm_transcript_id_injected(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["transcript_id"] = transcript_id
         seen["content"] = messages[0]["content"]
         return _payload("summary")
@@ -114,7 +114,7 @@ def test_llm_reads_content_from_stdin(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["content"] = messages[0]["content"]
         seen["transcript_id"] = transcript_id
         return _payload("done")
@@ -132,7 +132,7 @@ def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["content"] = messages[0]["content"]
         seen["transcript_id"] = transcript_id
         return _payload("s")
@@ -242,7 +242,7 @@ def test_llm_unauthenticated_runs_login(monkeypatch):
     monkeypatch.setattr("aai_cli.context._interactive_session", lambda: True)
     monkeypatch.setattr("aai_cli.auth.run_login_flow", _login_result)
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         raise AssertionError(f"LLM request should not run after auto-login: {api_key}")
 
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
@@ -256,7 +256,7 @@ def test_llm_follow_summarizes_each_turn(monkeypatch):
     _auth()
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append(messages[-1]["content"])
         return _payload(f"summary-{len(calls)}")
 
@@ -282,7 +282,7 @@ def test_llm_follow_includes_system_prompt(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["roles"] = [m["role"] for m in messages]
         seen["system"] = messages[0]["content"]
         return _payload("ok")
@@ -314,7 +314,7 @@ def test_llm_follow_ignores_blank_lines(monkeypatch):
     _auth()
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append(messages[-1]["content"])
         return _payload("ok")
 
@@ -401,7 +401,7 @@ def test_llm_follow_empty_stdin_exits_2(monkeypatch):
     _auth()
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append(messages)
         return _payload("ok")
 
@@ -435,7 +435,7 @@ def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
     _auth()
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append(messages[-1]["content"])
         if len(calls) == 2:
             raise KeyboardInterrupt  # user hits Ctrl-C mid-meeting
@@ -456,7 +456,7 @@ def test_llm_passes_model_and_max_tokens(monkeypatch):
     _auth()
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["model"] = model
         seen["max_tokens"] = max_tokens
         return _payload()
