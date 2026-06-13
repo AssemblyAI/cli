@@ -26,6 +26,7 @@ HELP_GROUPS: dict[str, frozenset[str]] = {
     "run": frozenset(
         {
             "transcribe",
+            "t",  # hidden alias for transcribe
             "stream",
             "dictate",
             "agent",
@@ -38,7 +39,7 @@ HELP_GROUPS: dict[str, frozenset[str]] = {
             "webhooks",
         }
     ),
-    "tools": frozenset({"doctor", "setup", "telemetry", "_update-check"}),
+    "tools": frozenset({"doctor", "setup", "config", "update", "telemetry", "_update-check"}),
     "history": frozenset({"transcripts", "sessions"}),
     "account": frozenset(
         {"login", "logout", "whoami", "balance", "usage", "limits", "keys", "audit"}

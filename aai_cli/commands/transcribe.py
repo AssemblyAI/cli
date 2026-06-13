@@ -414,3 +414,13 @@ def transcribe(
         lambda state, json_mode: transcribe_exec.run_transcribe(opts, state, json_mode=json_mode),
         json=json_out,
     )
+
+
+# `assembly t` — a one-letter alias for the CLI's highest-frequency command (the
+# pattern codex uses for `e`/`a`). Registered hidden so the root help table keeps
+# one row per command; `assembly t --help` still renders the full transcribe help.
+app.command(
+    name="t",
+    hidden=True,
+    epilog=examples_epilog([("Same flags as transcribe", "assembly t call.mp3 --speaker-labels")]),
+)(transcribe)

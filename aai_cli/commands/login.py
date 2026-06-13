@@ -1,15 +1,46 @@
 from __future__ import annotations
 
+import sys
+
 import typer
 from rich.markup import escape
 from rich.table import Table
 
 from aai_cli import client, config, environments, help_panels, options, output
 from aai_cli.context import AppState, persist_browser_login, run_command
-from aai_cli.errors import APIError, CLIError, UsageError
+from aai_cli.errors import (
+    STDIN_KEY_RECIPE,
+    APIError,
+    CLIError,
+    UsageError,
+    mutually_exclusive,
+)
 from aai_cli.help_text import examples_epilog
 
 app = typer.Typer()
+
+
+def _read_stdin_key() -> str:
+    """The API key piped on stdin for ``--with-api-key``, validated non-empty.
+
+    Stdin-only on purpose (the Codex-CLI pattern): a key passed as an argv value
+    lands in shell history and ``ps`` output; a piped key does not.
+    """
+    if sys.stdin.isatty():
+        raise UsageError(
+            "--with-api-key reads the key from stdin, but stdin is a terminal.",
+            suggestion=f"Pipe the key in: {STDIN_KEY_RECIPE}",
+        )
+    key = sys.stdin.read().strip()
+    if not key:
+        raise UsageError(
+            "--with-api-key found no key on stdin.",
+            suggestion=(
+                f"Pipe a non-empty key: {STDIN_KEY_RECIPE} "
+                "(check that the variable you piped is set)."
+            ),
+        )
+    return key
 
 
 @app.command(
@@ -17,13 +48,25 @@ app = typer.Typer()
     epilog=examples_epilog(
         [
             ("Log in with your browser", "assembly login"),
-            ("Log in non-interactively (CI)", "assembly login --api-key sk_..."),
+            ("Log in non-interactively (CI)", STDIN_KEY_RECIPE),
         ]
     ),
 )
 def login(
     ctx: typer.Context,
-    api_key: str | None = typer.Option(None, "--api-key", help="Provide key non-interactively."),
+    # Deprecation trap, not removal: the flag still works so existing CI scripts
+    # don't break, but it's hidden from --help and warns toward the stdin form.
+    api_key: str | None = typer.Option(
+        None,
+        "--api-key",
+        hidden=True,
+        help="Deprecated: use --with-api-key (reads stdin; keeps the key out of shell history).",
+    ),
+    with_api_key: bool = typer.Option(
+        False,
+        "--with-api-key",
+        help=f"Read an API key from stdin instead of the browser flow: {STDIN_KEY_RECIPE}",
+    ),
     json_out: bool = options.json_option(),
 ) -> None:
     """Authenticate via your browser; stores a CLI API key."""
@@ -31,6 +74,13 @@ def login(
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()
         env = environments.active().name
+        # `api_key is not None` (not truthiness): --api-key "" combined with
+        # --with-api-key must report the conflict, not fall through to stdin.
+        mutually_exclusive(
+            ("--api-key", api_key is not None),
+            ("--with-api-key", with_api_key),
+            suggestion=f"Use the stdin form alone: {STDIN_KEY_RECIPE}",
+        )
         if api_key is not None and not api_key.strip():
             # An explicitly-passed empty/whitespace key (e.g. --api-key "$UNSET_VAR")
             # must fail loudly, not silently fall into the browser flow as if the
@@ -38,10 +88,17 @@ def login(
             raise UsageError(
                 "--api-key was given an empty value.",
                 suggestion=(
-                    "Pass a real key: assembly login --api-key <KEY> "
+                    f"Pipe a real key instead: {STDIN_KEY_RECIPE} "
                     "(check that the shell variable you expanded is set)."
                 ),
             )
+        if api_key is not None and not state.quiet:
+            output.emit_warning(
+                "--api-key puts the key in shell history and process lists; "
+                f"pipe it instead: {STDIN_KEY_RECIPE}",
+                json_mode=json_mode,
+            )
+        provided_key = _read_stdin_key() if with_api_key else api_key
         # Both login paths persist to the OS keyring, so probe it before any
         # browser/network work: completing the whole OAuth dance only to fail on
         # the final keyring write is the worst place to discover a headless box.
@@ -55,28 +112,28 @@ def login(
                     "a keyring), or unlock/install an OS keyring and retry."
                 ),
             )
-        if api_key is None:
+        if provided_key is None:
             persist_browser_login(profile, env, json_mode=json_mode)
         else:
             # Non-interactive escape hatch for CI/automation: no AMS session is
             # obtained, so account self-service commands won't work for this profile.
-            if not client.validate_key(api_key):
+            if not client.validate_key(provided_key):
                 raise APIError(
                     "That API key was rejected (HTTP 401/403).",
                     suggestion="Check the key and retry.",
                 )
-            config.set_api_key(profile, api_key)
+            config.set_api_key(profile, provided_key)
             config.set_profile_env(profile, env)
             # Clear any session from a prior browser login: this profile is now
             # api-key-only, so account self-service must report it needs a browser
             # login rather than silently reusing the old (possibly different) identity.
             config.clear_session(profile)
-        # An --api-key login stores no browser session, so the AMS self-service
+        # A key-only login stores no browser session, so the AMS self-service
         # commands won't work for this profile — say so up front instead of letting
         # the user hit "needs a browser login" later. Named `key_only` (not api_key_*):
         # CodeQL's name heuristic would classify the boolean itself as a secret and
         # flag the emit below (py/clear-text-logging-sensitive-data).
-        key_only = api_key is not None
+        key_only = provided_key is not None
 
         def render(_d: object) -> str:
             lines = [
@@ -88,8 +145,8 @@ def login(
             if key_only:
                 lines.append(
                     output.hint(
-                        "Account commands (keys/balance/usage/limits/audit) need "
-                        "`assembly login` without --api-key."
+                        "Account commands (keys/balance/usage/limits/audit) need the "
+                        "browser flow: run `assembly login` with no key flag."
                     )
                 )
             return "\n".join(lines)

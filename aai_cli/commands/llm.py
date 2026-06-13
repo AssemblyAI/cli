@@ -71,6 +71,12 @@ def llm(
     max_tokens: int = typer.Option(
         gateway.DEFAULT_MAX_TOKENS, "--max-tokens", help="Max tokens to generate.", min=1
     ),
+    config_kv: list[str] | None = typer.Option(
+        None,
+        "--config",
+        help="Set any extra gateway request field: KEY=VALUE, repeatable "
+        "(e.g. --config temperature=0.2). Values parse as JSON, else literal text.",
+    ),
     list_models: bool = typer.Option(False, "--list-models", help="Print known models and exit."),
     json_out: bool = options.json_option("Output raw JSON (one object per turn in --follow mode)."),
 ) -> None:
@@ -94,6 +100,7 @@ def llm(
         follow=follow,
         output_field=output_field,
         max_tokens=max_tokens,
+        config_kv=tuple(config_kv or ()),
     )
     run_command(
         ctx,

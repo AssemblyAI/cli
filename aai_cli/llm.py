@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from aai_cli import environments
-from aai_cli.errors import APIError
+from aai_cli.errors import APIError, UsageError
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -40,6 +42,32 @@ def complete_model(incomplete: str) -> list[str]:
     these — it never restricts what you can type.
     """
     return [m for m in KNOWN_MODELS if m.startswith(incomplete)]
+
+
+def parse_gateway_overrides(pairs: Sequence[str]) -> dict[str, object]:
+    """``--config KEY=VALUE`` pairs to typed gateway request fields.
+
+    The escape hatch for request fields the curated flags don't cover (the same
+    role ``--config`` plays on `transcribe`/`stream`). The gateway's field set is
+    open-ended (it is OpenAI-compatible per model family), so values aren't
+    allow-listed; each VALUE parses as JSON when it can (``temperature=0.2`` →
+    float, ``stop=["END"]`` → list) and falls back to the literal string
+    otherwise (``reasoning_effort=low``).
+    """
+    extra: dict[str, object] = {}
+    for pair in pairs:
+        key, sep, raw = pair.partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise UsageError(
+                f"--config expects KEY=VALUE, got {pair!r}.",
+                suggestion="e.g. --config temperature=0.2",
+            )
+        try:
+            extra[key] = json.loads(raw)
+        except ValueError:
+            extra[key] = raw
+    return extra
 
 
 def build_messages(
@@ -105,23 +133,29 @@ def complete(
     messages: list[dict[str, str]],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     transcript_id: str | None = None,
+    extra: dict[str, object] | None = None,
 ) -> ChatCompletion:
     """Create a chat completion via the gateway and return the OpenAI response.
 
     `transcript_id` is passed through as an extra body field so the gateway can
-    inject the transcript text server-side. Access/permission and other gateway
-    errors surface the gateway's own message as APIError.
+    inject the transcript text server-side; `extra` carries the user's ``--config``
+    overrides the same way. Access/permission and other gateway errors surface
+    the gateway's own message as APIError.
     """
     import openai
 
     client = _client(api_key)
-    extra_body = {"transcript_id": transcript_id} if transcript_id is not None else None
+    extra_body: dict[str, object] = {}
+    if transcript_id is not None:
+        extra_body["transcript_id"] = transcript_id
+    if extra:
+        extra_body.update(extra)
     try:
         return client.chat.completions.create(
             model=model,
             messages=messages,  # type: ignore[arg-type]
             max_tokens=max_tokens,
-            extra_body=extra_body,
+            extra_body=extra_body or None,
         )
     except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
         # The gateway returns 401/403 for an invalid key, a proxy block, and a

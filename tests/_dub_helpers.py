@@ -90,7 +90,15 @@ def record_translate(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]
     """Record each gateway call and reply with a marked 'DE:<text>' translation."""
     calls: list[dict[str, object]] = []
 
-    def _fake(api_key, *, model, messages, max_tokens=llm.DEFAULT_MAX_TOKENS, transcript_id=None):
+    def _fake(
+        api_key,
+        *,
+        model,
+        messages,
+        max_tokens=llm.DEFAULT_MAX_TOKENS,
+        transcript_id=None,
+        extra=None,
+    ):
         calls.append({"model": model, "messages": messages, "max_tokens": max_tokens})
         return completion(f"DE:{messages[-1]['content']}")
 

@@ -20,13 +20,24 @@ if TYPE_CHECKING:
     # context type, not the upstream click.Context. Imported for typing only.
     from typer._click.core import Context as ClickContext
 
-from aai_cli import __version__, argscan, debuglog, environments, help_panels, output, stdio, theme
+from aai_cli import (
+    __version__,
+    argscan,
+    choices,
+    debuglog,
+    environments,
+    help_panels,
+    output,
+    stdio,
+    theme,
+)
 from aai_cli.commands import (
     account,
     agent,
     audit,
     caption,
     clip,
+    config_cmd,
     deploy,
     dev,
     dictate,
@@ -46,6 +57,7 @@ from aai_cli.commands import (
     telemetry,
     transcribe,
     transcripts,
+    update,
     webhooks,
 )
 from aai_cli.context import AppState
@@ -81,6 +93,8 @@ _COMMAND_ORDER = (
     # Setup & Tools — get set up & maintain
     "doctor",
     "setup",
+    "config",
+    "update",
     "telemetry",
     # History — browse past work
     "transcripts",
@@ -352,6 +366,11 @@ def main(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress non-essential messages (warnings, hints)."
     ),
+    color: choices.ColorMode = typer.Option(
+        choices.ColorMode.auto,
+        "--color",
+        help="Color output: auto (TTY detection), always, or never. NO_COLOR is also honored.",
+    ),
     verbose: int = typer.Option(
         0,
         "--verbose",
@@ -379,6 +398,7 @@ def main(
     # Enabled before anything else runs so even environment/profile resolution
     # failures can be diagnosed with -v.
     debuglog.enable(verbose)
+    output.set_color_mode(color)
     raw_args: list[str] = ctx.meta.get(_RAW_ARGS_META_KEY, [])
     json_mode = output.resolve_json(explicit=argscan.requests_json(raw_args))
     conflict_warning = _sandbox_conflict_warning(sandbox, env)
@@ -428,6 +448,8 @@ app.add_typer(share.app)
 app.add_typer(deploy.app)
 app.add_typer(onboard.app)
 app.add_typer(setup.app, name="setup", rich_help_panel=help_panels.SETUP)
+app.add_typer(config_cmd.app, name="config", rich_help_panel=help_panels.SETUP)
+app.add_typer(update.app)  # update
 app.add_typer(telemetry.app, name="telemetry", rich_help_panel=help_panels.SETUP)
 app.add_typer(keys.app, name="keys", rich_help_panel=help_panels.ACCOUNT)
 app.add_typer(webhooks.app, name="webhooks", rich_help_panel=help_panels.TRANSCRIPTION)

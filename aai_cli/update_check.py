@@ -23,7 +23,7 @@ from aai_cli.errors import CLIError
 
 ENV_DISABLED = "AAI_NO_UPDATE_CHECK"
 _RELEASES_URL = "https://api.github.com/repos/AssemblyAI/cli/releases/latest"
-_DOCS_URL = "https://github.com/AssemblyAI/cli#installation"
+DOCS_URL = "https://github.com/AssemblyAI/cli#installation"
 _CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 _FETCH_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = f"assembly-cli/{__version__}"
@@ -105,7 +105,7 @@ def _render(current: str, latest: str) -> None:
     if upgrade:
         action: Text = Text.assemble("Run ", (upgrade, "aai.success"), " to update")
     else:
-        action = Text(f"See {_DOCS_URL} to upgrade")
+        action = Text(f"See {DOCS_URL} to upgrade")
     body = Group(
         Text.assemble("Update available  ", (current, "aai.muted"), " → ", (latest, "aai.success")),
         action,

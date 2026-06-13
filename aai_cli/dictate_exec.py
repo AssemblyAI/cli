@@ -89,8 +89,11 @@ def _record(keys: TerminalKeys, mic: MicrophoneSource, *, max_seconds: float) ->
 def _emit(result: sync_stt.SyncTranscript, *, json_mode: bool) -> None:
     """One utterance to stdout: the bare transcript text, or one NDJSON object."""
     if json_mode:
+        # "type" first: every multi-line NDJSON stream the CLI emits discriminates
+        # its lines the same way (stream/agent already do; see docs/cli-reference.md).
         output.emit_ndjson(
             {
+                "type": "utterance",
                 "text": result.text,
                 "confidence": result.confidence,
                 "audio_duration_ms": result.audio_duration_ms,

@@ -176,7 +176,7 @@ def test_build_messages_with_system_prompt():
 def test_transform_transcript_roundtrips(monkeypatch):
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["transcript_id"] = transcript_id
         seen["messages"] = messages
         return _response("SUMMARY")
@@ -191,7 +191,7 @@ def test_transform_transcript_roundtrips(monkeypatch):
 def test_run_chain_single_prompt_runs_over_transcript(monkeypatch):
     seen = {}
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         seen["messages"] = messages
         seen["transcript_id"] = transcript_id
         return _response("SUMMARY")
@@ -208,7 +208,7 @@ def test_run_chain_single_prompt_runs_over_transcript(monkeypatch):
 def test_run_chain_threads_output_through_prompts(monkeypatch):
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append(messages[-1]["content"])
         return _response(f"out{len(calls)}")
 
@@ -239,7 +239,7 @@ def test_run_chain_empty_prompts_do_not_call_gateway(monkeypatch):
 def test_run_chain_steps_uses_transcript_id_then_prior_output(monkeypatch):
     calls = []
 
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None):
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
         calls.append({"content": messages[-1]["content"], "transcript_id": transcript_id})
         return _response(f"out{len(calls)}")
 
