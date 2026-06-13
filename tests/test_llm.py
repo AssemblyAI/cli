@@ -164,7 +164,7 @@ def test_build_messages_transcript_id_uses_tag():
 
 def test_build_messages_inline_text():
     msgs = llm.build_messages("summarize", transcript_text="hello world")
-    assert msgs[0]["content"] == "summarize\n\nTranscript:\nhello world"
+    assert msgs == [{"role": "user", "content": "summarize\n\nTranscript:\nhello world"}]
 
 
 def test_build_messages_with_system_prompt():
