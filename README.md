@@ -50,8 +50,8 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, stdin, or a live stream |
-| `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range — clip boundaries snap into nearby silence |
-| `assembly dub` | Re-voice an audio/video file in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
+| `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range (`--video` keeps the picture for URL sources) — clip boundaries snap into nearby silence |
+| `assembly dub` | Re-voice an audio/video file or URL in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
 | `assembly caption` | Burn always-visible captions into a video: transcribe (or reuse a transcript), fetch SRT, ffmpeg burns it in — audio untouched |
 | `assembly eval` | Benchmark WER against Hugging Face datasets (built-in aliases: `librispeech`, `tedlium`, …) or local manifests |
 | `assembly webhooks listen` | Open a public dev URL that prints webhook deliveries and can forward them to your local app |
@@ -79,10 +79,10 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
 
 `speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices.
 
-**Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video:
+**Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video. A great demo is the first YouTube video ever, "Me at the zoo" — it's 19 seconds long, a single clear English speaker, and instantly recognizable, so the dub finishes fast and the before/after is obvious:
 
 ```sh
-assembly --sandbox dub talk.mp4 --lang de
+assembly --sandbox dub "https://www.youtube.com/watch?v=jNQXAC9IVRw" -l de --video
 ```
 
 The video stream is copied untouched; each dubbed line lands at its original start time.
@@ -94,22 +94,19 @@ assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speak
   | assembly --sandbox speak --out episode.wav
 ```
 
-**Cut the highlight reel from a speech** — `clip` downloads the audio, transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):
+**Cut the highlight reel from a speech** — `clip` downloads the video (`--video`; omit it for audio-only clips), transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):
 
 ```sh
-assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" \
+assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" --video \
   --llm "the most quotable 20-40 seconds from each of the stories" \
   --padding 0.5 --out-dir .
 ```
 
-**Burn karaoke subtitles into a music video** — `-o srt` prints captions to stdout, and `--chars-per-caption` keeps the lines short so they flip with the vocals; ffmpeg renders them onto the video (`-f srt -i pipe:` muxes a toggleable soft-subtitle track instead, no re-encode):
+**Burn karaoke subtitles into a music video** — `caption` transcribes the video and burns the captions straight into the picture with ffmpeg; `--chars-per-caption` keeps the lines short so they flip with the vocals:
 
 ```sh
-assembly transcribe video.mp4 -o srt --chars-per-caption 24 > lyrics.srt
-ffmpeg -i video.mp4 -vf "subtitles=lyrics.srt:force_style='Fontsize=28,PrimaryColour=&H00FFFF&'" karaoke.mp4
+assembly caption video.mp4 --chars-per-caption 24 --font-size 28
 ```
-
-Prefer one step over styling control? `assembly caption video.mp4` transcribes and burns the captions in for you.
 
 **Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
 
