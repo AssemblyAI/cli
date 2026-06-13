@@ -18,6 +18,7 @@ Install on macOS or Linux with Homebrew:
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
+brew trust assemblyai/cli   # only needed when HOMEBREW_REQUIRE_TAP_TRUST is set; harmless otherwise
 brew install assembly
 ```
 
@@ -47,16 +48,18 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
 | `assembly dictate` | Push-to-talk dictation: press Enter to record, Enter again for instant text (Sync STT API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
+| `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, stdin, or a live stream |
 | `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range — clip boundaries snap into nearby silence |
 | `assembly dub` | Re-voice an audio/video file in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
-| `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
+| `assembly caption` | Burn always-visible captions into a video: transcribe (or reuse a transcript), fetch SRT, ffmpeg burns it in — audio untouched |
 | `assembly eval` | Benchmark WER against Hugging Face datasets (built-in aliases: `librispeech`, `tedlium`, …) or local manifests |
-| `assembly init` / `dev` / `share` / `deploy` | Scaffold a FastAPI + HTML starter app, run it locally, expose it on a public URL, ship it to Vercel / Railway / Fly.io |
 | `assembly webhooks listen` | Open a public dev URL that prints webhook deliveries and can forward them to your local app |
+| `assembly init` / `dev` / `share` / `deploy` | Scaffold a FastAPI + HTML starter app, run it locally, expose it on a public URL, ship it to Vercel / Railway / Fly.io |
 | `assembly setup` | Wire a coding agent up with the AssemblyAI docs MCP server and skills |
-| `assembly keys` / `balance` / `usage` / `limits` / `sessions` / `audit` | Account self-service via browser login |
 | `assembly doctor` | Check your environment: API key, network, ffmpeg, microphone |
+| `assembly transcripts` / `sessions` | Browse and fetch past transcripts and streaming sessions |
+| `assembly keys` / `balance` / `usage` / `limits` / `audit` | Account self-service via browser login |
 
 Add `--show-code` to `transcribe` / `stream` / `agent` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
 
@@ -105,6 +108,8 @@ assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" \
 assembly transcribe video.mp4 -o srt --chars-per-caption 24 > lyrics.srt
 ffmpeg -i video.mp4 -vf "subtitles=lyrics.srt:force_style='Fontsize=28,PrimaryColour=&H00FFFF&'" karaoke.mp4
 ```
+
+Prefer one step over styling control? `assembly caption video.mp4` transcribes and burns the captions in for you.
 
 **Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
 
@@ -268,26 +273,18 @@ ffmpeg -i talk.mp4 -f wav - | assembly transcribe -
 git log --oneline -30 | assembly llm "write release notes grouped by feature/fix"
 ```
 
-Graduate to the SDK — print the equivalent Python script instead of running:
-
-```sh
-assembly transcribe --sample --speaker-labels --show-code
-```
-
 ## 📚 Documentation
 
 ### In the terminal
 
 - Run `assembly --help` or `assembly <command> --help` for flags and examples.
 - Run `assembly doctor` to check your environment (API key, network, ffmpeg, microphone).
-- Run `assembly onboard` for the guided tour.
 
 ### Resources
 
 - [**AssemblyAI docs**](https://www.assemblyai.com/docs) — guides for every model and feature.
 - [**API reference**](https://www.assemblyai.com/docs/api-reference) — the REST and streaming APIs the CLI drives.
 - [**Dashboard**](https://www.assemblyai.com/dashboard) — manage your account and API keys.
-- [**AGENTS.md**](AGENTS.md) — development conventions and architecture notes for contributors.
 
 ## 🤝 Contributing
 
