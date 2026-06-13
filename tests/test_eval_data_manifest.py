@@ -1,4 +1,4 @@
-"""Local-manifest loading for `assembly eval` (`aai_cli.eval_data`).
+"""Local-manifest loading for `assembly eval` (`aai_cli.commands.evaluate._data`).
 
 Runs against real temp files; the Hugging Face paths live in
 test_eval_data_hf.py.
@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from aai_cli import eval_data
+from aai_cli.commands.evaluate import _data as eval_data
 from aai_cli.errors import CLIError, UsageError
 
 # ---------------------------------------------------------------- local manifests

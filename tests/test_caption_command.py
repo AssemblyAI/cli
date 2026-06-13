@@ -10,8 +10,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from aai_cli import caption_exec
-from aai_cli.caption_exec import CaptionOptions
+from aai_cli.commands.caption import _exec as caption_exec
+from aai_cli.commands.caption._exec import CaptionOptions
 from aai_cli.main import app
 
 runner = CliRunner()

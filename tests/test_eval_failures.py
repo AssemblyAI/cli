@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import evaluate_exec as evaluate
+from aai_cli.commands.evaluate import _exec as evaluate
 from aai_cli.errors import APIError, auth_failure
 from aai_cli.main import app
 from tests.test_eval_command import (
@@ -46,7 +46,9 @@ def test_concurrency_runs_items_at_once_and_keeps_dataset_order(tmp_path, mocker
         return _transcript(texts[Path(audio).name])
 
     mocker.patch(
-        "aai_cli.evaluate_exec.client.transcribe", autospec=True, side_effect=fake_transcribe
+        "aai_cli.commands.evaluate._exec.client.transcribe",
+        autospec=True,
+        side_effect=fake_transcribe,
     )
     result = runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2", "--json"])
     assert result.exit_code == 0
@@ -67,7 +69,7 @@ def test_concurrency_shows_one_pooled_status(tmp_path, mocker, monkeypatch):
         seen.append(message)
         yield
 
-    monkeypatch.setattr("aai_cli.evaluate_exec.output.status", fake_status)
+    monkeypatch.setattr("aai_cli.commands.evaluate._exec.output.status", fake_status)
     assert runner.invoke(app, ["eval", "manifest.csv", "--concurrency", "2"]).exit_code == 0
     assert seen == ["Transcribing 2 items (concurrency 2)…"]
 
@@ -211,7 +213,7 @@ def test_rejected_key_aborts_eval_with_auth_exit_code(tmp_path, mocker):
 def test_unauthenticated_fails_before_dataset_download(mocker):
     # Credentials resolve before the dataset loads: a signed-out user must not
     # pull the whole dataset first.
-    load = mocker.patch("aai_cli.evaluate_exec.eval_data.load", autospec=True)
+    load = mocker.patch("aai_cli.commands.evaluate._exec.eval_data.load", autospec=True)
     result = runner.invoke(app, ["eval", "org/ds"])
     assert result.exit_code == 4
     load.assert_not_called()

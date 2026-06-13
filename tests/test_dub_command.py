@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli import dub_exec, llm
+from aai_cli import llm
+from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.main import app
 from tests._clip_helpers import plain
 

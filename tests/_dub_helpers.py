@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from aai_cli import client, config, llm, mediafile
-from aai_cli.dub_exec import DubOptions
+from aai_cli.commands.dub._exec import DubOptions
 from aai_cli.tts import session
 from aai_cli.tts.session import SpeakResult
 

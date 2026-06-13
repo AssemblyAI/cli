@@ -117,7 +117,7 @@ def test_llm_follow_passes_config_to_every_refresh(monkeypatch):
         seen.append(extra)
         return _response("ans")
 
-    monkeypatch.setattr("aai_cli.llm_exec.gateway.complete", fake_complete)
+    monkeypatch.setattr("aai_cli.commands.llm._exec.gateway.complete", fake_complete)
     result = runner.invoke(
         app,
         ["llm", "-f", "summarize", "--config", "temperature=0.1", "--json"],

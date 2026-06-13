@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli import client, clip_exec, clip_select, config
+from aai_cli import client, config
+from aai_cli.commands.clip import _exec as clip_exec
+from aai_cli.commands.clip import _select as clip_select
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 from tests._clip_helpers import DEFAULTS, UTTERANCES, fake_transcript, record_ffmpeg

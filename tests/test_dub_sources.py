@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli import dub_exec, youtube
+from aai_cli import youtube
+from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.context import AppState
 from aai_cli.errors import UsageError
 from tests._dub_helpers import (

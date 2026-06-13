@@ -3,7 +3,7 @@ non-terminal failure mode. Session behavior lives in test_dictate_exec.py."""
 
 from typer.testing import CliRunner
 
-from aai_cli import dictate_exec
+from aai_cli.commands.dictate import _exec as dictate_exec
 from aai_cli.main import app
 
 runner = CliRunner()

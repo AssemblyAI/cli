@@ -16,11 +16,29 @@ pipe → exit 0).
 
 ### Command layer & the registration convention
 
-Each file in `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`,
+Each entry under `aai_cli/commands/` is a Typer sub-app (`transcribe`, `stream`,
 `dictate`, `agent`, `speak`, `llm`, `clip`, `dub`, `caption`, `eval`,
 `transcripts`, `login` (login/logout/whoami), `doctor`, `init`, `dev`, `share`,
 `deploy`, `setup`, `onboard`, `account` (balance/usage/limits), `keys`,
 `sessions`, `audit`, `telemetry` (status/enable/disable), `webhooks` (listen)).
+
+**A command is either a single module *or* a package** — `command_registry`
+discovers both (it iterates `pkgutil.iter_modules`, which enumerates packages
+too). A simple command stays a flat `commands/<cmd>.py`. A command with private
+run-logic becomes a package `commands/<cmd>/`: `__init__.py` holds the Typer
+`app` + `SPEC` (and is what gets imported as `aai_cli.commands.<cmd>`), and its
+support modules sit beside it **underscore-prefixed** — `_exec.py` for the
+`run_<cmd>` body, plus any private helpers (`clip/_select.py`,
+`evaluate/_data.py`, `evaluate/_hf_api.py`). The underscore both marks them
+private and avoids colliding with the package's own command functions (the
+`webhooks` package binds a `listen` command, so its module is `_listen.py`, not
+`listen.py`). This is the Prefect/spaCy convention: flat file by default,
+promote to a folder only when the command has earned multiple modules. Run-logic
+that's **shared beyond one command stays at the package root**, not inside a
+command package — `transcribe_exec`/`transcribe_render`/`transcribe_batch` and
+`init_exec` are reused by the onboarding wizard (`onboard/sections.py`), so they
+live at the root alongside `doctor_checks`/`setup_exec` rather than under
+`commands/transcribe/` or `commands/init/`.
 
 **Adding a command is purely additive — no shared file edits.** Every command
 module declares a module-level
@@ -61,9 +79,10 @@ command module from another.
 function only parses argv into a frozen `<Cmd>Options` dataclass and hands it
 to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda
 adapter in `run_command(ctx, ..., json=...)`. The run commands follow it —
-`aai_cli/stream_exec.py` (the reference implementation), `transcribe_exec.py`,
-`agent_exec.py`, `speak_exec.py`, `llm_exec.py`, `clip_exec.py`,
-`dictate_exec.py`. Because the run path is a plain function of data, tests
+`commands/stream/_exec.py` (the reference implementation), `transcribe_exec.py`
+(at the root — shared with onboarding), `commands/agent/_exec.py`,
+`commands/speak/_exec.py`, `commands/llm/_exec.py`, `commands/clip/_exec.py`,
+`commands/dictate/_exec.py`. Because the run path is a plain function of data, tests
 construct options directly (`dataclasses.replace` off a defaults instance, see
 `tests/test_stream_exec.py` and `tests/test_command_options_seam.py`) instead
 of round-tripping argv through `CliRunner` — which is also the cheap way to

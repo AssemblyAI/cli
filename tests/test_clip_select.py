@@ -8,8 +8,8 @@ import math
 
 import pytest
 
-from aai_cli import clip_select
-from aai_cli.clip_select import Segment
+from aai_cli.commands.clip import _select as clip_select
+from aai_cli.commands.clip._select import Segment
 from aai_cli.errors import CLIError, UsageError
 from tests._clip_helpers import UTTERANCES
 

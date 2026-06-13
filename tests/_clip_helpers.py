@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from aai_cli import llm, mediafile
-from aai_cli.clip_exec import ClipOptions
+from aai_cli.commands.clip._exec import ClipOptions
 
 _ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
