@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 from typing import TextIO
 
@@ -8,7 +7,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
-from aai_cli import theme
+from aai_cli import jsonshape, theme
 
 
 class BaseRenderer:
@@ -44,8 +43,8 @@ class BaseRenderer:
 
     # --- JSON output (plain text; preserves BrokenPipe for `| head`) -------
     def _emit(self, obj: object) -> None:
-        """Write one NDJSON event (default=str matches output.emit_ndjson's safety)."""
-        self._write(json.dumps(obj, default=str) + "\n")
+        """Write one NDJSON event (jsonshape.dumps is the CLI-wide JSON policy)."""
+        self._write(jsonshape.dumps(obj) + "\n")
 
     def _write(self, text: str) -> None:
         try:
