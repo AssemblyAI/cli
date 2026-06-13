@@ -11,9 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from aai_cli import environments, output, stdio
+from aai_cli import output, stdio
 from aai_cli.context import AppState
-from aai_cli.errors import CLIError, UsageError
+from aai_cli.errors import UsageError
 from aai_cli.tts import audio, dialogue, session, voices
 
 # The streaming-TTS reference client defaults to English, so the CLI does the
@@ -177,14 +177,7 @@ def _speak_dialogue(
 
 def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly speak` invocation from already-parsed flags."""
-    if not session.is_available():
-        raise CLIError(
-            "assembly speak is only available in the sandbox.",
-            error_type="unsupported_environment",
-            exit_code=2,
-            suggestion="Re-run as: assembly --sandbox speak … "
-            f"(--sandbox goes before the command; or use --env {environments.SANDBOX_ENV}).",
-        )
+    session.require_available("speak")
     spoken = _read_text(opts.text)
     api_key = state.resolve_api_key()
     bare_voice, overrides = dialogue.parse_voice_overrides(opts.voice)

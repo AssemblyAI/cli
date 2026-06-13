@@ -36,6 +36,7 @@ source_modules =
     aai_cli.init_exec
     aai_cli.llm
     aai_cli.llm_exec
+    aai_cli.mediafile
     aai_cli.microphone
     aai_cli.options
     aai_cli.output

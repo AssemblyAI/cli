@@ -15,8 +15,6 @@ captions are burned into it.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +22,7 @@ from pathlib import Path
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli import client, output, youtube
+from aai_cli import client, mediafile, output, youtube
 from aai_cli.context import AppState
 from aai_cli.errors import CLIError, UsageError
 
@@ -62,52 +60,6 @@ def subtitles_filter(srt: Path, font_size: int | None) -> str:
     return spec
 
 
-def _validate_media(media: Path) -> None:
-    """Reject a missing local source before credential resolution, so a typo'd
-    path reads as "file not found", never as a login prompt or an ffmpeg error."""
-    if not media.exists():
-        raise CLIError(
-            f"File not found: {media}",
-            error_type="file_not_found",
-            exit_code=2,
-            suggestion="Check the path. assembly caption needs a local video file.",
-        )
-    if not media.is_file():
-        raise CLIError(
-            f"Not a file: {media}",
-            error_type="not_a_file",
-            exit_code=2,
-            suggestion="Pass a video file, not a directory.",
-        )
-
-
-def _validate_out(out: Path, media: Path) -> None:
-    """The captioned file must never overwrite its own input: ffmpeg would read
-    and write the same file concurrently, corrupting it."""
-    if out.resolve() == media.resolve():
-        raise UsageError(
-            "--out would overwrite the input file.",
-            suggestion="Pick a different output path.",
-        )
-
-
-def _require_ffmpeg() -> str:
-    """The ffmpeg executable; checked before any (billed) transcription work."""
-    path = shutil.which("ffmpeg")
-    if path is None:
-        raise CLIError(
-            "ffmpeg is required to burn captions into video, but it isn't on PATH.",
-            error_type="missing_dependency",
-            suggestion="Install it (brew install ffmpeg / apt install ffmpeg) and re-run.",
-        )
-    return path
-
-
-def _run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Boundary seam for tests: one ffmpeg invocation, output captured."""
-    return subprocess.run(args, capture_output=True, text=True, check=False)
-
-
 def _burn(ffmpeg: str, media: Path, srt: Path, out: Path, font_size: int | None) -> None:
     """Burn the ``srt`` captions into ``media``'s video stream, writing ``out``.
 
@@ -118,7 +70,7 @@ def _burn(ffmpeg: str, media: Path, srt: Path, out: Path, font_size: int | None)
     re-run overwrite its own earlier output instead of stalling on ffmpeg's
     prompt.
     """
-    result = _run_ffmpeg(
+    result = mediafile.run_ffmpeg(
         [
             ffmpeg,
             "-hide_banner",
@@ -135,30 +87,18 @@ def _burn(ffmpeg: str, media: Path, srt: Path, out: Path, font_size: int | None)
             "0:a?",
             "-c:a",
             "copy",
-            str(out),
+            mediafile.path_arg(out),
         ]
     )
     if result.returncode != 0:
-        detail = result.stderr.strip().splitlines()
-        reason = detail[-1] if detail else f"ffmpeg exited with code {result.returncode}"
-        raise CLIError(
-            f"Could not write {out.name}: {reason}",
+        raise mediafile.ffmpeg_failure(
+            result,
+            "write",
+            out,
             error_type="caption_failed",
             suggestion="Check that the input is a readable video file — captions "
             "can't be burned into audio-only media.",
         )
-
-
-def _resolve_transcript(
-    opts: CaptionOptions, media: Path, state: AppState, *, json_mode: bool
-) -> object:
-    """The transcript whose captions are burned in: fetched by id, or made fresh
-    from the (already local) media file."""
-    if opts.transcript_id is not None:
-        return client.get_transcript(state.resolve_api_key(), opts.transcript_id)
-    api_key = state.resolve_api_key()
-    with output.status("Transcribing for captions…", json_mode=json_mode, quiet=state.quiet):
-        return client.transcribe(api_key, str(media), config=aai.TranscriptionConfig())
 
 
 def _fetch_srt(transcript: object, opts: CaptionOptions, *, json_mode: bool, quiet: bool) -> str:
@@ -181,7 +121,7 @@ def _fetch_srt(transcript: object, opts: CaptionOptions, *, json_mode: bool, qui
 
 def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly caption` invocation from already-parsed flags."""
-    ffmpeg = _require_ffmpeg()
+    ffmpeg = mediafile.require_ffmpeg("burn captions into video")
     if youtube.is_downloadable_url(opts.media):
         # A media-page URL (YouTube, …) is downloaded once — always the full
         # video, since the captions are burned into it. The download dir is
@@ -190,7 +130,7 @@ def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> No
             with output.status("Downloading video…", json_mode=json_mode, quiet=state.quiet):
                 local = youtube.download_media(opts.media, Path(td), video=True)
             out = opts.out if opts.out is not None else Path.cwd() / default_out_path(local).name
-            _validate_out(out, local)
+            mediafile.validate_out(out, local)
             _caption_and_emit(opts, local, out, ffmpeg, state, json_mode=json_mode)
         return
     if opts.media.startswith(("http://", "https://")):
@@ -199,10 +139,16 @@ def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> No
             "media-page URL yt-dlp can download (YouTube, …).",
             suggestion="Download the video first, then caption the local copy.",
         )
+    if "://" in opts.media:
+        # Path() would collapse the "//" and report a corrupted echo of the URL.
+        raise UsageError(
+            f"assembly caption needs a local file, not a URL: {opts.media}",
+            suggestion="Download the video first, then caption the local copy.",
+        )
     media = Path(opts.media)
-    _validate_media(media)
+    mediafile.validate_local_media(media, "caption", kind="video")
     out = opts.out if opts.out is not None else default_out_path(media)
-    _validate_out(out, media)
+    mediafile.validate_out(out, media)
     _caption_and_emit(opts, media, out, ffmpeg, state, json_mode=json_mode)
 
 
@@ -216,7 +162,15 @@ def _caption_and_emit(
     json_mode: bool,
 ) -> None:
     """Caption an already-local video file into ``out`` and report the result."""
-    transcript = _resolve_transcript(opts, media, state, json_mode=json_mode)
+    transcript = mediafile.resolve_transcript(
+        state.resolve_api_key(),
+        opts.transcript_id,
+        media,
+        status_message="Transcribing for captions…",
+        json_mode=json_mode,
+        quiet=state.quiet,
+        config=aai.TranscriptionConfig(),
+    )
     transcript_id = str(getattr(transcript, "id", ""))
     srt = _fetch_srt(transcript, opts, json_mode=json_mode, quiet=state.quiet)
     captions = srt.count("-->")  # one arrow per SRT cue timing line

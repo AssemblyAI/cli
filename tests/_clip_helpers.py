@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aai_cli import clip_exec, llm
+from aai_cli import llm, mediafile
 from aai_cli.clip_exec import ClipOptions
 
 _ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
@@ -71,5 +71,5 @@ def record_ffmpeg(monkeypatch: pytest.MonkeyPatch, detect_log: str = "") -> list
         stderr = detect_log if "-af" in args else ""
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr=stderr)
 
-    monkeypatch.setattr(clip_exec, "_run_ffmpeg", run)
+    monkeypatch.setattr(mediafile, "run_ffmpeg", run)
     return calls
