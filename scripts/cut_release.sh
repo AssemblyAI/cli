@@ -1,7 +1,9 @@
 #!/bin/sh
 # Cut an AssemblyAI CLI release: tag the version and push the tag, which triggers
 # .github/workflows/release.yml (builds the arm64 bottle, creates the GitHub
-# Release, opens the formula PR).
+# Release, opens the formula PR). release.yml's manual "Run workflow" dispatch
+# runs these same steps in CI — so a Claude web session can cut a release with no
+# local checkout — by calling this script with --no-push and pushing the tag itself.
 #
 # With hatch-vcs the git tag IS the version — there is no version file to bump
 # or version-bump PR to merge first. By default the script tags the next patch
@@ -11,16 +13,19 @@
 #   ./scripts/cut_release.sh 0.2.0   # tag an explicit version instead
 #   ./scripts/cut_release.sh --yes   # skip the interactive confirmation
 #   ./scripts/cut_release.sh -n      # dry run: verify only, don't tag or push
+#   ./scripts/cut_release.sh --no-push  # create the tag locally, don't push it
 set -eu
 
 ASSUME_YES=0
 DRY_RUN=0
+NO_PUSH=0
 for arg in "$@"; do
   case "$arg" in
     -y | --yes) ASSUME_YES=1 ;;
     -n | --dry-run) DRY_RUN=1 ;;
+    --no-push) NO_PUSH=1 ;;
     -h | --help)
-      sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     [0-9]*.[0-9]*.[0-9]*) EXPLICIT_VERSION="$arg" ;;
@@ -107,6 +112,12 @@ if [ "$ASSUME_YES" -ne 1 ]; then
 fi
 
 git tag -a "$tag" -m "Release ${tag}"
+
+if [ "$NO_PUSH" -eq 1 ]; then
+  info "Created tag ${tag} locally; --no-push set, leaving the push to the caller."
+  exit 0
+fi
+
 info "Created tag ${tag}. Pushing..."
 git push origin "$tag"
 

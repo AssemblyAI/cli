@@ -1,6 +1,6 @@
 ---
 name: release-prep
-description: Prepare an assembly CLI release — bump the version, run the full gate, then tag to trigger the bottle pipeline. Use when cutting a new release.
+description: Prepare an assembly CLI release — confirm main is green, then tag (locally or via the manual workflow) to trigger the bottle pipeline. Use when cutting a new release.
 disable-model-invocation: true
 ---
 
@@ -8,11 +8,10 @@ disable-model-invocation: true
 
 Drive an `assembly` release to a verified, tagged state. Stop and report at the first failure — never tag on a red check.
 
-## 1. Version bump
+## 1. Pick the version
 
-- Update `version` in `pyproject.toml` (`[project]`). Confirm `aai_cli/__init__.py` `__version__` stays in sync (the `version` command reads it).
+- With hatch-vcs **the git tag _is_ the version** — there is no `pyproject.toml` / `aai_cli/__init__.py` string to bump. `cut_release.sh` defaults to the next patch above the latest `vX.Y.Z` tag; pass `X.Y.Z` for a minor/major bump.
 - Decide the bump (patch/minor/major) from what changed since the last tag; ask the user if it's ambiguous.
-- Land the bump via a normal PR (regular CI) before tagging.
 
 ## 2. Full gate
 
@@ -20,17 +19,22 @@ Drive an `assembly` release to a verified, tagged state. Stop and report at the 
 ./scripts/check.sh
 ```
 
-Must end with `All checks passed.` (ruff, mypy, markdownlint, shellcheck, pytest+coverage, build, `twine check --strict`).
+Must end with `All checks passed.` (ruff, mypy, markdownlint, shellcheck, pytest+coverage, build, `twine check --strict`). The release builds whatever `main` points at, so confirm `main` is green before tagging.
 
 ## 3. Tag to trigger the bottle pipeline
 
+Two equivalent ways to cut the tag — both land on `.github/workflows/release.yml`:
+
+**Local** (from a clean `main` in sync with `origin/main`):
+
 ```sh
-./scripts/cut_release.sh
+./scripts/cut_release.sh           # next patch; --dry-run verifies without tagging, --yes skips the prompt
+./scripts/cut_release.sh 0.3.0     # explicit version
 ```
 
-This derives the version from `pyproject.toml`, verifies the tree is clean, on `main`, and in sync with origin, then tags `vX.Y.Z` and pushes it. (`--dry-run` verifies without tagging; `--yes` skips the confirmation prompt.)
+**No local checkout** (e.g. a Claude web session on a feature branch): run the **Release** workflow's manual `workflow_dispatch` — GitHub's "Run workflow" button, or the `actions_run_trigger` MCP tool — with an optional `version` input (blank = next patch). Its `tag` job resolves the version and creates+pushes the tag from `main`, then the same run builds and publishes. Set `dry_run: true` to build the bottle for an existing tag without publishing.
 
-The pushed tag triggers `.github/workflows/release.yml`, which:
+The tag triggers `.github/workflows/release.yml`, which:
 
 1. Builds the arm64 macOS bottle (`arm64_sonoma`).
 2. Creates the `vX.Y.Z` GitHub Release with the bottle attached.

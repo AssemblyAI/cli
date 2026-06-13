@@ -1,34 +1,100 @@
 name: Release
 
-# Cut a release by pushing a vX.Y.Z tag (after the version-bump PR merges).
-# Builds the arm64 macOS bottle, publishes it to the tag's GitHub Release, and
-# opens a formula PR (url + sha256 + bottle block) for a maintainer to merge.
+# Cut a release one of two ways, both landing on the same bottle pipeline below:
+#   1. Push a vX.Y.Z tag (what `scripts/cut_release.sh` does from a clean `main`).
+#   2. Run this workflow manually ("Run workflow" / the actions_run_trigger MCP
+#      tool) — the `tag` job resolves the version, creates the tag, and pushes it,
+#      so a Claude web session (which works on a feature branch and can't push
+#      tags itself) can cut a release without a local checkout.
+# Either way the pipeline builds the arm64 macOS bottle, publishes it to the tag's
+# GitHub Release, and opens a formula PR (url + sha256 + bottle block) to merge.
 on:
   push:
     tags: ["v*"]
-  # Manual dry-run: build the bottle for an existing tag WITHOUT publishing.
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing tag to build a bottle for (dry-run; no publish)"
-        required: true
+      version:
+        description: "Release version X.Y.Z (blank = next patch above the latest vX.Y.Z tag)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Build the bottle only — don't create the tag, GitHub Release, or formula PR"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.inputs.tag || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.inputs.version || github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # Resolve the tag the rest of the pipeline builds. On a tag push it already
+  # exists (just echo it). On a manual real release it's created here from the
+  # same logic maintainers run locally; on a manual dry run we build an existing
+  # tag without creating anything. Always runs so `bottle` has a single source
+  # for the tag regardless of trigger.
+  tag:
+    name: resolve release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # only the manual real-release path pushes a tag; unused otherwise
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Release from main; full history brings the vX.Y.Z tags cut_release.sh
+          # bumps from. persist-credentials off (the real-release push below uses
+          # an explicit tokened remote, matching the publish job).
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the release tag
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          elif [ "$DRY_RUN" = "true" ]; then
+            # Build a bottle for an already-existing tag without publishing.
+            if [ -n "$INPUT_VERSION" ]; then
+              tag="v${INPUT_VERSION}"
+            else
+              tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+            fi
+            [ -n "$tag" ] || { echo "no existing vX.Y.Z tag to dry-run" >&2; exit 1; }
+          else
+            # Real manual release: resolve + validate + create the tag locally via
+            # the same script maintainers run, then push it with an explicit
+            # tokened remote (persist-credentials is off above).
+            extra=()
+            [ -n "$INPUT_VERSION" ] && extra+=("$INPUT_VERSION")
+            ./scripts/cut_release.sh --yes --no-push "${extra[@]}"
+            tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "refs/tags/${tag}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
   bottle:
     name: build arm64 bottle (macOS)
+    needs: [tag]
     runs-on: macos-14
     timeout-minutes: 40
     permissions:
       contents: read
     outputs:
-      tag: ${{ steps.meta.outputs.tag }}
+      tag: ${{ needs.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -37,28 +103,26 @@ jobs:
       # commit SHA like every other action here — Dependabot keeps it current.
       - uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1
 
-      - name: Resolve tag + source sha256
+      - name: Resolve source sha256
         id: meta
         env:
           # Pass via env (not inline ${{ }}) to satisfy zizmor template-injection.
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
+          TAG: ${{ needs.tag.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag="${INPUT_TAG:-$REF_NAME}"
+          tag="$TAG"
           url="https://github.com/${REPO}/archive/refs/tags/${tag}.tar.gz"
           curl -fL "$url" -o source.tar.gz
           sha="$(shasum -a 256 source.tar.gz | awk '{print $1}')"
           {
-            echo "tag=${tag}"
             echo "source_sha=${sha}"
             echo "root_url=https://github.com/${REPO}/releases/download/${tag}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Pin the formula to the release tag
         env:
-          TAG: ${{ steps.meta.outputs.tag }}
+          TAG: ${{ needs.tag.outputs.tag }}
           SOURCE_SHA: ${{ steps.meta.outputs.source_sha }}
           REPO: ${{ github.repository }}
         run: |
@@ -114,7 +178,9 @@ jobs:
   publish:
     name: publish release + open formula PR
     needs: [bottle]
-    if: github.event_name == 'push'
+    # Publish for real tag pushes and for manual real releases; skip on a manual
+    # dry run (which only builds the bottle to prove the formula installs).
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
