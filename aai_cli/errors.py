@@ -19,6 +19,8 @@ process's own exit code unchanged. Each :class:`CLIError` carries an
 
 from __future__ import annotations
 
+from aai_cli import jsonshape
+
 
 class CLIError(Exception):
     """Base error carrying an exit code, a machine-readable type, and an optional
@@ -41,11 +43,15 @@ class CLIError(Exception):
         self.suggestion = suggestion
 
     def to_dict(self) -> dict[str, object]:
-        body: dict[str, object] = {"type": self.error_type, "message": self.message}
-        if self.suggestion is not None:
-            body["suggestion"] = self.suggestion
-        if self.transcript_id is not None:
-            body["transcript_id"] = self.transcript_id
+        # suggestion/transcript_id are omitted entirely when unset (not null).
+        body = jsonshape.compact(
+            {
+                "type": self.error_type,
+                "message": self.message,
+                "suggestion": self.suggestion,
+                "transcript_id": self.transcript_id,
+            }
+        )
         return {"error": body}
 
 

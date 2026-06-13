@@ -1,3 +1,5 @@
+import datetime
+
 from aai_cli import jsonshape
 
 
@@ -36,3 +38,22 @@ def test_as_float_coerces_scalars_and_defaults():
     assert jsonshape.as_float("bad") == 0.0
     assert jsonshape.as_float(object()) == 0.0
     assert jsonshape.as_float(None, default=-1.0) == -1.0
+
+
+def test_dumps_round_trips_plain_json():
+    assert jsonshape.dumps({"a": 1, "b": [2, 3]}) == '{"a": 1, "b": [2, 3]}'
+
+
+def test_dumps_falls_back_to_str_for_unserializable_values():
+    # A datetime isn't natively JSON-serializable; default=str must stringify it
+    # instead of raising — the safety every CLI emission path depends on.
+    moment = datetime.datetime(2026, 6, 13, 14, 0, 0)
+    assert jsonshape.dumps({"at": moment}) == '{"at": "2026-06-13 14:00:00"}'
+
+
+def test_compact_drops_only_none_values():
+    assert jsonshape.compact({"keep": 0, "blank": "", "false": False, "drop": None}) == {
+        "keep": 0,
+        "blank": "",
+        "false": False,
+    }
