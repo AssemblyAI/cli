@@ -65,7 +65,9 @@ def init(
         ),
     ),
     here: bool = typer.Option(False, "--here", help="Scaffold into the current directory"),
-    port: int = typer.Option(init_exec.DEFAULT_PORT, "--port", help="Local server port"),
+    port: int = typer.Option(
+        init_exec.DEFAULT_PORT, "--port", help="Local server port", min=0, max=65535
+    ),
     json_out: bool = options.json_option(),
 ) -> None:
     """Scaffold a new app from a template and launch it

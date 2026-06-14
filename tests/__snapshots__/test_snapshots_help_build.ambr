@@ -47,14 +47,18 @@
    browser.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --port                INTEGER  Local server port [default: 3000]             │
-  │ --host                TEXT     Interface to bind. Loopback by default; pass  │
-  │                                0.0.0.0 to expose on your network.            │
-  │                                [default: 127.0.0.1]                          │
-  │ --no-open                      Launch, but don't open the browser            │
-  │ --no-install                   Skip dependency install; launch directly      │
-  │ --json        -j               Output raw JSON                               │
-  │ --help                         Show this message and exit.                   │
+  │ --port                INTEGER RANGE              Local server port           │
+  │                       [0<=x<=65535]              [default: 3000]             │
+  │ --host                TEXT                       Interface to bind. Loopback │
+  │                                                  by default; pass 0.0.0.0 to │
+  │                                                  expose on your network.     │
+  │                                                  [default: 127.0.0.1]        │
+  │ --no-open                                        Launch, but don't open the  │
+  │                                                  browser                     │
+  │ --no-install                                     Skip dependency install;    │
+  │                                                  launch directly             │
+  │ --json        -j                                 Output raw JSON             │
+  │ --help                                           Show this message and exit. │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -90,15 +94,20 @@
   │   directory      [DIRECTORY]  Target directory (default: <template>)         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --no-install                   Scaffold only; don't install or launch        │
-  │ --no-open                      Install + launch, but don't open the browser  │
-  │ --force                        Overwrite a non-empty target directory        │
-  │                                (overlays the template; files not in the      │
-  │                                template are kept)                            │
-  │ --here                         Scaffold into the current directory           │
-  │ --port                INTEGER  Local server port [default: 3000]             │
-  │ --json        -j               Output raw JSON                               │
-  │ --help                         Show this message and exit.                   │
+  │ --no-install                                     Scaffold only; don't        │
+  │                                                  install or launch           │
+  │ --no-open                                        Install + launch, but don't │
+  │                                                  open the browser            │
+  │ --force                                          Overwrite a non-empty       │
+  │                                                  target directory (overlays  │
+  │                                                  the template; files not in  │
+  │                                                  the template are kept)      │
+  │ --here                                           Scaffold into the current   │
+  │                                                  directory                   │
+  │ --port                INTEGER RANGE              Local server port           │
+  │                       [0<=x<=65535]              [default: 3000]             │
+  │ --json        -j                                 Output raw JSON             │
+  │ --help                                           Show this message and exit. │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -155,10 +164,12 @@
    downloads/).
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --port                INTEGER  Local server port [default: 3000]             │
-  │ --no-install                   Skip dependency install; launch directly      │
-  │ --json        -j               Output raw JSON                               │
-  │ --help                         Show this message and exit.                   │
+  │ --port                INTEGER RANGE              Local server port           │
+  │                       [0<=x<=65535]              [default: 3000]             │
+  │ --no-install                                     Skip dependency install;    │
+  │                                                  launch directly             │
+  │ --json        -j                                 Output raw JSON             │
+  │ --help                                           Show this message and exit. │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

@@ -158,7 +158,7 @@ def validate_video_flag(source: str, *, video: bool) -> None:
         )
 
 
-def validate_sections_flag(source: str, sections: list[str]) -> None:
+def validate_sections_flag(source: str | None, sections: list[str]) -> None:
     """Reject ``--download-sections`` for a source that isn't a downloadable URL.
 
     The specs select which parts of a media-page download yt-dlp fetches; a local

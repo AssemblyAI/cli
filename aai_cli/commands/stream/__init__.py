@@ -128,12 +128,14 @@ def stream(
         None,
         "--min-turn-silence",
         help="Min silence to end a turn (ms)",
+        min=1,
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     max_turn_silence: int | None = typer.Option(
         None,
         "--max-turn-silence",
         help="Max silence before ending a turn (ms)",
+        min=1,
         rich_help_panel=help_panels.OPT_TURNS,
     ),
     vad_threshold: float | None = typer.Option(
@@ -190,6 +192,7 @@ def stream(
         None,
         "--inactivity-timeout",
         help="Auto-close after N seconds idle",
+        min=1,
         rich_help_panel=help_panels.OPT_FEATURES,
     ),
     # guardrails
@@ -255,6 +258,7 @@ def stream(
         llm.DEFAULT_MAX_TOKENS,
         "--max-tokens",
         help="Max tokens",
+        min=1,
         rich_help_panel=help_panels.OPT_LLM,
     ),
     # escape hatch

@@ -72,6 +72,25 @@ def test_share_prints_public_url(tmp_path, monkeypatch):
     assert server.terminated is False
 
 
+def test_share_port_out_of_range_is_rejected(tmp_path, monkeypatch):
+    # A bad --port used to reach socket.connect_ex and surface as an internal "report a
+    # bug" error; Typer now rejects it up front with a usage error (2). Pins max=65535.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub(monkeypatch)
+    result = runner.invoke(app, ["share", "--port", "65536"])
+    assert result.exit_code == 2
+
+
+def test_share_port_zero_is_accepted(tmp_path, monkeypatch):
+    # Port 0 ("OS-assign a free port") must stay valid (pins min=0, not 1).
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    _stub(monkeypatch)
+    result = runner.invoke(app, ["share", "--port", "0"])
+    assert result.exit_code == 0, result.output
+
+
 def test_share_missing_cloudflared_errors_with_brew_hint_on_macos(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)

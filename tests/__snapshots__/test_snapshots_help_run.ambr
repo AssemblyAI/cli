@@ -619,10 +619,10 @@
   │                                                  [0.0<=x<=1.0  confidence    │
   │                                                  ]             (0-1)         │
   │ --min-turn-silence                               INTEGER       Min silence   │
-  │                                                                to end a turn │
+  │                                                  RANGE [x>=1]  to end a turn │
   │                                                                (ms)          │
   │ --max-turn-silence                               INTEGER       Max silence   │
-  │                                                                before ending │
+  │                                                  RANGE [x>=1]  before ending │
   │                                                                a turn (ms)   │
   │ --vad-threshold                                  FLOAT RANGE   Voice         │
   │                                                  [0.0<=x<=1.0  activity      │
@@ -647,7 +647,7 @@
   │                                ]                      suppression model)     │
   │ --voice-focus-threshold        FLOAT RANGE            Voice-focus threshold  │
   │                                [0.0<=x<=1.0]          (0-1)                  │
-  │ --inactivity-timeout           INTEGER                Auto-close after N     │
+  │ --inactivity-timeout           INTEGER RANGE [x>=1]   Auto-close after N     │
   │                                                       seconds idle           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Guardrails ─────────────────────────────────────────────────────────────────╮
@@ -675,7 +675,7 @@
   │ --model               TEXT                  LLM Gateway model                │
   │                                             [default:                        │
   │                                             claude-haiku-4-5-20251001]       │
-  │ --max-tokens          INTEGER               Max tokens [default: 1000]       │
+  │ --max-tokens          INTEGER RANGE [x>=1]  Max tokens [default: 1000]       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any StreamingParameters field as         │

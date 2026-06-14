@@ -32,7 +32,7 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def dev(
     ctx: typer.Context,
-    port: int = typer.Option(3000, "--port", help="Local server port"),
+    port: int = typer.Option(3000, "--port", help="Local server port", min=0, max=65535),
     host: str = typer.Option(
         devserver.LOCAL_HOST,
         "--host",

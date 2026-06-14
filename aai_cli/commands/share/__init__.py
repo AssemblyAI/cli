@@ -29,7 +29,7 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def share(
     ctx: typer.Context,
-    port: int = typer.Option(3000, "--port", help="Local server port"),
+    port: int = typer.Option(3000, "--port", help="Local server port", min=0, max=65535),
     no_install: bool = typer.Option(
         False, "--no-install", help="Skip dependency install; launch directly"
     ),

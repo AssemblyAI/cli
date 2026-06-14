@@ -315,6 +315,10 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     transcribe_validate.validate_out_path(opts.out)
     transcribe_validate.validate_json_with_output(opts.output_field, json_mode=json_mode)
     client.validate_chars_per_caption(opts.chars_per_caption, opts.output_field)
+    # --download-sections only slices a downloadable-URL fetch; for a local file,
+    # stdin, remote bucket, or directory batch it would be dropped silently — reject
+    # it up front like `clip`/`dub` rather than billing a full-file transcription.
+    youtube.validate_sections_flag(opts.source, list(opts.download_sections or []))
 
     merged = config_builder.merge_transcribe_config(
         flags=flags, overrides=opts.config_kv, config_file=opts.config_file

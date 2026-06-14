@@ -39,6 +39,48 @@ def test_stream_maps_turn_detection_flags(monkeypatch):
     assert params.speaker_labels is True
 
 
+def test_stream_turn_and_timeout_minimums_are_inclusive(monkeypatch):
+    # These four options gained a min=1 guard (rejecting 0/negative like their siblings).
+    # 1 is the inclusive floor and must still be accepted — pins min=1, not 2.
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "aai_cli.commands.stream._exec.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+    result = runner.invoke(
+        app,
+        [
+            "stream",
+            "--sample",
+            "--min-turn-silence",
+            "1",
+            "--max-turn-silence",
+            "1",
+            "--inactivity-timeout",
+            "1",
+            "--max-tokens",
+            "1",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    params = captured["params"]
+    assert params.min_turn_silence == 1
+    assert params.max_turn_silence == 1
+    assert params.inactivity_timeout == 1
+
+
+def test_stream_turn_silence_below_minimum_is_rejected(monkeypatch):
+    # 0/negative is now a clean usage error (2) at parse time, not passed to the API.
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        "aai_cli.commands.stream._exec.client.stream_audio",
+        lambda *a, **k: None,
+    )
+    result = runner.invoke(app, ["stream", "--sample", "--min-turn-silence", "0"])
+    assert result.exit_code == 2
+
+
 def test_stream_config_escape_hatch(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}

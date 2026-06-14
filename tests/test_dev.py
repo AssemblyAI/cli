@@ -98,6 +98,25 @@ def test_dev_custom_port_expands_and_flows_through(tmp_path, monkeypatch):
     assert "3000" not in captured["command"]  # default was overridden, not used
 
 
+def test_dev_port_out_of_range_is_rejected(tmp_path, monkeypatch):
+    # A bad --port used to reach socket.connect_ex and surface as an internal "report a
+    # bug" error; Typer now rejects it up front with a usage error (2). Pins max=65535.
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    result = runner.invoke(app, ["dev", "--no-open", "--port", "65536"])
+    assert result.exit_code == 2
+
+
+def test_dev_port_zero_is_accepted(tmp_path, monkeypatch):
+    # Port 0 ("OS-assign a free port") must stay valid (pins min=0, not 1).
+    monkeypatch.chdir(tmp_path)
+    _make_project(tmp_path)
+    captured = _stub_runner(monkeypatch)
+    result = runner.invoke(app, ["dev", "--no-open", "--port", "0"])
+    assert result.exit_code == 0, result.output
+    assert captured["port"] == 0
+
+
 def test_dev_venv_command_when_no_uv(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)

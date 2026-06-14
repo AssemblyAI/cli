@@ -218,6 +218,18 @@ def test_transcribe_speakers_expected_without_labels_exits_2(mocker):
     tx.assert_not_called()
 
 
+def test_transcribe_download_sections_on_local_file_exits_2(mocker):
+    # --download-sections only slices a downloadable-URL fetch; on a local file it would
+    # be dropped silently, so it's rejected up front (matching `clip`/`dub`) rather than
+    # billing a full-file transcription. The guard fires before any API call.
+    _auth()
+    tx = mocker.patch("aai_cli.app.transcribe.run.client.transcribe", autospec=True)
+    result = runner.invoke(app, ["transcribe", "audio.mp3", "--download-sections", "*0:00-5:00"])
+    assert result.exit_code == 2
+    assert "--download-sections only applies to a downloadable URL source" in result.output
+    tx.assert_not_called()
+
+
 def test_transcribe_speakers_expected_with_labels_is_accepted(mocker):
     _auth()
     tx = mocker.patch(
