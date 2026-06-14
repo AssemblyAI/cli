@@ -102,7 +102,9 @@ def test_directory_scan_is_recursive_and_audio_only(tmp_path, mocker, monkeypatc
     seen = _patch_transcribe(mocker, monkeypatch)
     result = runner.invoke(app, ["transcribe", "calls", "--json"])
     assert result.exit_code == 0
-    assert sorted(seen) == ["calls/a.mp3", "calls/sub/b.WAV"]
+    # The scanner emits native paths (str(Path)), so build the expectation the same way
+    # rather than hardcoding "/" — directory sources use backslashes on Windows.
+    assert sorted(seen) == [str(Path("calls", "a.mp3")), str(Path("calls", "sub", "b.WAV"))]
 
 
 def test_directory_without_audio_exits_2(tmp_path):

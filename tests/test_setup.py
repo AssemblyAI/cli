@@ -20,6 +20,8 @@ runner = CliRunner()
 def _isolate_home(tmp_path, monkeypatch):
     """Keep skill writes/reads inside a temp HOME so tests never touch ~/.claude."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    # Path.home() reads USERPROFILE on Windows, not HOME, so isolate both.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 

@@ -407,7 +407,7 @@ def test_launch_app_noninteractive_hints_instead_of_blocking(
     prompter = _RecordingNonInteractive()
     assert sections.launch_app(prompter, ctx) is SectionResult.SKIPPED
     assert captured == {}
-    assert any("cd /scaffolded/app && assembly dev" in note for note in prompter.notes)
+    assert any(f"cd {ctx.scaffolded} && assembly dev" in note for note in prompter.notes)
 
 
 def test_launch_app_declined_leaves_hint(
@@ -418,7 +418,7 @@ def test_launch_app_declined_leaves_hint(
     prompter = _ScriptedPrompter(confirm=False)
     assert sections.launch_app(prompter, ctx) is SectionResult.SKIPPED
     assert captured == {}
-    assert any("cd /scaffolded/app && assembly dev" in note for note in prompter.notes)
+    assert any(f"cd {ctx.scaffolded} && assembly dev" in note for note in prompter.notes)
 
 
 @pytest.mark.parametrize("uv", [True, False])

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 
 import keyring
@@ -22,6 +23,16 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if any(item.get_closest_marker(name) for name in _NETWORK_MARKERS):
             item.add_marker(pytest.mark.enable_socket)
+        elif sys.platform == "win32" and not any(
+            item.get_closest_marker(m) for m in ("allow_hosts", "enable_socket", "disable_socket")
+        ):
+            # On Windows the asyncio event loop's self-pipe is an AF_INET socketpair(),
+            # which the suite-wide --disable-socket would block — so every in-process
+            # async test (FastAPI TestClient, the scaffolded template apps) would fail.
+            # POSIX uses an os.pipe() self-pipe, so this only bites on Windows. Permit
+            # loopback while still blocking external network (the hermeticity guarantee
+            # that matters), unless the test already pins its own allow_hosts.
+            item.add_marker(pytest.mark.allow_hosts(["127.0.0.1", "::1"]))
 
 
 @pytest.fixture
@@ -72,6 +83,20 @@ def isolate_env(monkeypatch):
         "DO_NOT_TRACK",
     ):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _disable_legacy_windows(monkeypatch):
+    # On a Windows CI runner Rich detects a "legacy" console (ColorSystem.WINDOWS) and
+    # subtracts 1 from the render width to dodge the auto-wrap cursor bug — so COLUMNS=80
+    # renders at 79 and every byte-exact help snapshot rewraps and fails. Modern Windows
+    # terminals (Windows Terminal, VT-enabled) report non-legacy, which is what real users
+    # get, so pin non-legacy here to keep rendering deterministic across platforms. No-op
+    # off Windows (detect_legacy_windows already returns False there).
+    if sys.platform == "win32":
+        import rich.console
+
+        monkeypatch.setattr(rich.console, "detect_legacy_windows", lambda: False)
 
 
 @pytest.fixture(autouse=True)

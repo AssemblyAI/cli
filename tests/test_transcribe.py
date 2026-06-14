@@ -409,7 +409,7 @@ def test_transcribe_remote_bucket_url_downloads_then_transcribes(monkeypatch, mo
     result = runner.invoke(app, ["transcribe", "memory://bucket/call.mp3", "-o", "text"])
     assert result.exit_code == 0
     assert result.output.strip() == "hello world"
-    assert seen["path"].endswith("/call.mp3")
+    assert seen["path"].replace("\\", "/").endswith("/call.mp3")  # native separator on Windows
     assert "aai-remote-" in seen["path"]  # a temp copy, not the URL itself
     assert seen["bytes"] == b"remote-bytes"
 

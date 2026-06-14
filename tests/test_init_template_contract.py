@@ -48,7 +48,7 @@ def test_vercel_json_pins_fastapi_framework(template_dir):
     declared"). Pinning the FastAPI preset makes Vercel build `api/index.py` and route
     every request to the ASGI app — and stops auto-detection from ever picking
     `services` again."""
-    config = json.loads((template_dir / "vercel.json").read_text())
+    config = json.loads((template_dir / "vercel.json").read_text(encoding="utf-8"))
     assert config.get("framework") == "fastapi", (
         f'{template_dir.name}: vercel.json must pin "framework": "fastapi" so Vercel '
         f'never auto-detects the "services" framework; got {config.get("framework")!r}'
@@ -58,7 +58,7 @@ def test_vercel_json_pins_fastapi_framework(template_dir):
 def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
     """Fly/Railway/Render(Docker)/Cloudflare-Containers build this image. It must run
     uvicorn on the app, bind 0.0.0.0, and honor the platform's injected ${PORT}."""
-    dockerfile = (template_dir / "Dockerfile").read_text()
+    dockerfile = (template_dir / "Dockerfile").read_text(encoding="utf-8")
     assert "uvicorn api.index:app" in dockerfile, (
         f"{template_dir.name}: Dockerfile must run uvicorn api.index:app"
     )
@@ -96,7 +96,10 @@ def test_dockerfile_runs_uvicorn_on_platform_port(template_dir):
 def test_dockerignore_excludes_env(template_dir):
     """`.env` holds the real API key; the Dockerfile does COPY . . so it must be
     excluded from the build context or the key gets baked into the image."""
-    lines = {line.strip() for line in (template_dir / "dockerignore").read_text().splitlines()}
+    lines = {
+        line.strip()
+        for line in (template_dir / "dockerignore").read_text(encoding="utf-8").splitlines()
+    }
     assert ".env" in lines, (
         f"{template_dir.name}: dockerignore must list .env so the API key isn't baked in"
     )
@@ -116,7 +119,7 @@ def test_procfile_starts_the_app(template_dir):
     command. The contract gate boots it for real; here we pin its shape."""
     web = [
         line.split("web:", 1)[1].strip()
-        for line in (template_dir / "Procfile").read_text().splitlines()
+        for line in (template_dir / "Procfile").read_text(encoding="utf-8").splitlines()
         if line.strip().startswith("web:")
     ]
     assert web, f"{template_dir.name}: Procfile has no web: process"
@@ -129,7 +132,7 @@ def test_procfile_starts_the_app(template_dir):
 
 
 def test_runtime_pins_supported_python(template_dir):
-    pin = (template_dir / "runtime.txt").read_text().strip()
+    pin = (template_dir / "runtime.txt").read_text(encoding="utf-8").strip()
     assert re.fullmatch(r"python-3\.(12|13)(\.\d+)?", pin), (
         f"{template_dir.name}: runtime.txt pins {pin!r}; must be python-3.12 or python-3.13"
     )
@@ -141,7 +144,7 @@ def test_realtime_templates_have_audio_helpers(template_dir):
 
 
 def test_static_assets_referenced_by_html_exist(template_dir):
-    html = (template_dir / "static" / "index.html").read_text()
+    html = (template_dir / "static" / "index.html").read_text(encoding="utf-8")
     refs = set(re.findall(r'(?:href|src)=["\'](/static/[^"\']+)', html))
     assert refs, f"{template_dir.name}: static/index.html should load static assets"
     for ref in refs:
@@ -151,8 +154,8 @@ def test_static_assets_referenced_by_html_exist(template_dir):
 
 
 def test_codex_edit_points_are_explicit(template_dir):
-    notes = (template_dir / "AGENTS.md").read_text()
-    app_js = (template_dir / "static" / "app.js").read_text()
+    notes = (template_dir / "AGENTS.md").read_text(encoding="utf-8")
+    app_js = (template_dir / "static" / "app.js").read_text(encoding="utf-8")
     assert "ASSEMBLYAI_API_KEY" in notes
     assert "buildless" in notes
     assert "static/app.js" in notes
@@ -161,17 +164,23 @@ def test_codex_edit_points_are_explicit(template_dir):
 
 def test_no_committed_dotenv_or_real_key(template_dir):
     assert not (template_dir / ".env").exists(), f"{template_dir.name} ships a real .env"
-    assert "your_assemblyai_api_key_here" in (template_dir / "env.example").read_text()
+    assert "your_assemblyai_api_key_here" in (template_dir / "env.example").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_frontend_routes_exist_in_backend(template_dir):
     """Every /api path the page fetches must be a route the backend registers."""
-    frontend = (template_dir / "static" / "index.html").read_text()
-    frontend += "\n".join(path.read_text() for path in (template_dir / "static").glob("*.js"))
+    frontend = (template_dir / "static" / "index.html").read_text(encoding="utf-8")
+    frontend += "\n".join(
+        path.read_text(encoding="utf-8") for path in (template_dir / "static").glob("*.js")
+    )
     fetched = set(re.findall(r'fetch\(\s*["\'`](/api/[^"\'`?]+)', frontend))
     # Also catch template-literal paths like fetch(`/api/status/${id}`) and "/api/x/" + id
     fetched |= set(re.findall(r'["\'`](/api/[A-Za-z0-9_\-/]+?)(?:/?\$\{|/?["\'`]\s*\+)', frontend))
-    src = "\n".join(path.read_text() for path in (template_dir / "api").glob("*.py"))
+    src = "\n".join(
+        path.read_text(encoding="utf-8") for path in (template_dir / "api").glob("*.py")
+    )
     registered = set(re.findall(r'@app\.\w+\(\s*["\']([^"\']+)["\']', src))
     registered_bases = {re.sub(r"/\{[^}]+\}$", "", r).rstrip("/") for r in registered}
     for path in fetched:
@@ -186,14 +195,14 @@ def test_requirements_cover_backend_imports(template_dir) -> None:
     """Every third-party import in api/*.py appears in requirements.txt."""
     imports: set[str] = set()
     for path in (template_dir / "api").glob("*.py"):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imports.add(node.names[0].name.split(".")[0])
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 imports.add(node.module.split(".")[0])
     third_party = imports - _STDLIB - _LOCAL_IMPORTS
-    reqs = (template_dir / "requirements.txt").read_text().lower()
+    reqs = (template_dir / "requirements.txt").read_text(encoding="utf-8").lower()
     for pkg in third_party:
         dist = _PKG_MAP.get(pkg, pkg)
         assert dist in reqs, (
@@ -210,7 +219,7 @@ def test_requirements_pin_versions(template_dir) -> None:
     """
     specifier = re.compile(r"(===|==|~=|!=|>=|<=|>|<)")
     unpinned: list[str] = []
-    for raw in (template_dir / "requirements.txt").read_text().splitlines():
+    for raw in (template_dir / "requirements.txt").read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -224,7 +233,7 @@ def test_requirements_pin_versions(template_dir) -> None:
 
 def test_status_endpoint_does_not_block(template_dir):
     """Guard against the blocking SDK call: a poll endpoint must not wait_for_completion."""
-    src = (template_dir / "api" / "index.py").read_text()
+    src = (template_dir / "api" / "index.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     blocking = {"get_by_id", "wait_for_completion"}
     called = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}

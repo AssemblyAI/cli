@@ -342,11 +342,14 @@ def test_synthesize_maps_unexpected_protocol_error_to_api_error():
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
 
 
+@pytest.mark.disable_socket
 def test_synthesize_without_connect_uses_real_client_and_fails_cleanly():
     # No `connect` provided: synthesize imports websockets' real sync client and
     # attempts a connection. pytest-socket blocks socket creation, so this must
     # surface as a clean CLIError (mapped in diagnostics.open_authorized_ws),
-    # never a raw socket error.
+    # never a raw socket error. disable_socket pins that blocked-at-creation behavior
+    # on Windows too (the suite-wide conftest otherwise allows loopback there, which
+    # would let the socket be created and then leak when the real connect is blocked).
     _use_env("sandbox000")
     with pytest.raises(CLIError):
         session.synthesize("k", session.SpeakConfig(text="hi"))

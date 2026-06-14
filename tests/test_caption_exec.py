@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import json
+import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,7 +59,10 @@ def record_ffmpeg(monkeypatch, *, returncode: int = 0, stderr: str = ""):
 
     def run(args: list[str]) -> subprocess.CompletedProcess[str]:
         recorded["args"] = args
-        srt_path = args[8].removeprefix("subtitles=").split(":force_style")[0]
+        escaped = args[8].removeprefix("subtitles=").split(":force_style")[0]
+        # subtitles_filter escapes filtergraph metacharacters (and the Windows drive
+        # colon) with a leading backslash; reverse that to recover the real on-disk path.
+        srt_path = re.sub(r"\\(.)", r"\1", escaped)
         recorded["srt"] = Path(srt_path).read_text(encoding="utf-8")
         return subprocess.CompletedProcess(
             args=args, returncode=returncode, stdout="", stderr=stderr

@@ -15,6 +15,7 @@ captions are burned into it.
 
 from __future__ import annotations
 
+import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,7 +57,12 @@ _FILTER_ESCAPES = str.maketrans({ch: f"\\{ch}" for ch in "\\':,;[]"})
 
 def subtitles_filter(srt: Path, font_size: int | None) -> str:
     """The ``-vf`` filtergraph burning ``srt`` into the video."""
-    spec = f"subtitles={str(srt).translate(_FILTER_ESCAPES)}"
+    # ffmpeg's filtergraph parser takes forward slashes on every platform; a Windows
+    # backslash path would otherwise need each separator escaped (and the drive colon
+    # mishandled). Normalize to "/" first, then escape the remaining metacharacters
+    # (notably the drive ":") — e.g. C:\a\b.srt -> C\:/a/b.srt. No-op on POSIX.
+    posix = str(srt).replace(os.sep, "/")
+    spec = f"subtitles={posix.translate(_FILTER_ESCAPES)}"
     if font_size is not None:
         spec += f":force_style=FontSize={font_size}"
     return spec

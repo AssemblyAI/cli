@@ -81,4 +81,8 @@ def test_outside_a_terminal_is_a_usage_error_not_a_login():
     # terminal requirement, not start an authentication flow.
     result = runner.invoke(app, ["dictate"])
     assert result.exit_code == 2
-    assert "interactive terminal" in result.output
+    # POSIX surfaces the not-a-tty requirement; Windows (no termios) surfaces the
+    # unsupported-platform message first. Either is the point: a usage error, not a login.
+    assert (
+        "interactive terminal" in result.output or "not supported on this platform" in result.output
+    )
