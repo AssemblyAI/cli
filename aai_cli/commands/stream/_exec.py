@@ -26,7 +26,7 @@ from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
     SourceOptions,
     StreamSession,
-    validate_output_flags,
+    resolve_output_modes,
     validate_sources,
 )
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
@@ -207,8 +207,7 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
 
 def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly stream` invocation from already-parsed flags."""
-    validate_output_flags(json_mode=json_mode, output_field=opts.output_field)
-    text_mode, json_mode = output.stream_output_modes(opts.output_field, json_mode=json_mode)
+    text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     sources = opts.source_options()
     base_flags = opts.base_flags()
 

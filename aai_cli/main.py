@@ -33,6 +33,10 @@ _REGISTERED_COMMAND_MODULES = command_registry.discover()
 # Names not listed (the hidden _update-check) fall to the end, sorted alphabetically.
 _COMMAND_ORDER = command_registry.command_order(_REGISTERED_COMMAND_MODULES)
 
+# Rank lookup derived once from the static order; list_commands runs per `--help`
+# and per completion, so there's no reason to rebuild this on every call.
+_COMMAND_RANK = {name: i for i, name in enumerate(_COMMAND_ORDER)}
+
 
 class _OrderedGroup(TyperGroup):
     """Lists commands in `_COMMAND_ORDER` rather than registration order.
@@ -42,9 +46,9 @@ class _OrderedGroup(TyperGroup):
     """
 
     def list_commands(self, ctx: ClickContext) -> list[str]:
-        rank = {name: i for i, name in enumerate(_COMMAND_ORDER)}
         return sorted(
-            super().list_commands(ctx), key=lambda name: (rank.get(name, len(rank)), name)
+            super().list_commands(ctx),
+            key=lambda name: (_COMMAND_RANK.get(name, len(_COMMAND_RANK)), name),
         )
 
     def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:

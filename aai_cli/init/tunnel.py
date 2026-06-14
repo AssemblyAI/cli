@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from aai_cli.core import config
-from aai_cli.core.errors import CLIError
+from aai_cli.core.errors import missing_dependency
 from aai_cli.init import runner
 
 # cloudflared binary name; resolved via shutil.which by callers.
@@ -37,10 +37,8 @@ def install_hint() -> str:
 def require_cloudflared(purpose: str) -> None:
     """Raise a clean missing-dependency error when cloudflared isn't on PATH."""
     if shutil.which(CLOUDFLARED) is None:
-        raise CLIError(
+        raise missing_dependency(
             f"cloudflared is required to {purpose}.",
-            error_type="missing_dependency",
-            exit_code=1,
             suggestion=install_hint(),
         )
 

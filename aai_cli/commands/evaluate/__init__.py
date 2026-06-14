@@ -10,7 +10,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.evaluate import _exec as evaluate_exec
 from aai_cli.commands.evaluate._exec import EvalSpeechModel
 from aai_cli.ui.help_text import examples_epilog
@@ -111,8 +111,4 @@ def evaluate(
         language_code=language_code,
         concurrency=concurrency,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: evaluate_exec.run_evaluate(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, evaluate_exec.run_evaluate, opts, json=json_out)

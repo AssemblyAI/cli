@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.clip import _exec as clip_exec
 from aai_cli.core import llm
 from aai_cli.ui.help_text import examples_epilog
@@ -149,8 +149,4 @@ def clip(
         out_dir=out_dir,
         video=video,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: clip_exec.run_clip(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, clip_exec.run_clip, opts, json=json_out)

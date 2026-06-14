@@ -120,8 +120,11 @@ import one command module from another.
 
 **Options/run split for flag-heavy commands** (gh-CLI style): the Typer
 function only parses argv into a frozen `<Cmd>Options` dataclass and hands it
-to a module-level `run_<cmd>(opts, state, *, json_mode)` through a thin lambda
-adapter in `run_command(ctx, ..., json=...)`. The run commands follow it —
+to a module-level `run_<cmd>(opts, state, *, json_mode)` via
+`context.run_with_options(ctx, run_<cmd>, opts, json=...)` — the typed adapter
+that wraps the `run_<cmd>` body in the `(state, json_mode)` callable
+`run_command` expects, so no command repeats the `lambda state, json_mode: …`
+boilerplate. The run commands follow it —
 `commands/stream/_exec.py` (the reference implementation), `app/transcribe/run.py`
 (in the `app/` layer — shared with onboarding), `commands/agent/_exec.py`,
 `commands/speak/_exec.py`, `commands/llm/_exec.py`, `commands/clip/_exec.py`,

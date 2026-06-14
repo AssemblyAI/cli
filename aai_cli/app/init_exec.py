@@ -21,8 +21,8 @@ from rich.markup import escape
 from aai_cli import __version__
 from aai_cli.app.context import AppState
 from aai_cli.core import environments, stdio
-from aai_cli.core.errors import CLIError, UsageError
-from aai_cli.init import keys, runner, scaffold, templates
+from aai_cli.core.errors import UsageError, missing_dependency
+from aai_cli.init import devserver, keys, runner, scaffold, templates
 from aai_cli.ui import output, steps
 
 DEFAULT_PORT = 3000
@@ -52,12 +52,10 @@ def _pick_template() -> str:
     try:
         import questionary
     except ImportError as exc:  # a broken/stale install missing the declared dep
-        raise CLIError(
+        raise missing_dependency(
             "The interactive picker needs 'questionary'. Reinstall the CLI "
             "(e.g. `uv tool install --reinstall aai-cli`), or pass a template "
             f"directly: {', '.join(templates.TEMPLATE_ORDER)}.",
-            error_type="missing_dependency",
-            exit_code=1,
         ) from exc
 
     choice = questionary.select(
@@ -109,32 +107,15 @@ def _active_env_vars() -> dict[str, str]:
 def _install_step(
     target: Path, *, no_install: bool, api_key: str | None, use_uv: bool
 ) -> tuple[list[steps.Step], bool]:
-    """Run (or skip) dependency install, returning the report rows and whether to launch.
+    """Run (or skip) dependency install, returning the report row and whether to launch.
 
-    Launch only happens when deps are installed and there's a key; an install failure
-    flips `will_launch` off so the caller exits non-zero instead of starting a server.
+    The row is built by the shared `devserver.install_step` (the same form `dev`/`share`
+    report), so only the launch decision is init-specific: launch when deps install and
+    a key is present. On a failed install the flag is moot — run_init raises Exit(1) on
+    any failed step before it consults will_launch.
     """
     will_launch = not no_install and api_key is not None
-    if no_install:
-        return [{"name": "install", "status": "skipped", "detail": "--no-install"}], will_launch
-    setup = runner.run_setup(target, use_uv=use_uv)
-    if setup.returncode != 0:
-        row: steps.Step = {
-            "name": "install",
-            "status": "failed",
-            "detail": (setup.stderr or setup.stdout).strip()[:300],
-        }
-        # The False (don't-launch) is an equivalent mutant: run_init raises Exit(1) on
-        # any failed step before it ever consults will_launch, so the value is unused
-        # on this branch.
-        return [row], False  # pragma: no mutate
-    return [
-        {
-            "name": "install",
-            "status": "installed",
-            "detail": "uv" if use_uv else "venv + pip",
-        }
-    ], will_launch
+    return [devserver.install_step(target, no_install=no_install, use_uv=use_uv)], will_launch
 
 
 def _reject_file_ancestor(target: Path) -> None:

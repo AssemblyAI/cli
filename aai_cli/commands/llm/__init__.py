@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_command, run_with_options
 from aai_cli.commands.llm import _exec as llm_exec
 from aai_cli.core import choices
 from aai_cli.core import llm as gateway
@@ -111,8 +111,4 @@ def llm(
         max_tokens=max_tokens,
         config_kv=tuple(config_kv or ()),
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: llm_exec.run_llm(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, llm_exec.run_llm, opts, json=json_out)

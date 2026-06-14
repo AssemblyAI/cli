@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.core import llm
 from aai_cli.ui.help_text import examples_epilog
@@ -140,8 +140,4 @@ def dub(
         video=video,
         download_sections=download_sections,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: dub_exec.run_dub(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, dub_exec.run_dub, opts, json=json_out)

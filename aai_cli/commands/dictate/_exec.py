@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from aai_cli.app.context import AppState
 from aai_cli.core import sync_stt
+from aai_cli.core.config_builder import split_csv
 from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
 from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.ui import output
@@ -53,9 +54,7 @@ def _note(message: str, *, json_mode: bool, quiet: bool) -> None:
 def _languages(language: str | None) -> str | list[str] | None:
     """Fold --language into the config shape: one ISO code as a string, a
     comma-separated list (code-switching audio) as a list, blank as unset."""
-    if language is None:
-        return None
-    codes = [code.strip() for code in language.split(",") if code.strip()]
+    codes = split_csv(language)
     if not codes:
         return None
     return codes[0] if len(codes) == 1 else codes

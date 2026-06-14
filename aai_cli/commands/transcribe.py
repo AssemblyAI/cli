@@ -6,7 +6,7 @@ import assemblyai as aai
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.core import choices, llm
 from aai_cli.ui.help_text import examples_epilog
@@ -417,11 +417,7 @@ def transcribe(
         out=out,
         show_code=show_code,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: transcribe_exec.run_transcribe(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, transcribe_exec.run_transcribe, opts, json=json_out)
 
 
 # `assembly t` — a one-letter alias for the CLI's highest-frequency command (the

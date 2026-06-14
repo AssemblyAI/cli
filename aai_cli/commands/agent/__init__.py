@@ -7,7 +7,7 @@ import typer
 from aai_cli import command_registry, help_panels, options
 from aai_cli.agent.session import DEFAULT_GREETING, DEFAULT_PROMPT
 from aai_cli.agent.voices import DEFAULT_VOICE, VOICES, complete_voice, format_voice_list
-from aai_cli.app.context import AppState, run_command
+from aai_cli.app.context import AppState, run_command, run_with_options
 from aai_cli.commands.agent import _exec as agent_exec
 from aai_cli.core import choices
 from aai_cli.ui import output
@@ -110,8 +110,4 @@ def agent(
         output_field=output_field,
         show_code=show_code,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: agent_exec.run_agent(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, agent_exec.run_agent, opts, json=json_out)

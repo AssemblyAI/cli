@@ -65,6 +65,19 @@ def validate_output_flags(*, json_mode: bool, output_field: choices.TextOrJson |
     )
 
 
+def resolve_output_modes(
+    output_field: choices.TextOrJson | None, *, json_mode: bool
+) -> tuple[bool, bool]:
+    """Validate the -o/--json combination, then fold it into (text_mode, json_mode).
+
+    The two steps always run together for the realtime commands (`stream`, `agent`),
+    so pairing them here keeps a caller from resolving the modes without first
+    rejecting a contradictory pair.
+    """
+    validate_output_flags(json_mode=json_mode, output_field=output_field)
+    return output.stream_output_modes(output_field, json_mode=json_mode)
+
+
 def validate_sources(opts: SourceOptions, *, has_llm: bool, text_mode: bool) -> None:
     """Reject flag combinations that can't be honored, before any audio is opened."""
     mutually_exclusive(

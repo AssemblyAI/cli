@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.share import _exec as share_exec
 from aai_cli.ui.help_text import examples_epilog
 
@@ -43,8 +43,4 @@ def share(
     https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
     """
     opts = share_exec.ShareOptions(port=port, no_install=no_install)
-    run_command(
-        ctx,
-        lambda state, json_mode: share_exec.run_share(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, share_exec.run_share, opts, json=json_out)

@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.speak import _exec as speak_exec
 from aai_cli.commands.speak._exec import DEFAULT_LANGUAGE
 from aai_cli.ui.help_text import examples_epilog
@@ -87,8 +87,4 @@ def speak(
         sample_rate=sample_rate,
         out=out,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: speak_exec.run_speak(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, speak_exec.run_speak, opts, json=json_out)

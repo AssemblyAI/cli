@@ -7,7 +7,7 @@ from assemblyai import PIISubstitutionPolicy
 from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.stream import _exec as stream_exec
 from aai_cli.core import choices, llm
 from aai_cli.ui.help_text import examples_epilog
@@ -338,8 +338,4 @@ def stream(
         output_field=output_field,
         show_code=show_code,
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: stream_exec.run_stream(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, stream_exec.run_stream, opts, json=json_out)
