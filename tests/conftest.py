@@ -23,7 +23,9 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if any(item.get_closest_marker(name) for name in _NETWORK_MARKERS):
             item.add_marker(pytest.mark.enable_socket)
-        elif sys.platform == "win32" and item.get_closest_marker("allow_hosts") is None:
+        elif sys.platform == "win32" and not any(
+            item.get_closest_marker(m) for m in ("allow_hosts", "enable_socket", "disable_socket")
+        ):
             # On Windows the asyncio event loop's self-pipe is an AF_INET socketpair(),
             # which the suite-wide --disable-socket would block — so every in-process
             # async test (FastAPI TestClient, the scaffolded template apps) would fail.
