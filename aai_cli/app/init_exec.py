@@ -45,11 +45,9 @@ class InitOptions:
 def _pick_template() -> str:
     """Interactive picker; raises a usage error when there's no TTY to prompt on."""
     if not stdio.interactive_stdio():
-        raise CLIError(
+        raise UsageError(
             "No template given and not running interactively. "
             f"Pass one of: {', '.join(templates.TEMPLATE_ORDER)}.",
-            error_type="usage_error",
-            exit_code=1,
         )
     try:
         import questionary
@@ -86,10 +84,8 @@ def _resolve_template(template: str | None) -> str:
     """Resolve the template name: the picker when omitted, else validate the arg."""
     chosen = template if template is not None else _pick_template()
     if not templates.is_template(chosen):
-        raise CLIError(
+        raise UsageError(
             f"Unknown template {chosen!r}. Choose one of: {', '.join(templates.TEMPLATE_ORDER)}.",
-            error_type="usage_error",
-            exit_code=1,
         )
     return chosen
 
@@ -165,22 +161,16 @@ def _resolve_target(
     """Resolve the target directory, rejecting --here+DIRECTORY, an existing file, or
     a non-empty conflict. Returns the target and whether --force is overlaying it."""
     if here and directory:
-        raise CLIError(
-            "Pass either a DIRECTORY or --here, not both.",
-            error_type="usage_error",
-            exit_code=1,
-        )
+        raise UsageError("Pass either a DIRECTORY or --here, not both.")
     target = _resolve_dir(directory, chosen, here=here)
     if target.exists() and not target.is_dir():
         raise UsageError(f"{target} exists and is not a directory.")
     _reject_file_ancestor(target)
     conflict = scaffold.target_conflict(target)
     if conflict and not force:
-        raise CLIError(
+        raise UsageError(
             f"{target} already exists and is not empty. "
             f"Use --force to overwrite or pick another directory.",
-            error_type="usage_error",
-            exit_code=1,
         )
     return target, conflict
 

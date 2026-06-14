@@ -31,10 +31,10 @@ def test_init_scaffold_only_creates_project(tmp_path, monkeypatch):
 
 def test_init_rejects_dir_and_here_together(tmp_path, monkeypatch):
     # DIRECTORY and --here are mutually exclusive; passing both is a usage error
-    # exiting 1 (pins that exit_code on the conflict).
+    # exiting 2 (pins that exit_code on the conflict).
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["init", TEMPLATE, "somedir", "--here", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "not both" in result.output
 
 
@@ -110,14 +110,14 @@ def test_init_placeholder_key_when_logged_out(tmp_path, monkeypatch):
 def test_init_unknown_template_errors(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["init", "nope", "myapp", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
 
 
 def test_init_refuses_nonempty_dir_without_force(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
     result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
 
 
 def test_init_no_template_non_interactive_errors(tmp_path, monkeypatch):
@@ -126,6 +126,23 @@ def test_init_no_template_non_interactive_errors(tmp_path, monkeypatch):
     result = runner.invoke(app, ["init"])
     assert result.exit_code != 0
     assert TEMPLATE in result.output  # lists the available templates
+
+
+def test_init_port_out_of_range_is_rejected_before_scaffolding(tmp_path, monkeypatch):
+    # A bad --port used to surface only at launch (after a wasted scaffold+install) as an
+    # internal "report a bug" error. Typer now rejects it up front with a usage error (2),
+    # before any directory is created. Pins the max=65535 bound.
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--port", "65536"])
+    assert result.exit_code == 2
+    assert not (tmp_path / "myapp").exists()  # rejected before scaffolding
+
+
+def test_init_port_zero_is_accepted(tmp_path, monkeypatch):
+    # Port 0 means "let the OS assign a free port" — it must stay valid (pins min=0, not 1).
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install", "--port", "0"])
+    assert result.exit_code == 0, result.output
 
 
 def test_init_default_dir_is_template_slug(tmp_path, monkeypatch):
@@ -155,7 +172,7 @@ def test_init_banner_skipped_on_error_only_runs(tmp_path, monkeypatch):
     # template) stays undecorated like the sibling commands, and stdout stays empty.
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["init", "nope", "x", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "AssemblyAI CLI" not in result.stderr
     assert result.stdout == ""
 
@@ -165,7 +182,7 @@ def test_init_banner_skipped_on_target_conflict_error(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"]).exit_code == 0
     result = runner.invoke(app, ["init", TEMPLATE, "myapp", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "AssemblyAI CLI" not in result.stderr
 
 
@@ -231,7 +248,7 @@ def test_init_unregistered_template_errors_cleanly(tmp_path, monkeypatch):
     # picking it must give a clean error, not a FileNotFoundError.
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["init", "llm", "x", "--no-install"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "llm" in result.output
 
 
@@ -289,7 +306,7 @@ def test_pick_template_errors_when_either_stream_not_a_tty(monkeypatch, stdin_tt
     with pytest.raises(CLIError) as exc:
         init_exec._pick_template()
     assert exc.value.error_type == "usage_error"
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == 2
 
 
 def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
