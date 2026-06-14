@@ -175,3 +175,13 @@ def auth_failure() -> NotAuthenticated:
     return NotAuthenticated(
         REJECTED_KEY_MESSAGE, suggestion=REJECTED_KEY_SUGGESTION, rejected_key=True
     )
+
+
+def missing_dependency(message: str, *, suggestion: str | None = None) -> CLIError:
+    """A required external tool or optional package isn't on PATH/importable (exit 1).
+
+    Centralizes the ``missing_dependency`` error type shared by the dependency probes
+    (ffmpeg, cloudflared, the deploy CLIs, the interactive picker's questionary) so the
+    type string can't drift across them.
+    """
+    return CLIError(message, error_type="missing_dependency", suggestion=suggestion)

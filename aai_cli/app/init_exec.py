@@ -21,7 +21,7 @@ from rich.markup import escape
 from aai_cli import __version__
 from aai_cli.app.context import AppState
 from aai_cli.core import environments, stdio
-from aai_cli.core.errors import CLIError, UsageError
+from aai_cli.core.errors import UsageError, missing_dependency
 from aai_cli.init import devserver, keys, runner, scaffold, templates
 from aai_cli.ui import output, steps
 
@@ -52,12 +52,10 @@ def _pick_template() -> str:
     try:
         import questionary
     except ImportError as exc:  # a broken/stale install missing the declared dep
-        raise CLIError(
+        raise missing_dependency(
             "The interactive picker needs 'questionary'. Reinstall the CLI "
             "(e.g. `uv tool install --reinstall aai-cli`), or pass a template "
             f"directly: {', '.join(templates.TEMPLATE_ORDER)}.",
-            error_type="missing_dependency",
-            exit_code=1,
         ) from exc
 
     choice = questionary.select(

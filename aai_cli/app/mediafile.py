@@ -19,7 +19,7 @@ from pathlib import Path
 import assemblyai as aai
 
 from aai_cli.core import client, youtube
-from aai_cli.core.errors import APIError, CLIError, UsageError
+from aai_cli.core.errors import APIError, CLIError, UsageError, missing_dependency
 from aai_cli.ui import output
 
 
@@ -140,9 +140,8 @@ def require_ffmpeg(purpose: str) -> str:
     """The ffmpeg executable; checked before any (billed) transcription work."""
     path = shutil.which("ffmpeg")
     if path is None:
-        raise CLIError(
+        raise missing_dependency(
             f"ffmpeg is required to {purpose}, but it isn't on PATH.",
-            error_type="missing_dependency",
             suggestion="Install it (brew install ffmpeg / apt install ffmpeg) and re-run.",
         )
     return path

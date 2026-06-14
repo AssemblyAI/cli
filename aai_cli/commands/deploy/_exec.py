@@ -18,7 +18,7 @@ from pathlib import Path
 import typer
 
 from aai_cli.app.context import AppState
-from aai_cli.core.errors import CLIError, UsageError
+from aai_cli.core.errors import UsageError, missing_dependency
 from aai_cli.init import procfile
 from aai_cli.ui import output
 
@@ -103,10 +103,8 @@ def _install_hint(target: Target) -> str:
 
 def _require_cli(target: Target) -> None:
     if shutil.which(target.bin) is None:
-        raise CLIError(
-            f"The {target.name} CLI is required to deploy. {_install_hint(target)}",
-            error_type="missing_dependency",
-            exit_code=1,
+        raise missing_dependency(
+            f"The {target.name} CLI is required to deploy. {_install_hint(target)}"
         )
 
 
