@@ -9,12 +9,14 @@ import sys
 
 import pytest
 
+from aai_cli.core import hotkey
 from aai_cli.core.errors import CLIError
 from aai_cli.core.hotkey import TerminalKeys, _stdin_fd
 
-# termios and os.openpty are POSIX-only, so the whole module is skipped on Windows
-# (where TerminalKeys raises a clean CLIError rather than running). importorskip keeps
-# this out of the skip/xfail escape-hatch count the Linux gate tracks.
+# termios and os.openpty are POSIX-only, so the pty-driven tests below are skipped on
+# Windows. importorskip keeps that out of the skip/xfail escape-hatch count the Linux
+# gate tracks. The msvcrt-backend tests at the bottom inject a fake console, so they run
+# (and give coverage) on the POSIX CI host even though they exercise the Windows path.
 termios = pytest.importorskip("termios")
 
 
@@ -121,3 +123,67 @@ def test_stdin_fd_defaults_to_real_stdin_or_minus_one(monkeypatch):
 
     monkeypatch.setattr(sys, "stdin", RealStdin())
     assert _stdin_fd() == 42
+
+
+# --- Windows (msvcrt) backend ------------------------------------------------
+# Driven on the POSIX CI host by forcing _on_windows() True and injecting a fake
+# console; the real msvcrt calls are thin, so this covers the branch logic.
+
+
+class _FakeMsvcrt:
+    """Stand-in for the stdlib msvcrt console API the Windows backend reads through."""
+
+    def __init__(self, *, ready_after: int = 0, char: str = "a") -> None:
+        self._until_ready = ready_after  # kbhit() returns False this many times first
+        self._char = char
+        self.getwch_calls = 0
+
+    def kbhit(self) -> bool:
+        if self._until_ready <= 0:
+            return True
+        self._until_ready -= 1
+        return False
+
+    def getwch(self) -> str:
+        self.getwch_calls += 1
+        return self._char
+
+
+@pytest.fixture
+def windows_backend(monkeypatch):
+    """Force the Windows code path on this POSIX host: msvcrt backend, fake console tty."""
+    monkeypatch.setattr(hotkey, "_on_windows", lambda: True)
+    monkeypatch.setattr(hotkey.os, "isatty", lambda _fd: True)
+    return monkeypatch
+
+
+def test_windows_backend_enters_without_cbreak_and_reads_keys(windows_backend):
+    windows_backend.setitem(sys.modules, "msvcrt", _FakeMsvcrt(char="a"))
+    keys = TerminalKeys(fd=5)
+    with keys as k:
+        assert k.read(None) == "a"  # timeout=None -> blocking getwch()
+        assert k.read(0) == "a"  # zero-timeout poll with a key already buffered
+    assert keys._saved is None  # no termios state is saved or restored on Windows
+
+
+def test_windows_backend_poll_returns_none_when_no_key(windows_backend):
+    windows_backend.setitem(sys.modules, "msvcrt", _FakeMsvcrt(ready_after=10**9))
+    with TerminalKeys(fd=5) as k:
+        assert k.read(0) is None  # nothing buffered + zero timeout -> immediate None
+
+
+def test_windows_backend_polls_with_naps_until_a_key_arrives(windows_backend):
+    naps: list[float] = []
+    windows_backend.setattr(hotkey.time, "sleep", lambda s: naps.append(s))
+    windows_backend.setitem(sys.modules, "msvcrt", _FakeMsvcrt(ready_after=2, char="z"))
+    with TerminalKeys(fd=5) as k:
+        assert k.read(5.0) == "z"
+    assert naps == [0.01, 0.01]  # napped between the two not-ready polls
+
+
+def test_windows_backend_non_tty_is_still_a_usage_error(windows_backend):
+    windows_backend.setattr(hotkey.os, "isatty", lambda _fd: False)
+    with pytest.raises(CLIError) as exc:
+        with TerminalKeys(fd=5):
+            pass
+    assert exc.value.error_type == "not_a_tty"
