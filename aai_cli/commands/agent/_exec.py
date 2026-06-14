@@ -23,7 +23,7 @@ from aai_cli.agent.voices import VOICE_NAMES
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client
 from aai_cli.core.errors import CLIError, UsageError
-from aai_cli.streaming.session import validate_output_flags
+from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
 from aai_cli.ui import output
 
@@ -107,8 +107,7 @@ def _print_show_code(opts: AgentOptions, system_prompt_text: str) -> None:
 
 def run_agent(opts: AgentOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent` conversation from already-parsed flags."""
-    validate_output_flags(json_mode=json_mode, output_field=opts.output_field)
-    text_mode, json_mode = output.stream_output_modes(opts.output_field, json_mode=json_mode)
+    text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     if opts.voice not in VOICE_NAMES:
         raise UsageError(
             f"Unknown voice {opts.voice!r}.",
