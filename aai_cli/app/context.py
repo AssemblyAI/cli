@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import NoReturn
+from typing import NoReturn, Protocol
 
 import keyring.errors
 import typer
@@ -256,3 +256,31 @@ def run_command(
         # `from exc`, unlike _fail's `from None`: the original exception is a bug
         # worth keeping on the chain for anyone re-raising with tracebacks enabled.
         raise typer.Exit(code=internal.exit_code) from exc
+
+
+class _OptionsRunner[OptsT](Protocol):
+    """The run-body half of an options/run-split command: it acts on already-parsed
+    ``opts`` instead of parsing argv. ``run_with_options`` adapts it to run_command."""
+
+    def __call__(self, opts: OptsT, state: AppState, /, *, json_mode: bool) -> None:
+        """Run the command from its parsed options.
+
+        ``opts``/``state`` are positional-only so a body free to ignore state can
+        still name it ``_state`` without breaking structural compatibility.
+        """
+
+
+def run_with_options[OptsT](
+    ctx: typer.Context,
+    run_fn: _OptionsRunner[OptsT],
+    opts: OptsT,
+    *,
+    json: bool,
+) -> None:
+    """run_command for an options/run-split command (see aai_cli/AGENTS.md).
+
+    Adapts ``run_<cmd>(opts, state, *, json_mode)`` to the ``(state, json_mode)`` body
+    run_command expects, replacing the identical ``lambda state, json_mode: run_<cmd>(
+    opts, state, json_mode=json_mode)`` adapter that every flag-heavy command repeats.
+    """
+    run_command(ctx, lambda state, json_mode: run_fn(opts, state, json_mode=json_mode), json=json)

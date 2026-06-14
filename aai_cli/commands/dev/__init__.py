@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.dev import _exec as dev_exec
 from aai_cli.init import devserver
 from aai_cli.ui.help_text import examples_epilog
@@ -50,8 +50,4 @@ def dev(
     if needed, then starts the FastAPI server with live reload and opens the browser.
     """
     opts = dev_exec.DevOptions(port=port, host=host, no_install=no_install, no_open=no_open)
-    run_command(
-        ctx,
-        lambda state, json_mode: dev_exec.run_dev(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, dev_exec.run_dev, opts, json=json_out)

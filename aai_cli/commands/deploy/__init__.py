@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.app.context import run_command
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.deploy import _exec as deploy_exec
 from aai_cli.ui.help_text import examples_epilog
 
@@ -46,8 +46,4 @@ def deploy(
     opts = deploy_exec.DeployOptions(
         prod=prod, vercel=vercel, railway=railway, fly=fly, assume_yes=assume_yes
     )
-    run_command(
-        ctx,
-        lambda state, json_mode: deploy_exec.run_deploy(opts, state, json_mode=json_mode),
-        json=json_out,
-    )
+    run_with_options(ctx, deploy_exec.run_deploy, opts, json=json_out)
