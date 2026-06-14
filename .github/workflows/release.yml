@@ -78,6 +78,11 @@ jobs:
             # Real manual release: resolve + validate + create the tag locally via
             # the same script maintainers run, then push it with an explicit
             # tokened remote (persist-credentials is off above).
+            # cut_release.sh makes an annotated tag (git tag -a), which needs a
+            # committer identity; the runner has none, so set one (matching the
+            # publish job) or the tag step fails with "empty ident name".
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             extra=()
             [ -n "$INPUT_VERSION" ] && extra+=("$INPUT_VERSION")
             ./scripts/cut_release.sh --yes --no-push "${extra[@]}"
