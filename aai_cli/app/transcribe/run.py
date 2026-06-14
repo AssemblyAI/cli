@@ -269,6 +269,12 @@ class TranscribeOptions:
         flags.update(config_builder.auth_header_flags(self.webhook_auth_header))
         return flags
 
+    def transform_options(self) -> TransformOptions:
+        """The post-transcription LLM transform spec built from the `--llm` flags."""
+        return TransformOptions(
+            prompts=list(self.llm_prompt or []), model=self.model, max_tokens=self.max_tokens
+        )
+
 
 def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None:
     """Print the equivalent SDK script and exit without transcribing or authenticating.
@@ -340,9 +346,7 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
             transcription_config=config_builder.construct_transcription_config(merged),
             concurrency=opts.concurrency,
             force=opts.force,
-            transform=TransformOptions(
-                prompts=list(opts.llm_prompt or []), model=opts.model, max_tokens=opts.max_tokens
-            ),
+            transform=opts.transform_options(),
             json_mode=json_mode,
             quiet=state.quiet,
         )
@@ -376,9 +380,7 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
         out=opts.out,
         output_field=opts.output_field,
         chars_per_caption=opts.chars_per_caption,
-        transform=TransformOptions(
-            prompts=list(opts.llm_prompt or []), model=opts.model, max_tokens=opts.max_tokens
-        ),
+        transform=opts.transform_options(),
         json_mode=json_mode,
         quiet=state.quiet,
     )

@@ -200,7 +200,7 @@ def coerce_value(field: str, raw: str) -> object:
     """Coerce a string --config value to the type expected by `field`."""
     kind = TRANSCRIBE_COERCE.get(field) or STREAM_COERCE.get(field, "str")
     if kind == "list":
-        return [part.strip() for part in raw.split(",") if part.strip()]
+        return split_csv(raw) or []
     entry = _VALIDATORS.get(kind)
     if entry is None:  # "str" and any unknown kind pass through raw
         return raw
