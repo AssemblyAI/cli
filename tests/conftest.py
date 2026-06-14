@@ -84,6 +84,20 @@ def isolate_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_legacy_windows(monkeypatch):
+    # On a Windows CI runner Rich detects a "legacy" console (ColorSystem.WINDOWS) and
+    # subtracts 1 from the render width to dodge the auto-wrap cursor bug — so COLUMNS=80
+    # renders at 79 and every byte-exact help snapshot rewraps and fails. Modern Windows
+    # terminals (Windows Terminal, VT-enabled) report non-legacy, which is what real users
+    # get, so pin non-legacy here to keep rendering deterministic across platforms. No-op
+    # off Windows (detect_legacy_windows already returns False there).
+    if sys.platform == "win32":
+        import rich.console
+
+        monkeypatch.setattr(rich.console, "detect_legacy_windows", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def pin_timezone(monkeypatch):
     # Pin the host timezone so any time rendering is deterministic across machines and
     # CI, regardless of the contributor's local zone. A fixed *non-UTC* zone is

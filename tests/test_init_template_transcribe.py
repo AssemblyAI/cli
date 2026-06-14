@@ -59,7 +59,9 @@ def test_required_files_exist():
 
 def test_template_ships_no_real_key():
     assert not (TEMPLATE_DIR / ".env").exists()
-    assert "your_assemblyai_api_key_here" in (TEMPLATE_DIR / "env.example").read_text()
+    assert "your_assemblyai_api_key_here" in (TEMPLATE_DIR / "env.example").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_base_url_env_is_applied(monkeypatch, mocker):
@@ -71,8 +73,8 @@ def test_base_url_env_is_applied(monkeypatch, mocker):
 
 def test_page_explores_all_features_and_speakers():
     # Guard the UI surface: each audio-intelligence view + per-speaker coloring stay wired.
-    html = (TEMPLATE_DIR / "static" / "index.html").read_text()
-    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text()
+    html = (TEMPLATE_DIR / "static" / "index.html").read_text(encoding="utf-8")
+    app_js = (TEMPLATE_DIR / "static" / "app.js").read_text(encoding="utf-8")
     ui_src = html + app_js
     for token in (
         "chapters",

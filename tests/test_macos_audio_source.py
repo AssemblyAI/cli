@@ -1,4 +1,6 @@
 import io
+import signal
+import sys
 import types
 from pathlib import Path
 
@@ -166,7 +168,9 @@ def test_read_stderr_none_is_empty():
 
 
 def test_open_process_exposes_stdout():
-    proc = macos._open_process(["/bin/echo", "ok"])
+    # sys.executable is the one binary guaranteed present on every platform (/bin/echo
+    # isn't on Windows); it writes "ok" to stdout exactly like the helper would.
+    proc = macos._open_process([sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'ok')"])
     assert proc.stdout is not None
     try:
         assert proc.stdout.read().strip() == b"ok"
@@ -215,7 +219,10 @@ def test_raise_helper_exit_handles_clean_eof():
 
 
 def test_returncode_detail_names_signals():
-    assert macos._returncode_detail(-5) == "SIGTRAP (-5)"
+    # SIGTERM (15) is one of the few signals the enum knows on Windows too, so the
+    # name-resolution branch is exercised cross-platform; 99999 hits the unknown fallback.
+    sigterm = int(signal.SIGTERM)
+    assert macos._returncode_detail(-sigterm) == f"SIGTERM (-{sigterm})"
     assert macos._returncode_detail(-99999) == "signal 99999 (-99999)"
     assert macos._returncode_detail(2) == "exit 2"
     assert macos._returncode_detail(0) == "exit 0"  # 0 is a clean exit (pins `>= 0`)
@@ -223,10 +230,10 @@ def test_returncode_detail_names_signals():
 
 
 def test_raise_helper_exit_names_signal_without_stderr():
-    proc = _FakeProc(stdout=b"", stderr=b"", returncode=-5)
+    proc = _FakeProc(stdout=b"", stderr=b"", returncode=-int(signal.SIGTERM))
     with pytest.raises(CLIError) as exc:
         macos._raise_helper_exit(proc)
-    assert "SIGTRAP" in exc.value.message
+    assert "SIGTERM" in exc.value.message
 
 
 def test_source_starts_helper_and_yields_pcm(tmp_path):
