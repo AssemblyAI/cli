@@ -11,7 +11,21 @@ TEMPLATE_DIRS = sorted(
 )
 # Map an import name to its PyPI distribution where they differ.
 _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
-_STDLIB = {"os", "tempfile", "uuid", "pathlib", "__future__", "json", "typing"}
+_STDLIB = {
+    "os",
+    "tempfile",
+    "uuid",
+    "pathlib",
+    "__future__",
+    "json",
+    "typing",
+    "asyncio",
+    "base64",
+    "contextlib",
+    "dataclasses",
+    "collections",
+    "urllib",
+}
 _LOCAL_IMPORTS = {"api"}
 
 

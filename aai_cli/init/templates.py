@@ -9,10 +9,16 @@ TEMPLATES: dict[str, str] = {
     "audio-transcription": "Audio Transcription",
     "live-captions": "Live Captions",
     "voice-agent": "Voice Agent",
+    "agent-framework": "Agent Framework",
 }
 
 # Display order for the picker and `--help`.
-TEMPLATE_ORDER: tuple[str, ...] = ("audio-transcription", "live-captions", "voice-agent")
+TEMPLATE_ORDER: tuple[str, ...] = (
+    "audio-transcription",
+    "live-captions",
+    "voice-agent",
+    "agent-framework",
+)
 
 
 def is_template(name: str) -> bool:

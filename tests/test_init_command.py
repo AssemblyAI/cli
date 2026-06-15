@@ -211,8 +211,8 @@ def test_init_template_arg_help_is_derived_from_registry():
     default = inspect.signature(init_cmd.init).parameters["template"].default
     assert isinstance(default, ArgumentInfo)
     assert default.help == (
-        "Template to scaffold: audio-transcription, live-captions, voice-agent "
-        "(omit to pick interactively)"
+        "Template to scaffold: audio-transcription, live-captions, voice-agent, "
+        "agent-framework (omit to pick interactively)"
     )
 
 
@@ -316,9 +316,21 @@ def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
         api_base="https://api.x",
         llm_gateway_base="https://llm.x",
         streaming_host="streaming.streaming.example.com",
+        streaming_tts_host="",
     )
     monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
     assert init_exec._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
+
+
+def test_active_env_vars_includes_streaming_tts_host(monkeypatch):
+    fake_env = types.SimpleNamespace(
+        api_base="https://api.x",
+        llm_gateway_base="https://llm.x/v1",
+        streaming_host="streaming.x",
+        streaming_tts_host="streaming-tts.x",
+    )
+    monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
+    assert init_exec._active_env_vars()["ASSEMBLYAI_TTS_HOST"] == "streaming-tts.x"
 
 
 def test_init_install_failure_reports_and_exits(tmp_path, monkeypatch):

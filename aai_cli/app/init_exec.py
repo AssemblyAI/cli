@@ -101,6 +101,10 @@ def _active_env_vars() -> dict[str, str]:
         "ASSEMBLYAI_STREAMING_HOST": env.streaming_host,
         # Voice Agent host mirrors the streaming host's naming across environments.
         "ASSEMBLYAI_AGENTS_HOST": env.streaming_host.replace("streaming", "agents", 1),
+        # Streaming-TTS host for the cascade (agent-framework) template. Empty in
+        # production, where streaming TTS has no host; that template then refuses to
+        # run and points at --sandbox.
+        "ASSEMBLYAI_TTS_HOST": env.streaming_tts_host,
     }
 
 
