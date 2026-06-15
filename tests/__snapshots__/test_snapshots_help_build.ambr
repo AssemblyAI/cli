@@ -89,8 +89,8 @@
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   template       [TEMPLATE]   Template to scaffold: audio-transcription,     │
-  │                               live-captions, voice-agent (omit to pick       │
-  │                               interactively)                                 │
+  │                               live-captions, voice-agent, agent-framework    │
+  │                               (omit to pick interactively)                   │
   │   directory      [DIRECTORY]  Target directory (default: <template>)         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
