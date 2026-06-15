@@ -110,6 +110,7 @@ def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> No
     assert url.startswith("wss://streaming.example/v3/ws?")
     assert "sample_rate=16000" in url
     assert "encoding=pcm_s16le" in url
+    assert "speech_model=u3-rt-pro" in url
     assert "format_turns=true" in url
 
 
