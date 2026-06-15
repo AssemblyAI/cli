@@ -310,8 +310,8 @@ def test_generate_reply_surfaces_error(monkeypatch):
     settings.TTS_HOST = "tts.example"
 
     async def llm_stream(_messages):
+        yield "partial"  # one delta arrives, then the LLM leg fails mid-stream
         raise RuntimeError("llm down")
-        yield  # pragma: no cover - makes this an async generator
 
     deps = cascade.Deps(
         connect_stt=_async_return(FakeWS()),
@@ -634,8 +634,8 @@ def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch)
     browser = FakeBrowser()
 
     async def llm_stream(_messages):
-        await asyncio.Event().wait()  # blocks until cancelled
-        yield ""  # pragma: no cover - unreachable, makes this an async generator
+        yield "partial"  # one delta, then block until the task is cancelled
+        await asyncio.Event().wait()
 
     deps = cascade.Deps(
         connect_stt=_async_return(FakeWS()),
