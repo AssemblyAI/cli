@@ -262,3 +262,22 @@ async def run_session(browser: Any, deps: Deps) -> None:
         await asyncio.gather(mic, listen, return_exceptions=True)
         await session.cancel_reply()
         await _safe_close(stt)
+
+
+class FastAPIBrowser:
+    """Adapts a Starlette WebSocket to the (send, recv) shape run_session expects.
+    recv() returns None when the client disconnects, so the pumps exit cleanly."""
+
+    def __init__(self, websocket: Any) -> None:
+        self._ws = websocket
+
+    async def send(self, event: dict[str, Any]) -> None:
+        await self._ws.send_json(event)
+
+    async def recv(self) -> dict[str, Any] | None:
+        from fastapi import WebSocketDisconnect
+
+        try:
+            return await self._ws.receive_json()
+        except WebSocketDisconnect:
+            return None

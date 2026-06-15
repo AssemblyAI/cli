@@ -692,3 +692,58 @@ def test_synthesize_audio_frame_missing_payload_defaults_empty(
     tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}])
     asyncio.run(cascade._synthesize(browser, tts, "hi"))
     assert {"type": "reply.audio", "data": ""} in browser.sent
+
+
+def test_index_serves_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    index = _load("api.index", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
+    from fastapi.testclient import TestClient
+
+    resp = TestClient(index.app).get("/")
+    assert resp.status_code == 200
+    assert "<html" in resp.text.lower()
+
+
+def test_ws_route_runs_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Drive the real /ws adapter with TestClient's WebSocket, but stub run_session so
+    # the route's accept + adapter wiring is exercised without real upstreams.
+    index = _load("api.index", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
+    cascade = importlib.import_module("api.cascade")
+
+    async def fake_run_session(browser, _deps):
+        msg = await browser.recv()
+        await browser.send({"type": "echo", "got": msg})
+
+    monkeypatch.setattr(cascade, "run_session", fake_run_session)
+    from fastapi.testclient import TestClient
+
+    with TestClient(index.app).websocket_connect("/ws") as ws:
+        ws.send_json({"type": "input.audio", "audio": "AAA="})
+        assert ws.receive_json() == {
+            "type": "echo",
+            "got": {"type": "input.audio", "audio": "AAA="},
+        }
+
+
+def test_fastapi_browser_recv_returns_none_on_disconnect(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    from fastapi import WebSocketDisconnect
+
+    class FakeWSStarlette:
+        def __init__(self):
+            self.sent: list[dict] = []
+
+        async def send_json(self, event):
+            self.sent.append(event)
+
+        async def receive_json(self):
+            raise WebSocketDisconnect(code=1000)
+
+    ws = FakeWSStarlette()
+    browser = cascade.FastAPIBrowser(ws)
+
+    async def drive():
+        await browser.send({"type": "x"})
+        return await browser.recv()
+
+    assert asyncio.run(drive()) is None
+    assert ws.sent == [{"type": "x"}]
