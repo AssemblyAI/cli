@@ -21,6 +21,7 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, youtube
 from aai_cli.core.errors import UsageError
 from aai_cli.core.microphone import MicrophoneSource
+from aai_cli.streaming import turn_presets
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
@@ -30,6 +31,7 @@ from aai_cli.streaming.session import (
     validate_sources,
 )
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
+from aai_cli.streaming.turn_presets import TurnDetectionPreset
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
 
@@ -57,6 +59,7 @@ class StreamOptions:
     end_of_turn_confidence_threshold: float | None
     min_turn_silence: int | None
     max_turn_silence: int | None
+    turn_detection: TurnDetectionPreset | None
     vad_threshold: float | None
     format_turns: bool | None
     include_partial_turns: bool | None
@@ -93,15 +96,21 @@ class StreamOptions:
 
     def base_flags(self) -> dict[str, object]:
         """Every streaming flag except sample_rate, which is set per source at stream time."""
+        end_of_turn_confidence_threshold, min_turn_silence, max_turn_silence = turn_presets.resolve(
+            self.turn_detection,
+            self.end_of_turn_confidence_threshold,
+            self.min_turn_silence,
+            self.max_turn_silence,
+        )
         flags: dict[str, object] = {
             "speech_model": config_builder.enum_value(self.speech_model),
             "format_turns": self.format_turns if self.format_turns is not None else True,
             "encoding": config_builder.enum_value(self.encoding),
             "language_detection": self.language_detection,
             "domain": self.domain,
-            "end_of_turn_confidence_threshold": self.end_of_turn_confidence_threshold,
-            "min_turn_silence": self.min_turn_silence,
-            "max_turn_silence": self.max_turn_silence,
+            "end_of_turn_confidence_threshold": end_of_turn_confidence_threshold,
+            "min_turn_silence": min_turn_silence,
+            "max_turn_silence": max_turn_silence,
             "vad_threshold": self.vad_threshold,
             "include_partial_turns": self.include_partial_turns,
             "keyterms_prompt": list(self.keyterms_prompt) if self.keyterms_prompt else None,

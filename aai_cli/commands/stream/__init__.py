@@ -10,6 +10,7 @@ from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import run_with_options
 from aai_cli.commands.stream import _exec as stream_exec
 from aai_cli.core import choices, llm
+from aai_cli.streaming.turn_presets import TurnDetectionPreset
 from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
@@ -113,6 +114,12 @@ def stream(
         rich_help_panel=help_panels.OPT_MODEL,
     ),
     # turn detection
+    turn_detection: TurnDetectionPreset | None = typer.Option(
+        None,
+        "--turn-detection",
+        help="Turn-detection sensitivity preset",
+        rich_help_panel=help_panels.OPT_TURNS,
+    ),
     end_of_turn_confidence_threshold: float | None = typer.Option(
         None,
         # Not "--end-of-turn-confidence-threshold": at 34 chars the name can't render
@@ -315,6 +322,7 @@ def stream(
         end_of_turn_confidence_threshold=end_of_turn_confidence_threshold,
         min_turn_silence=min_turn_silence,
         max_turn_silence=max_turn_silence,
+        turn_detection=turn_detection,
         vad_threshold=vad_threshold,
         format_turns=format_turns,
         include_partial_turns=include_partial_turns,
