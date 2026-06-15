@@ -20,11 +20,39 @@ import contextlib
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol
 from urllib.parse import urlencode
 
 
-def unavailable_reason(settings: Any) -> str | None:
+class _Settings(Protocol):
+    API_KEY: str
+    STREAMING_HOST: str
+    TTS_HOST: str
+    LLM_GATEWAY_URL: str
+    MODEL: str
+    VOICE: str
+    SYSTEM_PROMPT: str
+    GREETING: str
+    INPUT_SAMPLE_RATE: int
+    OUTPUT_SAMPLE_RATE: int
+
+
+class _Socket(Protocol):
+    """The websockets STT/TTS socket surface the cascade drives."""
+
+    async def send(self, data: str | bytes) -> None: ...
+    async def recv(self) -> str | bytes: ...
+    async def close(self) -> None: ...
+    def __aiter__(self) -> _Socket: ...
+    async def __anext__(self) -> str | bytes: ...
+
+
+class _Browser(Protocol):
+    async def send(self, event: dict[str, object]) -> None: ...
+    async def recv(self) -> dict[str, object] | None: ...
+
+
+def unavailable_reason(settings: _Settings) -> str | None:
     """Why the cascade can't run, or None when it can.
 
     Streaming TTS has no production host, so an empty TTS host means the user must
@@ -40,7 +68,7 @@ def unavailable_reason(settings: Any) -> str | None:
     return None
 
 
-def stt_url(settings: Any) -> str:
+def stt_url(settings: _Settings) -> str:
     """The Streaming v3 WebSocket URL with PCM + turn-formatting params."""
     params = urlencode(
         {
@@ -53,13 +81,13 @@ def stt_url(settings: Any) -> str:
     return f"wss://{settings.STREAMING_HOST}/v3/ws?{params}"
 
 
-def tts_url(settings: Any) -> str:
+def tts_url(settings: _Settings) -> str:
     """The streaming-TTS WebSocket URL for the configured voice and sample rate."""
     params = urlencode({"voice": settings.VOICE, "sample_rate": settings.OUTPUT_SAMPLE_RATE})
     return f"wss://{settings.TTS_HOST}/v1/ws/?{params}"
 
 
-def is_final_user_turn(msg: dict[str, Any]) -> bool:
+def is_final_user_turn(msg: dict[str, object]) -> bool:
     """True for a finalized, formatted end-of-turn (the cue to reply)."""
     return bool(msg.get("end_of_turn")) and bool(msg.get("turn_is_formatted"))
 
@@ -77,13 +105,13 @@ class Deps:
     """Injected cascade dependencies. `Deps.real(settings)` wires the live clients;
     tests pass fakes with the same shapes."""
 
-    connect_stt: Callable[[], Awaitable[Any]]
-    connect_tts: Callable[[], Awaitable[Any]]
+    connect_stt: Callable[[], Awaitable[_Socket]]
+    connect_tts: Callable[[], Awaitable[_Socket]]
     llm_stream: Callable[[list[dict[str, str]]], AsyncIterator[str]]
-    settings: Any
+    settings: _Settings
 
     @classmethod
-    def real(cls, settings: Any) -> Deps:
+    def real(cls, settings: _Settings) -> Deps:
         return cls(
             connect_stt=lambda: _connect_stt(settings),
             connect_tts=lambda: _connect_tts(settings),
@@ -113,7 +141,7 @@ class Session:
                 await task
 
 
-async def _connect_stt(settings: Any) -> Any:
+async def _connect_stt(settings: _Settings) -> _Socket:
     import websockets
 
     return await websockets.connect(
@@ -121,7 +149,7 @@ async def _connect_stt(settings: Any) -> Any:
     )
 
 
-async def _connect_tts(settings: Any) -> Any:
+async def _connect_tts(settings: _Settings) -> _Socket:
     import websockets
 
     # max_size=None: a synthesis's Audio frames can exceed the 1 MiB default.
@@ -132,7 +160,7 @@ async def _connect_tts(settings: Any) -> Any:
     )
 
 
-async def _llm_stream(settings: Any, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+async def _llm_stream(settings: _Settings, messages: list[dict[str, str]]) -> AsyncIterator[str]:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(base_url=settings.LLM_GATEWAY_URL, api_key=settings.API_KEY)
@@ -145,12 +173,12 @@ async def _llm_stream(settings: Any, messages: list[dict[str, str]]) -> AsyncIte
             yield delta
 
 
-async def _safe_close(conn: Any) -> None:
+async def _safe_close(conn: _Socket) -> None:
     with contextlib.suppress(Exception):
         await conn.close()
 
 
-async def _pump_mic(browser: Any, stt: Any) -> None:
+async def _pump_mic(browser: _Browser, stt: _Socket) -> None:
     """Forward each base64 mic frame from the browser to the STT socket."""
     while True:
         msg = await browser.recv()
@@ -161,7 +189,7 @@ async def _pump_mic(browser: Any, stt: Any) -> None:
             await stt.send(base64.b64decode(audio))
 
 
-async def _synthesize(browser: Any, tts: Any, text: str) -> None:
+async def _synthesize(browser: _Browser, tts: _Socket, text: str) -> None:
     """Drive the TTS protocol on an open socket, forwarding Audio as reply.audio."""
     begin = json.loads(await tts.recv())
     if begin.get("type") != "Begin":
@@ -182,7 +210,7 @@ async def _synthesize(browser: Any, tts: Any, text: str) -> None:
     await _safe_close(tts)
 
 
-async def _speak(browser: Any, deps: Deps, text: str) -> None:
+async def _speak(browser: _Browser, deps: Deps, text: str) -> None:
     """Emit agent text, synthesize it, and mark the reply done."""
     await browser.send({"type": "transcript.agent", "text": text})
     tts = await deps.connect_tts()
@@ -193,7 +221,7 @@ async def _speak(browser: Any, deps: Deps, text: str) -> None:
     await browser.send({"type": "reply.done", "status": "completed"})
 
 
-async def _generate_reply(browser: Any, deps: Deps, messages: list[dict[str, str]]) -> None:
+async def _generate_reply(browser: _Browser, deps: Deps, messages: list[dict[str, str]]) -> None:
     """Stream the LLM reply, then speak it. Errors surface as session.error."""
     try:
         text = "".join([delta async for delta in deps.llm_stream(messages)]).strip()
@@ -207,14 +235,14 @@ async def _generate_reply(browser: Any, deps: Deps, messages: list[dict[str, str
         await browser.send({"type": "session.error", "message": str(exc)})
 
 
-async def maybe_barge_in(browser: Any, session: Session) -> None:
+async def maybe_barge_in(browser: _Browser, session: Session) -> None:
     """If a reply is playing, tell the browser to stop and cancel it."""
     if session.reply_task is not None and not session.reply_task.done():
         await browser.send({"type": "input.speech.started"})
         await session.cancel_reply()
 
 
-async def _pump_stt(browser: Any, stt: Any, deps: Deps, session: Session) -> None:
+async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Session) -> None:
     """Read STT turns: emit user transcripts, reply on finalized turns, barge in on
     interim speech, and drain the last reply when the socket closes."""
     async for raw in stt:
@@ -235,7 +263,7 @@ async def _pump_stt(browser: Any, stt: Any, deps: Deps, session: Session) -> Non
     await session.drain()
 
 
-async def run_session(browser: Any, deps: Deps) -> None:
+async def run_session(browser: _Browser, deps: Deps) -> None:
     """Run one browser session: greet, then cascade STT -> LLM -> TTS until either
     side closes. All credentials stay server-side."""
     reason = unavailable_reason(deps.settings)
@@ -268,13 +296,13 @@ class FastAPIBrowser:
     """Adapts a Starlette WebSocket to the (send, recv) shape run_session expects.
     recv() returns None when the client disconnects, so the pumps exit cleanly."""
 
-    def __init__(self, websocket: Any) -> None:
+    def __init__(self, websocket: object) -> None:
         self._ws = websocket
 
-    async def send(self, event: dict[str, Any]) -> None:
+    async def send(self, event: dict[str, object]) -> None:
         await self._ws.send_json(event)
 
-    async def recv(self) -> dict[str, Any] | None:
+    async def recv(self) -> dict[str, object] | None:
         from fastapi import WebSocketDisconnect
 
         try:

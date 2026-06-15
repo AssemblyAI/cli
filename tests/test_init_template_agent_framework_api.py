@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-from typing import Any
 
 import pytest
 
@@ -15,6 +14,8 @@ from tests._agent_framework import (
     _cascade,
     _fake_openai_client,
     _load,
+    reimport,
+    untyped_bag,
 )
 
 
@@ -22,11 +23,11 @@ def test_connect_stt_uses_auth_header_and_url(monkeypatch: pytest.MonkeyPatch) -
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.STREAMING_HOST = "streaming.example"
     settings.INPUT_SAMPLE_RATE = 16000
-    captured: dict[str, Any] = {}
+    captured = untyped_bag()
 
     async def fake_connect(url, **kwargs):
         captured["url"] = url
@@ -44,12 +45,12 @@ def test_connect_tts_passes_max_size_none(monkeypatch: pytest.MonkeyPatch) -> No
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.VOICE = "ivy"
     settings.OUTPUT_SAMPLE_RATE = 24000
-    captured: dict[str, Any] = {}
+    captured = untyped_bag()
 
     async def fake_connect(url, **kwargs):
         captured["url"] = url
@@ -68,11 +69,11 @@ def test_llm_stream_yields_nonempty_deltas(monkeypatch: pytest.MonkeyPatch) -> N
     import openai
 
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.LLM_GATEWAY_URL = "https://llm.example/v1"
     settings.MODEL = "test-model"
-    captured: dict[str, Any] = {}
+    captured = untyped_bag()
 
     monkeypatch.setattr(
         openai, "AsyncOpenAI", _fake_openai_client(captured, ["Hi", "", " there", None])
@@ -94,7 +95,7 @@ def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) ->
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.STREAMING_HOST = "streaming.example"
@@ -119,7 +120,7 @@ def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     browser = FakeBrowser()
@@ -149,7 +150,7 @@ def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch)
 
 def test_pump_stt_skips_non_turn_and_empty_transcript(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.SYSTEM_PROMPT = "be brief"
@@ -197,8 +198,8 @@ def test_ws_route_runs_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
     # Drive the real /ws adapter with TestClient's WebSocket, but stub run_session so
     # the route's accept + adapter wiring is exercised without real upstreams.
     index = _load("api.index", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
-    cascade: Any = importlib.import_module("api.cascade")
-    captured: dict[str, Any] = {}
+    cascade = reimport("api.cascade")
+    captured = untyped_bag()
 
     async def fake_run_session(browser, deps):
         captured["deps"] = deps
@@ -224,7 +225,7 @@ def test_fastapi_browser_recv_returns_none_on_disconnect(monkeypatch: pytest.Mon
 
     class FakeWSStarlette:
         def __init__(self):
-            self.sent: list[dict[str, Any]] = []
+            self.sent: list[dict[str, object]] = []
 
         async def send_json(self, event):
             self.sent.append(event)

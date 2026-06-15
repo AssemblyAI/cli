@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import importlib
 import json
-from typing import Any
 
 import pytest
 
-from tests._agent_framework import FakeBrowser, FakeWS, _async_return, _cascade, _deps, _load
+from tests._agent_framework import (
+    FakeBrowser,
+    FakeWS,
+    _async_return,
+    _cascade,
+    _deps,
+    _load,
+    reimport,
+)
 
 
 def test_settings_imports_without_key_or_tts_host(monkeypatch):
@@ -66,7 +72,7 @@ def test_settings_sandbox_defaults(monkeypatch):
 
 def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = ""
     settings.TTS_HOST = "tts.example"
     assert "ASSEMBLYAI_API_KEY" in cascade.unavailable_reason(settings)
@@ -74,7 +80,7 @@ def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = ""
     reason = cascade.unavailable_reason(settings)
@@ -83,7 +89,7 @@ def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     assert cascade.unavailable_reason(settings) is None
@@ -91,7 +97,7 @@ def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.STREAMING_HOST = "streaming.example"
     settings.INPUT_SAMPLE_RATE = 16000
     url = cascade.stt_url(settings)
@@ -104,7 +110,7 @@ def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_tts_url_carries_voice_and_rate(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.TTS_HOST = "tts.example"
     settings.VOICE = "ivy"
     settings.OUTPUT_SAMPLE_RATE = 24000
@@ -212,7 +218,7 @@ def test_generate_reply_empty_llm_emits_done(monkeypatch):
 
 def test_generate_reply_surfaces_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
 
@@ -262,7 +268,7 @@ def test_maybe_barge_in_noop_without_reply(monkeypatch):
 
 def test_run_session_unavailable_emits_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = ""
     browser = FakeBrowser()
     deps = cascade.Deps(
@@ -277,7 +283,7 @@ def test_run_session_unavailable_emits_error(monkeypatch):
 
 def test_run_session_connect_failure_emits_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
 
@@ -293,7 +299,7 @@ def test_run_session_connect_failure_emits_error(monkeypatch):
     browser = FakeBrowser()
     asyncio.run(cascade.run_session(browser, deps))
     assert browser.types() == ["session.error"]
-    assert "no route to host" in browser.sent[0]["message"]
+    assert "no route to host" in str(browser.sent[0]["message"])
 
 
 def test_run_session_happy_path(monkeypatch):
@@ -325,7 +331,7 @@ def test_run_session_happy_path(monkeypatch):
         ),
     ]
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.GREETING = "hello!"
@@ -361,7 +367,7 @@ def test_run_session_happy_path(monkeypatch):
 def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
     # A non-final turn with text emits transcript.user and barges in on an active reply.
     cascade = _cascade(monkeypatch)
-    settings: Any = importlib.import_module("api.settings")
+    settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     browser = FakeBrowser()
