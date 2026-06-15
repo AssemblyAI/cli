@@ -1,0 +1,142 @@
+"""Shared loaders and fakes for the agent-framework template tests."""
+
+from __future__ import annotations
+
+import asyncio
+import importlib
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+TEMPLATE_DIR = Path("aai_cli/init/templates/agent-framework")
+
+
+def _load(module: str, monkeypatch: pytest.MonkeyPatch, **env: str) -> Any:
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    for name in ("api.index", "api.cascade", "api.settings", "api"):
+        sys.modules.pop(name, None)
+    monkeypatch.syspath_prepend(str(TEMPLATE_DIR))
+    return importlib.import_module(module)
+
+
+def _cascade(monkeypatch: pytest.MonkeyPatch) -> Any:
+    return _load("api.cascade", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
+
+
+class FakeBrowser:
+    """A browser side: hands out queued inbound messages, then blocks forever so the
+    mic pump stays alive until the test cancels it (mirrors a still-connected client)."""
+
+    def __init__(self, inbound: list[dict[str, Any] | None] | None = None):
+        self._inbound: list[dict[str, Any] | None] = list(inbound or [])
+        self.sent: list[dict[str, Any]] = []
+        self._idle = asyncio.Event()  # never set -> recv() blocks after the queue drains
+
+    async def send(self, event: dict[str, Any]) -> None:
+        self.sent.append(event)
+
+    async def recv(self) -> dict[str, Any] | None:
+        if self._inbound:
+            return self._inbound.pop(0)
+        await self._idle.wait()
+        return None
+
+    def types(self) -> list[str]:
+        return [event["type"] for event in self.sent]
+
+
+class FakeWS:
+    """A fake STT/TTS socket: yields the given frames as JSON strings, records sends."""
+
+    def __init__(self, frames: list[dict[str, Any]] | None = None):
+        self._frames = [json.dumps(f) for f in (frames or [])]
+        self.sent: list[Any] = []
+        self.closed = False
+
+    def __aiter__(self) -> FakeWS:
+        return self
+
+    async def __anext__(self) -> str:
+        if not self._frames:
+            raise StopAsyncIteration
+        return self._frames.pop(0)
+
+    async def recv(self) -> str:
+        if not self._frames:
+            raise AssertionError("recv() past end of fake frames")
+        return self._frames.pop(0)
+
+    async def send(self, data: Any) -> None:
+        self.sent.append(data)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _async_return(value):
+    async def factory():
+        return value
+
+    return factory
+
+
+def _deps(monkeypatch, *, stt, tts_frames, llm_text):
+    cascade = _cascade(monkeypatch)
+    settings: Any = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.GREETING = "hello!"
+    settings.SYSTEM_PROMPT = "be brief"
+
+    async def llm_stream(_messages):
+        for piece in llm_text:
+            yield piece
+
+    deps = cascade.Deps(
+        connect_stt=_async_return(stt),
+        connect_tts=_async_return(FakeWS(tts_frames)),
+        llm_stream=llm_stream,
+        settings=settings,
+    )
+    return cascade, deps
+
+
+class _LLMChunk:
+    """Mimics one OpenAI streaming chunk: `chunk.choices[0].delta.content`."""
+
+    def __init__(self, content: str | None):
+        self.choices = [type("Choice", (), {"delta": type("Delta", (), {"content": content})()})()]
+
+
+class _FakeLLMStream:
+    """An async-iterable over `_LLMChunk`s, the shape `client.chat.completions.create` returns."""
+
+    def __init__(self, contents: list[str | None]):
+        self._contents = contents
+
+    def __aiter__(self):
+        return self._gen()
+
+    async def _gen(self):
+        for content in self._contents:
+            yield _LLMChunk(content)
+
+
+def _fake_openai_client(captured: dict[str, Any], contents: list[str | None]):
+    """A fake `AsyncOpenAI` class recording its kwargs and the create() kwargs into `captured`."""
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return _FakeLLMStream(contents)
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+            self.chat = type("Chat", (), {"completions": _FakeCompletions()})()
+
+    return _FakeClient
