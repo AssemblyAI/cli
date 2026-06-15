@@ -195,7 +195,7 @@ async def _synthesize(browser: _Browser, tts: _Socket, text: str) -> None:
     if begin.get("type") != "Begin":
         raise RuntimeError(f"TTS did not begin (got {begin.get('type')!r}).")
     await tts.send(json.dumps({"type": "Generate", "text": text}))
-    await tts.send(json.dumps({"type": "ForceFlushTextBuffer"}))
+    await tts.send(json.dumps({"type": "Flush"}))
     while True:
         frame = json.loads(await tts.recv())
         kind = frame.get("type")

@@ -170,7 +170,7 @@ def test_synthesize_streams_audio_frames(monkeypatch):
         {"type": "reply.audio", "data": "BBB="},
     ]
     kinds = [json.loads(s)["type"] for s in tts.sent]
-    assert kinds == ["Generate", "ForceFlushTextBuffer", "Terminate"]
+    assert kinds == ["Generate", "Flush", "Terminate"]
     # The Generate frame carries the text.
     assert json.loads(tts.sent[0])["text"] == "hi"
     assert tts.closed is True
