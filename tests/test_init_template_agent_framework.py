@@ -708,8 +708,10 @@ def test_ws_route_runs_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
     # the route's accept + adapter wiring is exercised without real upstreams.
     index = _load("api.index", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
     cascade = importlib.import_module("api.cascade")
+    captured: dict[str, Any] = {}
 
-    async def fake_run_session(browser, _deps):
+    async def fake_run_session(browser, deps):
+        captured["deps"] = deps
         msg = await browser.recv()
         await browser.send({"type": "echo", "got": msg})
 
@@ -722,6 +724,8 @@ def test_ws_route_runs_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
             "type": "echo",
             "got": {"type": "input.audio", "audio": "AAA="},
         }
+    # The handler must wire the real settings module into Deps.real (not None / wrong arg).
+    assert captured["deps"].settings is importlib.import_module("api.settings")
 
 
 def test_fastapi_browser_recv_returns_none_on_disconnect(monkeypatch: pytest.MonkeyPatch) -> None:
