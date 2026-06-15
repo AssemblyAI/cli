@@ -61,7 +61,11 @@ def _pick_template() -> str:
     choice = questionary.select(
         "Pick a template",
         choices=[
-            questionary.Choice(title=templates.title_for(t), value=t)
+            questionary.Choice(
+                title=templates.title_for(t),
+                value=t,
+                description=templates.description_for(t),
+            )
             for t in templates.TEMPLATE_ORDER
         ],
     ).ask()

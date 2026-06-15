@@ -21,6 +21,16 @@ TEMPLATE_ORDER: tuple[str, ...] = (
 )
 
 
+# One-line description shown beside each title in the interactive picker. Keys must
+# match TEMPLATES exactly (a test enforces both directions).
+DESCRIPTIONS: dict[str, str] = {
+    "audio-transcription": "Transcribe audio & video files, URLs, and YouTube — speaker labels and audio intelligence",
+    "live-captions": "Live real-time captions from your microphone over the Streaming API",
+    "voice-agent": "Full-duplex voice agent (speech in, LLM reply, speech out) via the Voice Agent API",
+    "agent-framework": "Cascaded voice agent you orchestrate: Streaming STT, the LLM Gateway, and sandbox TTS",
+}
+
+
 def is_template(name: str) -> bool:
     return name in TEMPLATES
 
@@ -28,3 +38,8 @@ def is_template(name: str) -> bool:
 def title_for(name: str) -> str:
     """The human title for a template id, or the raw id if unknown."""
     return TEMPLATES.get(name, name)
+
+
+def description_for(name: str) -> str:
+    """The one-line picker description for a template id, or '' when unknown."""
+    return DESCRIPTIONS.get(name, "")

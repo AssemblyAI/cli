@@ -65,7 +65,9 @@ def test_settings_sandbox_defaults(monkeypatch):
     assert settings.TTS_HOST == "streaming-tts.sandbox000.assemblyai-labs.com"
     assert settings.LLM_GATEWAY_URL == "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
     assert settings.SYSTEM_PROMPT == (
-        "You are a friendly, concise voice assistant. Keep replies short and conversational."
+        "You are a friendly, concise voice assistant. Keep replies short and conversational. "
+        "Your reply is read aloud by a text-to-speech engine, so write plain spoken prose — "
+        "no markdown, emoji, bullet lists, or code."
     )
     assert settings.GREETING == "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 

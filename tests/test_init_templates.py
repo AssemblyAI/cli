@@ -36,6 +36,21 @@ def test_every_shipped_directory_is_registered():
             )
 
 
+def test_descriptions_cover_every_template():
+    # Every template advertised in the picker needs a description (and no stray ones).
+    assert set(templates.DESCRIPTIONS) == set(templates.TEMPLATES)
+    assert all(templates.DESCRIPTIONS.values())  # none empty
+
+
+def test_description_for_each_template_has_distinctive_text():
+    # A keyword per description keeps the mutation gate honest on the literals.
+    assert "Transcribe" in templates.description_for("audio-transcription")
+    assert "captions" in templates.description_for("live-captions")
+    assert "Voice Agent" in templates.description_for("voice-agent")
+    assert "Cascaded" in templates.description_for("agent-framework")
+    assert templates.description_for("nope") == ""  # unknown id -> no description
+
+
 def test_title_for_known_and_unknown():
     assert "Audio Transcription" in templates.title_for("audio-transcription")
     assert templates.title_for("nope") == "nope"  # falls back to the raw id

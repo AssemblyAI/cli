@@ -23,7 +23,9 @@ LLM_GATEWAY_URL = os.environ.get(
 MODEL = "claude-haiku-4-5-20251001"
 VOICE = "jane"
 SYSTEM_PROMPT = (
-    "You are a friendly, concise voice assistant. Keep replies short and conversational."
+    "You are a friendly, concise voice assistant. Keep replies short and conversational. "
+    "Your reply is read aloud by a text-to-speech engine, so write plain spoken prose — "
+    "no markdown, emoji, bullet lists, or code."
 )
 GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 

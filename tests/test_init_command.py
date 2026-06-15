@@ -252,18 +252,27 @@ def test_init_unregistered_template_errors_cleanly(tmp_path, monkeypatch):
     assert "llm" in result.output
 
 
-def _fake_questionary(choice):
-    """A minimal stand-in for the questionary module's select(...).ask() chain."""
+def _fake_questionary(choice, captured=None):
+    """A minimal stand-in for the questionary module's select(...).ask() chain.
+
+    Pass ``captured`` (a dict) to record the choices handed to select(...)."""
 
     class _Choice:
-        def __init__(self, title, value):
+        def __init__(self, title, value, description=None):
+            self.title = title
             self.value = value
+            self.description = description
 
     class _Select:
         def ask(self):
             return choice
 
-    return types.SimpleNamespace(Choice=_Choice, select=lambda *a, **k: _Select())
+    def _select(*_a, choices=None, **_k):
+        if captured is not None:
+            captured["choices"] = choices
+        return _Select()
+
+    return types.SimpleNamespace(Choice=_Choice, select=_select)
 
 
 def test_pick_template_interactive_returns_choice(monkeypatch):
@@ -271,6 +280,21 @@ def test_pick_template_interactive_returns_choice(monkeypatch):
     monkeypatch.setattr("sys.stdout", _Tty())
     monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(TEMPLATE))
     assert init_exec._pick_template() == TEMPLATE
+
+
+def test_pick_template_choices_carry_descriptions(monkeypatch):
+    # Each picker choice wires the registry's title + description for that template.
+    from aai_cli.init import templates
+
+    monkeypatch.setattr("sys.stdin", _Tty())
+    monkeypatch.setattr("sys.stdout", _Tty())
+    captured: dict[str, object] = {}
+    monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(TEMPLATE, captured))
+    init_exec._pick_template()
+    choices = captured["choices"]
+    assert [c.value for c in choices] == list(templates.TEMPLATE_ORDER)
+    assert all(c.description == templates.description_for(c.value) for c in choices)
+    assert all(c.description for c in choices)  # every template advertises a description
 
 
 def test_pick_template_ctrl_c_exits_130(monkeypatch):
