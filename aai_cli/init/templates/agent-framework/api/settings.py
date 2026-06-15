@@ -21,7 +21,7 @@ LLM_GATEWAY_URL = os.environ.get(
 
 # The cascade's knobs — edit these to change behavior.
 MODEL = "claude-haiku-4-5-20251001"
-VOICE = "ivy"
+VOICE = "jane"
 SYSTEM_PROMPT = (
     "You are a friendly, concise voice assistant. Keep replies short and conversational."
 )
