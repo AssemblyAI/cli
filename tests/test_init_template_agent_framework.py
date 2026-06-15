@@ -7,10 +7,14 @@ stay collision-free under pytest-xdist / pytest-randomly.
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import importlib
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -141,3 +145,347 @@ def test_build_messages(monkeypatch: pytest.MonkeyPatch) -> None:
         {"role": "system", "content": "be brief"},
         {"role": "user", "content": "hello there"},
     ]
+
+
+class FakeBrowser:
+    """A browser side: hands out queued inbound messages, then blocks forever so the
+    mic pump stays alive until the test cancels it (mirrors a still-connected client)."""
+
+    def __init__(self, inbound: list[dict] | None = None):
+        self._inbound = list(inbound or [])
+        self.sent: list[dict] = []
+        self._idle = asyncio.Event()  # never set -> recv() blocks after the queue drains
+
+    async def send(self, event: dict) -> None:
+        self.sent.append(event)
+
+    async def recv(self) -> dict | None:
+        if self._inbound:
+            return self._inbound.pop(0)
+        await self._idle.wait()
+        return None
+
+    def types(self) -> list[str]:
+        return [event["type"] for event in self.sent]
+
+
+class FakeWS:
+    """A fake STT/TTS socket: yields the given frames as JSON strings, records sends."""
+
+    def __init__(self, frames: list[dict] | None = None):
+        self._frames = [json.dumps(f) for f in (frames or [])]
+        self.sent: list[Any] = []
+        self.closed = False
+
+    def __aiter__(self) -> FakeWS:
+        return self
+
+    async def __anext__(self) -> str:
+        if not self._frames:
+            raise StopAsyncIteration
+        return self._frames.pop(0)
+
+    async def recv(self) -> str:
+        if not self._frames:
+            raise AssertionError("recv() past end of fake frames")
+        return self._frames.pop(0)
+
+    async def send(self, data: Any) -> None:
+        self.sent.append(data)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _async_return(value):
+    async def factory():
+        return value
+
+    return factory
+
+
+def _deps(monkeypatch, *, stt, tts_frames, llm_text):
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.GREETING = "hello!"
+    settings.SYSTEM_PROMPT = "be brief"
+
+    async def llm_stream(_messages):
+        for piece in llm_text:
+            yield piece
+
+    deps = cascade.Deps(
+        connect_stt=_async_return(stt),
+        connect_tts=_async_return(FakeWS(tts_frames)),
+        llm_stream=llm_stream,
+        settings=settings,
+    )
+    return cascade, deps
+
+
+def test_pump_mic_forwards_decoded_audio(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    pcm = b"\x01\x02\x03\x04"
+    browser = FakeBrowser([{"type": "input.audio", "audio": base64.b64encode(pcm).decode()}, None])
+    stt = FakeWS()
+    asyncio.run(cascade._pump_mic(browser, stt))
+    assert stt.sent == [pcm]
+
+
+def test_pump_mic_ignores_non_audio_and_stops_on_disconnect(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser([{"type": "noise"}, None])
+    stt = FakeWS()
+    asyncio.run(cascade._pump_mic(browser, stt))
+    assert stt.sent == []
+
+
+def test_synthesize_streams_audio_frames(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+    tts = FakeWS(
+        [
+            {"type": "Begin", "configuration": {"sample_rate": 24000}},
+            {"type": "Audio", "audio": "AAA="},
+            {"type": "Audio", "audio": "BBB=", "is_final": True},
+        ]
+    )
+    asyncio.run(cascade._synthesize(browser, tts, "hi"))
+    assert browser.sent == [
+        {"type": "reply.audio", "data": "AAA="},
+        {"type": "reply.audio", "data": "BBB="},
+    ]
+    kinds = [json.loads(s)["type"] for s in tts.sent]
+    assert kinds == ["Generate", "ForceFlushTextBuffer", "Terminate"]
+    # The Generate frame carries the text.
+    assert json.loads(tts.sent[0])["text"] == "hi"
+    assert tts.closed is True
+
+
+def test_synthesize_raises_on_error_frame(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Error", "error": "bad voice"}])
+    with pytest.raises(RuntimeError, match="bad voice"):
+        asyncio.run(cascade._synthesize(browser, tts, "hi"))
+
+
+def test_synthesize_raises_when_no_begin(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+    tts = FakeWS([{"type": "Audio", "audio": "AAA=", "is_final": True}])
+    with pytest.raises(RuntimeError, match="did not begin"):
+        asyncio.run(cascade._synthesize(browser, tts, "hi"))
+
+
+def test_generate_reply_speaks_llm_text(monkeypatch):
+    cascade, deps = _deps(
+        monkeypatch,
+        stt=FakeWS(),
+        tts_frames=[
+            {"type": "Begin", "configuration": {}},
+            {"type": "Audio", "audio": "AAA=", "is_final": True},
+        ],
+        llm_text=["Hello", " world"],
+    )
+    browser = FakeBrowser()
+    asyncio.run(cascade._generate_reply(browser, deps, cascade.build_messages("be brief", "hi")))
+    assert {"type": "transcript.agent", "text": "Hello world"} in browser.sent
+    assert {"type": "reply.audio", "data": "AAA="} in browser.sent
+    assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
+
+
+def test_generate_reply_empty_llm_emits_done(monkeypatch):
+    cascade, deps = _deps(monkeypatch, stt=FakeWS(), tts_frames=[], llm_text=["  "])
+    browser = FakeBrowser()
+    asyncio.run(cascade._generate_reply(browser, deps, []))
+    assert browser.sent == [{"type": "reply.done", "status": "empty"}]
+
+
+def test_generate_reply_surfaces_error(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+
+    async def llm_stream(_messages):
+        raise RuntimeError("llm down")
+        yield  # pragma: no cover - makes this an async generator
+
+    deps = cascade.Deps(
+        connect_stt=_async_return(FakeWS()),
+        connect_tts=_async_return(FakeWS()),
+        llm_stream=llm_stream,
+        settings=settings,
+    )
+    browser = FakeBrowser()
+    asyncio.run(cascade._generate_reply(browser, deps, []))
+    assert browser.sent == [{"type": "session.error", "message": "llm down"}]
+
+
+def test_maybe_barge_in_cancels_active_reply(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+
+    async def drive():
+        session = cascade.Session()
+        started = asyncio.Event()
+
+        async def never_ending():
+            started.set()
+            await asyncio.Event().wait()
+
+        session.reply_task = asyncio.create_task(never_ending())
+        await started.wait()
+        await cascade.maybe_barge_in(browser, session)
+        return session
+
+    session = asyncio.run(drive())
+    assert browser.sent == [{"type": "input.speech.started"}]
+    assert session.reply_task is None
+
+
+def test_maybe_barge_in_noop_without_reply(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+    asyncio.run(cascade.maybe_barge_in(browser, cascade.Session()))
+    assert browser.sent == []
+
+
+def test_run_session_unavailable_emits_error(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = ""
+    browser = FakeBrowser()
+    deps = cascade.Deps(
+        connect_stt=_async_return(FakeWS()),
+        connect_tts=_async_return(FakeWS()),
+        llm_stream=lambda _m: iter(()),
+        settings=settings,
+    )
+    asyncio.run(cascade.run_session(browser, deps))
+    assert browser.types() == ["session.error"]
+
+
+def test_run_session_connect_failure_emits_error(monkeypatch):
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+
+    async def boom():
+        raise RuntimeError("no route to host")
+
+    deps = cascade.Deps(
+        connect_stt=boom,
+        connect_tts=_async_return(FakeWS()),
+        llm_stream=lambda _m: iter(()),
+        settings=settings,
+    )
+    browser = FakeBrowser()
+    asyncio.run(cascade.run_session(browser, deps))
+    assert browser.types() == ["session.error"]
+    assert "no route to host" in browser.sent[0]["message"]
+
+
+def test_run_session_happy_path(monkeypatch):
+    # STT yields one finalized user turn, then closes -> the reply drains, then the
+    # session tears down. The greeting speaks first. The mic pump blocks on FakeBrowser's
+    # idle event until run_session cancels it.
+    stt = FakeWS(
+        [
+            {
+                "type": "Turn",
+                "transcript": "what time is it",
+                "end_of_turn": True,
+                "turn_is_formatted": True,
+            }
+        ]
+    )
+    tts_sockets = [
+        FakeWS(
+            [
+                {"type": "Begin", "configuration": {}},
+                {"type": "Audio", "audio": "G=", "is_final": True},
+            ]
+        ),
+        FakeWS(
+            [
+                {"type": "Begin", "configuration": {}},
+                {"type": "Audio", "audio": "R=", "is_final": True},
+            ]
+        ),
+    ]
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.GREETING = "hello!"
+    settings.SYSTEM_PROMPT = "be brief"
+
+    async def llm_stream(_messages):
+        yield "It is noon."
+
+    def connect_tts():
+        async def factory():
+            return tts_sockets.pop(0)
+
+        return factory()
+
+    deps = cascade.Deps(
+        connect_stt=_async_return(stt),
+        connect_tts=connect_tts,
+        llm_stream=llm_stream,
+        settings=settings,
+    )
+    browser = FakeBrowser()
+    asyncio.run(asyncio.wait_for(cascade.run_session(browser, deps), timeout=5))
+
+    types = browser.types()
+    assert types[0] == "transcript.agent"  # greeting spoken first
+    assert {"type": "transcript.user", "text": "what time is it"} in browser.sent
+    assert {"type": "transcript.agent", "text": "It is noon."} in browser.sent
+    assert {"type": "reply.audio", "data": "R="} in browser.sent
+    assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
+    assert stt.closed is True
+
+
+def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
+    # A non-final turn with text emits transcript.user and barges in on an active reply.
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    browser = FakeBrowser()
+
+    async def drive():
+        session = cascade.Session()
+
+        async def never_ending():
+            await asyncio.Event().wait()
+
+        session.reply_task = asyncio.create_task(never_ending())
+        stt = FakeWS(
+            [
+                {
+                    "type": "Turn",
+                    "transcript": "wait",
+                    "end_of_turn": False,
+                    "turn_is_formatted": False,
+                }
+            ]
+        )
+        # _deps not used; build minimal deps
+        deps = cascade.Deps(
+            connect_stt=_async_return(stt),
+            connect_tts=_async_return(FakeWS()),
+            llm_stream=lambda _m: iter(()),
+            settings=settings,
+        )
+        await cascade._pump_stt(browser, stt, deps, session)
+
+    asyncio.run(asyncio.wait_for(drive(), timeout=5))
+    assert {"type": "transcript.user", "text": "wait"} in browser.sent
+    assert {"type": "input.speech.started"} in browser.sent
