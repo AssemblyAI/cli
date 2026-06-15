@@ -150,8 +150,8 @@ class FakeBrowser:
     """A browser side: hands out queued inbound messages, then blocks forever so the
     mic pump stays alive until the test cancels it (mirrors a still-connected client)."""
 
-    def __init__(self, inbound: list[dict[str, Any]] | None = None):
-        self._inbound = list(inbound or [])
+    def __init__(self, inbound: list[dict[str, Any] | None] | None = None):
+        self._inbound: list[dict[str, Any] | None] = list(inbound or [])
         self.sent: list[dict[str, Any]] = []
         self._idle = asyncio.Event()  # never set -> recv() blocks after the queue drains
 
