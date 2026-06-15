@@ -203,7 +203,7 @@ async def _generate_reply(browser: Any, deps: Deps, messages: list[dict[str, str
         await _speak(browser, deps, text)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001 — any leg failure becomes one clean event
+    except Exception as exc:  # any leg failure becomes one clean session.error event
         await browser.send({"type": "session.error", "message": str(exc)})
 
 
@@ -244,7 +244,7 @@ async def run_session(browser: Any, deps: Deps) -> None:
         return
     try:
         stt = await deps.connect_stt()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # any connect/setup failure becomes one clean session.error
         await browser.send(
             {"type": "session.error", "message": f"Could not start the session: {exc}"}
         )

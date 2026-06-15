@@ -336,7 +336,10 @@ max-statements = 40
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
 # TID251: the scaffolds are end-user example apps that read their own config straight
 # from os.environ — that's correct, idiomatic code to ship, not a CLI-internal env read.
-"aai_cli/init/templates/**" = ["S105", "TID251"]
+# BLE001: starter apps funnel any leg failure into one user-facing error event/response
+# (a broad `except Exception` is the right shape to ship), so the blind-except lint
+# doesn't apply to scaffolds.
+"aai_cli/init/templates/**" = ["S105", "TID251", "BLE001"]
 # ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
 # source (release builds inject the write-only client token).
 "aai_cli/core/telemetry.py" = ["S105"]
