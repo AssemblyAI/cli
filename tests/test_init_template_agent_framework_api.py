@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
@@ -88,6 +89,45 @@ def test_llm_stream_yields_nonempty_deltas(monkeypatch: pytest.MonkeyPatch) -> N
     assert captured["stream"] is True
     assert captured["client_kwargs"]["base_url"] == "https://llm.example/v1"
     assert captured["client_kwargs"]["api_key"] == "sk-test"
+
+
+def test_llm_stream_skips_chunk_without_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The Anthropic-backed gateway ends the stream with a usage/final chunk carrying an
+    # empty `choices` list; _llm_stream must skip it, not IndexError on chunk.choices[0].
+    import openai
+
+    cascade = _cascade(monkeypatch)
+    settings = reimport("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.LLM_GATEWAY_URL = "https://llm.example/v1"
+    settings.MODEL = "test-model"
+
+    def _chunk(content: str) -> SimpleNamespace:
+        return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content))])
+
+    class _Stream:
+        def __aiter__(self):
+            return self._gen()
+
+        async def _gen(self):
+            yield _chunk("Hi")
+            yield SimpleNamespace(choices=[])  # gateway usage/final chunk — no choices
+            yield _chunk(" there")
+
+    class _Completions:
+        async def create(self, **kwargs):
+            return _Stream()
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", _Client)
+
+    async def collect():
+        return [d async for d in cascade._llm_stream(settings, [{"role": "user", "content": "hi"}])]
+
+    assert asyncio.run(collect()) == ["Hi", " there"]
 
 
 def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) -> None:

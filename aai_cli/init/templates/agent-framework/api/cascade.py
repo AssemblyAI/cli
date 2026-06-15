@@ -168,6 +168,10 @@ async def _llm_stream(settings: _Settings, messages: list[dict[str, str]]) -> As
         model=settings.MODEL, messages=messages, stream=True
     )
     async for chunk in stream:
+        # The gateway (Anthropic-backed, OpenAI-compatible) ends the stream with a
+        # usage/final chunk that carries no choices — skip it instead of IndexError-ing.
+        if not chunk.choices:
+            continue
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
