@@ -489,3 +489,206 @@ def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
     asyncio.run(asyncio.wait_for(drive(), timeout=5))
     assert {"type": "transcript.user", "text": "wait"} in browser.sent
     assert {"type": "input.speech.started"} in browser.sent
+
+
+def test_connect_stt_uses_auth_header_and_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    import websockets
+
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.STREAMING_HOST = "streaming.example"
+    settings.INPUT_SAMPLE_RATE = 16000
+    captured: dict[str, Any] = {}
+
+    async def fake_connect(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return FakeWS()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    result = asyncio.run(cascade._connect_stt(settings))
+    assert isinstance(result, FakeWS)
+    assert captured["url"] == cascade.stt_url(settings)
+    assert captured["kwargs"]["additional_headers"] == {"Authorization": "sk-test"}
+
+
+def test_connect_tts_passes_max_size_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    import websockets
+
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.VOICE = "ivy"
+    settings.OUTPUT_SAMPLE_RATE = 24000
+    captured: dict[str, Any] = {}
+
+    async def fake_connect(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return FakeWS()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    result = asyncio.run(cascade._connect_tts(settings))
+    assert isinstance(result, FakeWS)
+    assert captured["url"] == cascade.tts_url(settings)
+    assert captured["kwargs"]["additional_headers"] == {"Authorization": "sk-test"}
+    assert captured["kwargs"]["max_size"] is None
+
+
+class _LLMChunk:
+    """Mimics one OpenAI streaming chunk: `chunk.choices[0].delta.content`."""
+
+    def __init__(self, content: str | None):
+        self.choices = [type("Choice", (), {"delta": type("Delta", (), {"content": content})()})()]
+
+
+class _FakeLLMStream:
+    """An async-iterable over `_LLMChunk`s, the shape `client.chat.completions.create` returns."""
+
+    def __init__(self, contents: list[str | None]):
+        self._contents = contents
+
+    def __aiter__(self):
+        return self._gen()
+
+    async def _gen(self):
+        for content in self._contents:
+            yield _LLMChunk(content)
+
+
+def _fake_openai_client(captured: dict[str, Any], contents: list[str | None]):
+    """A fake `AsyncOpenAI` class recording its kwargs and the create() kwargs into `captured`."""
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return _FakeLLMStream(contents)
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+            self.chat = type("Chat", (), {"completions": _FakeCompletions()})()
+
+    return _FakeClient
+
+
+def test_llm_stream_yields_nonempty_deltas(monkeypatch: pytest.MonkeyPatch) -> None:
+    import openai
+
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.LLM_GATEWAY_URL = "https://llm.example/v1"
+    settings.MODEL = "test-model"
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        openai, "AsyncOpenAI", _fake_openai_client(captured, ["Hi", "", " there", None])
+    )
+
+    async def collect():
+        return [d async for d in cascade._llm_stream(settings, [{"role": "user", "content": "hi"}])]
+
+    deltas = asyncio.run(collect())
+    assert deltas == ["Hi", " there"]  # empty + None filtered by `if delta`
+    assert captured["model"] == "test-model"
+    assert captured["stream"] is True
+    assert captured["client_kwargs"]["base_url"] == "https://llm.example/v1"
+    assert captured["client_kwargs"]["api_key"] == "sk-test"
+
+
+def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
+    import openai
+    import websockets
+
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.STREAMING_HOST = "streaming.example"
+    settings.LLM_GATEWAY_URL = "https://llm.example/v1"
+
+    async def fake_connect(url, **kwargs):
+        return FakeWS()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    monkeypatch.setattr(openai, "AsyncOpenAI", _fake_openai_client({}, []))
+
+    deps = cascade.Deps.real(settings)
+    assert deps.settings is settings
+
+    async def drive():
+        assert isinstance(await deps.connect_stt(), FakeWS)
+        assert isinstance(await deps.connect_tts(), FakeWS)
+        return [d async for d in deps.llm_stream([{"role": "user", "content": "hi"}])]
+
+    assert asyncio.run(drive()) == []
+
+
+def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    browser = FakeBrowser()
+
+    async def llm_stream(_messages):
+        await asyncio.Event().wait()  # blocks until cancelled
+        yield ""  # pragma: no cover - unreachable, makes this an async generator
+
+    deps = cascade.Deps(
+        connect_stt=_async_return(FakeWS()),
+        connect_tts=_async_return(FakeWS()),
+        llm_stream=llm_stream,
+        settings=settings,
+    )
+
+    async def drive():
+        task = asyncio.create_task(cascade._generate_reply(browser, deps, []))
+        await asyncio.sleep(0)  # let it start and block on the LLM
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(drive())
+    # Cancellation must NOT be turned into a session.error.
+    assert browser.sent == []
+
+
+def test_pump_stt_skips_non_turn_and_empty_transcript(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    settings.SYSTEM_PROMPT = "be brief"
+    browser = FakeBrowser()
+    # A non-Turn frame and an empty-transcript Turn must both be skipped (no transcript.user),
+    # then the stream closes.
+    stt = FakeWS(
+        [
+            {"type": "Begin"},
+            {"type": "Turn", "transcript": "", "end_of_turn": False, "turn_is_formatted": False},
+        ]
+    )
+    deps = cascade.Deps(
+        connect_stt=_async_return(stt),
+        connect_tts=_async_return(FakeWS()),
+        llm_stream=lambda _m: iter(()),
+        settings=settings,
+    )
+    session = cascade.Session()
+    asyncio.run(asyncio.wait_for(cascade._pump_stt(browser, stt, deps, session), timeout=5))
+    assert browser.sent == []  # nothing emitted for non-Turn or empty-transcript frames
+
+
+def test_synthesize_audio_frame_missing_payload_defaults_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cascade = _cascade(monkeypatch)
+    browser = FakeBrowser()
+    # An Audio frame with no `audio` key must yield reply.audio with data == "" (the default).
+    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}])
+    asyncio.run(cascade._synthesize(browser, tts, "hi"))
+    assert {"type": "reply.audio", "data": ""} in browser.sent
