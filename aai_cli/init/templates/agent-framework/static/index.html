@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Talk to a cascaded voice agent · AssemblyAI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="template-page voice-agent-template">
+  <main class="app-shell">
+    <a class="brand" href="https://www.assemblyai.com" target="_blank" rel="noopener">
+      <img class="brand-logo" src="https://www.assemblyai.com/_aai/images/logos/assemblyai-logo-primary.svg" alt="AssemblyAI" />
+    </a>
+
+    <header class="page-header">
+      <span class="eyebrow">Streaming STT · LLM Gateway · TTS</span>
+      <h1 class="page-title">Talk to a cascaded voice agent</h1>
+      <p class="page-subtitle">Connect and just talk. This agent is a cascade your backend wires together — Streaming STT transcribes you, the LLM Gateway replies, and streaming TTS speaks it back, with turn detection and barge-in handled server-side. Your API key stays on the server. Headphones give the cleanest result.</p>
+    </header>
+
+    <div class="control-bar">
+      <button id="conn" class="button connection-button" data-state="idle">● Connect</button>
+      <span id="status" class="status-pill" aria-live="polite"></span>
+    </div>
+
+    <div id="log" class="conversation-log"></div>
+
+    <footer class="page-footer">
+      <span>Built with AssemblyAI</span>
+      <a class="footer-link" href="https://www.assemblyai.com" target="_blank" rel="noopener">assemblyai.com →</a>
+    </footer>
+  </main>
+
+  <script src="/static/audio.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
