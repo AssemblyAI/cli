@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# httpx2 is Pydantic's maintained fork of httpx (API-identical, just renamed) — not a
-# typo. Keep the "2"; see requirements.txt.
-import httpx2
+from assemblyai.streaming.v3 import StreamingClient, StreamingClientOptions
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -42,21 +40,18 @@ def index() -> FileResponse:
 
 @app.post("/api/token")
 def token() -> dict[str, str]:
-    """Mint a one-time streaming token. The browser uses it to open the WebSocket."""
+    """Mint a one-time streaming token via the AssemblyAI SDK. The browser uses it to open the WebSocket."""
     _require_key()
-    # NOTE: the streaming token uses the raw API key as Authorization (no 'Bearer').
     try:
-        resp = httpx2.get(
-            f"https://{settings.STREAMING_HOST}{settings.TOKEN_PATH}",
-            params={"expires_in_seconds": settings.TOKEN_EXPIRES_IN_SECONDS},
-            headers={"Authorization": settings.API_KEY},
+        client = StreamingClient(
+            StreamingClientOptions(api_key=settings.API_KEY, api_host=settings.STREAMING_HOST)
         )
-        resp.raise_for_status()
+        token = client.create_temporary_token(expires_in_seconds=settings.TOKEN_EXPIRES_IN_SECONDS)
     except Exception as exc:  # missing/invalid key, network -> clean 502, not a 500
         raise HTTPException(
             status_code=502, detail=f"Could not mint streaming token: {exc}"
         ) from exc
     return {
-        "token": resp.json()["token"],
+        "token": token,
         "ws_url": f"wss://{settings.STREAMING_HOST}{settings.WEBSOCKET_PATH}",
     }

@@ -33,7 +33,9 @@ TEMPLATES_ROOT = Path("aai_cli/init/templates")
 TEMPLATE_NAMES = sorted(
     p.name for p in TEMPLATES_ROOT.iterdir() if p.is_dir() and not p.name.startswith("__")
 )
-TOKEN_TEMPLATES = ["live-captions", "voice-agent"]
+# live-captions now mints via the AssemblyAI SDK (covered in test_init_template_stream.py),
+# so it no longer has the httpx2 GET these parametrized tests mock.
+TOKEN_TEMPLATES = ["voice-agent"]
 HTTP_OK = 200
 HTTP_BAD_GATEWAY = 502
 
