@@ -53,3 +53,20 @@ def test_settings_reads_env(monkeypatch):
     assert settings.STREAMING_HOST == "streaming.example"
     assert settings.TTS_HOST == "tts.example"
     assert settings.LLM_GATEWAY_URL == "https://llm.example/v1"
+
+
+def test_settings_sandbox_defaults(monkeypatch):
+    # With the host env vars unset, the module falls back to the sandbox defaults
+    # (TTS is sandbox-only, so the whole cascade defaults there). Asserting the exact
+    # default strings keeps the mutation gate honest on settings.py's literals.
+    monkeypatch.delenv("ASSEMBLYAI_STREAMING_HOST", raising=False)
+    monkeypatch.delenv("ASSEMBLYAI_TTS_HOST", raising=False)
+    monkeypatch.delenv("ASSEMBLYAI_LLM_GATEWAY_URL", raising=False)
+    settings = _load("api.settings", monkeypatch)
+    assert settings.STREAMING_HOST == "streaming.sandbox000.assemblyai-labs.com"
+    assert settings.TTS_HOST == "streaming-tts.sandbox000.assemblyai-labs.com"
+    assert settings.LLM_GATEWAY_URL == "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
+    assert settings.SYSTEM_PROMPT == (
+        "You are a friendly, concise voice assistant. Keep replies short and conversational."
+    )
+    assert settings.GREETING == "Hi! I'm your AssemblyAI voice agent. What can I help you with?"

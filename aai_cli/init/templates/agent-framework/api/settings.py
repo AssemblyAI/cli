@@ -19,7 +19,7 @@ LLM_GATEWAY_URL = os.environ.get(
     "ASSEMBLYAI_LLM_GATEWAY_URL", "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
 )
 
-# The cascade's three knobs — edit these to change behavior.
+# The cascade's knobs — edit these to change behavior.
 MODEL = "claude-haiku-4-5-20251001"
 VOICE = "ivy"
 SYSTEM_PROMPT = (
