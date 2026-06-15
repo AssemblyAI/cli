@@ -46,12 +46,14 @@ def token() -> dict[str, str]:
         client = StreamingClient(
             StreamingClientOptions(api_key=settings.API_KEY, api_host=settings.STREAMING_HOST)
         )
-        token = client.create_temporary_token(expires_in_seconds=settings.TOKEN_EXPIRES_IN_SECONDS)
+        streaming_token = client.create_temporary_token(
+            expires_in_seconds=settings.TOKEN_EXPIRES_IN_SECONDS
+        )
     except Exception as exc:  # missing/invalid key, network -> clean 502, not a 500
         raise HTTPException(
             status_code=502, detail=f"Could not mint streaming token: {exc}"
         ) from exc
     return {
-        "token": token,
+        "token": streaming_token,
         "ws_url": f"wss://{settings.STREAMING_HOST}{settings.WEBSOCKET_PATH}",
     }
