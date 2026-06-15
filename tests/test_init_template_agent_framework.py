@@ -70,3 +70,73 @@ def test_settings_sandbox_defaults(monkeypatch):
         "You are a friendly, concise voice assistant. Keep replies short and conversational."
     )
     assert settings.GREETING == "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
+
+
+def _cascade(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    return _load("api.cascade", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
+
+
+def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = ""
+    settings.TTS_HOST = "tts.example"
+    assert "ASSEMBLYAI_API_KEY" in cascade.unavailable_reason(settings)
+
+
+def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = ""
+    reason = cascade.unavailable_reason(settings)
+    assert "sandbox" in reason and "assembly --sandbox init agent-framework" in reason
+
+
+def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.API_KEY = "sk-test"
+    settings.TTS_HOST = "tts.example"
+    assert cascade.unavailable_reason(settings) is None
+
+
+def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.STREAMING_HOST = "streaming.example"
+    settings.INPUT_SAMPLE_RATE = 16000
+    url = cascade.stt_url(settings)
+    assert url.startswith("wss://streaming.example/v3/ws?")
+    assert "sample_rate=16000" in url
+    assert "encoding=pcm_s16le" in url
+    assert "format_turns=true" in url
+
+
+def test_tts_url_carries_voice_and_rate(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    settings = importlib.import_module("api.settings")
+    settings.TTS_HOST = "tts.example"
+    settings.VOICE = "ivy"
+    settings.OUTPUT_SAMPLE_RATE = 24000
+    url = cascade.tts_url(settings)
+    assert url.startswith("wss://tts.example/v1/ws/?")
+    assert "voice=ivy" in url
+    assert "sample_rate=24000" in url
+
+
+def test_is_final_user_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    assert cascade.is_final_user_turn({"end_of_turn": True, "turn_is_formatted": True}) is True
+    assert cascade.is_final_user_turn({"end_of_turn": True, "turn_is_formatted": False}) is False
+    assert cascade.is_final_user_turn({"end_of_turn": False, "turn_is_formatted": True}) is False
+    assert cascade.is_final_user_turn({}) is False
+
+
+def test_build_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    messages = cascade.build_messages("be brief", "hello there")
+    assert messages == [
+        {"role": "system", "content": "be brief"},
+        {"role": "user", "content": "hello there"},
+    ]
