@@ -81,6 +81,41 @@ def test_stream_turn_silence_below_minimum_is_rejected(monkeypatch):
     assert result.exit_code == 2
 
 
+def test_stream_turn_detection_preset_reaches_params(monkeypatch):
+    # --turn-detection balanced must thread through the command wiring into the
+    # documented (0.4, 400, 1280) trio on StreamingParameters.
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "aai_cli.commands.stream._exec.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+
+    runner.invoke(app, ["stream", "--sample", "--turn-detection", "balanced"])
+    params = captured["params"]
+    assert params.end_of_turn_confidence_threshold == 0.4
+    assert params.min_turn_silence == 400
+    assert params.max_turn_silence == 1280
+
+
+def test_stream_explicit_flag_overrides_preset_via_cli(monkeypatch):
+    # A raw flag passed alongside the preset wins its slot through the real argv path.
+    config.set_api_key("default", "sk_live")
+    captured = {}
+    monkeypatch.setattr(
+        "aai_cli.commands.stream._exec.client.stream_audio",
+        lambda api_key, source, *, params, **kw: captured.update(params=params),
+    )
+
+    runner.invoke(
+        app,
+        ["stream", "--sample", "--turn-detection", "conservative", "--min-turn-silence", "200"],
+    )
+    params = captured["params"]
+    assert params.min_turn_silence == 200  # explicit flag, not the preset's 800
+    assert params.max_turn_silence == 3600  # preset's value survives
+
+
 def test_stream_config_escape_hatch(monkeypatch):
     config.set_api_key("default", "sk_live")
     captured = {}

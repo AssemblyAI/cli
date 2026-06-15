@@ -615,6 +615,9 @@
   │                                                     (repeatable)             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Turn Detection ─────────────────────────────────────────────────────────────╮
+  │ --turn-detection                                 [aggressive|  Turn-detecti… │
+  │                                                  balanced|con  sensitivity   │
+  │                                                  servative]    preset        │
   │ --end-of-turn-confidence                         FLOAT RANGE   End-of-turn   │
   │                                                  [0.0<=x<=1.0  confidence    │
   │                                                  ]             (0-1)         │

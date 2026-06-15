@@ -17,6 +17,7 @@ from aai_cli.commands.stream import DEFAULT_SPEECH_MODEL
 from aai_cli.commands.stream import _exec as stream_exec
 from aai_cli.core import config, llm
 from aai_cli.core.errors import UsageError
+from aai_cli.streaming.turn_presets import TurnDetectionPreset
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
 DEFAULTS = stream_exec.StreamOptions(
@@ -35,6 +36,7 @@ DEFAULTS = stream_exec.StreamOptions(
     end_of_turn_confidence_threshold=None,
     min_turn_silence=None,
     max_turn_silence=None,
+    turn_detection=None,
     vad_threshold=None,
     format_turns=None,
     include_partial_turns=None,
@@ -121,6 +123,32 @@ def test_redact_pii_sub_enum_maps_to_its_string_value():
     opts = dataclasses.replace(DEFAULTS, redact_pii_sub=PIISubstitutionPolicy.hash)
     assert opts.base_flags()["redact_pii_sub"] == "hash"
     assert DEFAULTS.base_flags()["redact_pii_sub"] is None  # unset stays None
+
+
+def test_turn_detection_preset_fills_base_flags():
+    # --turn-detection balanced supplies the documented (0.4, 400, 1280) trio.
+    opts = dataclasses.replace(DEFAULTS, turn_detection=TurnDetectionPreset.balanced)
+    flags = opts.base_flags()
+    assert flags["end_of_turn_confidence_threshold"] == 0.4
+    assert flags["min_turn_silence"] == 400
+    assert flags["max_turn_silence"] == 1280
+
+
+def test_explicit_turn_flag_overrides_the_preset_slot():
+    # A raw --min-turn-silence wins over the preset's value; the other slots stay.
+    opts = dataclasses.replace(
+        DEFAULTS, turn_detection=TurnDetectionPreset.balanced, min_turn_silence=900
+    )
+    flags = opts.base_flags()
+    assert flags["min_turn_silence"] == 900
+    assert flags["max_turn_silence"] == 1280
+
+
+def test_no_preset_leaves_turn_flags_unset():
+    flags = DEFAULTS.base_flags()
+    assert flags["end_of_turn_confidence_threshold"] is None
+    assert flags["min_turn_silence"] is None
+    assert flags["max_turn_silence"] is None
 
 
 def test_stream_options_are_immutable():
