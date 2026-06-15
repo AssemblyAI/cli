@@ -1,0 +1,8 @@
+fastapi>=0.136.3
+uvicorn>=0.30.0
+websockets>=14.1
+openai>=1.54.0
+python-dotenv>=1.2.2
+# Pin starlette directly: FastAPI's own floor still admits versions with known CVEs,
+# so raise the transitive floor above them.
+starlette>=1.2.1
