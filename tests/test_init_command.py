@@ -252,10 +252,13 @@ def test_init_unregistered_template_errors_cleanly(tmp_path, monkeypatch):
     assert "llm" in result.output
 
 
-def _fake_questionary(choice, captured=None):
+def _fake_questionary(choice):
     """A minimal stand-in for the questionary module's select(...).ask() chain.
 
-    Pass ``captured`` (a dict) to record the choices handed to select(...)."""
+    The returned namespace records the choices select(...) was called with on its
+    ``choices`` attribute (read it back in a test to inspect titles/descriptions)."""
+
+    ns = types.SimpleNamespace(Choice=None, select=None, choices=None)
 
     class _Choice:
         def __init__(self, title, value, description=None):
@@ -268,11 +271,12 @@ def _fake_questionary(choice, captured=None):
             return choice
 
     def _select(*_a, choices=None, **_k):
-        if captured is not None:
-            captured["choices"] = choices
+        ns.choices = choices
         return _Select()
 
-    return types.SimpleNamespace(Choice=_Choice, select=_select)
+    ns.Choice = _Choice
+    ns.select = _select
+    return ns
 
 
 def test_pick_template_interactive_returns_choice(monkeypatch):
@@ -288,10 +292,10 @@ def test_pick_template_choices_carry_descriptions(monkeypatch):
 
     monkeypatch.setattr("sys.stdin", _Tty())
     monkeypatch.setattr("sys.stdout", _Tty())
-    captured: dict[str, object] = {}
-    monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(TEMPLATE, captured))
+    fake = _fake_questionary(TEMPLATE)
+    monkeypatch.setitem(sys.modules, "questionary", fake)
     init_exec._pick_template()
-    choices = captured["choices"]
+    choices = fake.choices
     assert [c.value for c in choices] == list(templates.TEMPLATE_ORDER)
     assert all(c.description == templates.description_for(c.value) for c in choices)
     assert all(c.description for c in choices)  # every template advertises a description
