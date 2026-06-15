@@ -103,7 +103,14 @@ def _async_return(value):
     return factory
 
 
-def _deps(monkeypatch, *, stt, tts_frames, llm_text):
+def _deps(monkeypatch, *, stt, tts_frames, llm_text, captured_messages=None):
+    """Build a cascade + Deps wired to fakes.
+
+    ``connect_tts`` hands out a FRESH FakeWS (cloned from ``tts_frames``) on every
+    call, because a streamed reply opens one TTS socket per sentence. When
+    ``captured_messages`` is a list, the fake ``llm_stream`` records the ``messages``
+    it was called with into it so memory threading can be asserted.
+    """
     cascade = _cascade(monkeypatch)
     settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
@@ -111,13 +118,18 @@ def _deps(monkeypatch, *, stt, tts_frames, llm_text):
     settings.GREETING = "hello!"
     settings.SYSTEM_PROMPT = "be brief"
 
-    async def llm_stream(_messages):
+    async def llm_stream(messages):
+        if captured_messages is not None:
+            captured_messages.append(messages)
         for piece in llm_text:
             yield piece
 
+    async def connect_tts():
+        return FakeWS(tts_frames)
+
     deps = cascade.Deps(
         connect_stt=_async_return(stt),
-        connect_tts=_async_return(FakeWS(tts_frames)),
+        connect_tts=connect_tts,
         llm_stream=llm_stream,
         settings=settings,
     )

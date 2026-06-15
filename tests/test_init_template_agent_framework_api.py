@@ -177,7 +177,7 @@ def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch)
     )
 
     async def drive():
-        task = asyncio.create_task(cascade._generate_reply(browser, deps, []))
+        task = asyncio.create_task(cascade._generate_reply(browser, deps, cascade.Session()))
         await asyncio.sleep(0)  # let it start and block on the LLM
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

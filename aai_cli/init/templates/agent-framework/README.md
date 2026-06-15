@@ -40,7 +40,10 @@ Set `ASSEMBLYAI_API_KEY` and the three sandbox host vars (`ASSEMBLYAI_STREAMING_
 
 ## Ideas to extend
 
-- Change the `MODEL`, `VOICE`, `SYSTEM_PROMPT`, or `GREETING` in `api/settings.py`.
-- Stream each LLM sentence into TTS as it completes (lower latency) instead of
-  synthesizing the whole reply at once — see `_generate_reply` in `api/cascade.py`.
+- Change the `MODEL`, `VOICE`, `SYSTEM_PROMPT`, `GREETING`, or `MAX_HISTORY` in
+  `api/settings.py`.
+- Replies already stream into TTS sentence-by-sentence as the LLM produces them
+  (`_generate_reply` flushes on each `.`/`!`/`?`), and a sliding window of
+  `MAX_HISTORY` messages gives the agent memory of the conversation. Tune the
+  sentence boundary or `MAX_HISTORY` to trade latency, cost, and recall.
 - Add tools (function calling) on the LLM leg so the agent can look things up.

@@ -28,6 +28,7 @@ SYSTEM_PROMPT = (
     "no markdown, emoji, bullet lists, or code."
 )
 GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
+MAX_HISTORY = 40  # keep the last N messages of conversation context (sliding window)
 
 # 16 kHz PCM in (Streaming v3); 24 kHz PCM out (streaming TTS).
 INPUT_SAMPLE_RATE = 16000

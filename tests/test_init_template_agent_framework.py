@@ -70,6 +70,7 @@ def test_settings_sandbox_defaults(monkeypatch):
         "no markdown, emoji, bullet lists, or code."
     )
     assert settings.GREETING == "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
+    assert settings.MAX_HISTORY == 40
 
 
 def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,11 +133,49 @@ def test_is_final_user_turn(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_build_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    messages = cascade.build_messages("be brief", "hello there")
+    messages = cascade.build_messages("be brief", [{"role": "user", "content": "hello there"}])
     assert messages == [
         {"role": "system", "content": "be brief"},
         {"role": "user", "content": "hello there"},
     ]
+
+
+def test_build_messages_prepends_system_to_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    assert cascade.build_messages("be brief", history) == [
+        {"role": "system", "content": "be brief"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+    ]
+
+
+def test_trim_history_keeps_last_n(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    history = [{"role": "user", "content": str(i)} for i in range(5)]
+    cascade._trim_history(history, 3)
+    assert history == [
+        {"role": "user", "content": "2"},
+        {"role": "user", "content": "3"},
+        {"role": "user", "content": "4"},
+    ]
+    # Under the cap: untouched (the other branch).
+    short = [{"role": "user", "content": "only"}]
+    cascade._trim_history(short, 3)
+    assert short == [{"role": "user", "content": "only"}]
+
+
+def test_split_sentences(monkeypatch: pytest.MonkeyPatch) -> None:
+    cascade = _cascade(monkeypatch)
+    assert cascade._split_sentences("One. Two! Three? rest") == (
+        ["One.", "Two!", "Three?"],
+        " rest",
+    )
+    assert cascade._split_sentences("whole") == ([], "whole")
+    assert cascade._split_sentences("") == ([], "")
 
 
 def test_pump_mic_forwards_decoded_audio(monkeypatch):
@@ -195,6 +234,7 @@ def test_synthesize_raises_when_no_begin(monkeypatch):
 
 
 def test_generate_reply_speaks_llm_text(monkeypatch):
+    # A single sentence: one TTS socket, one transcript.agent + reply.audio, one done.
     cascade, deps = _deps(
         monkeypatch,
         stt=FakeWS(),
@@ -202,20 +242,47 @@ def test_generate_reply_speaks_llm_text(monkeypatch):
             {"type": "Begin", "configuration": {}},
             {"type": "Audio", "audio": "AAA=", "is_final": True},
         ],
-        llm_text=["Hello", " world"],
+        llm_text=["Hello", " world."],
     )
     browser = FakeBrowser()
-    asyncio.run(cascade._generate_reply(browser, deps, cascade.build_messages("be brief", "hi")))
-    assert {"type": "transcript.agent", "text": "Hello world"} in browser.sent
+    session = cascade.Session()
+    asyncio.run(cascade._generate_reply(browser, deps, session))
+    assert {"type": "transcript.agent", "text": "Hello world."} in browser.sent
     assert {"type": "reply.audio", "data": "AAA="} in browser.sent
     assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
+    assert session.history[-1] == {"role": "assistant", "content": "Hello world."}
+
+
+def test_generate_reply_streams_each_sentence(monkeypatch):
+    # Deltas form TWO sentences -> two TTS sockets, two transcript.agent + reply.audio.
+    cascade, deps = _deps(
+        monkeypatch,
+        stt=FakeWS(),
+        tts_frames=[
+            {"type": "Begin", "configuration": {}},
+            {"type": "Audio", "audio": "AAA=", "is_final": True},
+        ],
+        llm_text=["Hello there. ", "How are you?"],
+    )
+    browser = FakeBrowser()
+    session = cascade.Session()
+    asyncio.run(cascade._generate_reply(browser, deps, session))
+    agent_texts = [e["text"] for e in browser.sent if e["type"] == "transcript.agent"]
+    assert agent_texts == ["Hello there.", "How are you?"]
+    audio = [e for e in browser.sent if e["type"] == "reply.audio"]
+    assert audio == [{"type": "reply.audio", "data": "AAA="}] * 2
+    done = [e for e in browser.sent if e["type"] == "reply.done"]
+    assert done == [{"type": "reply.done", "status": "completed"}]
+    assert session.history[-1] == {"role": "assistant", "content": "Hello there. How are you?"}
 
 
 def test_generate_reply_empty_llm_emits_done(monkeypatch):
     cascade, deps = _deps(monkeypatch, stt=FakeWS(), tts_frames=[], llm_text=["  "])
     browser = FakeBrowser()
-    asyncio.run(cascade._generate_reply(browser, deps, []))
+    session = cascade.Session()
+    asyncio.run(cascade._generate_reply(browser, deps, session))
     assert browser.sent == [{"type": "reply.done", "status": "empty"}]
+    assert session.history == []  # nothing recorded for an empty reply
 
 
 def test_generate_reply_surfaces_error(monkeypatch):
@@ -225,7 +292,7 @@ def test_generate_reply_surfaces_error(monkeypatch):
     settings.TTS_HOST = "tts.example"
 
     async def llm_stream(_messages):
-        yield "partial"  # one delta arrives, then the LLM leg fails mid-stream
+        yield "partial"  # one delta arrives (no boundary), then the LLM leg fails mid-stream
         raise RuntimeError("llm down")
 
     deps = cascade.Deps(
@@ -235,7 +302,7 @@ def test_generate_reply_surfaces_error(monkeypatch):
         settings=settings,
     )
     browser = FakeBrowser()
-    asyncio.run(cascade._generate_reply(browser, deps, []))
+    asyncio.run(cascade._generate_reply(browser, deps, cascade.Session()))
     assert browser.sent == [{"type": "session.error", "message": "llm down"}]
 
 
@@ -348,6 +415,15 @@ def test_run_session_happy_path(monkeypatch):
 
         return factory()
 
+    captured_session = {}
+    real_generate_reply = cascade._generate_reply
+
+    async def spy_generate_reply(browser, deps, session):
+        captured_session["session"] = session
+        await real_generate_reply(browser, deps, session)
+
+    monkeypatch.setattr(cascade, "_generate_reply", spy_generate_reply)
+
     deps = cascade.Deps(
         connect_stt=_async_return(stt),
         connect_tts=connect_tts,
@@ -364,6 +440,11 @@ def test_run_session_happy_path(monkeypatch):
     assert {"type": "reply.audio", "data": "R="} in browser.sent
     assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
     assert stt.closed is True
+    # The user turn is recorded and the assistant reply appended (memory).
+    assert captured_session["session"].history == [
+        {"role": "user", "content": "what time is it"},
+        {"role": "assistant", "content": "It is noon."},
+    ]
 
 
 def test_pump_stt_interim_turn_barges_in_without_displaying(monkeypatch):

@@ -33,6 +33,7 @@ class _Settings(Protocol):
     VOICE: str
     SYSTEM_PROMPT: str
     GREETING: str
+    MAX_HISTORY: int
     INPUT_SAMPLE_RATE: int
     OUTPUT_SAMPLE_RATE: int
 
@@ -92,12 +93,28 @@ def is_final_user_turn(msg: dict[str, object]) -> bool:
     return bool(msg.get("end_of_turn")) and bool(msg.get("turn_is_formatted"))
 
 
-def build_messages(system_prompt: str, user_text: str) -> list[dict[str, str]]:
-    """The chat `messages` array for one user turn."""
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_text},
-    ]
+def build_messages(system_prompt: str, history: list[dict[str, str]]) -> list[dict[str, str]]:
+    """The chat `messages` array: the system prompt followed by the conversation so far."""
+    return [{"role": "system", "content": system_prompt}, *history]
+
+
+def _trim_history(history: list[dict[str, str]], max_messages: int) -> None:
+    """Cap the running history to the most recent ``max_messages`` (sliding window)."""
+    if len(history) > max_messages:
+        del history[: len(history) - max_messages]
+
+
+def _split_sentences(buffer: str) -> tuple[list[str], str]:
+    """Split off complete sentences (each ending in . ! ?). Return (sentences, remainder)."""
+    sentences: list[str] = []
+    start = 0
+    for index, char in enumerate(buffer):
+        if char in ".!?":
+            sentence = buffer[start : index + 1].strip()
+            if sentence:
+                sentences.append(sentence)
+            start = index + 1
+    return sentences, buffer[start:]
 
 
 @dataclass
@@ -125,6 +142,7 @@ class Session:
 
     def __init__(self) -> None:
         self.reply_task: asyncio.Task[None] | None = None
+        self.history: list[dict[str, str]] = []
 
     async def cancel_reply(self) -> None:
         task, self.reply_task = self.reply_task, None
@@ -225,14 +243,40 @@ async def _speak(browser: _Browser, deps: Deps, text: str) -> None:
     await browser.send({"type": "reply.done", "status": "completed"})
 
 
-async def _generate_reply(browser: _Browser, deps: Deps, messages: list[dict[str, str]]) -> None:
-    """Stream the LLM reply, then speak it. Errors surface as session.error."""
+async def _speak_sentence(browser: _Browser, deps: Deps, text: str) -> None:
+    """Show + synthesize one sentence of a streamed reply (no reply.done)."""
+    await browser.send({"type": "transcript.agent", "text": text})
+    tts = await deps.connect_tts()
     try:
-        text = "".join([delta async for delta in deps.llm_stream(messages)]).strip()
-        if not text:
+        await _synthesize(browser, tts, text)
+    finally:
+        await _safe_close(tts)
+
+
+async def _generate_reply(browser: _Browser, deps: Deps, session: Session) -> None:
+    """Stream the LLM reply sentence-by-sentence into TTS (low perceived latency), then
+    record it in the conversation history. Errors surface as session.error."""
+    messages = build_messages(deps.settings.SYSTEM_PROMPT, session.history)
+    try:
+        spoken: list[str] = []
+        buffer = ""
+        async for delta in deps.llm_stream(messages):
+            buffer += delta
+            sentences, buffer = _split_sentences(buffer)
+            for sentence in sentences:
+                spoken.append(sentence)
+                await _speak_sentence(browser, deps, sentence)
+        tail = buffer.strip()
+        if tail:
+            spoken.append(tail)
+            await _speak_sentence(browser, deps, tail)
+        reply = " ".join(spoken).strip()
+        if not reply:
             await browser.send({"type": "reply.done", "status": "empty"})
             return
-        await _speak(browser, deps, text)
+        session.history.append({"role": "assistant", "content": reply})
+        _trim_history(session.history, deps.settings.MAX_HISTORY)
+        await browser.send({"type": "reply.done", "status": "completed"})
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # any leg failure becomes one clean session.error event
@@ -260,9 +304,9 @@ async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Sessio
         if is_final_user_turn(msg):
             await browser.send({"type": "transcript.user", "text": text})
             await session.cancel_reply()
-            session.reply_task = asyncio.create_task(
-                _generate_reply(browser, deps, build_messages(deps.settings.SYSTEM_PROMPT, text))
-            )
+            session.history.append({"role": "user", "content": text})
+            _trim_history(session.history, deps.settings.MAX_HISTORY)
+            session.reply_task = asyncio.create_task(_generate_reply(browser, deps, session))
         else:
             await maybe_barge_in(browser, session)
     await session.drain()
