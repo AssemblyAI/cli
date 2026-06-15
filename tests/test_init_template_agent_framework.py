@@ -364,8 +364,9 @@ def test_run_session_happy_path(monkeypatch):
     assert stt.closed is True
 
 
-def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
-    # A non-final turn with text emits transcript.user and barges in on an active reply.
+def test_pump_stt_interim_turn_barges_in_without_displaying(monkeypatch):
+    # An interim (non-final) turn is NOT shown to the user; it only barges in on an
+    # active reply. Only the finalized turn gets a transcript.user (see happy-path test).
     cascade = _cascade(monkeypatch)
     settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
@@ -399,5 +400,7 @@ def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
         await cascade._pump_stt(browser, stt, deps, session)
 
     asyncio.run(asyncio.wait_for(drive(), timeout=5))
-    assert {"type": "transcript.user", "text": "wait"} in browser.sent
+    # Interim turn: barge-in fires, but the partial text is never displayed.
     assert {"type": "input.speech.started"} in browser.sent
+    assert {"type": "transcript.user", "text": "wait"} not in browser.sent
+    assert not any(event.get("type") == "transcript.user" for event in browser.sent)

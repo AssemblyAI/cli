@@ -243,8 +243,9 @@ async def maybe_barge_in(browser: _Browser, session: Session) -> None:
 
 
 async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Session) -> None:
-    """Read STT turns: emit user transcripts, reply on finalized turns, barge in on
-    interim speech, and drain the last reply when the socket closes."""
+    """Read STT turns: display only the finalized (formatted end-of-turn) user
+    transcript and reply to it. An interim turn isn't shown — it only barges in on a
+    playing reply. Drain the last reply when the socket closes."""
     async for raw in stt:
         msg = json.loads(raw)
         if msg.get("type") != "Turn":
@@ -252,8 +253,8 @@ async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Sessio
         text = msg.get("transcript", "")
         if not text:
             continue
-        await browser.send({"type": "transcript.user", "text": text})
         if is_final_user_turn(msg):
+            await browser.send({"type": "transcript.user", "text": text})
             await session.cancel_reply()
             session.reply_task = asyncio.create_task(
                 _generate_reply(browser, deps, build_messages(deps.settings.SYSTEM_PROMPT, text))
@@ -261,6 +262,17 @@ async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Sessio
         else:
             await maybe_barge_in(browser, session)
     await session.drain()
+
+
+class _SessionClosed(Exception):
+    """Sentinel that unwinds the session TaskGroup when one pump returns — i.e. the
+    browser disconnected or the STT socket closed. Raising it cancels the sibling pump."""
+
+
+async def _until_closed(pump: Awaitable[None]) -> None:
+    """Run a pump to its natural end, then raise to close the session TaskGroup."""
+    await pump
+    raise _SessionClosed
 
 
 async def run_session(browser: _Browser, deps: Deps) -> None:
@@ -280,14 +292,16 @@ async def run_session(browser: _Browser, deps: Deps) -> None:
 
     session = Session()
     session.reply_task = asyncio.create_task(_speak(browser, deps, deps.settings.GREETING))
-    mic = asyncio.create_task(_pump_mic(browser, stt))
-    listen = asyncio.create_task(_pump_stt(browser, stt, deps, session))
     try:
-        await asyncio.wait({mic, listen}, return_when=asyncio.FIRST_COMPLETED)
+        # Race the two pumps: whichever returns first (browser hangs up → mic; STT
+        # socket closes → listen) raises _SessionClosed, and the TaskGroup cancels the
+        # other pump for us — no manual cancel/gather bookkeeping.
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(_until_closed(_pump_mic(browser, stt)))
+            tg.create_task(_until_closed(_pump_stt(browser, stt, deps, session)))
+    except* _SessionClosed:
+        pass
     finally:
-        mic.cancel()
-        listen.cancel()
-        await asyncio.gather(mic, listen, return_exceptions=True)
         await session.cancel_reply()
         await _safe_close(stt)
 
