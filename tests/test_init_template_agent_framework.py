@@ -13,7 +13,6 @@ import importlib
 import json
 import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -21,7 +20,7 @@ import pytest
 TEMPLATE_DIR = Path("aai_cli/init/templates/agent-framework")
 
 
-def _load(module: str, monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
+def _load(module: str, monkeypatch: pytest.MonkeyPatch, **env: str) -> Any:
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     for name in ("api.index", "api.cascade", "api.settings", "api"):
@@ -76,13 +75,13 @@ def test_settings_sandbox_defaults(monkeypatch):
     assert settings.GREETING == "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 
 
-def _cascade(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+def _cascade(monkeypatch: pytest.MonkeyPatch) -> Any:
     return _load("api.cascade", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
 
 
 def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = ""
     settings.TTS_HOST = "tts.example"
     assert "ASSEMBLYAI_API_KEY" in cascade.unavailable_reason(settings)
@@ -90,7 +89,7 @@ def test_unavailable_reason_missing_key(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = ""
     reason = cascade.unavailable_reason(settings)
@@ -99,7 +98,7 @@ def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     assert cascade.unavailable_reason(settings) is None
@@ -107,7 +106,7 @@ def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.STREAMING_HOST = "streaming.example"
     settings.INPUT_SAMPLE_RATE = 16000
     url = cascade.stt_url(settings)
@@ -120,7 +119,7 @@ def test_stt_url_carries_streaming_params(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_tts_url_carries_voice_and_rate(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.TTS_HOST = "tts.example"
     settings.VOICE = "ivy"
     settings.OUTPUT_SAMPLE_RATE = 24000
@@ -151,15 +150,15 @@ class FakeBrowser:
     """A browser side: hands out queued inbound messages, then blocks forever so the
     mic pump stays alive until the test cancels it (mirrors a still-connected client)."""
 
-    def __init__(self, inbound: list[dict] | None = None):
+    def __init__(self, inbound: list[dict[str, Any]] | None = None):
         self._inbound = list(inbound or [])
-        self.sent: list[dict] = []
+        self.sent: list[dict[str, Any]] = []
         self._idle = asyncio.Event()  # never set -> recv() blocks after the queue drains
 
-    async def send(self, event: dict) -> None:
+    async def send(self, event: dict[str, Any]) -> None:
         self.sent.append(event)
 
-    async def recv(self) -> dict | None:
+    async def recv(self) -> dict[str, Any] | None:
         if self._inbound:
             return self._inbound.pop(0)
         await self._idle.wait()
@@ -172,7 +171,7 @@ class FakeBrowser:
 class FakeWS:
     """A fake STT/TTS socket: yields the given frames as JSON strings, records sends."""
 
-    def __init__(self, frames: list[dict] | None = None):
+    def __init__(self, frames: list[dict[str, Any]] | None = None):
         self._frames = [json.dumps(f) for f in (frames or [])]
         self.sent: list[Any] = []
         self.closed = False
@@ -206,7 +205,7 @@ def _async_return(value):
 
 def _deps(monkeypatch, *, stt, tts_frames, llm_text):
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.GREETING = "hello!"
@@ -306,7 +305,7 @@ def test_generate_reply_empty_llm_emits_done(monkeypatch):
 
 def test_generate_reply_surfaces_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
 
@@ -356,7 +355,7 @@ def test_maybe_barge_in_noop_without_reply(monkeypatch):
 
 def test_run_session_unavailable_emits_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = ""
     browser = FakeBrowser()
     deps = cascade.Deps(
@@ -371,7 +370,7 @@ def test_run_session_unavailable_emits_error(monkeypatch):
 
 def test_run_session_connect_failure_emits_error(monkeypatch):
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
 
@@ -419,7 +418,7 @@ def test_run_session_happy_path(monkeypatch):
         ),
     ]
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.GREETING = "hello!"
@@ -455,7 +454,7 @@ def test_run_session_happy_path(monkeypatch):
 def test_pump_stt_emits_user_transcript_and_barges_in(monkeypatch):
     # A non-final turn with text emits transcript.user and barges in on an active reply.
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     browser = FakeBrowser()
@@ -495,7 +494,7 @@ def test_connect_stt_uses_auth_header_and_url(monkeypatch: pytest.MonkeyPatch) -
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.STREAMING_HOST = "streaming.example"
     settings.INPUT_SAMPLE_RATE = 16000
@@ -517,7 +516,7 @@ def test_connect_tts_passes_max_size_none(monkeypatch: pytest.MonkeyPatch) -> No
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.VOICE = "ivy"
@@ -578,7 +577,7 @@ def test_llm_stream_yields_nonempty_deltas(monkeypatch: pytest.MonkeyPatch) -> N
     import openai
 
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.LLM_GATEWAY_URL = "https://llm.example/v1"
     settings.MODEL = "test-model"
@@ -604,7 +603,7 @@ def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) ->
     import websockets
 
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.STREAMING_HOST = "streaming.example"
@@ -629,7 +628,7 @@ def test_deps_real_factories_invoke_adapters(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     browser = FakeBrowser()
@@ -659,7 +658,7 @@ def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch)
 
 def test_pump_stt_skips_non_turn_and_empty_transcript(monkeypatch: pytest.MonkeyPatch) -> None:
     cascade = _cascade(monkeypatch)
-    settings = importlib.import_module("api.settings")
+    settings: Any = importlib.import_module("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
     settings.SYSTEM_PROMPT = "be brief"
@@ -707,7 +706,7 @@ def test_ws_route_runs_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
     # Drive the real /ws adapter with TestClient's WebSocket, but stub run_session so
     # the route's accept + adapter wiring is exercised without real upstreams.
     index = _load("api.index", monkeypatch, ASSEMBLYAI_API_KEY="sk-test")
-    cascade = importlib.import_module("api.cascade")
+    cascade: Any = importlib.import_module("api.cascade")
     captured: dict[str, Any] = {}
 
     async def fake_run_session(browser, deps):
@@ -734,7 +733,7 @@ def test_fastapi_browser_recv_returns_none_on_disconnect(monkeypatch: pytest.Mon
 
     class FakeWSStarlette:
         def __init__(self):
-            self.sent: list[dict] = []
+            self.sent: list[dict[str, Any]] = []
 
         async def send_json(self, event):
             self.sent.append(event)
