@@ -214,3 +214,28 @@ def test_sessions_no_subcommand_shows_help():
     result = runner.invoke(app, ["sessions"])
     assert "Missing command" not in result.output
     assert "list" in result.output and "get" in result.output
+
+
+def test_sessions_list_projects_fields(mocker):
+    _auth()
+    payload = {
+        "data": [
+            {"session_id": "s_1", "status": "completed", "audio_duration_sec": 12.0},
+            {"session_id": "s_2", "status": "error", "audio_duration_sec": 0.0},
+        ]
+    }
+    mocker.patch(
+        "aai_cli.commands.sessions.ams.list_streaming", autospec=True, return_value=payload
+    )
+    result = runner.invoke(app, ["sessions", "list", "-o", "session_id,audio_duration_sec"])
+    assert result.exit_code == 0
+    assert result.output == "s_1\t12.0\ns_2\t0.0\n"
+
+
+def test_sessions_get_projects_field(mocker):
+    _auth()
+    detail = {"session_id": "s_1", "status": "completed", "audio_duration_sec": 30.0}
+    mocker.patch("aai_cli.commands.sessions.ams.get_streaming", autospec=True, return_value=detail)
+    result = runner.invoke(app, ["sessions", "get", "s_1", "-o", "audio_duration_sec"])
+    assert result.exit_code == 0
+    assert result.output == "30.0\n"

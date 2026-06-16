@@ -56,6 +56,14 @@ dependencies = [
     # imported lazily). fsspec core only — each protocol's backend (s3fs, gcsfs, adlfs,
     # …) stays a user-installed extra surfaced via a clean install hint.
     "fsspec>=2026.4.0",
+    # Podcast RSS/Atom feed parsing for `assembly transcribe <feed-url>` (feed.py,
+    # imported lazily). The de-facto standard feed parser; pure-Python, no compiled
+    # deps. We hand it already-fetched bytes (never a URL) so our bounded, safe
+    # httpx fetch stays the only network path.
+    "feedparser>=6.0.11",
+    # Web-page article extraction for `assembly speak --url` (webpage.py, imported
+    # lazily). Strips boilerplate down to the readable body; ships prebuilt wheels
+    # (lxml included), so it adds no source-compile step to Homebrew bottling.
     "trafilatura>=2.1.0",
 ]
 

@@ -227,7 +227,9 @@ def _render_table(items: list[_Item]) -> Table:
 
 
 @contextmanager
-def _progress_table(items: list[_Item], *, json_mode: bool, reduce_active: bool) -> Generator[None]:
+def _progress_table(
+    items: list[_Item], *, json_mode: bool, reduce_active: bool, quiet: bool
+) -> Generator[None]:
     """Render the batch as a live-updating table (human mode).
 
     Rich renders nothing while running on a non-interactive console and prints the
@@ -235,8 +237,12 @@ def _progress_table(items: list[_Item], *, json_mode: bool, reduce_active: bool)
     mode skips Rich entirely — NDJSON per source is the output. When a --llm-reduce
     step will print the aggregate to stdout, the table goes to stderr so stdout
     carries only the reduce result.
+
+    ``--quiet`` drops the table only when it's stderr progress chrome (the
+    --llm-reduce case); without --llm-reduce the table *is* the run's stdout result,
+    so it's left alone — quiet silences chrome, not the output a script came for.
     """
-    if json_mode:
+    if json_mode or (quiet and reduce_active):
         yield
         return
     console = output.error_console if reduce_active else output.console
@@ -380,7 +386,7 @@ def run_batch(
     """
     items = [_Item(source) for source in sources]
     reduce_active = bool(transform.reduce_prompts)
-    with _progress_table(items, json_mode=json_mode, reduce_active=reduce_active):
+    with _progress_table(items, json_mode=json_mode, reduce_active=reduce_active, quiet=quiet):
         _drain(
             api_key,
             items,

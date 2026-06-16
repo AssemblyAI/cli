@@ -154,11 +154,15 @@ class StreamSession:
     llm_prompts: list[str]
     model: str
     max_tokens: int
-    # When set, tee the streamed PCM to this path as a WAV (see record.tee_wav). Only
-    # the single-source path sets it — the parallel/batch callers reject --save-audio.
+    # When set, tee the streamed PCM to this path as a WAV (see record.tee_wav). The
+    # single-source path sets it; the batch (--from-stdin) caller rejects --save-audio.
     save_audio: Path | None = None
+    # --system-audio runs two parallel streams that can't share one WAV, so each is teed
+    # to its own file keyed by source label ("you", "system"). Set instead of save_audio
+    # for that path; a label with no entry (or no save flag) tees nowhere.
+    save_audio_by_label: dict[str, Path] | None = None
     # When set, write each finalized turn to this path as plain text (see TranscriptWriter).
-    # Like save_audio, only the single-source path sets it; batch rejects --save-transcript.
+    # One shared transcript even under --system-audio (both channels); batch rejects it.
     save_transcript: Path | None = None
     # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
     llm_interval: float = 0.0
@@ -275,12 +279,23 @@ class StreamSession:
             return
         follow(answer, turns)
 
+    def _audio_target(self, source_label: str | None) -> Path | None:
+        """The WAV path this source tees to, if any.
+
+        ``--system-audio`` records two channels to two files (``save_audio_by_label``);
+        every other run tees its single source to ``save_audio``.
+        """
+        if self.save_audio_by_label is not None:
+            return self.save_audio_by_label.get(source_label or "")
+        return self.save_audio
+
     def stream_one(
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
-        if self.save_audio is not None:
+        target = self._audio_target(source_label)
+        if target is not None:
             # Tee verbatim to disk at the source's true rate before it hits the wire.
-            audio = record.tee_wav(audio, self.save_audio, rate=rate)
+            audio = record.tee_wav(audio, target, rate=rate)
         flags = self.base_flags | {"sample_rate": rate}
         if source_label == "you":
             # The microphone captures you alone, so never diarize it into separate

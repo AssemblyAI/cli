@@ -271,6 +271,62 @@ def test_batch_reduce_routes_table_to_stderr(mocker, monkeypatch, capsys):
     assert "https://a" in err
 
 
+def test_quiet_drops_the_reduce_progress_table_but_keeps_the_result(mocker, monkeypatch, capsys):
+    """--quiet silences the stderr progress chrome; stdout still carries the reduce."""
+    import assemblyai as aai
+
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    monkeypatch.setattr(
+        transcribe_batch.llm,
+        "run_chain",
+        lambda api_key, prompts, *, transcript_text, model, max_tokens: "AGGREGATE",
+    )
+    transform = transcribe_run.TransformOptions(
+        prompts=[], model="m", max_tokens=10, reduce_prompts=["summarize"]
+    )
+    transcribe_batch.run_batch(
+        "sk_live",
+        ["https://a"],
+        transcription_config=aai.TranscriptionConfig(),
+        concurrency=1,
+        force=False,
+        transform=transform,
+        json_mode=False,
+        quiet=True,
+    )
+    out, err = capsys.readouterr()
+    assert "AGGREGATE" in out  # the data a script came for survives --quiet
+    assert "https://a" not in err  # the progress table chrome is gone
+
+
+def test_quiet_keeps_the_non_reduce_table_since_it_is_the_result(mocker, monkeypatch, capsys):
+    """Without --llm-reduce the table is the run's stdout output, so --quiet leaves it."""
+    import assemblyai as aai
+
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    transform = transcribe_run.TransformOptions(
+        prompts=[], model="m", max_tokens=10, reduce_prompts=[]
+    )
+    transcribe_batch.run_batch(
+        "sk_live",
+        ["https://a"],
+        transcription_config=aai.TranscriptionConfig(),
+        concurrency=1,
+        force=False,
+        transform=transform,
+        json_mode=False,
+        quiet=True,
+    )
+    out, _ = capsys.readouterr()
+    assert "https://a" in out  # the result table still renders to stdout
+
+
 def test_batch_reduce_skips_when_nothing_to_reduce(mocker, monkeypatch, capsys):
     """An all-empty batch result must not fire a (billable) reduce call."""
     import assemblyai as aai

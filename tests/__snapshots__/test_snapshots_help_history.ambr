@@ -10,8 +10,10 @@
   │ *    session_id      TEXT  Streaming session id [required]                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON                                            │
-  │ --help            Show this message and exit.                                │
+  │ --json    -j              Output raw JSON                                    │
+  │ --output  -o      FIELDS  Project fields from the JSON result                │
+  │                           (comma-separated, e.g. id,status)                  │
+  │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -19,9 +21,10 @@
    $ assembly sessions get sess_5551234
    Raw JSON for one session
    $ assembly sessions get sess_5551234 --json
+   Grab one field
+   $ assembly sessions get sess_5551234 -o audio_duration_sec
    Drill into the latest session
-   $ assembly sessions get $(assembly sessions list --json | jq -r
-   '.[0].session_id')
+   $ assembly sessions get $(assembly sessions list -o session_id | head -1)
   
   
   
@@ -40,6 +43,9 @@
   │ --status          [created|completed|error]  Only show sessions with this    │
   │                                              status                          │
   │ --json    -j                                 Output raw JSON                 │
+  │ --output  -o      FIELDS                     Project fields from the JSON    │
+  │                                              result (comma-separated, e.g.   │
+  │                                              id,status)                      │
   │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -49,10 +55,9 @@
    Find failed sessions
    $ assembly sessions list --status error
    Inspect the most recent session
-   $ assembly sessions get $(assembly sessions list --json | jq -r
-   '.[0].session_id')
-   Total audio across recent sessions (seconds)
-   $ assembly sessions list --json | jq '[.[].audio_duration_sec] | add'
+   $ assembly sessions get $(assembly sessions list -o session_id | head -1)
+   Pull session ids and durations as columns
+   $ assembly sessions list -o session_id,audio_duration_sec
   
   
   
@@ -130,10 +135,12 @@
    List recent transcripts
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --limit          INTEGER RANGE [x>=1]  How many transcripts to show          │
-  │                                        [default: 10]                         │
-  │ --json   -j                            Output raw JSON                       │
-  │ --help                                 Show this message and exit.           │
+  │ --limit           INTEGER RANGE [x>=1]  How many transcripts to show         │
+  │                                         [default: 10]                        │
+  │ --json    -j                            Output raw JSON                      │
+  │ --output  -o      FIELDS                Project fields from the JSON result  │
+  │                                         (comma-separated, e.g. id,status)    │
+  │ --help                                  Show this message and exit.          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -142,10 +149,10 @@
    Show more at once
    $ assembly transcripts list --limit 50
    Grab the latest transcript id
-   $ assembly transcripts list --json | jq -r '.[0].id'
+   $ assembly transcripts list -o id | head -1
    Summarize your latest transcript
-   $ assembly llm "summarize" --transcript-id $(assembly transcripts list --json
-   | jq -r '.[0].id')
+   $ assembly llm "summarize" --transcript-id $(assembly transcripts list -o id |
+   head -1)
   
   
   

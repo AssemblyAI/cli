@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import signal
 
 import pytest
 from typer.testing import CliRunner
@@ -104,6 +105,23 @@ def test_url_and_text_argument_are_mutually_exclusive(monkeypatch):
     # Both conflicting inputs are named so the fix is unambiguous.
     assert "the text argument" in result.output
     assert "--url" in result.output
+
+
+def test_installs_sigterm_handler_around_synthesis(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_single(*a, **k):
+        captured["handler"] = signal.getsignal(signal.SIGTERM)
+
+    monkeypatch.setattr("aai_cli.commands.speak._exec._speak_single", fake_single)
+    result = runner.invoke(app, ["--sandbox", "speak", "Hi"])
+    assert result.exit_code == 0
+    handler = captured["handler"]
+    # During synthesis/playback, SIGTERM maps to KeyboardInterrupt — the same abort
+    # path as Ctrl-C; without the wrapper this would be the default, non-callable SIG_DFL.
+    assert callable(handler)
+    with pytest.raises(KeyboardInterrupt):
+        handler(signal.SIGTERM, None)
 
 
 def test_reads_text_from_stdin_when_arg_omitted(monkeypatch, fake_synthesize):

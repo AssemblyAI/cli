@@ -353,7 +353,9 @@
    Press Enter (or Space) to start recording and press it again to stop; the
    utterance is sent to the AssemblyAI Sync API and the transcript prints
    immediately — no polling. Press q (or Esc/Ctrl-C) to finish. Each utterance
-   can be up to 120 seconds long.
+   can be up to 120 seconds long. With --once, or when stdout is piped,
+   recording starts immediately and dictate exits after one utterance so the
+   transcript flows to the next command.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --language             TEXT                       ISO 639-1 language code,   │
@@ -366,8 +368,8 @@
   │ --word-boost           TEXT                       Bias recognition toward a  │
   │                                                   term (repeatable)          │
   │ --device               INTEGER                    Microphone device index    │
-  │ --once                                            Transcribe one utterance,  │
-  │                                                   then exit                  │
+  │ --once                                            Record one utterance       │
+  │                                                   immediately, then exit     │
   │ --max-seconds          FLOAT RANGE                Auto-stop a recording      │
   │                        [1.0<=x<=120.0]            after this many seconds    │
   │                                                   [default: 120.0]           │
@@ -386,6 +388,8 @@
    $ assembly dictate
    One utterance, then exit
    $ assembly dictate --once
+   Pipe one utterance into another command
+   $ assembly dictate | assembly llm "write a conventional commit"
    Dictate in Spanish
    $ assembly dictate --language es
    Bias recognition toward tricky terms
@@ -766,7 +770,8 @@
   │                                     one turn per line                        │
   │ --save-dir               DIRECTORY  Auto-name the transcript and a matching  │
   │                                     WAV under DIR/YYYY-MM-DD/ with a         │
-  │                                     timestamped file                         │
+  │                                     timestamped file; --system-audio saves   │
+  │                                     one WAV per channel                      │
   │ --name                   TEXT       Title to slug into the --save-dir        │
   │                                     filename (e.g. a meeting title)          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -901,10 +906,11 @@
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. Each source gets a .aai.json sidecar
-   with the full result (including any --llm responses), and a re-run skips
-   sources already transcribed — with changed --llm prompts it replays just
-   the LLM step, never a second transcription.
+   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
+   to batch mode — every episode enclosure becomes one source. Each source gets a
+   .aai.json sidecar with the full result (including any --llm responses), and a
+   re-run skips sources already transcribed — with changed --llm prompts it
+   replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -915,8 +921,9 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
+  │                         feed, bucket URL (s3://, gs://, …), or a             │
+  │                         directory/glob (batch mode)                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1084,10 +1091,11 @@
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. Each source gets a .aai.json sidecar
-   with the full result (including any --llm responses), and a re-run skips
-   sources already transcribed — with changed --llm prompts it replays just
-   the LLM step, never a second transcription.
+   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
+   to batch mode — every episode enclosure becomes one source. Each source gets a
+   .aai.json sidecar with the full result (including any --llm responses), and a
+   re-run skips sources already transcribed — with changed --llm prompts it
+   replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -1098,8 +1106,9 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
+  │                         feed, bucket URL (s3://, gs://, …), or a             │
+  │                         directory/glob (batch mode)                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1260,6 +1269,8 @@
    $ assembly transcribe https://youtu.be/dtp6b76pMak
    Transcribe a podcast page
    $ assembly transcribe "https://podcasts.apple.com/…"
+   Transcribe a whole podcast feed
+   $ assembly transcribe "https://feeds.simplecast.com/…"
    Label who said what
    $ assembly transcribe call.mp3 --speaker-labels
    Redact PII for compliance

@@ -59,11 +59,11 @@ class SessionStatus(enum.StrEnum):
             ("Find failed sessions", "assembly sessions list --status error"),
             (
                 "Inspect the most recent session",
-                "assembly sessions get $(assembly sessions list --json | jq -r '.[0].session_id')",
+                "assembly sessions get $(assembly sessions list -o session_id | head -1)",
             ),
             (
-                "Total audio across recent sessions (seconds)",
-                "assembly sessions list --json | jq '[.[].audio_duration_sec] | add'",
+                "Pull session ids and durations as columns",
+                "assembly sessions list -o session_id,audio_duration_sec",
             ),
         ]
     ),
@@ -75,6 +75,7 @@ def list_(
         None, "--status", help="Only show sessions with this status"
     ),
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """List recent streaming sessions"""
 
@@ -108,7 +109,7 @@ def list_(
                 )
             return table
 
-        output.emit(rows, render, json_mode=json_mode)
+        output.emit(rows, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
 
@@ -118,9 +119,10 @@ def list_(
         [
             ("Show one session's details", "assembly sessions get sess_5551234"),
             ("Raw JSON for one session", "assembly sessions get sess_5551234 --json"),
+            ("Grab one field", "assembly sessions get sess_5551234 -o audio_duration_sec"),
             (
                 "Drill into the latest session",
-                "assembly sessions get $(assembly sessions list --json | jq -r '.[0].session_id')",
+                "assembly sessions get $(assembly sessions list -o session_id | head -1)",
             ),
         ]
     )
@@ -129,6 +131,7 @@ def get(
     ctx: typer.Context,
     session_id: str = typer.Argument(..., help="Streaming session id"),
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """Show details for one streaming session"""
 
@@ -144,6 +147,6 @@ def get(
                 table.add_row(label, escape("" if value is None else str(value)))
             return table
 
-        output.emit(data, render, json_mode=json_mode)
+        output.emit(data, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
