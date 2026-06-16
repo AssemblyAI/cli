@@ -7,12 +7,16 @@ same out of the box.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.core import llm
 
 DEFAULT_MODEL = llm.DEFAULT_MODEL
+DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
+# The realtime model the cascade transcribes with (same as the agent-cascade template).
+DEFAULT_SPEECH_MODEL = "u3-rt-pro"
 DEFAULT_SYSTEM_PROMPT = (
     "You are a friendly, concise voice assistant. Keep replies short and "
     "conversational. Your reply is read aloud by a text-to-speech engine, so "
@@ -32,3 +36,13 @@ class CascadeConfig:
     greeting: str = DEFAULT_GREETING
     model: str = DEFAULT_MODEL
     max_history: int = DEFAULT_MAX_HISTORY
+    # TTS language (None lets the server pick from the voice).
+    language: str | None = None
+    # LLM: cap per-reply tokens and pass through any extra gateway request fields.
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    llm_extra: Mapping[str, object] = field(default_factory=dict[str, object])
+    # Extra streaming-TTS query params (the --tts-config escape hatch).
+    tts_extra: Mapping[str, str] = field(default_factory=dict[str, str])
+    # Whether STT formats finalized turns. The reply trigger waits for the formatted
+    # turn when on; with it off, an unformatted end-of-turn is the cue instead.
+    format_turns: bool = True

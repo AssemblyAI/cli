@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.text import split_sentences, trim_history
-from aai_cli.core import client, config_builder, llm
+from aai_cli.core import client, llm
 from aai_cli.core.errors import CLIError
 from aai_cli.tts import session as tts_session
 from aai_cli.tts.session import SpeakConfig
@@ -96,23 +96,6 @@ def _spawn_thread(target: Callable[[], None]) -> _Worker:
     return thread
 
 
-# The realtime model the cascade transcribes with (same as the agent-cascade template).
-STT_SPEECH_MODEL = "u3-rt-pro"
-
-
-def _stt_params(sample_rate: int) -> StreamingParameters:
-    """Streaming v3 params for the cascade: PCM at ``sample_rate`` with formatted turns
-    (so ``turn_is_formatted`` marks the cue to reply)."""
-    merged = config_builder.merge_streaming_params(
-        flags={
-            "sample_rate": sample_rate,
-            "format_turns": True,
-            "speech_model": STT_SPEECH_MODEL,
-        }
-    )
-    return config_builder.construct_streaming_params(merged)
-
-
 @dataclass
 class CascadeDeps:
     """The cascade's three network legs plus its thread spawner, all injectable.
@@ -133,17 +116,29 @@ class CascadeDeps:
         config: CascadeConfig,
         *,
         audio: Iterable[bytes],
-        sample_rate: int,
+        stt_params: StreamingParameters,
     ) -> CascadeDeps:
         def run_stt(on_turn: Callable[[object], None]) -> None:
-            client.stream_audio(api_key, audio, params=_stt_params(sample_rate), on_turn=on_turn)
+            client.stream_audio(api_key, audio, params=stt_params, on_turn=on_turn)
 
         def complete_reply(messages: list[ChatCompletionMessageParam]) -> str:
-            response = llm.complete(api_key, model=config.model, messages=messages)
+            response = llm.complete(
+                api_key,
+                model=config.model,
+                messages=messages,
+                max_tokens=config.max_tokens,
+                extra=dict(config.llm_extra) or None,
+            )
             return llm.content_of(response)
 
         def synthesize(text: str) -> bytes:
-            spec = SpeakConfig(text=text, voice=config.voice, sample_rate=TTS_SAMPLE_RATE)
+            spec = SpeakConfig(
+                text=text,
+                voice=config.voice,
+                language=config.language,
+                sample_rate=TTS_SAMPLE_RATE,
+                extra=config.tts_extra,
+            )
             return tts_session.synthesize(api_key, spec).pcm
 
         return cls(run_stt=run_stt, complete_reply=complete_reply, synthesize=synthesize)
@@ -186,7 +181,7 @@ class CascadeSession:
         text = (getattr(event, "transcript", "") or "").strip()
         if not text:
             return
-        if _is_final_turn(event):
+        if _is_final_turn(event, format_turns=self.config.format_turns):
             self.renderer.user_final(text)
             self._barge_in()
             self.history.append({"role": "user", "content": text})
@@ -261,11 +256,16 @@ class CascadeSession:
         self._join_reply()
 
 
-def _is_final_turn(event: object) -> bool:
-    """True for a finalized, formatted end-of-turn — the cue to generate a reply."""
-    return bool(getattr(event, "end_of_turn", False)) and bool(
-        getattr(event, "turn_is_formatted", False)
-    )
+def _is_final_turn(event: object, *, format_turns: bool) -> bool:
+    """True for an end-of-turn that's the cue to generate a reply.
+
+    With formatting on, wait for the *formatted* turn (better text for the LLM);
+    with it off the server never sets ``turn_is_formatted``, so a bare end-of-turn
+    is the cue — otherwise ``--no-format-turns`` would make the agent never reply.
+    """
+    if not bool(getattr(event, "end_of_turn", False)):
+        return False
+    return bool(getattr(event, "turn_is_formatted", False)) or not format_turns
 
 
 def run_cascade(

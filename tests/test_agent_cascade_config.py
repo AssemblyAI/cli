@@ -19,6 +19,13 @@ def test_default_config_values():
     # The sliding-window default keeps the last 40 messages of context.
     assert config.max_history == 40
     assert DEFAULT_MAX_HISTORY == 40
+    # Formatting is on by default, so the reply trigger waits for the formatted turn.
+    assert config.format_turns is True
+    assert config.language is None
+    assert config.max_tokens == llm.DEFAULT_MAX_TOKENS
+    # Escape-hatch overrides start empty.
+    assert dict(config.llm_extra) == {}
+    assert dict(config.tts_extra) == {}
 
 
 def test_config_is_frozen():

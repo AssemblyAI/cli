@@ -11,6 +11,7 @@ import contextlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
@@ -20,11 +21,23 @@ from aai_cli.agent_cascade import engine, voices
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client
+from aai_cli.core import choices, client, config_builder, llm
 from aai_cli.core.errors import UsageError
+from aai_cli.streaming import turn_presets
 from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
 from aai_cli.tts import session as tts_session
+
+if TYPE_CHECKING:
+    from assemblyai.streaming.v3 import StreamingParameters
+
+# A --tts-config key that has its own named flag (or is owned by the cascade), with the
+# message steering the user to the right place instead of silently fighting the cascade.
+_RESERVED_TTS_KEYS: dict[str, str] = {
+    "voice": "Set the voice with --voice, not --tts-config.",
+    "language": "Set the language with --language, not --tts-config.",
+    "sample_rate": "TTS sample rate is fixed to match the live speaker and can't be overridden.",
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +58,58 @@ class AgentCascadeOptions:
     greeting: str
     device: int | None
     output_field: choices.TextOrJson | None
+    # Speech-to-text: common knobs named, everything else via --stt-config(-file).
+    speech_model: str
+    format_turns: bool
+    turn_detection: turn_presets.TurnDetectionPreset | None
+    stt_config: tuple[str, ...]
+    stt_config_file: Path | None
+    # Language model: token cap plus any extra gateway request field.
+    max_tokens: int
+    llm_config: tuple[str, ...]
+    # Text-to-speech: language named, any other query param via --tts-config.
+    language: str | None
+    tts_config: tuple[str, ...]
+
+
+def _build_stt_params(opts: AgentCascadeOptions, sample_rate: int) -> StreamingParameters:
+    """Construct the cascade's StreamingParameters from the STT flags + escape hatch.
+
+    A turn-detection preset expands into the three end-of-turn knobs; --stt-config /
+    --stt-config-file then override any field (including those knobs). sample_rate is
+    fixed by the audio source, so it's merged in here rather than user-set."""
+    eot, min_silence, max_silence = turn_presets.resolve(opts.turn_detection, None, None, None)
+    flags: dict[str, object] = {
+        "speech_model": opts.speech_model,
+        "format_turns": opts.format_turns,
+        "end_of_turn_confidence_threshold": eot,
+        "min_turn_silence": min_silence,
+        "max_turn_silence": max_silence,
+    }
+    merged = config_builder.merge_streaming_params(
+        flags=flags | {"sample_rate": sample_rate},
+        overrides=opts.stt_config or None,
+        config_file=opts.stt_config_file,
+    )
+    return config_builder.construct_streaming_params(merged)
+
+
+def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
+    """Parse --tts-config KEY=VALUE pairs into extra streaming-TTS query params,
+    rejecting keys that have a named flag (or are cascade-owned)."""
+    extra: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise UsageError(
+                f"--tts-config expects KEY=VALUE, got {pair!r}.",
+                suggestion="e.g. --tts-config chunk_size_ms=100",
+            )
+        if key in _RESERVED_TTS_KEYS:
+            raise UsageError(_RESERVED_TTS_KEYS[key])
+        extra[key] = value
+    return extra
 
 
 def _open_audio(
@@ -89,6 +154,10 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         # Existence-check the clip before credentials, so a typo'd path reads as
         # "file not found" instead of triggering a login.
         client.resolve_audio_source(opts.source, sample=opts.sample)
+    # Parse the LLM/TTS escape hatches before opening the device, so a bad KEY=VALUE
+    # fails fast instead of after the mic is live.
+    llm_extra = llm.parse_gateway_overrides(opts.llm_config)
+    tts_extra = _parse_tts_config(opts.tts_config)
     api_key = state.resolve_api_key()
 
     config = CascadeConfig(
@@ -97,12 +166,18 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         # File-driven runs speak a clip and end after the reply, so skip the greeting.
         greeting="" if from_file else opts.greeting,
         model=opts.model,
+        language=opts.language,
+        max_tokens=opts.max_tokens,
+        format_turns=opts.format_turns,
+        llm_extra=llm_extra,
+        tts_extra=tts_extra,
     )
     renderer = AgentRenderer(json_mode=json_mode, text_mode=text_mode, mic_input=not from_file)
     audio, player, sample_rate = _open_audio(
         renderer, source=opts.source, sample=opts.sample, device=opts.device, from_file=from_file
     )
-    deps = engine.CascadeDeps.real(api_key, config, audio=audio, sample_rate=sample_rate)
+    stt_params = _build_stt_params(opts, sample_rate)
+    deps = engine.CascadeDeps.real(api_key, config, audio=audio, stt_params=stt_params)
     try:
         engine.run_cascade(renderer=renderer, player=player, config=config, deps=deps)
     except KeyboardInterrupt:
