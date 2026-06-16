@@ -61,12 +61,19 @@
 # name: test_command_help_matches_snapshot[transcripts_get]
   '''
   
-   Usage: assembly transcripts get [OPTIONS] TRANSCRIPT_ID
+   Usage: assembly transcripts get [OPTIONS] [TRANSCRIPT_ID]
   
    Fetch a past transcript by id and print its text
   
+   Omit the id to read transcript ids from stdin — one per line, or the JSON from
+   `assembly transcripts list --json`. Add --llm to transform each transcript
+   through
+   LLM Gateway (a map), or --llm-reduce to run one prompt over them all (a
+   reduce).
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    transcript_id      TEXT  Transcript id [required]                       │
+  │   transcript_id      [TRANSCRIPT_ID]  Transcript id; omit to read ids from   │
+  │                                       stdin                                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --output             -o      [text|id|status|uttera  Print one field of the  │
@@ -78,6 +85,20 @@
   │ --help                                               Show this message and   │
   │                                                      exit.                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --llm               TEXT     Transform each transcript through LLM Gateway.  │
+  │                              Repeatable: each prompt runs on the previous    │
+  │                              one's response (a chain), the first on the      │
+  │                              transcript.                                     │
+  │ --llm-reduce        TEXT     Run one LLM-Gateway prompt over all fetched     │
+  │                              transcripts (a reduce). Repeatable: each runs   │
+  │                              on the previous one's output. For a single id   │
+  │                              it extends the --llm chain over that            │
+  │                              transcript.                                     │
+  │ --model             TEXT     LLM Gateway model                               │
+  │                              [default: claude-haiku-4-5-20251001]            │
+  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Fetch a transcript's text by id
@@ -86,10 +107,16 @@
    $ assembly transcripts get 5551234-abcd -o utterances
    Save SRT subtitles
    $ assembly transcripts get 5551234-abcd -o srt > captions.srt
-   Save VTT subtitles
-   $ assembly transcripts get 5551234-abcd -o vtt > captions.vtt
    Get the raw JSON
    $ assembly transcripts get 5551234-abcd --json
+   Fetch many at once from a piped list
+   $ assembly transcripts list --json | assembly transcripts get -o text
+   Summarize each transcript in a piped list
+   $ assembly transcripts list --json | assembly transcripts get --llm "Summarize
+   this call"
+   Rank a piped list with one reduce prompt
+   $ assembly transcripts list --json | assembly transcripts get --llm-reduce
+   "Rank these worst-to-best"
   
   
   

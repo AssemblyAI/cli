@@ -109,6 +109,9 @@ def test_get_json_emits_full_payload(mocker):
     data = json.loads(result.output)
     assert data["id"] == "t_42"
     assert data["text"] == "retrieved text"
+    # A single positional fetch emits the bare payload, not the batch NDJSON record
+    # (pins `json_mode and batch`: the single path must not carry a "type" wrapper).
+    assert "type" not in data
 
 
 def test_get_json_emits_full_sdk_payload_when_present(mocker):
