@@ -224,6 +224,28 @@ reportMissingTypeStubs = false
 venvPath = "."
 venv = ".venv"
 
+# Editors (Pylance) read this config and also analyze whatever test file you have
+# open. The `include` above scopes the *gate's* `pyright` run to aai_cli (strict), but
+# the editor checks open tests too — and applies the strict mode above, surfacing
+# thousands of low-value pytest fixture/mock diagnostics (untyped `monkeypatch`,
+# unknown member/parameter types, …). `executionEnvironments` can't set
+# `typeCheckingMode`, so we silence exactly the strict-only "unknown type" family for
+# tests/ — matching the standard mode the gate uses for tests (pyrightconfig.tests.json
+# in scripts/check.sh). Editor-facing only: the gate's `pyright` run never analyzes
+# tests/ (not in `include`), so this changes nothing about what the gate checks.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportUnknownParameterType = "none"
+reportMissingParameterType = "none"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownLambdaType = "none"
+reportPrivateUsage = "none"
+reportUnusedFunction = "none"
+reportMissingTypeArgument = "none"
+reportUntypedNamedTuple = "none"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
