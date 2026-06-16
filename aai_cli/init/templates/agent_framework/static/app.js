@@ -40,16 +40,20 @@ async function connect() {
 }
 
 async function startMic() {
+  // Create the player first: the server speaks the greeting the instant the
+  // socket opens, so `reply.audio` can arrive before getUserMedia's permission
+  // prompt resolves. Setting `player` synchronously here (before the first
+  // await) guarantees it exists when onEvent handles that first audio frame.
+  player = AudioHelpers.createPcmPlayer({
+    sampleRate: SESSION_CONFIG.outputSampleRate,
+  });
+  await player.resume();
   const stream = await navigator.mediaDevices.getUserMedia(
     SESSION_CONFIG.microphone,
   );
   micPipeline = AudioHelpers.createMicrophonePipeline(stream, {
     bufferSize: SESSION_CONFIG.processorBufferSize,
   });
-  player = AudioHelpers.createPcmPlayer({
-    sampleRate: SESSION_CONFIG.outputSampleRate,
-  });
-  await player.resume();
   await micPipeline.start((frame, sampleRate) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const pcm = AudioHelpers.downsampleToPCM(
@@ -78,7 +82,8 @@ function onEvent(event) {
     case "transcript.agent":
       return addTurn("agent", "Agent", event.text);
     case "reply.audio":
-      return player.playBase64Chunk(event.data);
+      if (player) player.playBase64Chunk(event.data);
+      return;
     case "input.speech.started":
       return bargeIn();
     case "reply.done":

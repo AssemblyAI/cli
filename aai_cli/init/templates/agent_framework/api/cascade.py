@@ -45,8 +45,11 @@ class _Settings(Protocol):
 
 
 class _Browser(Protocol):
-    async def send(self, event: dict[str, object]) -> None: ...
-    async def recv(self) -> dict[str, object] | None: ...
+    async def send(self, event: dict[str, object]) -> None:
+        """Send one protocol event to the browser."""
+
+    async def recv(self) -> dict[str, object] | None:
+        """Receive the next browser message, or None once the socket closes."""
 
 
 def unavailable_reason(settings: _Settings) -> str | None:
