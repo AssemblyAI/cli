@@ -87,6 +87,35 @@ uv run pytest -q -n auto --timeout=60 --cov=aai_cli --cov-branch --cov-context=t
 uv run python scripts/mutation_sweep.py aai_cli/config.py   # or omit paths for the whole package
 ```
 
+## Cross-platform portability (a green Linux gate isn't a green macOS/Windows run)
+
+`scripts/check.sh` runs **Linux-only** (it's bash plus Go/Homebrew/shell tooling),
+and that's the only gate a web session can run. But CI also runs the pytest suite
+on `windows-latest` (the `tests (windows)` job), and maintainers run the full gate
+on macOS — so OS-specific failures you never see on Linux still land on `main`.
+These have each cost a session a follow-up PR; bake the fix in up front:
+
+- **POSIX-only imports at module scope crash collection on Windows.** A top-level
+  `import termios` / `fcntl` / `os.openpty` (e.g. `tests/test_hotkey.py`'s pty driver)
+  aborts collection before any skip can apply. Guard it with
+  `pytest.importorskip("termios")` at the top of the module — that skips the whole file
+  on Windows and, unlike a skip/xfail marker, is **not** counted by the Linux
+  escape-hatch gate (which greps for the marker/call forms — so don't paste those literal
+  tokens into a test file or even this guide; that itself trips the count).
+- **Permission-bit asserts are POSIX-only.** `0o600`/`0o700` mode checks (e.g.
+  `tests/test_init_scaffold.py`) don't hold on Windows. Gate the mode assertion on
+  `os.name == "posix"` and assert the cross-platform behavior (file contents, the `.env`
+  rewrite) unconditionally so the test still covers Windows.
+- **macOS filesystems are case-insensitive by default.** A test that distinguishes two
+  paths differing only in case (hard-link / same-file detection) passes on Linux and fails
+  on macOS — assert on a case-stable property instead of the casing.
+- **When you touch `check.sh` itself, don't assume GNU tooling.** macOS ships BSD
+  utilities: BSD/ERE `grep -E` silently *ignores* `\b`, so a baseline-vs-working count that
+  used `git grep -E` on one side and `rg` on the other disagreed and failed the escape-hatch
+  gate on macOS only — use one matcher consistently (`git grep -P`, PCRE). Homebrew 6+ also
+  dropped `brew audit [path]`; a formula must be audited **by name** (copy it into an
+  ephemeral local tap first). Both bit a "green on Linux" branch on the maintainer's Mac.
+
 ## Replay fixtures (offline end-to-end coverage)
 
 `tests/test_replay_e2e.py` drives whole commands (`transcribe`/`transcripts`/`llm`/
