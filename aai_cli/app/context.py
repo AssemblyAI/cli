@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NoReturn, Protocol
@@ -8,7 +7,7 @@ from typing import NoReturn, Protocol
 import keyring.errors
 import typer
 
-from aai_cli.core import config, debuglog, env, environments, telemetry
+from aai_cli.core import config, debuglog, env, environments, stdio, telemetry
 from aai_cli.core.environments import Environment
 from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.ui import output, update_check
@@ -143,7 +142,7 @@ def _fail(err: CLIError, *, json_mode: bool) -> NoReturn:
 def _interactive_session() -> bool:
     """True only when a human can complete a browser login: stdin and stderr are both
     real TTYs and no agent/CI context is detected (`output.is_agentic`)."""
-    return sys.stdin.isatty() and sys.stderr.isatty() and not output.is_agentic()
+    return stdio.stdin_is_tty() and stdio.stderr_is_tty() and not output.is_agentic()
 
 
 def _should_auto_login(err: NotAuthenticated) -> bool:

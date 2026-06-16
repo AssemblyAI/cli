@@ -5,6 +5,23 @@ from aai_cli.core.errors import CLIError
 from aai_cli.ui import output
 
 
+class _StdoutProbe:
+    def __init__(self, tty):
+        self._tty = tty
+
+    def isatty(self):
+        return self._tty
+
+
+def test_stdout_is_tty_seam_reflects_real_stdout(monkeypatch):
+    # The seam every other test patches delegates to the stdio chokepoint; exercise
+    # the real body so the delegation is covered and a negated isatty mutant dies.
+    monkeypatch.setattr("sys.stdout", _StdoutProbe(True))
+    assert output._stdout_is_tty() is True
+    monkeypatch.setattr("sys.stdout", _StdoutProbe(False))
+    assert output._stdout_is_tty() is False
+
+
 def test_resolve_json_true_only_when_explicit():
     # JSON is opt-in: the flag is the single source of truth.
     assert output.resolve_json(explicit=True) is True
