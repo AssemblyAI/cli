@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aai_cli.core import youtube
 
@@ -44,7 +44,9 @@ class _Enclosure(BaseModel):
 
 
 class _Entry(BaseModel):
-    enclosures: list[_Enclosure] = []
+    # default_factory (not a shared `= []`) so each entry gets its own list, and the
+    # typed factory keeps the field's element type known under pyright strict.
+    enclosures: list[_Enclosure] = Field(default_factory=list[_Enclosure])
 
 
 class _ParsedFeed(BaseModel):
@@ -54,7 +56,7 @@ class _ParsedFeed(BaseModel):
     # feedparser sets ``version`` to a non-empty id ("rss20", "atom10", …) for a
     # recognized feed and to "" for anything it doesn't recognize as one.
     version: str = ""
-    entries: list[_Entry] = []
+    entries: list[_Entry] = Field(default_factory=list[_Entry])
 
 
 def feed_episode_urls(url: str) -> list[str] | None:
