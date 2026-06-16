@@ -15,10 +15,11 @@ from typing import TYPE_CHECKING
 
 import typer
 
+from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent_cascade import engine, voices
-from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, llm
@@ -27,6 +28,7 @@ from aai_cli.streaming import turn_presets
 from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
 from aai_cli.tts import session as tts_session
+from aai_cli.ui import output
 
 if TYPE_CHECKING:
     from assemblyai.streaming.v3 import StreamingParameters
@@ -70,6 +72,8 @@ class AgentCascadeOptions:
     # Text-to-speech: language named, any other query param via --tts-config.
     language: str | None
     tts_config: tuple[str, ...]
+    # Print the equivalent Python instead of running a conversation.
+    show_code: bool
 
 
 def _build_stt_params(opts: AgentCascadeOptions, sample_rate: int) -> StreamingParameters:
@@ -135,6 +139,32 @@ def _open_audio(
     return duplex.mic, duplex.player, SAMPLE_RATE
 
 
+def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None:
+    """Print the equivalent cascade script and exit without authenticating or opening
+    audio. Raw stdout for `> script.py`; the named per-leg knobs are reflected, the
+    --stt/--llm/--tts-config escape hatches are not."""
+    if opts.source or opts.sample:
+        # The generated script is microphone-driven (like the agent snippet); a
+        # faithful file-driven cascade would need the CLI's ffmpeg-decode +
+        # exit-after-reply machinery. Say so on stderr so `--show-code > script.py`
+        # stays byte-clean instead of silently dropping the source.
+        output.error_console.print(
+            "[aai.warn]Note:[/aai.warn] the generated script uses the microphone; "
+            "it does not stream the audio source you passed."
+        )
+    config = CascadeConfig(
+        voice=opts.voice,
+        system_prompt=system_prompt_text,
+        greeting=opts.greeting,
+        model=opts.model,
+        max_history=DEFAULT_MAX_HISTORY,
+        language=opts.language,
+        max_tokens=opts.max_tokens,
+        format_turns=opts.format_turns,
+    )
+    output.print_code(code_gen.agent_cascade(config, speech_model=opts.speech_model))
+
+
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
@@ -146,6 +176,10 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     # Streaming TTS has no production host, so the whole cascade is sandbox-only.
     tts_session.require_available("agent-cascade")
     system_prompt_text = _resolve_system_prompt(opts.system_prompt, opts.system_prompt_file)
+
+    if opts.show_code:
+        _print_show_code(opts, system_prompt_text)
+        return
 
     from_file = bool(opts.source) or opts.sample
     if from_file and opts.device is not None:
