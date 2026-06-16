@@ -22,7 +22,7 @@ from aai_cli.agent_cascade import engine, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, llm
+from aai_cli.core import choices, client, config_builder, llm, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.session import resolve_output_modes
@@ -213,7 +213,10 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     stt_params = _build_stt_params(opts, sample_rate)
     deps = engine.CascadeDeps.real(api_key, config, audio=audio, stt_params=stt_params)
     try:
-        engine.run_cascade(renderer=renderer, player=player, config=config, deps=deps)
+        # SIGTERM stops the cascade as cleanly as Ctrl-C, so an external supervisor
+        # (Hammerspoon, a service manager, a wrapper's `kill`) can end the session.
+        with signals.terminate_as_interrupt():
+            engine.run_cascade(renderer=renderer, player=player, config=config, deps=deps)
     except KeyboardInterrupt:
         renderer.stopped()
     except BrokenPipeError as exc:

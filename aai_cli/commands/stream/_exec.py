@@ -20,7 +20,7 @@ from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import code_gen
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, stdio, youtube
+from aai_cli.core import choices, client, config_builder, signals, stdio, youtube
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.streaming import naming, record, transcript, turn_presets
@@ -376,7 +376,10 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
     """Execute one `assembly stream` invocation from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     if opts.from_stdin:
-        _run_batch(opts, state, json_mode=json_mode, text_mode=text_mode)
+        # SIGTERM stops the stream as cleanly as Ctrl-C, so an external supervisor
+        # (Hammerspoon, a service manager, a wrapper's `kill`) can end a recording.
+        with signals.terminate_as_interrupt():
+            _run_batch(opts, state, json_mode=json_mode, text_mode=text_mode)
         return
     sources = opts.source_options()
     base_flags = opts.base_flags()
@@ -409,4 +412,5 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
         save_transcript=save_transcript,
         llm_interval=opts.llm_interval,
     )
-    _dispatch(session, sources)
+    with signals.terminate_as_interrupt():
+        _dispatch(session, sources)

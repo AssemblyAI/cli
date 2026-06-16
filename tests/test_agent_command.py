@@ -1,5 +1,7 @@
 import json
+import signal
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.agent.voices import VOICES, format_voice_list
@@ -134,6 +136,24 @@ def test_agent_ctrl_c_exits_cleanly(monkeypatch):
     monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", raise_kbd)
     result = runner.invoke(app, ["agent"])
     assert result.exit_code == 0
+
+
+def test_agent_installs_sigterm_handler_around_session(monkeypatch):
+    config.set_api_key("default", "sk_live")
+    captured: dict[str, object] = {}
+
+    def fake_run_session(api_key, *, renderer, player, mic, config):
+        captured["handler"] = signal.getsignal(signal.SIGTERM)
+
+    monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", fake_run_session)
+    result = runner.invoke(app, ["agent"])
+    assert result.exit_code == 0
+    handler = captured["handler"]
+    # While the session runs, SIGTERM maps to KeyboardInterrupt (the same clean stop
+    # as Ctrl-C); without the wrapper this would be the default, non-callable SIG_DFL.
+    assert callable(handler)
+    with pytest.raises(KeyboardInterrupt):
+        handler(signal.SIGTERM, None)
 
 
 def test_agent_unknown_voice_exits_2(monkeypatch):
