@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aai_cli.core import choices
+
 
 @dataclass(frozen=True)
 class Voice:
@@ -71,4 +73,4 @@ def format_voice_list() -> str:
 
 def complete_voice(incomplete: str) -> list[str]:
     """Shell-completion callback for ``--voice``: known voice ids matching the prefix."""
-    return [name for name in VOICE_NAMES if name.startswith(incomplete)]
+    return choices.complete_prefix(VOICE_NAMES, incomplete)
