@@ -227,19 +227,24 @@ def _render_table(items: list[_Item]) -> Table:
 
 
 @contextmanager
-def _progress_table(items: list[_Item], *, json_mode: bool) -> Generator[None]:
+def _progress_table(
+    items: list[_Item], *, json_mode: bool, reduce_active: bool = False
+) -> Generator[None]:
     """Render the batch as a live-updating table (human mode).
 
     Rich renders nothing while running on a non-interactive console and prints the
     final frame once on stop, so piped/agent runs still get the result table. JSON
-    mode skips Rich entirely — NDJSON per source is the output.
+    mode skips Rich entirely — NDJSON per source is the output. When a --llm-reduce
+    step will print the aggregate to stdout, the table goes to stderr so stdout
+    carries only the reduce result.
     """
     if json_mode:
         yield
         return
+    console = output.error_console if reduce_active else output.console
     with Live(
         get_renderable=lambda: _render_table(items),
-        console=output.console,
+        console=console,
         refresh_per_second=4,  # pragma: no mutate (cosmetic refresh cadence)
     ):
         yield
@@ -295,6 +300,62 @@ def _summarize(items: list[_Item], *, json_mode: bool, quiet: bool) -> None:
         output.error_console.print(output.success(f"Transcribed {completed}, skipped {skipped}."))
 
 
+def _reduce_input(record: dict[str, object]) -> str:
+    """A source's contribution to the reduce: its last --llm output, else its text."""
+    transform = jsonshape.as_mapping(record.get("transform"))
+    if transform is not None:
+        steps = jsonshape.mapping_list(transform.get("steps"))
+        if steps:
+            return str(steps[-1].get("output", "") or "")
+    transcript = jsonshape.as_mapping(record.get("transcript"))
+    if transcript is not None:
+        return str(transcript.get("text", "") or "")
+    return ""
+
+
+def _gather_reduce_inputs(items: list[_Item]) -> str:
+    """Concatenate each completed/skipped source's reduce input under a header."""
+    blocks: list[str] = []
+    for item in items:
+        if item.status not in ("completed", "skipped"):
+            continue
+        record = resumable_record(sidecar_path(item.source), digest=None)
+        text = _reduce_input(record) if record is not None else ""
+        if text:
+            blocks.append(f"### Source: {item.source}\n{text}")
+    return "\n\n".join(blocks)
+
+
+def _run_reduce(
+    api_key: str,
+    items: list[_Item],
+    *,
+    transform: transcribe_exec.TransformOptions,
+    json_mode: bool,
+) -> None:
+    """Run the --llm-reduce chain once over every source's result; print to stdout."""
+    combined = _gather_reduce_inputs(items)
+    result = llm.run_chain(
+        api_key,
+        transform.reduce_prompts,
+        transcript_text=combined,
+        model=transform.model,
+        max_tokens=transform.max_tokens,
+    )
+    if json_mode:
+        # Additive NDJSON event after the per-source {"type":"result"} records.
+        output.emit_ndjson(
+            {
+                "type": "reduce",
+                "model": transform.model,
+                "prompts": transform.reduce_prompts,
+                "output": result,
+            }
+        )
+    else:
+        output.emit_text(result)
+
+
 def run_batch(
     api_key: str,
     sources: list[str],
@@ -312,7 +373,8 @@ def run_batch(
     code; a re-run resumes from the sidecars and retries only the failures.
     """
     items = [_Item(source) for source in sources]
-    with _progress_table(items, json_mode=json_mode):
+    reduce_active = bool(transform.reduce_prompts)
+    with _progress_table(items, json_mode=json_mode, reduce_active=reduce_active):
         _drain(
             api_key,
             items,
@@ -323,3 +385,5 @@ def run_batch(
             json_mode=json_mode,
         )
     _summarize(items, json_mode=json_mode, quiet=quiet)
+    if reduce_active:
+        _run_reduce(api_key, items, transform=transform, json_mode=json_mode)

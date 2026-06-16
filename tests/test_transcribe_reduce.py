@@ -7,10 +7,12 @@ the single-source chain and batch-reduce behavior tests to this file.
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 from typer.testing import CliRunner
 
+from aai_cli.app.transcribe import batch as transcribe_batch
 from aai_cli.app.transcribe import run as transcribe_run
 from aai_cli.core import config
 from aai_cli.main import app
@@ -29,6 +31,19 @@ def workdir(tmp_path, monkeypatch):
 
 def _auth() -> None:
     config.set_api_key("default", "sk_live")
+
+
+def _fake_transcript(mocker, source):
+    t = mocker.MagicMock()
+    t.id = f"t_{source}"
+    t.text = f"text of {source}"
+    t.status = "completed"
+    t.json_response = {"id": t.id, "text": t.text, "status": "completed"}
+    return t
+
+
+def _ndjson(result):
+    return [json.loads(line) for line in result.output.splitlines() if line.startswith("{")]
 
 
 _DEFAULT_OPTS = transcribe_run.TranscribeOptions(
@@ -122,3 +137,105 @@ def test_single_source_runs_reduce_as_chain_step(mocker):
     # Two chain steps ran: --llm then --llm-reduce, over the one transcript.
     assert transform.call_count == 2
     assert "reduced" in result.output
+
+
+def test_batch_reduce_feeds_map_outputs(mocker, monkeypatch):
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    mocker.patch(_TRANSFORM, side_effect=["JUDGED a", "JUDGED b", "FINAL"])
+    captured = {}
+
+    def spy(api_key, prompts, *, transcript_text, model, max_tokens):
+        captured["text"] = transcript_text
+        captured["prompts"] = prompts
+        return "FINAL"
+
+    monkeypatch.setattr(transcribe_batch.llm, "run_chain", spy)
+    result = runner.invoke(
+        app,
+        ["transcribe", "--from-stdin", "--llm", "judge", "--llm-reduce", "rank"],
+        input="https://a\nhttps://b\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "### Source: https://a" in captured["text"]
+    assert "JUDGED a" in captured["text"] and "JUDGED b" in captured["text"]
+    assert captured["prompts"] == ["rank"]
+    assert "FINAL" in result.output
+
+
+def test_batch_reduce_falls_back_to_transcript_text(mocker, monkeypatch):
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    captured = {}
+
+    def spy(api_key, prompts, *, transcript_text, model, max_tokens):
+        captured["text"] = transcript_text
+        return "FINAL"
+
+    monkeypatch.setattr(transcribe_batch.llm, "run_chain", spy)
+    result = runner.invoke(
+        app,
+        ["transcribe", "--from-stdin", "--llm-reduce", "summarize"],
+        input="https://a\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "text of https://a" in captured["text"]
+
+
+def test_batch_reduce_emits_json_record(mocker, monkeypatch):
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    monkeypatch.setattr(
+        transcribe_batch.llm,
+        "run_chain",
+        lambda api_key, prompts, *, transcript_text, model, max_tokens: "FINAL",
+    )
+    result = runner.invoke(
+        app,
+        ["transcribe", "--from-stdin", "--llm-reduce", "summarize", "--json"],
+        input="https://a\n",
+    )
+    assert result.exit_code == 0, result.output
+    records = _ndjson(result)
+    reduce_records = [r for r in records if r.get("type") == "reduce"]
+    assert len(reduce_records) == 1
+    assert reduce_records[0]["output"] == "FINAL"
+    assert reduce_records[0]["prompts"] == ["summarize"]
+
+
+def test_batch_reduce_routes_table_to_stderr(mocker, monkeypatch, capsys):
+    """run_batch sends the reduce result to stdout and the progress table to stderr."""
+    import assemblyai as aai
+
+    _auth()
+    monkeypatch.setattr(
+        _TRANSCRIBE, lambda api_key, audio, *, config: _fake_transcript(mocker, audio)
+    )
+    monkeypatch.setattr(
+        transcribe_batch.llm,
+        "run_chain",
+        lambda api_key, prompts, *, transcript_text, model, max_tokens: "AGGREGATE",
+    )
+    transform = transcribe_run.TransformOptions(
+        prompts=[], model="m", max_tokens=10, reduce_prompts=["summarize"]
+    )
+    transcribe_batch.run_batch(
+        "sk_live",
+        ["https://a"],
+        transcription_config=aai.TranscriptionConfig(),
+        concurrency=1,
+        force=False,
+        transform=transform,
+        json_mode=False,
+        quiet=False,
+    )
+    out, err = capsys.readouterr()
+    assert "AGGREGATE" in out
+    assert "AGGREGATE" not in err
+    assert "https://a" in err
