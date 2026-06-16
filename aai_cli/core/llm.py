@@ -14,7 +14,10 @@ if TYPE_CHECKING:
 # The LLM Gateway is OpenAI-compatible, so we talk to it through the OpenAI SDK
 # pointed at the active environment's gateway base (see _client / code_gen).
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_MAX_TOKENS = 1000
+# Generous ceiling so long reduces/summaries aren't clipped mid-sentence; the
+# gateway only bills tokens actually generated, so a high cap costs nothing on
+# short replies. Override per-call with --max-tokens.
+DEFAULT_MAX_TOKENS = 8192
 
 # Exact tag the gateway substitutes with a transcript's text when `transcript_id`
 # is supplied. Must be exactly "{{ transcript }}" (spaces included).

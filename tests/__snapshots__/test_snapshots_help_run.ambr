@@ -67,7 +67,7 @@
   │                                           [default:                          │
   │                                           claude-haiku-4-5-20251001]         │
   │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
-  │                                           [default: 1000]                    │
+  │                                           [default: 8192]                    │
   │ --llm-config        TEXT                  Set any LLM Gateway request field  │
   │                                           as KEY=VALUE (repeatable)          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -314,7 +314,7 @@
   │ --model             TEXT     LLM Gateway model for --llm                     │
   │                              [default: claude-haiku-4-5-20251001]            │
   │ --max-tokens        INTEGER  Max tokens for the --llm selection reply        │
-  │                              [default: 1000]                                 │
+  │                              [default: 8192]                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -461,7 +461,7 @@
   │                              utterances                                      │
   │                              [default: claude-haiku-4-5-20251001]            │
   │ --max-tokens        INTEGER  Max tokens per utterance translation            │
-  │                              [default: 1000]                                 │
+  │                              [default: 8192]                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -563,7 +563,7 @@
   │                              previous one's output.                          │
   │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
+  │ --max-tokens        INTEGER  Max tokens [default: 8192]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -621,7 +621,7 @@
   │                                                answer, pipe-friendly) or     │
   │                                                json                          │
   │ --max-tokens             INTEGER RANGE [x>=1]  Max tokens to generate        │
-  │                                                [default: 1000]               │
+  │                                                [default: 8192]               │
   │ --config                 TEXT                  Set any extra gateway request │
   │                                                field: KEY=VALUE, repeatable  │
   │                                                (e.g. --config                │
@@ -856,7 +856,7 @@
   │ --model               TEXT                  LLM Gateway model                │
   │                                             [default:                        │
   │                                             claude-haiku-4-5-20251001]       │
-  │ --max-tokens          INTEGER RANGE [x>=1]  Max tokens [default: 1000]       │
+  │ --max-tokens          INTEGER RANGE [x>=1]  Max tokens [default: 8192]       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Advanced ───────────────────────────────────────────────────────────────────╮
   │ --config             KEY=VALUE  Set any StreamingParameters field as         │
@@ -1067,7 +1067,7 @@
   │                              transcript.                                     │
   │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
+  │ --max-tokens        INTEGER  Max tokens [default: 8192]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -1253,7 +1253,7 @@
   │                              transcript.                                     │
   │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
+  │ --max-tokens        INTEGER  Max tokens [default: 8192]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
