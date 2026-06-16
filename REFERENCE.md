@@ -79,7 +79,15 @@ each carrying a `"type"` field to dispatch on:
 | `assembly agent-cascade --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
 | `assembly dictate --json` | `utterance` |
 | `assembly llm --follow --json` | `answer` |
-| `assembly transcribe <batch> --json` | `result` (one per source) |
+| `assembly transcribe <batch> --json` | `result` (one per source), then `reduce` if `--llm-reduce` is set |
 
 New event types may be added; existing fields are stable. Consumers should
 ignore types they don't recognize.
+
+With `--llm-reduce`, batch mode emits one final
+`{"type":"reduce","model","prompts","output"}` record after the per-source
+`result` records — the aggregate prompt(s) run once over every result, with the
+output printed to stdout (the progress table is routed to stderr so stdout stays
+clean for piping). `--llm-reduce` is repeatable, each prompt running on the
+previous one's output; for a single source it extends the `--llm` chain over
+that transcript.

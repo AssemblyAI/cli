@@ -134,6 +134,18 @@ assembly stream -o text | grep --line-buffered -i alex \
 assembly transcribe --sample --llm "summarize" --llm "translate the summary to French"
 ```
 
+**Score diarization quality across several videos** — pipe a list of URLs into batch mode (`--from-stdin`), transcribe them in parallel with speaker labels, have an LLM judge each transcript, then use `--llm-reduce` to run one prompt over all the results for a single aggregate verdict:
+
+```sh
+printf '%s\n' \
+  https://youtu.be/RC5zRvqnRm8 \
+  https://youtu.be/u9S41Kplsbs \
+  https://youtu.be/mP31CdpGzUY \
+| assembly transcribe --from-stdin --concurrency 3 --speaker-labels \
+    --llm 'Judge diarization quality; output JSON {speaker_count, issues, score}' \
+    --llm-reduce 'Rank these videos worst-to-best and summarize the failure modes'
+```
+
 **Talk to a voice agent in your terminal** — full-duplex, around 20 voices:
 
 ```sh
