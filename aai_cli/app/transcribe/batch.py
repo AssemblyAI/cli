@@ -227,9 +227,7 @@ def _render_table(items: list[_Item]) -> Table:
 
 
 @contextmanager
-def _progress_table(
-    items: list[_Item], *, json_mode: bool, reduce_active: bool = False
-) -> Generator[None]:
+def _progress_table(items: list[_Item], *, json_mode: bool, reduce_active: bool) -> Generator[None]:
     """Render the batch as a live-updating table (human mode).
 
     Rich renders nothing while running on a non-interactive console and prints the
