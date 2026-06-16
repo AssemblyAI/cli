@@ -47,7 +47,7 @@ def _ndjson(result):
 
 
 _DEFAULT_OPTS = transcribe_run.TranscribeOptions(
-    source=None,
+    sources=[],
     sample=False,
     from_stdin=False,
     concurrency=2,

@@ -133,7 +133,7 @@ def test_stdin_source_list_dedupes_preserving_order(monkeypatch):
     import io
 
     monkeypatch.setattr("sys.stdin", io.StringIO("b.mp3\na.mp3\nb.mp3\n"))
-    assert transcribe_sources.expand_sources(None, from_stdin=True, sample=False) == [
+    assert transcribe_sources.expand_sources([], from_stdin=True, sample=False) == [
         "b.mp3",
         "a.mp3",
     ]
@@ -160,9 +160,33 @@ def test_from_stdin_rejects_sample():
     assert "--from-stdin reads sources from stdin" in result.output
 
 
-@pytest.mark.parametrize("source", ["-", "https://example.com/a.mp3", None, ""])
-def test_non_batch_sources_return_none(source):
-    assert transcribe_sources.expand_sources(source, from_stdin=False, sample=False) is None
+@pytest.mark.parametrize("sources", [["-"], ["https://example.com/a.mp3"], [], [""]])
+def test_non_batch_sources_return_none(sources):
+    assert transcribe_sources.expand_sources(sources, from_stdin=False, sample=False) is None
+
+
+def test_multiple_positional_sources_form_an_as_is_batch_list():
+    # Several explicit positional sources are a hand-picked batch: deduped, order kept,
+    # and taken literally (a lone source of the same value would instead stay single).
+    assert transcribe_sources.expand_sources(
+        ["b.mp3", "a.mp3", "b.mp3"], from_stdin=False, sample=False
+    ) == ["b.mp3", "a.mp3"]
+
+
+def test_multiple_sources_with_sample_is_rejected():
+    with pytest.raises(UsageError, match="Pass either --sample or your own sources"):
+        transcribe_sources.expand_sources(["a.mp3", "b.mp3"], from_stdin=False, sample=True)
+
+
+def test_multiple_positional_sources_transcribe_as_a_batch(tmp_path, mocker, monkeypatch):
+    _auth()
+    (tmp_path / "a.mp3").write_bytes(b"a")
+    (tmp_path / "b.mp3").write_bytes(b"b")
+    seen = _patch_transcribe(mocker, monkeypatch)
+    # The user's "pass a list of URLs in" ask: hand-pick the sources on argv, no stdin.
+    result = runner.invoke(app, ["transcribe", "a.mp3", "b.mp3", "--json"])
+    assert result.exit_code == 0, result.output
+    assert sorted(seen) == ["a.mp3", "b.mp3"]
 
 
 def test_empty_source_is_rejected_not_treated_as_cwd(tmp_path, mocker, monkeypatch):
@@ -179,13 +203,13 @@ def test_empty_source_is_rejected_not_treated_as_cwd(tmp_path, mocker, monkeypat
 
 
 def test_sample_returns_none_even_without_source():
-    assert transcribe_sources.expand_sources(None, from_stdin=False, sample=True) is None
+    assert transcribe_sources.expand_sources([], from_stdin=False, sample=True) is None
 
 
 def test_expand_sources_directory_error_message_names_the_path(tmp_path):
     (tmp_path / "calls").mkdir()
     with pytest.raises(UsageError, match="No audio files found under calls"):
-        transcribe_sources.expand_sources("calls", from_stdin=False, sample=False)
+        transcribe_sources.expand_sources(["calls"], from_stdin=False, sample=False)
 
 
 @pytest.mark.parametrize(
@@ -299,7 +323,7 @@ def test_remote_glob_without_matches_exits_2(memory_fs):
 def test_plain_remote_file_url_stays_single_source(memory_fs):
     # No glob and no trailing slash: a bucket URL is one file, like a local path.
     for url in ("memory://calls/a.mp3", "memory://calls"):
-        assert transcribe_sources.expand_sources(url, from_stdin=False, sample=False) is None
+        assert transcribe_sources.expand_sources([url], from_stdin=False, sample=False) is None
 
 
 def test_sidecar_path_for_remote_url_is_slug_plus_hash():

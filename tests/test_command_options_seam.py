@@ -27,7 +27,7 @@ from aai_cli.options import DEFAULT_BATCH_CONCURRENCY
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
 TRANSCRIBE_DEFAULTS = transcribe_exec.TranscribeOptions(
-    source=None,
+    sources=[],
     sample=False,
     from_stdin=False,
     concurrency=DEFAULT_BATCH_CONCURRENCY,
@@ -133,6 +133,15 @@ def test_run_transcribe_validates_flags_before_credentials():
             AppState(),
             json_mode=False,
         )
+
+
+def test_single_source_collapses_zero_or_one_positional():
+    # The positional argument is variadic; the single-source path wants a scalar.
+    assert TRANSCRIBE_DEFAULTS.single_source is None  # zero sources (e.g. --sample)
+    one = dataclasses.replace(TRANSCRIBE_DEFAULTS, sources=["a.mp3"])
+    assert one.single_source == "a.mp3"
+    many = dataclasses.replace(TRANSCRIBE_DEFAULTS, sources=["a.mp3", "b.mp3"])
+    assert many.single_source is None  # two or more route to batch instead
 
 
 def test_transcribe_flags_drop_unset_speaker_labels():

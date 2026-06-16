@@ -185,7 +185,7 @@ class TranscribeOptions:
     ``json_mode`` argument), so a test can describe an invocation without argv.
     """
 
-    source: str | None
+    sources: list[str]
     sample: bool
     from_stdin: bool
     concurrency: int
@@ -236,6 +236,17 @@ class TranscribeOptions:
     chars_per_caption: int | None
     out: Path | None
     show_code: bool
+
+    @property
+    def single_source(self) -> str | None:
+        """The lone source for the single-source path, or ``None``.
+
+        The positional argument is variadic: zero sources (``--sample`` or audio
+        piped on stdin) or exactly one feed the single-source path; two or more
+        always route to batch (see ``expand_sources``), so this collapses the 0/1
+        case to the scalar the single-source helpers expect.
+        """
+        return self.sources[0] if len(self.sources) == 1 else None
 
     def flags(self, pii_policies: list[str] | None) -> dict[str, object]:
         """The curated flags in TranscriptionConfig field names (None = unset)."""
@@ -302,14 +313,15 @@ def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None
     Raw stdout, so `--show-code > script.py` runs. No source/--sample needed — fall
     back to a placeholder path for a pure snippet.
     """
-    if opts.source and remotefs.is_remote_url(opts.source):
+    source = opts.single_source
+    if source and remotefs.is_remote_url(source):
         raise UsageError(
             "--show-code does not support bucket URLs (s3://, gs://, …) yet.",
             suggestion="Download the audio first and pass the local file.",
         )
     audio = (
-        client.resolve_audio_source(opts.source, sample=opts.sample, check_local=False)
-        if opts.source or opts.sample
+        client.resolve_audio_source(source, sample=opts.sample, check_local=False)
+        if source or opts.sample
         else "your-audio-file.mp3"
     )
     gateway = code_gen.gateway_options(
@@ -348,22 +360,22 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     # --download-sections only slices a downloadable-URL fetch; for a local file,
     # stdin, remote bucket, or directory batch it would be dropped silently — reject
     # it up front like `clip`/`dub` rather than billing a full-file transcription.
-    youtube.validate_sections_flag(opts.source, list(opts.download_sections or []))
+    youtube.validate_sections_flag(opts.single_source, list(opts.download_sections or []))
 
     merged = config_builder.merge_transcribe_config(
         flags=flags, overrides=opts.config_kv, config_file=opts.config_file
     )
     transcribe_validate.validate_speakers_expected(merged)
 
-    sources = transcribe_sources.expand_sources(
-        opts.source,
+    batch_sources = transcribe_sources.expand_sources(
+        opts.sources,
         from_stdin=opts.from_stdin,
         sample=opts.sample,
         # --show-code must never touch the network; skip the feed probe and treat a
         # URL as a single source for code generation.
         detect_feeds=not opts.show_code,
     )
-    if sources is not None:
+    if batch_sources is not None:
         transcribe_sources.reject_single_source_flags(
             out=opts.out,
             output_field=opts.output_field,
@@ -371,7 +383,7 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
         )
         transcribe_batch.run_batch(
             state.resolve_api_key(),
-            sources,
+            batch_sources,
             transcription_config=config_builder.construct_transcription_config(merged),
             concurrency=opts.concurrency,
             force=opts.force,
@@ -388,16 +400,16 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     tc = config_builder.construct_transcription_config(merged)
 
     # A typo'd path must read as "file not found", not trigger a login.
-    check_source_exists(opts.source, sample=opts.sample)
+    check_source_exists(opts.single_source, sample=opts.sample)
     transcribe_validate.warn_unrecognized_extension(
-        opts.source, json_mode=json_mode, quiet=state.quiet
+        opts.single_source, json_mode=json_mode, quiet=state.quiet
     )
 
     api_key = state.resolve_api_key()
     with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
         transcript = run_transcription(
             api_key,
-            opts.source,
+            opts.single_source,
             sample=opts.sample,
             transcription_config=tc,
             download_sections=list(opts.download_sections or []),

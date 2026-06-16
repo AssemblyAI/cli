@@ -134,17 +134,19 @@ assembly stream -o text | grep --line-buffered -i alex \
 assembly transcribe --sample --llm "summarize" --llm "translate the summary to French"
 ```
 
-**Score diarization quality across several videos** — pipe a list of URLs into batch mode (`--from-stdin`), transcribe them in parallel with speaker labels, have an LLM judge each transcript, then use `--llm-reduce` to run one prompt over all the results for a single aggregate verdict:
+**Score diarization quality across several videos** — pass a hand-picked list of URLs straight on the command line (batch mode), transcribe them in parallel with speaker labels, have an LLM judge each transcript, then use `--llm-reduce` to run one prompt over all the results for a single aggregate verdict:
 
 ```sh
-printf '%s\n' \
+assembly transcribe \
   https://youtu.be/RC5zRvqnRm8 \
   https://youtu.be/u9S41Kplsbs \
   https://youtu.be/mP31CdpGzUY \
-| assembly transcribe --from-stdin --concurrency 3 --speaker-labels \
-    --llm 'Judge diarization quality; output JSON {speaker_count, issues, score}' \
-    --llm-reduce 'Rank these videos worst-to-best and summarize the failure modes'
+  --concurrency 3 --speaker-labels \
+  --llm 'Judge diarization quality; output JSON {speaker_count, issues, score}' \
+  --llm-reduce 'Rank these videos worst-to-best and summarize the failure modes'
 ```
+
+(Prefer to stream a generated list in? `--from-stdin` reads one source per line, so `find . -name '*.wav' | assembly transcribe --from-stdin …` works too.)
 
 **Summarize your recent transcripts and surface the themes** — pipe a list of past transcripts into `transcripts get`, summarize each (`--llm`, a map), then reduce them all into one answer (`--llm-reduce`):
 
@@ -285,10 +287,12 @@ assembly transcribe video.mp4 -o srt   # captions
 assembly transcribe call.mp3 --speaker-labels --summarization --json
 ```
 
-Transcribe in batches — a directory, a glob, a piped list, or a whole podcast
-RSS feed (every episode becomes one source), resumable on re-run:
+Transcribe in batches — a hand-picked list, a directory, a glob, a piped list,
+or a whole podcast RSS feed (every episode becomes one source), resumable on
+re-run:
 
 ```sh
+assembly transcribe a.mp3 b.mp3 https://youtu.be/dtp6b76pMak   # a hand-picked list
 assembly transcribe ./recordings
 assembly transcribe "s3://bucket/calls/*.mp3"   # needs: pip install s3fs
 assembly transcribe "https://feeds.simplecast.com/54nAGcIl"   # every episode in the feed

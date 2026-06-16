@@ -27,6 +27,10 @@ SPEC = command_registry.CommandModuleSpec(
             ("Transcribe a local file", "assembly transcribe call.mp3"),
             ("Batch-transcribe a folder", "assembly transcribe ./recordings"),
             ("Batch-transcribe a glob", 'assembly transcribe "calls/*.mp3"'),
+            (
+                "Batch-transcribe a hand-picked list",
+                "assembly transcribe a.mp3 https://youtu.be/dtp6b76pMak --concurrency 3",
+            ),
             ("Batch-transcribe an S3 prefix", 'assembly transcribe "s3://bucket/calls/*.mp3"'),
             ("Try it with the hosted sample", "assembly transcribe --sample"),
             ("Transcribe a YouTube video", "assembly transcribe https://youtu.be/dtp6b76pMak"),
@@ -45,10 +49,11 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def transcribe(
     ctx: typer.Context,
-    source: str | None = typer.Argument(
+    sources: list[str] | None = typer.Argument(
         None,
         help="Audio file, URL, YouTube/podcast URL, podcast RSS feed, bucket URL "
-        "(s3://, gs://, …), or a directory/glob (batch mode)",
+        "(s3://, gs://, …), or a directory/glob (batch mode). Pass several to "
+        "batch-transcribe a hand-picked list",
     ),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample"),
     # batch mode
@@ -365,12 +370,12 @@ def transcribe(
     Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
     URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
 
-    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-    transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
-    to batch mode — every episode enclosure becomes one source. Each source gets a
-    .aai.json sidecar with the full result (including any --llm responses), and a
-    re-run skips sources already transcribed — with changed --llm prompts it
-    replays just the LLM step, never a second transcription.
+    Batch mode: pass several sources, a directory or glob (or pipe a list with
+    --from-stdin) to transcribe many sources concurrently. A podcast RSS/Atom feed
+    URL also expands to batch mode — every episode enclosure becomes one source.
+    Each source gets a .aai.json sidecar with the full result (including any --llm
+    responses), and a re-run skips sources already transcribed — with changed
+    --llm prompts it replays just the LLM step, never a second transcription.
 
     Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
     batches (a glob, or a folder ending in /); install the matching fsspec
@@ -379,7 +384,7 @@ def transcribe(
     Curated flags cover common features; --config KEY=VALUE and --config-file reach every other field. Analysis (summary, chapters, ...) renders in human mode.
     """
     opts = transcribe_exec.TranscribeOptions(
-        source=source,
+        sources=list(sources) if sources else [],
         sample=sample,
         from_stdin=from_stdin,
         concurrency=concurrency,

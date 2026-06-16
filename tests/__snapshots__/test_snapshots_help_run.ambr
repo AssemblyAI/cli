@@ -887,7 +887,7 @@
 # name: test_command_help_matches_snapshot[t]
   '''
   
-   Usage: assembly t [OPTIONS] [SOURCE]
+   Usage: assembly t [OPTIONS] [SOURCES]...
   
    Transcribe a file, URL, or YouTube/podcast link — or a whole batch
   
@@ -897,12 +897,12 @@
    Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
-   Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
-   to batch mode — every episode enclosure becomes one source. Each source gets a
-   .aai.json sidecar with the full result (including any --llm responses), and a
-   re-run skips sources already transcribed — with changed --llm prompts it
-   replays just the LLM step, never a second transcription.
+   Batch mode: pass several sources, a directory or glob (or pipe a list with
+   --from-stdin) to transcribe many sources concurrently. A podcast RSS/Atom feed
+   URL also expands to batch mode — every episode enclosure becomes one source.
+   Each source gets a .aai.json sidecar with the full result (including any --llm
+   responses), and a re-run skips sources already transcribed — with changed
+   --llm prompts it replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -913,9 +913,10 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
-  │                         feed, bucket URL (s3://, gs://, …), or a             │
-  │                         directory/glob (batch mode)                          │
+  │   sources      [SOURCES]...  Audio file, URL, YouTube/podcast URL, podcast   │
+  │                              RSS feed, bucket URL (s3://, gs://, …), or a    │
+  │                              directory/glob (batch mode). Pass several to    │
+  │                              batch-transcribe a hand-picked list             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1072,7 +1073,7 @@
 # name: test_command_help_matches_snapshot[transcribe]
   '''
   
-   Usage: assembly transcribe [OPTIONS] [SOURCE]
+   Usage: assembly transcribe [OPTIONS] [SOURCES]...
   
    Transcribe a file, URL, or YouTube/podcast link — or a whole batch
   
@@ -1082,12 +1083,12 @@
    Save with --out FILE, or pipe one field with -o text. YouTube and podcast-page
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
-   Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
-   to batch mode — every episode enclosure becomes one source. Each source gets a
-   .aai.json sidecar with the full result (including any --llm responses), and a
-   re-run skips sources already transcribed — with changed --llm prompts it
-   replays just the LLM step, never a second transcription.
+   Batch mode: pass several sources, a directory or glob (or pipe a list with
+   --from-stdin) to transcribe many sources concurrently. A podcast RSS/Atom feed
+   URL also expands to batch mode — every episode enclosure becomes one source.
+   Each source gets a .aai.json sidecar with the full result (including any --llm
+   responses), and a re-run skips sources already transcribed — with changed
+   --llm prompts it replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -1098,9 +1099,10 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
-  │                         feed, bucket URL (s3://, gs://, …), or a             │
-  │                         directory/glob (batch mode)                          │
+  │   sources      [SOURCES]...  Audio file, URL, YouTube/podcast URL, podcast   │
+  │                              RSS feed, bucket URL (s3://, gs://, …), or a    │
+  │                              directory/glob (batch mode). Pass several to    │
+  │                              batch-transcribe a hand-picked list             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1253,6 +1255,8 @@
    $ assembly transcribe ./recordings
    Batch-transcribe a glob
    $ assembly transcribe "calls/*.mp3"
+   Batch-transcribe a hand-picked list
+   $ assembly transcribe a.mp3 https://youtu.be/dtp6b76pMak --concurrency 3
    Batch-transcribe an S3 prefix
    $ assembly transcribe "s3://bucket/calls/*.mp3"
    Try it with the hosted sample

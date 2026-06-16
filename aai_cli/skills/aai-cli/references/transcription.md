@@ -5,11 +5,14 @@ Five commands. All accept `--json` (auto-enabled when piped); `transcribe`,
 `transcribe`, `stream`, and `agent` accept `--show-code` to print equivalent
 Python SDK code without calling the API.
 
-## `assembly transcribe [SOURCE]` — file / URL / YouTube / podcast page / RSS feed
+## `assembly transcribe [SOURCE]...` — file / URL / YouTube / podcast page / RSS feed
 
 `SOURCE` is a local file path, public URL, or a media-page URL yt-dlp can extract
 (YouTube, Apple Podcasts, Spreaker, SoundCloud, …) — those are downloaded first.
-A podcast RSS/Atom feed URL expands into a resumable batch run over every episode
+Pass **several sources** to batch-transcribe a hand-picked list on the command
+line (each taken literally, no glob/feed expansion) — the clean alternative to
+`--from-stdin`. A directory, glob, or bucket folder also expands to a batch, and a
+podcast RSS/Atom feed URL expands into a resumable batch run over every episode
 enclosure (one `.aai.json` sidecar apiece). Use `--sample` for the hosted
 `wildfires.mp3`. Analysis results (summary, chapters, sentiment, …) render
 automatically in human mode.
@@ -39,6 +42,7 @@ assembly transcribe --sample
 assembly transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
 assembly transcribe call.mp3 -o text
 assembly transcribe call.mp3 --show-code
+assembly transcribe a.mp3 b.mp3 https://youtu.be/dtp6b76pMak --concurrency 3   # hand-picked batch
 assembly transcribe "https://feeds.simplecast.com/54nAGcIl"   # every episode in the feed
 ```
 
