@@ -8,7 +8,28 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+from typer.testing import CliRunner
+
 from aai_cli.app.transcribe import run as transcribe_run
+from aai_cli.core import config
+from aai_cli.main import app
+
+runner = CliRunner()
+
+_TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
+_TRANSFORM = "aai_cli.core.llm.transform_transcript"
+
+
+@pytest.fixture(autouse=True)
+def workdir(tmp_path, monkeypatch):
+    # Batch sources and sidecars resolve relative to cwd; isolate each test.
+    monkeypatch.chdir(tmp_path)
+
+
+def _auth() -> None:
+    config.set_api_key("default", "sk_live")
+
 
 _DEFAULT_OPTS = transcribe_run.TranscribeOptions(
     source=None,
@@ -82,3 +103,22 @@ def test_chain_appends_reduce_to_map() -> None:
         prompts=["a"], model="m", max_tokens=10, reduce_prompts=["b"]
     )
     assert transform.chain() == ["a", "b"]
+
+
+def test_single_source_runs_reduce_as_chain_step(mocker):
+    _auth()
+    mocker.patch(
+        _TRANSCRIBE,
+        return_value=mocker.MagicMock(
+            id="t1",
+            text="hello",
+            status="completed",
+            json_response={"id": "t1", "text": "hello", "status": "completed"},
+        ),
+    )
+    transform = mocker.patch(_TRANSFORM, side_effect=["mapped", "reduced"])
+    result = runner.invoke(app, ["transcribe", "--sample", "--llm", "map", "--llm-reduce", "red"])
+    assert result.exit_code == 0, result.output
+    # Two chain steps ran: --llm then --llm-reduce, over the one transcript.
+    assert transform.call_count == 2
+    assert "reduced" in result.output

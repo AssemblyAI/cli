@@ -150,12 +150,15 @@ def deliver_result(
         )
         return
 
-    if transform.prompts:
+    chain = transform.chain()
+    if chain:
         # Chain the prompts: the first runs over the transcript (injected server-side
         # via transcript_id); each subsequent prompt runs over the prior response.
+        # --llm-reduce prompts extend the chain here — a single source has nothing to
+        # aggregate, so reduce is just more chain steps over this one transcript.
         steps = llm.run_chain_steps(
             api_key,
-            transform.prompts,
+            chain,
             transcript_id=transcript.id,
             model=transform.model,
             max_tokens=transform.max_tokens,
@@ -309,7 +312,9 @@ def _print_show_code(opts: TranscribeOptions, merged: dict[str, object]) -> None
         if opts.source or opts.sample
         else "your-audio-file.mp3"
     )
-    gateway = code_gen.gateway_options(list(opts.llm_prompt or []), opts.model, opts.max_tokens)
+    gateway = code_gen.gateway_options(
+        list(opts.llm_prompt or []) + list(opts.llm_reduce or []), opts.model, opts.max_tokens
+    )
     output.print_code(
         render_transcribe_code(
             merged,
@@ -334,7 +339,9 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     transcribe_validate.validate_pii_policies(pii_policies)
     flags = opts.flags(pii_policies)
 
-    transcribe_validate.validate_out_with_llm(opts.out, opts.llm_prompt)
+    transcribe_validate.validate_out_with_llm(
+        opts.out, (opts.llm_prompt or []) + (opts.llm_reduce or []) or None
+    )
     transcribe_validate.validate_out_path(opts.out)
     transcribe_validate.validate_json_with_output(opts.output_field, json_mode=json_mode)
     client.validate_chars_per_caption(opts.chars_per_caption, opts.output_field)
