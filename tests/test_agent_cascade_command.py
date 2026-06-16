@@ -7,6 +7,7 @@ selection, and CascadeDeps.real's three live legs (all driven against fakes).
 from __future__ import annotations
 
 import dataclasses
+import signal
 import types
 
 import pytest
@@ -262,6 +263,22 @@ def test_keyboard_interrupt_stops_cleanly(monkeypatch):
     run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
     assert rendered["r"].stopped_called is True
     assert rendered["r"].closed is True
+
+
+def test_installs_sigterm_handler_around_run(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def capture(**kwargs):
+        captured["handler"] = signal.getsignal(signal.SIGTERM)
+
+    _wire_run(monkeypatch, capture)
+    run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
+    handler = captured["handler"]
+    # While the cascade runs, SIGTERM maps to KeyboardInterrupt (the same clean stop
+    # as Ctrl-C); without the wrapper this would be the default, non-callable SIG_DFL.
+    assert callable(handler)
+    with pytest.raises(KeyboardInterrupt):
+        handler(signal.SIGTERM, None)
 
 
 def test_broken_pipe_exits_zero(monkeypatch):
