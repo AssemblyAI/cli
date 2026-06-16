@@ -214,7 +214,7 @@ def test_launch_and_open_handles_keyboard_interrupt(monkeypatch):
     monkeypatch.setattr(runner, "wait_for_port", lambda port: True)
     monkeypatch.setattr(runner.webbrowser, "open", lambda url: None)
     rc = runner.launch_and_open(Path("/proj"), port=3000, use_uv=True, open_browser=False)
-    assert rc == 0  # clean Ctrl-C shutdown
+    assert rc == 130  # Ctrl-C is a cancel, not a clean (0) shutdown
     assert proc.terminated is True
 
 

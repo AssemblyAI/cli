@@ -12,10 +12,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import typer
 from rich.markup import escape
 
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, stdio
+from aai_cli.core import choices, client, errors, stdio
 from aai_cli.core import llm as gateway
 from aai_cli.core.errors import UsageError
 from aai_cli.ui import output
@@ -161,16 +162,16 @@ def _run_follow(
         return gateway.content_of(response)
 
     transcript: list[str] = []
-    interrupted = False
     with FollowRenderer(json_mode=json_mode) as render:
-        # Ctrl-C is the normal "stop watching" signal -> exit cleanly (code 0).
+        # Ctrl-C is the normal "stop watching" signal: exit 130 (cancel) rather than
+        # masquerading as a clean finish — the renderer's panel closes on the way out.
         try:
             for turn in stdio.iter_piped_stdin_lines():
                 transcript.append(turn)
                 render(ask("\n".join(transcript)), len(transcript))
         except KeyboardInterrupt:
-            interrupted = True
-    if not transcript and not interrupted:
+            raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
+    if not transcript:
         # An empty pipe (`assembly llm -f "…" </dev/null`) would otherwise exit 0
         # silently, having asked nothing.
         raise UsageError(_FOLLOW_STDIN_MESSAGE)

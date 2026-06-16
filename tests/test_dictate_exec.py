@@ -13,6 +13,7 @@ import dataclasses
 import json
 
 import pytest
+import typer
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.dictate import _exec as dictate_exec
@@ -342,10 +343,13 @@ def test_transcription_runs_under_the_status_spinner(seams, monkeypatch):
     assert seen == {"message": "Transcribing…", "json_mode": False, "quiet": True}
 
 
-def test_ctrl_c_ends_the_session_cleanly(seams):
+def test_ctrl_c_exits_with_cancel_code(seams):
     keys = RaisingKeys([])
     seams["keys"] = keys
-    _run()  # no exception
+    # Ctrl-C cancels dictation: exit 130 (distinct from `q`, which finishes with 0).
+    with pytest.raises(typer.Exit) as exc:
+        _run()
+    assert exc.value.exit_code == 130
     assert keys.exited  # the with-block unwound, restoring the terminal
 
 

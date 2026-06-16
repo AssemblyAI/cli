@@ -9,7 +9,7 @@ import time
 import webbrowser
 from pathlib import Path
 
-from aai_cli.core.errors import CLIError
+from aai_cli.core.errors import CANCELLED_EXIT_CODE, CLIError
 from aai_cli.ui import output
 
 
@@ -143,8 +143,10 @@ def run_server(
 ) -> int:
     """Run a prebuilt server command, wait for the port, open the browser, block until Ctrl-C.
 
-    Returns the process exit code (0 on a clean Ctrl-C shutdown). `env=None` inherits
-    the current environment; pass a full dict (e.g. `{**os.environ, "PORT": ...}`) to override.
+    Returns the process exit code: the cancel code (130) on a Ctrl-C shutdown so a
+    `dev && next` chain doesn't proceed past the interrupt, else the child's own code.
+    `env=None` inherits the current environment; pass a full dict (e.g.
+    `{**os.environ, "PORT": ...}`) to override.
     """
     proc = subprocess.Popen(command, cwd=target, env=env)
     try:
@@ -154,7 +156,7 @@ def run_server(
     except KeyboardInterrupt:
         proc.terminate()
         proc.wait()
-        return 0
+        return CANCELLED_EXIT_CODE
     return proc.returncode
 
 

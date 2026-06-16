@@ -7,7 +7,7 @@ from typing import NoReturn, Protocol
 import keyring.errors
 import typer
 
-from aai_cli.core import config, debuglog, env, environments, stdio, telemetry
+from aai_cli.core import config, debuglog, env, environments, errors, stdio, telemetry
 from aai_cli.core.environments import Environment
 from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.ui import output, update_check
@@ -196,6 +196,30 @@ def _auto_login_and_exit(state: AppState, *, json_mode: bool) -> NoReturn:
     )
 
 
+def _run_body(
+    ctx: typer.Context,
+    fn: Callable[[AppState, bool], None],
+    *,
+    json_mode: bool,
+    has_deferred: bool,
+) -> None:
+    """Run the command body, wrapped (or not) by the telemetry/update-check machinery.
+
+    Called inside ``run_command``'s ``try`` so telemetry sees the raw CLIError (and its
+    error_type) before it's folded into a ``typer.Exit``. ``config path`` opts into
+    ``has_deferred`` (a corrupt config.toml): it reports a contents-independent location,
+    so it runs just the body and skips the telemetry/update-check wrappers that would
+    re-parse the broken config.
+    """
+    state: AppState = ctx.obj
+    if has_deferred:
+        fn(state, json_mode)
+        return
+    with telemetry.track(ctx.command_path):
+        fn(state, json_mode)
+    update_check.maybe_notify(json_mode=json_mode)
+
+
 def run_command(
     ctx: typer.Context,
     fn: Callable[[AppState, bool], None],
@@ -219,23 +243,20 @@ def run_command(
         # exit, without telemetry/update-check, both of which would just re-parse it.
         _fail(deferred, json_mode=json_mode)
     try:
-        if deferred is not None:
-            # `config path` opted in (tolerate_unreadable_config): it reports a
-            # contents-independent location, so run just the body and skip the
-            # telemetry/update-check wrappers that re-parse the broken config.
-            fn(state, json_mode)
-        else:
-            # Inside the try so telemetry sees the raw CLIError (and its error_type)
-            # before it's folded into a typer.Exit below.
-            with telemetry.track(ctx.command_path):
-                fn(state, json_mode)
-            update_check.maybe_notify(json_mode=json_mode)
+        _run_body(ctx, fn, json_mode=json_mode, has_deferred=deferred is not None)
     except NotAuthenticated as err:
         if not auto_login or not _should_auto_login(err):
             _fail(err, json_mode=json_mode)
         _auto_login_and_exit(state, json_mode=json_mode)
     except CLIError as err:
         _fail(err, json_mode=json_mode)
+    except KeyboardInterrupt:
+        # Ctrl-C (and the SIGTERM that core.signals routes through the same path) is a
+        # cancel, not a crash: exit 130 so `assembly … && next` composes correctly,
+        # instead of the bare "Aborted!" / exit 1 Click would otherwise produce. The
+        # interactive commands print their own "Stopped." before re-raising; this is the
+        # single place the cancel maps to its exit code.
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
     except (typer.Exit, typer.Abort, BrokenPipeError):
         # Deliberate control flow (and the closed-pipe contract handled in main.run);
         # these must reach Click/the entry point untouched.

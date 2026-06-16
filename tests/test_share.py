@@ -254,7 +254,7 @@ def test_share_log_cleanup_tolerates_already_missing_file(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
 
 
-def test_share_keyboard_interrupt_is_clean(tmp_path, monkeypatch):
+def test_share_keyboard_interrupt_exits_cancel_and_cleans_up(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _make_project(tmp_path)
     server, proxy = _stub(
@@ -263,7 +263,8 @@ def test_share_keyboard_interrupt_is_clean(tmp_path, monkeypatch):
         proxy=_FakeProc(poll_rc=None),
     )
     result = runner.invoke(app, ["share"])
-    assert result.exit_code == 0
+    # Ctrl-C cancels the foreground share: exit 130, and the tunnel/server still torn down.
+    assert result.exit_code == 130
     assert server.terminated is True
     assert proxy.terminated is True
 
