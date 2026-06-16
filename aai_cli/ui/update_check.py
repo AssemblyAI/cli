@@ -28,6 +28,11 @@ DOCS_URL = "https://github.com/AssemblyAI/cli#installation"
 _CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 _FETCH_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = f"assembly-cli/{__version__}"
+_HOMEBREW_PATH_MARKERS = ("/cellar/", "/homebrew/")
+_UPGRADE_COMMAND_MARKERS = (
+    ("pipx", "pipx upgrade aai-cli"),
+    ("/uv/tools/", "uv tool upgrade aai-cli"),
+)
 
 
 def is_newer(latest: str, current: str) -> bool:
@@ -38,19 +43,24 @@ def is_newer(latest: str, current: str) -> bool:
         return False
 
 
+def _is_homebrew_executable(executable: str) -> bool:
+    if executable.startswith("/usr/local/"):
+        return True
+    return any(marker in executable for marker in _HOMEBREW_PATH_MARKERS)
+
+
 def detect_upgrade_command() -> str:
     """The exact upgrade command for the install method the running interpreter
     lives in, or "" when it can't be determined (callers show a docs hint)."""
-    exe = (sys.executable or "").lower()
-    if "/cellar/" in exe or "/homebrew/" in exe or exe.startswith("/usr/local/"):
+    executable = (sys.executable or "").lower()
+    if _is_homebrew_executable(executable):
         return "brew upgrade assembly"
     # pipx/uv track installs by *distribution* name (aai-cli), not the console
     # command (assembly) — "pipx upgrade assembly" fails with "not installed".
-    if "pipx" in exe:
-        return "pipx upgrade aai-cli"
-    if "/uv/tools/" in exe:
-        return "uv tool upgrade aai-cli"
-    return ""
+    return next(
+        (command for marker, command in _UPGRADE_COMMAND_MARKERS if marker in executable),
+        "",
+    )
 
 
 def fetch_and_cache() -> None:
@@ -116,6 +126,12 @@ def _render(current: str, latest: str) -> None:
     output.error_console.print(panel)
 
 
+def _cache_is_stale(last_check: float | None, *, now: float) -> bool:
+    if last_check is None:
+        return True
+    return (now - last_check) > _CHECK_INTERVAL_SECONDS
+
+
 def maybe_notify(*, json_mode: bool) -> None:
     """Render the cached notice (if newer) and refresh the cache if stale.
 
@@ -132,7 +148,8 @@ def _maybe_notify(*, json_mode: bool) -> None:
     if not _should_notify(json_mode=json_mode):
         return
     last_check, latest = config.get_update_cache()
-    if latest and is_newer(latest, __version__):
+    now = time.time()
+    if latest is not None and is_newer(latest, __version__):
         _render(__version__, latest)
-    if last_check is None or (time.time() - last_check) > _CHECK_INTERVAL_SECONDS:
+    if _cache_is_stale(last_check, now=now):
         spawn_refresh()
