@@ -92,8 +92,9 @@ clean for piping). `--llm-reduce` is repeatable, each prompt running on the
 previous one's output; for a single source it extends the `--llm` chain over
 that transcript.
 
-`assembly eval` takes the same `--llm`/`--llm-reduce` flags but emits a single
-JSON object (not NDJSON): `--llm` runs a chain over each transcript and attaches
-`{"model","steps"}` under the row's `llm` key (the WER score still uses the raw
-transcript), and `--llm-reduce` runs one prompt over every item's result and
-adds a top-level `reduce` (`{"model","prompts","output"}`) to the object.
+`assembly eval` takes the same `--llm`/`--llm-reduce` flags but emits one JSON
+object per dataset (not NDJSON; a single dataset is therefore one object):
+`--llm` runs a chain over each transcript and attaches `{"model","steps"}` under
+the row's `llm` key (the WER score still uses the raw transcript), and
+`--llm-reduce` runs one prompt over every item's result and adds a top-level
+`reduce` (`{"model","prompts","output"}`) to the object.

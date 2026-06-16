@@ -480,15 +480,19 @@
 # name: test_command_help_matches_snapshot[eval]
   '''
   
-   Usage: assembly eval [OPTIONS] DATASET
+   Usage: assembly eval [OPTIONS] DATASETS...
   
-   Transcribe a dataset and score WER against its reference texts
+   Transcribe one or more datasets and score WER against their reference texts
   
    Each row's audio is transcribed, then scored against the row's reference
    text; both are normalized first (lowercased, punctuation stripped) so style
    differences don't count as errors, and the summary pools total errors over
    total reference words. Handy for picking a model: run once per
    --speech-model and compare.
+  
+   Pass several datasets to score them in one run; each is loaded, scored, and
+   reported separately (under --json, one JSON object per dataset). The
+   --limit/--split/--subset/--column flags apply to every dataset.
   
    Datasets come from the Hugging Face Hub (any public dataset its viewer
    serves with audio + reference columns; gated ones need HF_TOKEN), a local
@@ -506,9 +510,10 @@
    item's result to summarize patterns across the run.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    dataset      TEXT  Hugging Face dataset id, or a local .csv/.jsonl      │
-  │                         manifest with audio + text columns                   │
-  │                         [required]                                           │
+  │ *    datasets      DATASETS...  Hugging Face dataset ids, or local           │
+  │                                 .csv/.jsonl manifests with audio + text      │
+  │                                 columns                                      │
+  │                                 [required]                                   │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --split                  TEXT                      Hugging Face split to     │
@@ -554,6 +559,8 @@
    Examples
    Score a model on 10 rows of a benchmark
    $ assembly eval tedlium
+   Score several benchmarks in one run
+   $ assembly eval tedlium librispeech earnings22
    Compare models on your own audio
    $ assembly eval calls.csv --speech-model universal-3-pro
    More rows, transcribed four at a time

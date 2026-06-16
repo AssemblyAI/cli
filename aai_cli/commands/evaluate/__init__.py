@@ -35,6 +35,10 @@ SPEC = command_registry.CommandModuleSpec(
                 "assembly eval tedlium",
             ),
             (
+                "Score several benchmarks in one run",
+                "assembly eval tedlium librispeech earnings22",
+            ),
+            (
                 "Compare models on your own audio",
                 "assembly eval calls.csv --speech-model universal-3-pro",
             ),
@@ -55,9 +59,9 @@ SPEC = command_registry.CommandModuleSpec(
 )
 def evaluate(
     ctx: typer.Context,
-    dataset: str = typer.Argument(
+    datasets: list[str] = typer.Argument(
         ...,
-        help="Hugging Face dataset id, or a local .csv/.jsonl manifest with audio + text columns",
+        help="Hugging Face dataset ids, or local .csv/.jsonl manifests with audio + text columns",
     ),
     split: str | None = typer.Option(
         None, "--split", help="Hugging Face split to score (default: test)"
@@ -114,13 +118,17 @@ def evaluate(
     ),
     json_out: bool = options.json_option("Output the rows and summary as one JSON object"),
 ) -> None:
-    """Transcribe a dataset and score WER against its reference texts
+    """Transcribe one or more datasets and score WER against their reference texts
 
     Each row's audio is transcribed, then scored against the row's reference
     text; both are normalized first (lowercased, punctuation stripped) so style
     differences don't count as errors, and the summary pools total errors over
     total reference words. Handy for picking a model: run once per
     --speech-model and compare.
+
+    Pass several datasets to score them in one run; each is loaded, scored, and
+    reported separately (under --json, one JSON object per dataset). The
+    --limit/--split/--subset/--column flags apply to every dataset.
 
     Datasets come from the Hugging Face Hub (any public dataset its viewer
     serves with audio + reference columns; gated ones need HF_TOKEN), a local
@@ -138,7 +146,7 @@ def evaluate(
     item's result to summarize patterns across the run.
     """
     opts = evaluate_exec.EvalOptions(
-        dataset=dataset,
+        datasets=datasets,
         split=split,
         subset=subset,
         limit=limit,

@@ -57,8 +57,8 @@
   │                time range                                                    │
   │ dub            [sandbox] Dub a video or audio file into another language     │
   │ caption        Burn always-visible captions into a video                     │
-  │ eval           Transcribe a dataset and score WER against its reference      │
-  │                texts                                                         │
+  │ eval           Transcribe one or more datasets and score WER against their   │
+  │                reference texts                                               │
   │ webhooks       Receive webhook deliveries on a public dev URL                │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Setup & Tools ──────────────────────────────────────────────────────────────╮
