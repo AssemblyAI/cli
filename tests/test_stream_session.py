@@ -1,22 +1,11 @@
-import json
+"""`assembly stream` session lifecycle + transcript-saving tests.
+
+The --system-audio family lives in test_stream_system_audio.py; this file covers the
+shared StreamSession plumbing (the "Listening…" latch, renderer teardown) and the
+--save-transcript/--save-dir file writer.
+"""
+
 import types
-from collections.abc import Callable
-
-from typer.testing import CliRunner
-
-from aai_cli.core import config
-from aai_cli.core.errors import APIError
-from aai_cli.main import app
-
-runner = CliRunner()
-
-
-def _capture_source(seen):
-    def fake(api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None):
-        seen["source"] = source
-        seen["rate"] = params.sample_rate
-
-    return fake
 
 
 def test_stream_session_listening_notice_latches(monkeypatch):
@@ -81,374 +70,83 @@ def test_stream_session_closes_renderer_on_error(monkeypatch):
     assert closed["n"] >= 1
 
 
-def test_stream_system_audio_uses_macos_source(monkeypatch) -> None:
-    config.set_api_key("default", "sk_live")
-    source_types: list[str] = []
-    rates: list[int] = []
-    mic_target_rate: list[int | None] = [None]
-    system_on_open: list[Callable[[], None] | None] = [None]
-    mic_on_open: list[Callable[[], None] | None] = [None]
+def _saving_session(out, *, follow=None, llm_prompts=None):
+    """A StreamSession wired with a transcript writer for the save-to-file tests."""
+    import io
 
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            system_on_open[0] = on_open
-            self.sample_rate = 16000
+    from aai_cli.streaming.render import StreamRenderer
+    from aai_cli.streaming.session import StreamSession
+    from aai_cli.streaming.transcript import TranscriptWriter
 
-        def __iter__(self):
-            if system_on_open[0] is not None:
-                system_on_open[0]()
-            return iter([b"system"])
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            mic_target_rate[0] = target_rate
-            mic_on_open[0] = on_open
-            self.sample_rate = 16000
-
-        def __iter__(self):
-            if mic_on_open[0] is not None:
-                mic_on_open[0]()
-            return iter([b"mic"])
-
-    def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
-    ):
-        source_type = type(source).__name__
-        source_types.append(source_type)
-        rates.append(params.sample_rate)
-        if on_begin:
-            on_begin(types.SimpleNamespace(id=source_type))
-        list(source)
-        if on_turn:
-            on_turn(types.SimpleNamespace(transcript=source_type, end_of_turn=True))
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
-    assert result.exit_code == 0
-    assert set(source_types) == {"FakeSystemAudio", "FakeMic"}
-    assert rates == [16000, 16000]
-    assert mic_target_rate[0] == 16000
-    lines = [json.loads(x) for x in result.output.splitlines() if x.strip()]
-    assert {
-        "type": "turn",
-        "transcript": "FakeSystemAudio",
-        "end_of_turn": True,
-        "source": "system",
-    } in lines
-    assert {"type": "turn", "transcript": "FakeMic", "end_of_turn": True, "source": "you"} in lines
-
-
-def test_stream_system_audio_only_disables_mic(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    seen = {}
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-        def __iter__(self):
-            return iter([b"\x00\x00"])
-
-    def fail_mic(**_kwargs):
-        raise AssertionError("system-audio-only must not open the microphone")
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", fail_mic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", _capture_source(seen))
-    result = runner.invoke(app, ["stream", "--system-audio-only", "--json"])
-    assert result.exit_code == 0
-    assert type(seen["source"]).__name__ == "FakeSystemAudio"
-
-
-def test_stream_system_audio_rejects_other_sources():
-    config.set_api_key("default", "sk_live")
-    result = runner.invoke(app, ["stream", "--system-audio", "--sample"])
-    assert result.exit_code == 2
-    assert "cannot be combined" in result.output
-
-
-def test_stream_system_audio_forwards_mic_device_flags(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    seen = {}
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-        def __iter__(self):
-            return iter([b"system"])
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            seen["target_rate"] = target_rate
-            seen["device"] = device
-            seen["capture_rate"] = capture_rate
-            self.sample_rate = target_rate
-
-        def __iter__(self):
-            return iter([b"mic"])
-
-    def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
-    ):
-        list(source)
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    result = runner.invoke(
-        app,
-        ["stream", "--system-audio", "--device", "2", "--sample-rate", "44100", "--json"],
+    session = StreamSession(
+        api_key="sk",
+        base_flags={},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=follow,
+        llm_prompts=llm_prompts or [],
+        model="m",
+        max_tokens=1,
+        save_transcript=out,
     )
-    assert result.exit_code == 0
-    assert seen == {"target_rate": 16000, "device": 2, "capture_rate": 44100}
+    session._transcript_writer = TranscriptWriter(out)
+    return session
 
 
-def test_stream_system_audio_llm_prefixes_sources(monkeypatch):
-    config.set_api_key("default", "sk_live")
-    transcript_inputs = []
+def test_record_turn_saves_to_file_in_llm_mode(monkeypatch, tmp_path):
+    # In --llm (follow) mode on_turn routes through _record_turn, which must also append
+    # the finalized turn to the open --save-transcript file (pins the _save_line call there).
+    from aai_cli.streaming import session as session_mod
 
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
+    monkeypatch.setattr(session_mod.llm, "run_chain", lambda *a, **k: "answer")
+    out = tmp_path / "notes.txt"
+    summaries: list[str] = []
+    session = _saving_session(
+        out, follow=lambda answer, turns: summaries.append(answer), llm_prompts=["go"]
+    )
 
-        def __iter__(self):
-            return iter([b"system"])
+    session.on_turn(types.SimpleNamespace(transcript="hello", end_of_turn=True, speaker_label=None))
+    writer = session._transcript_writer
+    assert writer is not None
+    writer.close()
 
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
-
-        def __iter__(self):
-            return iter([b"mic"])
-
-    def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
-    ):
-        if on_turn:
-            on_turn(types.SimpleNamespace(transcript="", end_of_turn=True))
-            on_turn(types.SimpleNamespace(transcript=type(source).__name__, end_of_turn=True))
-
-    def fake_run_chain(api_key, prompts, *, transcript_text, model, max_tokens):
-        transcript_inputs.append(transcript_text)
-        return "summary"
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    monkeypatch.setattr("aai_cli.core.llm.run_chain", fake_run_chain)
-    result = runner.invoke(app, ["stream", "--system-audio", "--llm", "summarize", "--json"])
-    assert result.exit_code == 0
-    assert any("System: FakeSystemAudio" in value for value in transcript_inputs)
-    assert any("You: FakeMic" in value for value in transcript_inputs)
+    assert out.read_text(encoding="utf-8") == "hello\n"
+    assert session.transcript == ["hello"]  # still recorded for the --llm chain
+    assert summaries == ["answer"]  # the chain refreshed off the saved turn
 
 
-def test_stream_system_audio_speaker_labels_only_diarizes_system(monkeypatch):
-    # --speaker-labels diarizes the system audio but never the mic: the "you" session
-    # is forced to speaker_labels=False so the mic stays a single "You".
-    config.set_api_key("default", "sk_live")
-    speaker_labels_by_chunk = {}
+def test_guarded_closes_transcript_writer(monkeypatch, tmp_path):
+    # The writer opened for a run is closed in _guarded's finally, even on a clean run
+    # (pins the close() in the finally block — flush-per-turn alone wouldn't release it).
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+    from aai_cli.streaming.session import StreamSession
 
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
+    closed = {"n": 0}
+    real = session_mod.TranscriptWriter
 
-        def __iter__(self):
-            return iter([b"system"])
+    class SpyWriter(real):
+        def close(self):
+            closed["n"] += 1
+            super().close()
 
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
+    monkeypatch.setattr(session_mod, "TranscriptWriter", SpyWriter)
+    monkeypatch.setattr(session_mod.client, "stream_audio", lambda *a, **k: list(a[1]))
 
-        def __iter__(self):
-            return iter([b"mic"])
+    import io
 
-    def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
-    ):
-        chunk = next(iter(source))
-        speaker_labels_by_chunk[chunk] = params.speaker_labels
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    result = runner.invoke(app, ["stream", "--system-audio", "--speaker-labels", "--json"])
-    assert result.exit_code == 0
-    assert speaker_labels_by_chunk[b"system"] is True
-    assert speaker_labels_by_chunk[b"mic"] is False
-
-
-def test_stream_system_audio_parallel_final_worker_error_surfaces(monkeypatch):
-    config.set_api_key("default", "sk_live")
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-        def __iter__(self):
-            return iter([b"system"])
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
-
-        def __iter__(self):
-            return iter([b"mic"])
-
-    daemons = []
-
-    class ImmediateThread:
-        def __init__(self, *, target, args, daemon):
-            self._target = target
-            self._args = args
-            daemons.append(daemon)
-
-        def start(self):
-            self._target(*self._args)
-
-        def is_alive(self):
-            return False
-
-        def join(self, timeout=None):
-            return None
-
-    def fake_stream_audio(
-        api_key, source, *, params, on_begin=None, on_turn=None, on_termination=None
-    ):
-        raise APIError(f"{type(source).__name__} failed")
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
-    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
-    assert result.exit_code == 1
-    assert "failed" in result.output
-    # Both source workers run as daemons so a wedged stream can't block process exit.
-    assert daemons and all(d is True for d in daemons)
-
-
-def test_stream_system_audio_parallel_unexpected_worker_error_fails_the_run(monkeypatch):
-    # A non-CLIError bug inside a worker must still fail the run with a clean error:
-    # uncaught, it would die with the daemon thread and the command would exit 0
-    # for a stream that actually failed.
-    config.set_api_key("default", "sk_live")
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-        def __iter__(self):
-            return iter([b"system"])
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
-
-        def __iter__(self):
-            return iter([b"mic"])
-
-    class ImmediateThread:
-        def __init__(self, *, target, args, daemon):
-            self._target = target
-            self._args = args
-
-        def start(self):
-            self._target(*self._args)
-
-        def is_alive(self):
-            return False
-
-        def join(self, timeout=None):
-            return None
-
-    def fake_stream_audio(api_key, source, *, params, **_kwargs):
-        raise RuntimeError("event parsing blew up")
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", fake_stream_audio)
-    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", ImmediateThread)
-    result = runner.invoke(app, ["stream", "--system-audio", "--json"])
-    assert result.exit_code == 1
-    # Normalized to a clean worker error that names the source and the cause.
-    assert "Streaming worker" in result.output
-    assert "event parsing blew up" in result.output
-    assert "Traceback" not in result.output
-
-
-def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypatch):
-    config.set_api_key("default", "sk_live")
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
-
-    class InterruptingThread:
-        def __init__(self, *, target, args, daemon):
-            pass
-
-        def start(self):
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", InterruptingThread)
-    result = runner.invoke(app, ["stream", "--system-audio"])
-    assert result.exit_code == 0
-    assert "Stopped." in result.output
-
-
-def test_stream_system_audio_parallel_broken_pipe_exits_zero(monkeypatch):
-    config.set_api_key("default", "sk_live")
-
-    class FakeSystemAudio:
-        def __init__(self, *, on_open=None):
-            self.sample_rate = 16000
-
-    class FakeMic:
-        def __init__(self, *, target_rate=None, device=None, capture_rate=None, on_open=None):
-            self.sample_rate = target_rate
-
-    class BrokenPipeThread:
-        def __init__(self, *, target, args, daemon):
-            pass
-
-        def start(self):
-            raise BrokenPipeError
-
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MacSystemAudioSource", FakeSystemAudio)
-    monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
-    monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", BrokenPipeThread)
-    result = runner.invoke(app, ["stream", "--system-audio"])
-    assert result.exit_code == 0
-
-
-def test_stream_system_audio_only_rejects_mic_device_flags():
-    config.set_api_key("default", "sk_live")
-    result = runner.invoke(app, ["stream", "--system-audio-only", "--device", "2"])
-    assert result.exit_code == 2
-    assert "--device" in result.output
-
-    result = runner.invoke(app, ["stream", "--system-audio-only", "--sample-rate", "44100"])
-    assert result.exit_code == 2
-    assert "--sample-rate" in result.output
-
-
-def test_stream_system_audio_rejects_both_modes():
-    config.set_api_key("default", "sk_live")
-    result = runner.invoke(app, ["stream", "--system-audio", "--system-audio-only"])
-    assert result.exit_code == 2
-    assert "--system-audio and --system-audio-only can't be combined." in result.output
-
-
-def test_stream_show_code_rejects_system_audio():
-    result = runner.invoke(app, ["stream", "--system-audio", "--show-code"])
-    assert result.exit_code == 2
-    assert "--show-code" in result.output
+    session = StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_transcript=tmp_path / "notes.txt",
+    )
+    session.run([b"\x00\x00"], 16000)
+    assert closed["n"] == 1

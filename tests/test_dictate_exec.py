@@ -16,8 +16,8 @@ import pytest
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.dictate import _exec as dictate_exec
-from aai_cli.core import config, sync_stt
-from aai_cli.core.errors import CLIError
+from aai_cli.core import choices, config, sync_stt
+from aai_cli.core.errors import CLIError, UsageError
 
 DICTATE_DEFAULTS = dictate_exec.DictateOptions(
     language=None,
@@ -147,6 +147,34 @@ def test_json_mode_emits_one_ndjson_object_per_utterance(seams, capsys):
     }
     # --json keeps stderr machine-readable: no human hints.
     assert captured.err == ""
+
+
+def test_output_json_folds_into_ndjson_without_the_json_flag(seams, capsys):
+    # -o json must enable NDJSON on its own (json_mode stays the --json flag,
+    # which is False here) — proving the -o/--output resolution runs.
+    seams["keys"] = FakeKeys(["\r", "\r"])
+    _run(dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.json))
+    assert json.loads(capsys.readouterr().out)["text"] == "hello world"
+
+
+def test_output_text_emits_bare_transcript(seams, capsys):
+    # -o text is the explicit spelling of the human default: bare text, no JSON.
+    seams["keys"] = FakeKeys(["\r", "\r"])
+    _run(dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.text))
+    out = capsys.readouterr().out
+    assert out.strip() == "hello world"
+    assert "{" not in out
+
+
+def test_output_text_conflicts_with_json_flag(seams):
+    # --json + -o text are contradictory output shapes: a clean usage error,
+    # the same as `stream`/`agent`.
+    seams["keys"] = FakeKeys(["\r", "\r"])
+    with pytest.raises(UsageError):
+        _run(
+            dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.text),
+            json_mode=True,
+        )
 
 
 def test_quiet_suppresses_the_interactive_hints(seams, capsys):
