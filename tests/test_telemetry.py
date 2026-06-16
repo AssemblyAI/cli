@@ -359,16 +359,30 @@ def test_track_cli_error_keeps_error_type_and_reraises(events):
 
 
 @pytest.mark.parametrize(
-    ("code", "outcome"), [(0, "success"), (3, "error")], ids=["exit-0", "exit-3"]
+    ("code", "outcome"),
+    [(0, "success"), (3, "error"), (130, "cancelled")],
+    ids=["exit-0", "exit-3", "exit-130"],
 )
 def test_track_typer_exit_maps_code(events, code, outcome):
+    # 130 (the Ctrl-C cancel code, e.g. an interactive command's own handler) reads as
+    # "cancelled", not a generic "error", so it doesn't inflate the crash rate.
     with pytest.raises(typer.Exit), telemetry.track("aai login"):
         _raise(typer.Exit(code=code))
     (event,) = events
     assert event["outcome"] == outcome
     assert event["exit_code"] == code
     # A bare typer.Exit carries no message, so the failure event has only the kind.
-    assert event.get("error") == ({"kind": "error"} if code else None)
+    assert event.get("error") == ({"kind": outcome} if code else None)
+
+
+def test_track_keyboard_interrupt_is_cancelled(events):
+    # A raw Ctrl-C reaching track() (a command with no interactive handler) is recorded
+    # as a cancel at exit 130, never as an internal_error crash.
+    with pytest.raises(KeyboardInterrupt), telemetry.track("aai stream"):
+        _raise(KeyboardInterrupt())
+    (event,) = events
+    assert event["outcome"] == "cancelled"
+    assert event["exit_code"] == 130
 
 
 def test_track_unexpected_exception_is_internal_error(events):

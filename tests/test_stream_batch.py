@@ -129,9 +129,9 @@ def test_stream_from_stdin_keyboard_interrupt_stops_the_batch(monkeypatch):
 
     _patch_batch_inputs(monkeypatch, fake_stream_audio)
     result = runner.invoke(app, ["stream", "--from-stdin"], input="a.wav\nb.wav\n")
-    # One Ctrl-C stops the whole batch (exit 0), not just the current source.
+    # One Ctrl-C stops the whole batch (exit 130, cancel), not just the current source.
     assert streamed == ["a.wav"]
-    assert result.exit_code == 0
+    assert result.exit_code == 130
     assert "Stopped." in result.output
 
 

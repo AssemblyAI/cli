@@ -16,6 +16,7 @@ from rich.markup import escape
 
 from aai_cli.app.context import AppState
 from aai_cli.core import env as os_env
+from aai_cli.core import errors
 from aai_cli.core.errors import CLIError
 from aai_cli.init import devserver, procfile, runner, tunnel
 from aai_cli.ui import output, steps
@@ -86,9 +87,9 @@ def run_share(opts: ShareOptions, state: AppState, *, json_mode: bool) -> None:
         output.emit(payload, _render_share, json_mode=json_mode)
         server.wait()
     except KeyboardInterrupt:
-        # Ctrl-C is the expected way to stop a foreground share; the finally
-        # block below tears down the tunnel and server.
-        pass
+        # Ctrl-C is the expected way to stop a foreground share: tear down (finally,
+        # below) then exit 130 (cancel) so it isn't reported to a caller as success.
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
     finally:
         tunnel.terminate(proxy)
         tunnel.terminate(server)

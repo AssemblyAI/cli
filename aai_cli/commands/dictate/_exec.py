@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import typer
+
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, stdio, sync_stt
+from aai_cli.core import choices, errors, stdio, sync_stt
 from aai_cli.core.config_builder import split_csv
 from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
 from aai_cli.core.microphone import MicrophoneSource
@@ -222,5 +224,7 @@ def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> No
                 )
             _session(keys, api_key, opts, state, json_mode=json_mode, single=single)
     except KeyboardInterrupt:
-        # Ctrl-C is the normal "done dictating" signal: end cleanly, not as an error.
-        return
+        # Ctrl-C cancels dictation, so it exits 130 (cancel) — distinct from `q`, which
+        # ends the session normally (exit 0). The with-block above already restored the
+        # terminal on the way out.
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None

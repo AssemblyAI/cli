@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from aai_cli.core import choices, client, config_builder, llm
+from aai_cli.core import choices, client, config_builder, errors, llm
 from aai_cli.core.errors import (
     APIError,
     CLIError,
@@ -327,8 +327,8 @@ class StreamSession:
 
     def _guarded(self, work: Callable[[], None], *, handle_interrupt: bool = True) -> None:
         """Run a streaming body with the shared lifecycle handling: enter the
-        FollowRenderer's live panel if present, treat Ctrl-C as a clean stop, exit 0 on
-        a closed downstream pipe, and always close the renderer.
+        FollowRenderer's live panel if present, treat Ctrl-C as a clean stop (exit 130),
+        exit 0 on a closed downstream pipe, and always close the renderer.
 
         ``handle_interrupt=False`` lets a Ctrl-C or a closed pipe propagate instead of
         being swallowed here — the batch driver owns those signals across the whole
@@ -352,10 +352,13 @@ class StreamSession:
         except KeyboardInterrupt:
             if not handle_interrupt:
                 raise
-            # Ctrl-C is a normal "user stopped" signal -> exit 0.
+            # Ctrl-C is a clean "user stopped" signal: flush the closing state, print
+            # "Stopped.", then exit 130 (the cancel code) so a `stream && next` chain
+            # doesn't treat the interrupt as success.
             if self.follow is None:
                 self.renderer.close()
                 self.renderer.stopped()
+            raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
         except BrokenPipeError:
             if not handle_interrupt:
                 raise
@@ -441,8 +444,9 @@ def stream_batch_sources(
     as a per-source failure so the batch carries on — except ``NotAuthenticated``, which
     re-raises to abort the whole batch (one rejected key fails every source identically).
 
-    A Ctrl-C or a closed downstream pipe stops the batch cleanly (exit 0). When any
-    source failed, raises a ``CLIError`` at the end so a script can trust the exit code.
+    A Ctrl-C stops the batch with the cancel code (exit 130); a closed downstream pipe
+    stops it quietly (exit 0). When any source failed, raises a ``CLIError`` at the end
+    so a script can trust the exit code.
     """
     total = len(sources)
     failures: list[str] = []
@@ -458,9 +462,10 @@ def stream_batch_sources(
                 failures.append(source)
                 output.emit_warning(f"{source}: {exc.message}", json_mode=json_mode)
     except KeyboardInterrupt:
-        # One Ctrl-C stops the whole batch, not just the current source -> exit 0.
+        # One Ctrl-C stops the whole batch, not just the current source. Exit 130
+        # (cancel) so the interrupt isn't mistaken for a clean run of every source.
         renderer.stopped()
-        return
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
     except BrokenPipeError:
         # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
         raise typer.Exit(code=0) from None

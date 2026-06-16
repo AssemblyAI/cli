@@ -10,7 +10,6 @@ than to AssemblyAI. Ctrl-C (or ``--max-events``) stops the listener.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import threading
 from collections.abc import Callable
@@ -180,9 +179,10 @@ def run_listen(opts: ListenOptions, *, json_mode: bool) -> None:
                     "check it for errors.",
                 )
         _announce(public_url, port, json_mode=json_mode)
-        # Ctrl-C is the expected way to stop a foreground listener.
-        with contextlib.suppress(KeyboardInterrupt):
-            server.serve_forever()
+        # Ctrl-C is the expected way to stop a foreground listener; let it propagate so
+        # the command exits 130 (cancel). The finally below still closes the socket and
+        # tears down the tunnel.
+        server.serve_forever()
     finally:
         # Close here, not via `with server:` — a tunnel failure raises before the
         # serve block, and the bound listening socket must not outlive the command.

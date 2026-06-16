@@ -363,7 +363,7 @@ def test_stream_system_audio_parallel_keyboard_interrupt_exits_cleanly(monkeypat
     monkeypatch.setattr("aai_cli.commands.stream._exec.MicrophoneSource", FakeMic)
     monkeypatch.setattr("aai_cli.streaming.session.threading.Thread", InterruptingThread)
     result = runner.invoke(app, ["stream", "--system-audio"])
-    assert result.exit_code == 0
+    assert result.exit_code == 130
     assert "Stopped." in result.output
 
 

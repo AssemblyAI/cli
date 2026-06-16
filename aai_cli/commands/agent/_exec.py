@@ -22,7 +22,7 @@ from aai_cli.agent.session import AgentRunConfig, run_session
 from aai_cli.agent.voices import VOICE_NAMES
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, signals
+from aai_cli.core import choices, client, errors, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
@@ -135,7 +135,10 @@ def run_agent(opts: AgentOptions, state: AppState, *, json_mode: bool) -> None:
         with signals.terminate_as_interrupt():
             run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
     except KeyboardInterrupt:
+        # Ctrl-C (or a supervisor's SIGTERM) ends the session cleanly, then exits 130
+        # (cancel) so the interrupt isn't reported to a caller as success.
         renderer.stopped()
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
     except BrokenPipeError as exc:
         # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
         raise typer.Exit(code=0) from exc

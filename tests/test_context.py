@@ -437,6 +437,16 @@ def test_run_command_lets_typer_exit_pass_through():
     assert "Unexpected error" not in result.output
 
 
+def test_run_command_maps_keyboard_interrupt_to_cancel_code():
+    # A Ctrl-C reaching run_command (a command with no interactive handler of its own)
+    # is a cancel: exit 130, not Click's bare "Aborted!" / exit 1.
+    def body(state, json_mode):
+        raise KeyboardInterrupt
+
+    result = runner.invoke(_make_app(body), ["go"])
+    assert result.exit_code == 130
+
+
 def test_run_command_lets_broken_pipe_propagate():
     # The closed-pipe contract is owned by main.run(); run_command must not eat it.
     def body(state, json_mode):

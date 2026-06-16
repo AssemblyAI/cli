@@ -22,7 +22,7 @@ from aai_cli.agent_cascade import engine, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, llm, signals
+from aai_cli.core import choices, client, config_builder, errors, llm, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.session import resolve_output_modes
@@ -218,7 +218,10 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         with signals.terminate_as_interrupt():
             engine.run_cascade(renderer=renderer, player=player, config=config, deps=deps)
     except KeyboardInterrupt:
+        # Ctrl-C (or a supervisor's SIGTERM) ends the cascade cleanly, then exits 130
+        # (cancel) so the interrupt isn't reported to a caller as success.
         renderer.stopped()
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
     except BrokenPipeError as exc:
         # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
         raise typer.Exit(code=0) from exc
