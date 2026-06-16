@@ -12,6 +12,11 @@ MAX_LINES = 500
 # build artifacts) and third-party code are out of scope.
 ROOTS = ("aai_cli", "tests", "scripts")
 
+# Files exempt from the cap. Reserved for flat, declaration-heavy modules where the
+# length is a stage/registry table rather than logic to navigate — splitting them would
+# scatter one list across files for no readability gain. Add here only with that rationale.
+EXEMPT = frozenset({Path("scripts/check.py")})
+
 
 def _line_count(path: Path) -> int:
     # Count newlines; a trailing line without a newline still counts (+1) so the
@@ -28,9 +33,12 @@ def _offenders() -> list[tuple[Path, int]]:
     found: list[tuple[Path, int]] = []
     for root in ROOTS:
         for path in sorted((repo_root / root).rglob("*.py")):
+            rel = path.relative_to(repo_root)
+            if rel in EXEMPT:
+                continue
             count = _line_count(path)
             if count > MAX_LINES:
-                found.append((path.relative_to(repo_root), count))
+                found.append((rel, count))
     return found
 
 
