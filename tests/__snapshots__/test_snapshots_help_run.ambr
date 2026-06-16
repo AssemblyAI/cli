@@ -977,6 +977,11 @@
   │                              Gateway. Repeatable: each prompt runs on the    │
   │                              previous one's response (a chain), the first on │
   │                              the transcript.                                 │
+  │ --llm-reduce        TEXT     Run one LLM-Gateway prompt over all batch       │
+  │                              results (a reduce). Repeatable: each runs on    │
+  │                              the previous one's output. For a single source  │
+  │                              it extends the --llm chain over that            │
+  │                              transcript.                                     │
   │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
   │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
