@@ -225,7 +225,7 @@ def test_llm_status_messages(tmp_path, mocker, monkeypatch):
 
 def test_llm_options_maps_fields():
     opts = evaluate_exec.EvalOptions(
-        dataset="d", split=None, subset=None, limit=10, audio_column=None,
+        datasets=["d"], split=None, subset=None, limit=10, audio_column=None,
         text_column=None, speech_model=None, language_code=None, concurrency=1,
         llm_prompt=["a"], llm_reduce=["b", "c"], model="m", max_tokens=5,
     )  # fmt: skip
@@ -238,7 +238,7 @@ def test_llm_options_maps_fields():
 
 def test_llm_options_default_to_empty_chains():
     opts = evaluate_exec.EvalOptions(
-        dataset="d", split=None, subset=None, limit=10, audio_column=None,
+        datasets=["d"], split=None, subset=None, limit=10, audio_column=None,
         text_column=None, speech_model=None, language_code=None, concurrency=1,
         llm_prompt=None, llm_reduce=None, model="m", max_tokens=5,
     )  # fmt: skip

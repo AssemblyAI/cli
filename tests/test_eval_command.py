@@ -55,6 +55,12 @@ def _payload_of(result):
     )
 
 
+def _payloads_of(result):
+    return [
+        json.loads(line) for line in result.output.splitlines() if line.startswith('{"dataset"')
+    ]
+
+
 def _without_latency(row):
     return {key: value for key, value in row.items() if key != "latency"}
 
@@ -119,6 +125,60 @@ def test_json_payload_shape(tmp_path, mocker):
     }  # fmt: skip
     assert all(isinstance(row["latency"], float) for row in payload["rows"])
     assert "failed" not in payload  # only present when a row failed
+
+
+def _write_two_manifests(tmp_path):
+    (tmp_path / "a.wav").write_bytes(b"fake-audio")
+    (tmp_path / "b.wav").write_bytes(b"fake-audio")
+    (tmp_path / "one.csv").write_text("audio,text\na.wav,hello there\n", encoding="utf-8")
+    (tmp_path / "two.csv").write_text("audio,text\nb.wav,goodbye now\n", encoding="utf-8")
+
+
+def test_multiple_datasets_emit_one_payload_each(tmp_path, mocker):
+    _auth()
+    _write_two_manifests(tmp_path)
+    # First dataset transcribes perfectly; second gets one of two words wrong.
+    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye cow")])
+    result = runner.invoke(app, ["eval", "one.csv", "two.csv", "--json"])
+    assert result.exit_code == 0
+    payloads = _payloads_of(result)
+    # One self-describing JSON object per dataset, in argument order.
+    assert [payload["dataset"] for payload in payloads] == ["one.csv", "two.csv"]
+    assert payloads[0]["wer"] == 0.0
+    assert payloads[1]["wer"] == 0.5
+
+
+def test_multiple_datasets_render_a_block_per_dataset(tmp_path, mocker):
+    _auth()
+    _write_two_manifests(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    result = runner.invoke(app, ["eval", "one.csv", "two.csv"])
+    assert result.exit_code == 0
+    # Each dataset gets its own header line in the human output.
+    assert "one.csv" in result.output
+    assert "two.csv" in result.output
+
+
+def test_multiple_datasets_aggregate_failures_in_exit_message(tmp_path, mocker):
+    from aai_cli.core.errors import APIError
+
+    _auth()
+    _write_two_manifests(tmp_path)
+    # A row in each dataset fails: the tally pools (sums) across both datasets.
+    _mock_transcribe(mocker, [APIError("boom one"), APIError("boom two")])
+    result = runner.invoke(app, ["eval", "one.csv", "two.csv", "--json"])
+    assert result.exit_code == 1
+    err = next(
+        json.loads(line) for line in result.output.splitlines() if line.startswith('{"error"')
+    )
+    # Exact message (not a substring) so a summed-vs-subtracted tally is caught:
+    # "-2 of 2 …" would still contain "2 of 2 …".
+    assert err["error"]["message"] == "2 of 2 items failed to transcribe."
+
+
+def test_at_least_one_dataset_is_required():
+    result = runner.invoke(app, ["eval"])
+    assert result.exit_code == 2
 
 
 @pytest.mark.parametrize("model", ["universal-3-pro", "universal-2"])

@@ -43,7 +43,7 @@ class EvalOptions:
     """Every `assembly eval` flag as plain data (``--json`` excluded: run_command
     resolves it into the ``json_mode`` argument)."""
 
-    dataset: str
+    datasets: list[str]
     split: str | None
     subset: str | None
     limit: int
@@ -423,13 +423,12 @@ def _render(payload: dict[str, object]) -> RenderableType:
     )
 
 
-def run_evaluate(opts: EvalOptions, state: AppState, *, json_mode: bool) -> None:
-    """Transcribe an evaluation dataset and score WER against its reference texts."""
-    # Resolve credentials before any dataset download: a signed-out user must
-    # not pull the whole dataset only to fail at the first transcription.
-    api_key = state.resolve_api_key()
+def _evaluate_one(
+    dataset: str, api_key: str, opts: EvalOptions, state: AppState, *, json_mode: bool
+) -> dict[str, object]:
+    """Score one dataset end to end and return its emitted payload."""
     data = eval_data.load(
-        opts.dataset,
+        dataset,
         split=opts.split,
         subset=opts.subset,
         audio_column=opts.audio_column,
@@ -466,11 +465,24 @@ def run_evaluate(opts: EvalOptions, state: AppState, *, json_mode: bool) -> None
         reduce = _run_reduce(api_key, results, llm_opts, json_mode=json_mode, quiet=state.quiet)
         if reduce is not None:
             payload["reduce"] = reduce
-    output.emit(payload, _render, json_mode=json_mode)
-    failed = jsonshape.as_int(payload.get("failed"))
+    return payload
+
+
+def run_evaluate(opts: EvalOptions, state: AppState, *, json_mode: bool) -> None:
+    """Transcribe one or more evaluation datasets and score WER against references."""
+    # Resolve credentials before any dataset download: a signed-out user must
+    # not pull the whole dataset only to fail at the first transcription.
+    api_key = state.resolve_api_key()
+    failed = 0
+    total = 0
+    for dataset in opts.datasets:
+        payload = _evaluate_one(dataset, api_key, opts, state, json_mode=json_mode)
+        output.emit(payload, _render, json_mode=json_mode)
+        failed += jsonshape.as_int(payload.get("failed"))
+        total += jsonshape.as_int(payload.get("items"))
     if failed:
         raise CLIError(
-            f"{failed} of {len(results)} items failed to transcribe.",
+            f"{failed} of {total} items failed to transcribe.",
             error_type="eval_failed",
             suggestion="The summary covers only the items that transcribed.",
         )
