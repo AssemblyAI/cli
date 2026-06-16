@@ -869,10 +869,11 @@
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. Each source gets a .aai.json sidecar
-   with the full result (including any --llm responses), and a re-run skips
-   sources already transcribed — with changed --llm prompts it replays just
-   the LLM step, never a second transcription.
+   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
+   to batch mode — every episode enclosure becomes one source. Each source gets a
+   .aai.json sidecar with the full result (including any --llm responses), and a
+   re-run skips sources already transcribed — with changed --llm prompts it
+   replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -883,8 +884,9 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
+  │                         feed, bucket URL (s3://, gs://, …), or a             │
+  │                         directory/glob (batch mode)                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1052,10 +1054,11 @@
    URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
   
    Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-   transcribe many sources concurrently. Each source gets a .aai.json sidecar
-   with the full result (including any --llm responses), and a re-run skips
-   sources already transcribed — with changed --llm prompts it replays just
-   the LLM step, never a second transcription.
+   transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
+   to batch mode — every episode enclosure becomes one source. Each source gets a
+   .aai.json sidecar with the full result (including any --llm responses), and a
+   re-run skips sources already transcribed — with changed --llm prompts it
+   replays just the LLM step, never a second transcription.
   
    Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
    batches (a glob, or a folder ending in /); install the matching fsspec
@@ -1066,8 +1069,9 @@
    mode.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, bucket URL     │
-  │                         (s3://, gs://, …), or a directory/glob (batch mode)  │
+  │   source      [SOURCE]  Audio file, URL, YouTube/podcast URL, podcast RSS    │
+  │                         feed, bucket URL (s3://, gs://, …), or a             │
+  │                         directory/glob (batch mode)                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                             Use the hosted          │
@@ -1228,6 +1232,8 @@
    $ assembly transcribe https://youtu.be/dtp6b76pMak
    Transcribe a podcast page
    $ assembly transcribe "https://podcasts.apple.com/…"
+   Transcribe a whole podcast feed
+   $ assembly transcribe "https://feeds.simplecast.com/…"
    Label who said what
    $ assembly transcribe call.mp3 --speaker-labels
    Redact PII for compliance

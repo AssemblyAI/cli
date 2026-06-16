@@ -356,7 +356,12 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     transcribe_validate.validate_speakers_expected(merged)
 
     sources = transcribe_sources.expand_sources(
-        opts.source, from_stdin=opts.from_stdin, sample=opts.sample
+        opts.source,
+        from_stdin=opts.from_stdin,
+        sample=opts.sample,
+        # --show-code must never touch the network; skip the feed probe and treat a
+        # URL as a single source for code generation.
+        detect_feeds=not opts.show_code,
     )
     if sources is not None:
         transcribe_sources.reject_single_source_flags(
