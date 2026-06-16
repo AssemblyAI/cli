@@ -744,9 +744,17 @@
   │ --system-audio-only                              macOS only: stream          │
   │                                                  system/app audio without    │
   │                                                  the microphone              │
-  │ --save-audio               FILE                  Tee the streamed PCM to     │
-  │                                                  PATH as a 16-bit mono WAV   │
-  │                                                  while transcribing          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Saving ─────────────────────────────────────────────────────────────────────╮
+  │ --save-audio             FILE       Tee the streamed PCM to PATH as a 16-bit │
+  │                                     mono WAV while transcribing              │
+  │ --save-transcript        FILE       Write the finalized transcript to PATH,  │
+  │                                     one turn per line                        │
+  │ --save-dir               DIRECTORY  Auto-name the transcript and a matching  │
+  │                                     WAV under DIR/YYYY-MM-DD/ with a         │
+  │                                     timestamped file                         │
+  │ --name                   TEXT       Title to slug into the --save-dir        │
+  │                                     filename (e.g. a meeting title)          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
@@ -850,6 +858,10 @@
    $ assembly stream --speaker-labels
    Save a WAV of the audio while streaming
    $ assembly stream --save-audio out.wav
+   Save the transcript text to a file
+   $ assembly stream --save-transcript notes.txt
+   Auto-name the transcript + WAV under a dir
+   $ assembly stream --save-dir ~/recordings --name "Standup"
    Boost domain terms with keyterm prompts
    $ assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk
