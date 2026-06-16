@@ -758,7 +758,8 @@
   │                                     one turn per line                        │
   │ --save-dir               DIRECTORY  Auto-name the transcript and a matching  │
   │                                     WAV under DIR/YYYY-MM-DD/ with a         │
-  │                                     timestamped file                         │
+  │                                     timestamped file; --system-audio saves   │
+  │                                     one WAV per channel                      │
   │ --name                   TEXT       Title to slug into the --save-dir        │
   │                                     filename (e.g. a meeting title)          │
   ╰──────────────────────────────────────────────────────────────────────────────╯

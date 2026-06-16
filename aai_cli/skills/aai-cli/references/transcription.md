@@ -43,7 +43,8 @@ assembly transcribe call.mp3 --show-code
 
 Omit `SOURCE` to use the microphone; pass a file/URL/media page to stream that, or
 `--sample`. macOS can capture system audio with `--system-audio` (mic + system)
-or `--system-audio-only`.
+or `--system-audio-only`. With `--save-dir`, `--system-audio` writes one WAV per
+channel (`<stem>-you.wav`, `<stem>-system.wav`) beside the shared transcript.
 
 High-value flags (run `assembly stream --help` for the full set):
 
