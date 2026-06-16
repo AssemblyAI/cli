@@ -81,6 +81,31 @@ def test_out_writes_wav_and_does_not_play(monkeypatch, tmp_path, fake_synthesize
     assert "played" not in result.stderr
 
 
+def test_url_reads_web_page_aloud(monkeypatch, fake_synthesize):
+    # --url fetches a page and narrates its extracted main text.
+    from aai_cli.core import webpage
+
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
+    monkeypatch.setattr(
+        webpage,
+        "fetch_article",
+        lambda url: webpage.Article(text="The article body.", title="Headline", url=url),
+    )
+    result = runner.invoke(app, ["--sandbox", "speak", "--url", "https://example.com/post"])
+    assert result.exit_code == 0
+    assert fake_synthesize["cfg"].text == "The article body."
+
+
+def test_url_and_text_argument_are_mutually_exclusive(monkeypatch):
+    result = runner.invoke(
+        app, ["--sandbox", "speak", "Hello", "--url", "https://example.com/post"]
+    )
+    assert result.exit_code == 2
+    # Both conflicting inputs are named so the fix is unambiguous.
+    assert "the text argument" in result.output
+    assert "--url" in result.output
+
+
 def test_reads_text_from_stdin_when_arg_omitted(monkeypatch, fake_synthesize):
     monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
     result = runner.invoke(app, ["--sandbox", "speak"], input="piped text\n")

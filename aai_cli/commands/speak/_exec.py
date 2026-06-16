@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aai_cli.app.context import AppState
-from aai_cli.core import stdio
-from aai_cli.core.errors import UsageError
+from aai_cli.core import stdio, webpage
+from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.ui import output
 
@@ -30,10 +30,24 @@ class SpeakOptions:
     resolves it into the ``json_mode`` argument)."""
 
     text: str | None
+    url: str | None
     voice: list[str]
     language: str
     sample_rate: int | None
     out: Path | None
+
+
+def _resolve_input(opts: SpeakOptions) -> str:
+    """The text to speak: a fetched web page when --url is given, else the
+    argument or piped stdin. --url is mutually exclusive with both."""
+    mutually_exclusive(
+        ("the text argument", opts.text),
+        ("--url", opts.url),
+        suggestion="Speak a URL or literal text, not both.",
+    )
+    if opts.url is not None:
+        return webpage.fetch_article(opts.url).text
+    return _read_text(opts.text)
 
 
 def _read_text(text: str | None) -> str:
@@ -179,7 +193,7 @@ def _speak_dialogue(
 def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly speak` invocation from already-parsed flags."""
     session.require_available("speak")
-    spoken = _read_text(opts.text)
+    spoken = _resolve_input(opts)
     api_key = state.resolve_api_key()
     bare_voice, overrides = dialogue.parse_voice_overrides(opts.voice)
     if dialogue.looks_like_speaker_labeled(spoken):

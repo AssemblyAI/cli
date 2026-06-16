@@ -94,6 +94,7 @@ AGENT_DEFAULTS = agent_exec.AgentOptions(
 
 SPEAK_DEFAULTS = speak_exec.SpeakOptions(
     text=None,
+    url=None,
     voice=[],
     language=speak_exec.DEFAULT_LANGUAGE,
     sample_rate=None,

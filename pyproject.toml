@@ -56,6 +56,7 @@ dependencies = [
     # imported lazily). fsspec core only — each protocol's backend (s3fs, gcsfs, adlfs,
     # …) stays a user-installed extra surfaced via a clean install hint.
     "fsspec>=2026.4.0",
+    "trafilatura>=2.1.0",
 ]
 
 [project.urls]
