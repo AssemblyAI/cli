@@ -54,6 +54,7 @@ def test_is_newer(latest, current, expected):
     [
         ("/opt/homebrew/Cellar/assembly/0.1.0/libexec/bin/python", "brew upgrade assembly"),
         ("/usr/local/Cellar/assembly/0.1.0/libexec/bin/python", "brew upgrade assembly"),
+        ("/usr/local/bin/python", "brew upgrade assembly"),
         # pipx/uv upgrade by *distribution* name (aai-cli), not the console command.
         ("/Users/x/.local/pipx/venvs/aai-cli/bin/python", "pipx upgrade aai-cli"),
         ("/Users/x/.local/share/uv/tools/aai-cli/bin/python", "uv tool upgrade aai-cli"),
@@ -213,6 +214,11 @@ def test_maybe_notify_spawns_refresh_only_when_stale(tmp_path, monkeypatch):
 
     spawned: list[bool] = []
     monkeypatch.setattr(update_check, "spawn_refresh", lambda: spawned.append(True))
+
+    # Never checked -> spawn.
+    update_check.maybe_notify(json_mode=False)
+    assert spawned == [True]
+    spawned.clear()
 
     # Fresh check -> no spawn.
     config.set_update_cache(last_check=time.time(), latest_version=None)

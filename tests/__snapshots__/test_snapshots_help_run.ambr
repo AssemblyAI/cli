@@ -373,6 +373,10 @@
   │                                                   [default: 120.0]           │
   │ --json         -j                                 Emit one JSON object per   │
   │                                                   utterance                  │
+  │ --output       -o      [text|json]                Output mode: text (the     │
+  │                                                   bare transcript per        │
+  │                                                   utterance, pipe-friendly)  │
+  │                                                   or json                    │
   │ --help                                            Show this message and      │
   │                                                   exit.                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -388,6 +392,8 @@
    $ assembly dictate --word-boost AssemblyAI --word-boost LeMUR
    One JSON object per utterance
    $ assembly dictate --json
+   Pipe the bare transcript onward
+   $ assembly dictate -o text | assembly llm -f
   
   
   
@@ -577,7 +583,7 @@
 # name: test_command_help_matches_snapshot[llm]
   '''
   
-   Usage: assembly llm [OPTIONS] [PROMPT]
+   Usage: assembly llm [OPTIONS] [PROMPT] [FILES]...
   
    Send a prompt to AssemblyAI's LLM Gateway and print the reply
   
@@ -586,7 +592,10 @@
    --transcript-id ID).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   prompt      [PROMPT]  The prompt to send to the model                      │
+  │   prompt      [PROMPT]    The prompt to send to the model                    │
+  │   files       [FILES]...  Optional input files to read as the prompt's       │
+  │                           context (each is header-prefixed with its name and │
+  │                           concatenated; takes priority over piped stdin)     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --model                  TEXT                  LLM Gateway model             │
@@ -626,6 +635,9 @@
    $ assembly llm "summarize the key decisions" --transcript-id 5551234-abcd
    Pipe any text in
    $ echo "meeting notes" | assembly llm "turn into action items"
+   Read one or more files as context
+   $ assembly llm "answer using only these notes: who owns the deploy?"
+   notes/*.md
    Pick a model and add a system prompt
    $ assembly llm "draft a follow-up email" --model claude-opus-4-7 --system "Be
    concise."
@@ -738,9 +750,17 @@
   │ --system-audio-only                              macOS only: stream          │
   │                                                  system/app audio without    │
   │                                                  the microphone              │
-  │ --save-audio               FILE                  Tee the streamed PCM to     │
-  │                                                  PATH as a 16-bit mono WAV   │
-  │                                                  while transcribing          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Saving ─────────────────────────────────────────────────────────────────────╮
+  │ --save-audio             FILE       Tee the streamed PCM to PATH as a 16-bit │
+  │                                     mono WAV while transcribing              │
+  │ --save-transcript        FILE       Write the finalized transcript to PATH,  │
+  │                                     one turn per line                        │
+  │ --save-dir               DIRECTORY  Auto-name the transcript and a matching  │
+  │                                     WAV under DIR/YYYY-MM-DD/ with a         │
+  │                                     timestamped file                         │
+  │ --name                   TEXT       Title to slug into the --save-dir        │
+  │                                     filename (e.g. a meeting title)          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
@@ -844,6 +864,10 @@
    $ assembly stream --speaker-labels
    Save a WAV of the audio while streaming
    $ assembly stream --save-audio out.wav
+   Save the transcript text to a file
+   $ assembly stream --save-transcript notes.txt
+   Auto-name the transcript + WAV under a dir
+   $ assembly stream --save-dir ~/recordings --name "Standup"
    Boost domain terms with keyterm prompts
    $ assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk

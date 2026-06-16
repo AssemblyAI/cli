@@ -10,6 +10,7 @@ rich-free by architecture contract, so the rendering-aware run path lives here.)
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from rich.markup import escape
 
@@ -44,10 +45,15 @@ class LlmOptions:
     max_tokens: int
     # Raw --config KEY=VALUE pairs; parsed (and validated) once in run_llm.
     config_kv: tuple[str, ...] = ()
+    # Input files read as the prompt's context (header-prefixed, concatenated).
+    files: tuple[Path, ...] = ()
 
 
 def _validate_follow_args(
-    prompt: str | None, output_field: str | None, transcript_id: str | None
+    prompt: str | None,
+    output_field: str | None,
+    transcript_id: str | None,
+    files: tuple[Path, ...],
 ) -> str:
     """Reject flag combinations that don't apply to --follow's live-panel mode.
 
@@ -65,36 +71,84 @@ def _validate_follow_args(
             "--follow runs over live transcript text piped on stdin; it can't be "
             "combined with --transcript-id."
         )
+    if files:
+        raise UsageError(
+            "--follow runs over live transcript text piped on stdin; it can't be "
+            "combined with file arguments."
+        )
     if not stdio.stdin_is_piped():
         raise UsageError(_FOLLOW_STDIN_MESSAGE)
     return prompt
 
 
-def _stdin_transcript_text(
-    state: AppState, transcript_id: str | None, *, json_mode: bool
-) -> str | None:
-    """Resolve the inline transcript text for one-shot mode.
+def _read_files(files: tuple[Path, ...]) -> str:
+    """Read each file and join them, each prefixed with a ``===== name =====`` header.
 
-    Text piped on stdin becomes the content the prompt operates on, unless an
-    explicit --transcript-id is given — that injects server-side and takes
-    priority, so piped text is ignored with a visible warning (suppressed by
-    --quiet, structured under --json).
+    The header names each source (the file's stem) so a multi-file prompt can cite
+    which note an answer came from; it's applied uniformly, even for a single file,
+    so the format the model sees is predictable. A missing or unreadable path is a
+    usage error raised before any auth or network — the same fail-fast ordering as
+    the --transcript-id check.
     """
-    if transcript_id is None:
-        return stdio.piped_stdin_text()
-    # Same cheap local id check as `transcripts get`, before auth or network.
-    client.validate_transcript_id(transcript_id)
-    if stdio.stdin_is_piped() and not state.quiet:
-        output.emit_warning(
-            "Ignoring piped stdin; --transcript-id takes priority.", json_mode=json_mode
-        )
-    return None
+    sections: list[str] = []
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise UsageError(
+                f"Couldn't read {path}: {exc.strerror or exc}.",
+                suggestion="Check the path points at a readable file.",
+            ) from exc
+        sections.append(f"===== {path.stem} =====\n{text}")
+    return "\n\n".join(sections)
+
+
+def _input_text(
+    state: AppState, transcript_id: str | None, files: tuple[Path, ...], *, json_mode: bool
+) -> str | None:
+    """Resolve the inline text the prompt operates on for one-shot mode.
+
+    Three possible sources, in priority order: an explicit --transcript-id (injected
+    server-side, so this returns None), one or more file arguments (read and
+    concatenated), or text piped on stdin. A higher-priority source present alongside
+    a lower one ignores the lower with a visible warning (suppressed by --quiet,
+    structured under --json).
+    """
+    if transcript_id is not None:
+        # Same cheap local id check as `transcripts get`, before auth or network.
+        client.validate_transcript_id(transcript_id)
+        ignored = _ignored_sources(files, stdio.stdin_is_piped())
+        if ignored and not state.quiet:
+            output.emit_warning(
+                f"Ignoring {ignored}; --transcript-id takes priority.", json_mode=json_mode
+            )
+        return None
+    if files:
+        if stdio.stdin_is_piped() and not state.quiet:
+            output.emit_warning(
+                "Ignoring piped stdin; file arguments take priority.", json_mode=json_mode
+            )
+        return _read_files(files)
+    return stdio.piped_stdin_text()
+
+
+def _ignored_sources(files: tuple[Path, ...], stdin_piped: bool) -> str | None:
+    """Name the lower-priority input sources present alongside --transcript-id, for the
+    warning — or None when there's nothing to ignore."""
+    sources: list[str] = []
+    if files:
+        sources.append("file arguments")
+    if stdin_piped:
+        sources.append("piped stdin")
+    return " and ".join(sources) or None
 
 
 def _run_follow(
     opts: LlmOptions, state: AppState, extra: dict[str, object], *, json_mode: bool
 ) -> None:
-    prompt_text = _validate_follow_args(opts.prompt, opts.output_field, opts.transcript_id)
+    prompt_text = _validate_follow_args(
+        opts.prompt, opts.output_field, opts.transcript_id, opts.files
+    )
     api_key = state.resolve_api_key()
 
     def ask(transcript_text: str) -> str:
@@ -131,13 +185,13 @@ def _run_oneshot(
             suggestion="Or pass --list-models to see available models.",
         )
     prompt_text = opts.prompt
-    stdin_text = _stdin_transcript_text(state, opts.transcript_id, json_mode=json_mode)
+    input_text = _input_text(state, opts.transcript_id, opts.files, json_mode=json_mode)
     api_key = state.resolve_api_key()
     messages = gateway.build_messages(
         prompt_text,
         system=opts.system,
         transcript_id=opts.transcript_id,
-        transcript_text=stdin_text,
+        transcript_text=input_text,
     )
     response = gateway.complete(
         api_key,

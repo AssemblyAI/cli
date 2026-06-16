@@ -5,6 +5,7 @@ import typer
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import run_with_options
 from aai_cli.commands.dictate import _exec as dictate_exec
+from aai_cli.core import choices
 from aai_cli.core.sync_stt import MAX_AUDIO_SECONDS
 from aai_cli.ui.help_text import examples_epilog
 
@@ -29,6 +30,7 @@ SPEC = command_registry.CommandModuleSpec(
                 "assembly dictate --word-boost AssemblyAI --word-boost LeMUR",
             ),
             ("One JSON object per utterance", "assembly dictate --json"),
+            ("Pipe the bare transcript onward", "assembly dictate -o text | assembly llm -f"),
         ]
     ),
 )
@@ -58,6 +60,12 @@ def dictate(
         max=float(MAX_AUDIO_SECONDS),
     ),
     json_out: bool = options.json_option("Emit one JSON object per utterance"),
+    output_field: choices.TextOrJson | None = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Output mode: text (the bare transcript per utterance, pipe-friendly) or json",
+    ),
 ) -> None:
     """Push-to-talk dictation: record the mic, get the transcript back
 
@@ -73,5 +81,6 @@ def dictate(
         device=device,
         once=once,
         max_seconds=max_seconds,
+        output_field=output_field,
     )
     run_with_options(ctx, dictate_exec.run_dictate, opts, json=json_out)

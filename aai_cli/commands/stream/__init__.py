@@ -34,6 +34,11 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
             ("Stream the hosted sample", "assembly stream --sample"),
             ("Label speakers in the live transcript", "assembly stream --speaker-labels"),
             ("Save a WAV of the audio while streaming", "assembly stream --save-audio out.wav"),
+            ("Save the transcript text to a file", "assembly stream --save-transcript notes.txt"),
+            (
+                "Auto-name the transcript + WAV under a dir",
+                'assembly stream --save-dir ~/recordings --name "Standup"',
+            ),
             (
                 "Boost domain terms with keyterm prompts",
                 'assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
@@ -83,15 +88,38 @@ def stream(
         help="macOS only: stream system/app audio without the microphone",
         rich_help_panel=help_panels.OPT_CAPTURE,
     ),
+    # saving
     save_audio: Path | None = typer.Option(
         None,
         "--save-audio",
         help="Tee the streamed PCM to PATH as a 16-bit mono WAV while transcribing",
-        rich_help_panel=help_panels.OPT_CAPTURE,
+        rich_help_panel=help_panels.OPT_SAVING,
         dir_okay=False,
         # Click guardrail; flipping it changes no behavior a unit test can observe
         # (and the writable check is a no-op under the test runner's root uid).
         writable=True,  # pragma: no mutate
+    ),
+    save_transcript: Path | None = typer.Option(
+        None,
+        "--save-transcript",
+        help="Write the finalized transcript to PATH, one turn per line",
+        rich_help_panel=help_panels.OPT_SAVING,
+        dir_okay=False,
+        writable=True,  # pragma: no mutate
+    ),
+    save_dir: Path | None = typer.Option(
+        None,
+        "--save-dir",
+        help="Auto-name the transcript and a matching WAV under DIR/YYYY-MM-DD/ "
+        "with a timestamped file",
+        rich_help_panel=help_panels.OPT_SAVING,
+        file_okay=False,
+    ),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="Title to slug into the --save-dir filename (e.g. a meeting title)",
+        rich_help_panel=help_panels.OPT_SAVING,
     ),
     # model & input
     speech_model: SpeechModel = typer.Option(
@@ -367,5 +395,8 @@ def stream(
         output_field=output_field,
         show_code=show_code,
         save_audio=save_audio,
+        save_transcript=save_transcript,
+        save_dir=save_dir,
+        name=name,
     )
     run_with_options(ctx, stream_exec.run_stream, opts, json=json_out)
