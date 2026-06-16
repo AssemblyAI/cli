@@ -128,6 +128,130 @@ def test_llm_reads_content_from_stdin(monkeypatch):
     assert seen["transcript_id"] is None
 
 
+def test_llm_reads_file_argument_as_context(monkeypatch, tmp_path):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
+        seen["content"] = messages[0]["content"]
+        seen["transcript_id"] = transcript_id
+        return _payload("done")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    note = tmp_path / "alpha.md"
+    note.write_text("bob owns the deploy")
+    result = runner.invoke(app, ["llm", "who owns the deploy?", str(note), "--json"])
+    assert result.exit_code == 0
+    # The file content is injected, under a header naming the file's stem.
+    assert "who owns the deploy?" in seen["content"]
+    assert "bob owns the deploy" in seen["content"]
+    assert "===== alpha =====" in seen["content"]
+    assert seen["transcript_id"] is None
+
+
+def test_llm_concatenates_multiple_files_with_headers_in_order(monkeypatch, tmp_path):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
+        seen["content"] = messages[0]["content"]
+        return _payload("done")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    first = tmp_path / "first.md"
+    first.write_text("ship friday")
+    second = tmp_path / "second.md"
+    second.write_text("freeze monday")
+    result = runner.invoke(app, ["llm", "summarize", str(first), str(second), "--json"])
+    assert result.exit_code == 0
+    content = seen["content"]
+    assert "===== first =====" in content
+    assert "===== second =====" in content
+    assert "ship friday" in content
+    assert "freeze monday" in content
+    # Both note bodies appear under their own header, in the order passed.
+    assert content.index("===== first =====") < content.index("===== second =====")
+    assert content.index("ship friday") < content.index("freeze monday")
+
+
+def test_llm_files_take_priority_over_stdin(monkeypatch, tmp_path):
+    _auth()
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
+        seen["content"] = messages[0]["content"]
+        return _payload("done")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    note = tmp_path / "note.md"
+    note.write_text("from the file")
+    result = runner.invoke(
+        app, ["llm", "summarize", str(note)], input="from stdin, should be ignored"
+    )
+    assert result.exit_code == 0
+    assert "from the file" in seen["content"]
+    assert "from stdin, should be ignored" not in seen["content"]
+    assert "Ignoring piped stdin; file arguments take priority." in result.output
+
+
+def test_llm_missing_file_exits_2_without_network(monkeypatch, tmp_path):
+    # A bad path (e.g. an unmatched shell glob passed through literally) is a usage
+    # error raised before auth or the gateway, not a crash.
+    _auth()
+    monkeypatch.setattr(
+        "aai_cli.commands.llm.gateway.complete",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call the gateway")),
+    )
+    missing = tmp_path / "nope.md"
+    result = runner.invoke(app, ["llm", "summarize", str(missing)])
+    assert result.exit_code == 2
+    assert "Couldn't read" in result.output
+    # The clean OS reason (errno's strerror) is shown, not the raw exception repr —
+    # so no "[Errno N] …: '/path'" bracket leaks into the message.
+    assert "[Errno" not in result.output
+
+
+def test_llm_files_with_terminal_stdin_emits_no_warning(monkeypatch, tmp_path):
+    # With files given and stdin a terminal (not piped), there's nothing being
+    # ignored, so the "Ignoring piped stdin" warning must not fire.
+    _auth()
+    monkeypatch.setattr("aai_cli.commands.llm._exec.stdio.stdin_is_piped", lambda: False)
+    seen = {}
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
+        seen["content"] = messages[0]["content"]
+        return _payload("done")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    note = tmp_path / "note.md"
+    note.write_text("only the file")
+    result = runner.invoke(app, ["llm", "summarize", str(note)])
+    assert result.exit_code == 0
+    assert "only the file" in seen["content"]
+    assert "Ignoring piped stdin" not in result.output
+
+
+def test_llm_transcript_id_takes_priority_over_files(monkeypatch, tmp_path):
+    _auth()
+    seen = {}
+    # Pin stdin to a terminal so only the file argument is the ignored source.
+    monkeypatch.setattr("aai_cli.commands.llm._exec.stdio.stdin_is_piped", lambda: False)
+
+    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
+        seen["content"] = messages[0]["content"]
+        seen["transcript_id"] = transcript_id
+        return _payload("s")
+
+    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
+    note = tmp_path / "note.md"
+    note.write_text("file content here")
+    result = runner.invoke(app, ["llm", "summarize", str(note), "--transcript-id", "t_9"])
+    assert result.exit_code == 0
+    assert seen["transcript_id"] == "t_9"
+    assert "file content here" not in seen["content"]
+    assert "Ignoring file arguments; --transcript-id takes priority." in result.output
+
+
 def test_llm_transcript_id_takes_priority_over_stdin(monkeypatch):
     _auth()
     seen = {}
@@ -252,83 +376,6 @@ def test_llm_unauthenticated_runs_login(monkeypatch):
     assert "Run the same command again" in result.output
 
 
-def test_llm_follow_summarizes_each_turn(monkeypatch):
-    _auth()
-    calls = []
-
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
-        calls.append(messages[-1]["content"])
-        return _payload(f"summary-{len(calls)}")
-
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
-    result = runner.invoke(
-        app,
-        ["llm", "summarize action items", "--follow", "--json"],
-        input="we ship friday\nbob owns the deploy\n",
-    )
-    assert result.exit_code == 0
-    updates = [json.loads(line) for line in result.output.splitlines() if line.strip()]
-    # One update per finalized turn, full transcript accumulating each time.
-    assert len(updates) == 2
-    assert "we ship friday" in calls[0]
-    assert "bob owns the deploy" not in calls[0]
-    assert "we ship friday" in calls[1]
-    assert "bob owns the deploy" in calls[1]
-    assert updates[-1]["output"] == "summary-2"
-    assert updates[-1]["turns"] == 2
-
-
-def test_llm_follow_includes_system_prompt(monkeypatch):
-    _auth()
-    seen = {}
-
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
-        seen["roles"] = [m["role"] for m in messages]
-        seen["system"] = messages[0]["content"]
-        return _payload("ok")
-
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
-    result = runner.invoke(
-        app,
-        ["llm", "summarize", "--follow", "--system", "You are a scribe", "--json"],
-        input="one turn\n",
-    )
-    assert result.exit_code == 0
-    assert seen["roles"][0] == "system"
-    assert seen["system"] == "You are a scribe"
-
-
-def test_llm_follow_rejects_transcript_id(monkeypatch):
-    _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
-    result = runner.invoke(
-        app,
-        ["llm", "summarize", "--follow", "--transcript-id", "t_1", "--json"],
-        input="x\n",
-    )
-    assert result.exit_code == 2
-    assert "transcript-id" in result.output
-
-
-def test_llm_follow_ignores_blank_lines(monkeypatch):
-    _auth()
-    calls = []
-
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
-        calls.append(messages[-1]["content"])
-        return _payload("ok")
-
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
-    result = runner.invoke(
-        app,
-        ["llm", "summarize", "--follow", "--json"],
-        input="first\n\n   \nsecond\n",
-    )
-    assert result.exit_code == 0
-    # Blank/whitespace-only lines don't trigger a call.
-    assert len(calls) == 2
-
-
 def test_llm_output_text_prints_raw_answer(monkeypatch):
     _auth()
     monkeypatch.setattr(
@@ -366,92 +413,6 @@ def test_llm_output_invalid_field_exits_2(monkeypatch):
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "hi", "-o", "bogus"])
     assert result.exit_code == 2
-
-
-def test_llm_output_with_follow_is_rejected(monkeypatch):
-    _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
-    result = runner.invoke(app, ["llm", "hi", "-f", "-o", "text"], input="x\n")
-    assert result.exit_code == 2
-    assert "one-shot" in result.output
-
-
-def test_llm_follow_requires_a_prompt(monkeypatch):
-    # --follow re-runs a prompt over each turn; with no prompt there's nothing to run.
-    _auth()
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
-    result = runner.invoke(app, ["llm", "--follow", "--json"], input="x\n")
-    assert result.exit_code == 2
-    assert "prompt" in result.output.lower()
-
-
-def test_llm_follow_requires_piped_stdin(monkeypatch):
-    # Interactively (no pipe) --follow would block forever; reject it with guidance.
-    _auth()
-    monkeypatch.setattr("aai_cli.commands.llm._exec.stdio.stdin_is_piped", lambda: False)
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
-    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"])
-    assert result.exit_code == 2
-    assert "stdin" in result.output.lower()
-
-
-def test_llm_follow_empty_stdin_exits_2(monkeypatch):
-    # `assembly llm -f "…" </dev/null` must not exit 0 silently: an empty pipe means the
-    # prompt never ran, which is a usage error, not a success.
-    _auth()
-    calls = []
-
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
-        calls.append(messages)
-        return _payload("ok")
-
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
-    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
-    assert result.exit_code == 2
-    assert "--follow needs transcript text piped on stdin" in result.output
-    assert calls == []  # no API call was made
-
-
-def test_llm_follow_interrupt_before_first_turn_still_exits_0(monkeypatch):
-    # Ctrl-C before any turn arrives is the normal "stop watching" signal, not the
-    # empty-stdin usage error.
-    _auth()
-
-    class _InterruptIter:
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr(
-        "aai_cli.commands.llm._exec.stdio.iter_piped_stdin_lines", lambda: _InterruptIter()
-    )
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
-    result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
-    assert result.exit_code == 0
-    assert "--follow needs transcript text piped on stdin" not in result.output
-
-
-def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
-    _auth()
-    calls = []
-
-    def fake_complete(api_key, *, model, messages, max_tokens, transcript_id=None, extra=None):
-        calls.append(messages[-1]["content"])
-        if len(calls) == 2:
-            raise KeyboardInterrupt  # user hits Ctrl-C mid-meeting
-        return _payload("ok")
-
-    monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", fake_complete)
-    result = runner.invoke(
-        app, ["llm", "summarize", "--follow", "--json"], input="alpha\nbeta\ngamma\n"
-    )
-    # Ctrl-C is a normal stop, not an error.
-    assert result.exit_code == 0
-    updates = [json.loads(line) for line in result.output.splitlines() if line.strip()]
-    assert len(updates) == 1
-    assert updates[0]["turns"] == 1
 
 
 def test_llm_passes_model_and_max_tokens(monkeypatch):

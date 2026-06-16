@@ -50,7 +50,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
 | `assembly agent-cascade` | Same live conversation, but wired client-side from Streaming STT + the LLM Gateway + streaming TTS, like the `agent-cascade` starter (sandbox-only) |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
-| `assembly llm` | Prompt the LLM Gateway over a transcript, stdin, or a live stream |
+| `assembly llm` | Prompt the LLM Gateway over a transcript, files, stdin, or a live stream |
 | `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range (`--video` keeps the picture for URL sources) — clip boundaries snap into nearby silence |
 | `assembly dub` | Re-voice an audio/video file or URL in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
 | `assembly caption` | Burn always-visible captions into a video: transcribe (or reuse a transcript), fetch SRT, ffmpeg burns it in — audio untouched |
@@ -298,6 +298,12 @@ Compose with other tools — audio in, text out:
 ```sh
 ffmpeg -i talk.mp4 -f wav - | assembly transcribe -
 git log --oneline -30 | assembly llm "write release notes grouped by feature/fix"
+```
+
+Pass files straight to `llm` instead of building the pipeline yourself — each is read, prefixed with a `===== name =====` header, and concatenated as the prompt's context (so the answer can cite which note it came from):
+
+```sh
+assembly llm "answer using only these notes: who owns the deploy?" notes/*.md
 ```
 
 ## 📚 Documentation
