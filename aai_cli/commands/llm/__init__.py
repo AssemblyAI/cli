@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 
 from aai_cli import command_registry, help_panels, options
@@ -42,6 +44,10 @@ def _list_models(output_field: choices.TextOrJson | None, json_mode: bool) -> No
             ),
             ("Pipe any text in", 'echo "meeting notes" | assembly llm "turn into action items"'),
             (
+                "Read one or more files as context",
+                'assembly llm "answer using only these notes: who owns the deploy?" notes/*.md',
+            ),
+            (
                 "Pick a model and add a system prompt",
                 'assembly llm "draft a follow-up email" --model claude-opus-4-7 --system "Be concise."',
             ),
@@ -52,6 +58,11 @@ def _list_models(output_field: choices.TextOrJson | None, json_mode: bool) -> No
 def llm(
     ctx: typer.Context,
     prompt: str | None = typer.Argument(None, help="The prompt to send to the model"),
+    files: list[Path] | None = typer.Argument(
+        None,
+        help="Optional input files to read as the prompt's context (each is header-prefixed "
+        "with its name and concatenated; takes priority over piped stdin)",
+    ),
     # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | assembly llm "summarize"`).
     model: str = typer.Option(
         gateway.DEFAULT_MODEL,
@@ -103,6 +114,7 @@ def llm(
 
     opts = llm_exec.LlmOptions(
         prompt=prompt,
+        files=tuple(files or ()),
         model=model,
         transcript_id=transcript_id,
         system=system,
