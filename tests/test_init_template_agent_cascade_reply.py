@@ -1,8 +1,8 @@
-"""Reply-synthesis-path tests for the agent-framework template.
+"""Reply-synthesis-path tests for the agent-cascade template.
 
 Covers _synthesize (the TTS protocol), _speak (the greeting/single-shot reply), and
 _generate_reply (the streamed, sentence-by-sentence reply with conversation memory).
-Split out of test_init_template_agent_framework.py to keep each file under the
+Split out of test_init_template_agent_cascade.py to keep each file under the
 500-line gate.
 """
 
@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from tests._agent_framework import (
+from tests._agent_cascade import (
     FakeBrowser,
     FakeWS,
     _async_return,

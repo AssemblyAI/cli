@@ -1,4 +1,4 @@
-"""Hermetic tests for the agent-framework template's conversation memory + multi-turn STT.
+"""Hermetic tests for the agent-cascade template's conversation memory + multi-turn STT.
 
 Covers the sliding-window history threaded through `_generate_reply` and `_pump_stt`:
 the user turn is recorded before the reply, the assistant turn after it completes, so a
@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from tests._agent_framework import FakeBrowser, FakeWS, _async_return, _cascade, _deps, reimport
+from tests._agent_cascade import FakeBrowser, FakeWS, _async_return, _cascade, _deps, reimport
 
 
 def test_generate_reply_records_history(monkeypatch):

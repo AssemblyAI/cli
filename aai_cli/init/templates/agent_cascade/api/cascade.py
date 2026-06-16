@@ -1,4 +1,4 @@
-"""Server-side cascade orchestrator for the agent-framework template.
+"""Server-side cascade orchestrator for the agent-cascade template.
 
 The browser opens one WebSocket to FastAPI and the backend wires three AssemblyAI
 primitives together — Streaming STT, the LLM Gateway, and streaming TTS — so every
@@ -63,7 +63,7 @@ def unavailable_reason(settings: _Settings) -> str | None:
     if not settings.TTS_HOST:
         return (
             "Streaming TTS has no production host, so this cascade is sandbox-only. "
-            "Re-scaffold against the sandbox: assembly --sandbox init agent-framework."
+            "Re-scaffold against the sandbox: assembly --sandbox init agent-cascade."
         )
     return None
 

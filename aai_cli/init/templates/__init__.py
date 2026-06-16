@@ -9,7 +9,7 @@ TEMPLATES: dict[str, str] = {
     "audio-transcription": "Audio Transcription",
     "live-captions": "Live Captions",
     "voice-agent": "Voice Agent",
-    "agent-framework": "Agent Framework",
+    "agent-cascade": "Agent Cascade",
 }
 
 # Display order for the picker and `--help`.
@@ -17,7 +17,7 @@ TEMPLATE_ORDER: tuple[str, ...] = (
     "audio-transcription",
     "live-captions",
     "voice-agent",
-    "agent-framework",
+    "agent-cascade",
 )
 
 
@@ -27,7 +27,7 @@ DESCRIPTIONS: dict[str, str] = {
     "audio-transcription": "Transcribe audio & video files, URLs, and YouTube — speaker labels and audio intelligence",
     "live-captions": "Live real-time captions from your microphone over the Streaming API",
     "voice-agent": "Full-duplex voice agent (speech in, LLM reply, speech out) via the Voice Agent API",
-    "agent-framework": "Cascaded voice agent you orchestrate: Streaming STT, the LLM Gateway, and sandbox TTS",
+    "agent-cascade": "Cascaded voice agent you orchestrate: Streaming STT, the LLM Gateway, and sandbox TTS",
 }
 
 

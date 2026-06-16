@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aai_cli.agent_framework.text import split_sentences, trim_history
+from aai_cli.agent_cascade.text import split_sentences, trim_history
 
 
 def test_split_sentences_breaks_on_terminators():

@@ -6,8 +6,8 @@ import dataclasses
 
 import pytest
 
-from aai_cli.agent_framework.config import DEFAULT_GREETING, DEFAULT_MAX_HISTORY, CascadeConfig
-from aai_cli.agent_framework.voices import DEFAULT_VOICE
+from aai_cli.agent_cascade.config import DEFAULT_GREETING, DEFAULT_MAX_HISTORY, CascadeConfig
+from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.core import llm
 
 

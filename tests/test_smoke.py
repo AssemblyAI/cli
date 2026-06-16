@@ -155,7 +155,7 @@ def test_help_lists_commands_in_workflow_order():
         "stream",
         "dictate",
         "agent",
-        "agent-framework",
+        "agent-cascade",
         "speak",
         "llm",
         "clip",

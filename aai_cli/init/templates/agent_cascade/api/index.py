@@ -1,9 +1,9 @@
-"""Talk to a cascaded voice agent — AssemblyAI agent-framework starter (FastAPI).
+"""Talk to a cascaded voice agent — AssemblyAI agent-cascade starter (FastAPI).
 
 The browser opens one WebSocket to this backend, which runs the cascade itself —
 Streaming STT -> LLM Gateway -> streaming TTS — so your API key never reaches the
 client. Streaming TTS is sandbox-only, so scaffold with `assembly --sandbox init
-agent-framework` and use a sandbox key.
+agent-cascade` and use a sandbox key.
 
   WS /ws  <- {"type":"input.audio","audio":<b64 pcm>} ; -> transcripts + reply.audio
 """

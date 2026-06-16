@@ -1,4 +1,4 @@
-"""Hermetic tests for the agent-framework template's live-client adapters and FastAPI routes."""
+"""Hermetic tests for the agent-cascade template's live-client adapters and FastAPI routes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests._agent_framework import (
+from tests._agent_cascade import (
     FakeBrowser,
     FakeWS,
     _async_return,

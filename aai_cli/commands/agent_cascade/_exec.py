@@ -1,7 +1,7 @@
-"""Run logic for `assembly agent-framework`: the options/run split (see AGENTS.md).
+"""Run logic for `assembly agent-cascade`: the options/run split (see AGENTS.md).
 
-The command module parses argv into an ``AgentFrameworkOptions`` and hands it to
-``run_agent_framework``, so tests drive validation and the cascade wiring by
+The command module parses argv into an ``AgentCascadeOptions`` and hands it to
+``run_agent_cascade``, so tests drive validation and the cascade wiring by
 constructing options directly rather than round-tripping through ``CliRunner``.
 """
 
@@ -16,8 +16,8 @@ import typer
 
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_framework import engine, voices
-from aai_cli.agent_framework.config import CascadeConfig
+from aai_cli.agent_cascade import engine, voices
+from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client
@@ -28,8 +28,8 @@ from aai_cli.tts import session as tts_session
 
 
 @dataclass(frozen=True)
-class AgentFrameworkOptions:
-    """Every `assembly agent-framework` conversation flag as plain data.
+class AgentCascadeOptions:
+    """Every `assembly agent-cascade` conversation flag as plain data.
 
     ``--list-voices`` is excluded: it dispatches to its own auth-free body in the
     command module. ``--json`` is excluded: run_command resolves it into the
@@ -70,16 +70,16 @@ def _open_audio(
     return duplex.mic, duplex.player, SAMPLE_RATE
 
 
-def run_agent_framework(opts: AgentFrameworkOptions, state: AppState, *, json_mode: bool) -> None:
-    """Execute one `assembly agent-framework` cascade from already-parsed flags."""
+def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
+    """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     if opts.voice not in voices.VOICE_NAMES:
         raise UsageError(
             f"Unknown voice {opts.voice!r}.",
-            suggestion="Run 'assembly agent-framework --list-voices' to see the options.",
+            suggestion="Run 'assembly agent-cascade --list-voices' to see the options.",
         )
     # Streaming TTS has no production host, so the whole cascade is sandbox-only.
-    tts_session.require_available("agent-framework")
+    tts_session.require_available("agent-cascade")
     system_prompt_text = _resolve_system_prompt(opts.system_prompt, opts.system_prompt_file)
 
     from_file = bool(opts.source) or opts.sample

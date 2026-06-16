@@ -1,4 +1,4 @@
-"""The voices `assembly agent-framework` speaks with.
+"""The voices `assembly agent-cascade` speaks with.
 
 The cascade's audio comes from streaming TTS, so its voices are the TTS catalog
 (`aai_cli.tts.voices`) — not the Voice Agent voices `assembly agent` uses. This

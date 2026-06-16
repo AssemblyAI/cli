@@ -1,4 +1,4 @@
-"""Orchestration tests for the terminal voice cascade (aai_cli.agent_framework.engine).
+"""Orchestration tests for the terminal voice cascade (aai_cli.agent_cascade.engine).
 
 The cascade's three network legs and its thread spawner are injected through
 CascadeDeps, so every test here runs against fakes — no sockets, mic, or speaker.
@@ -11,9 +11,9 @@ import types
 
 import pytest
 
-from aai_cli.agent_framework import engine
-from aai_cli.agent_framework.config import CascadeConfig
-from aai_cli.agent_framework.engine import CascadeDeps, CascadeSession, run_cascade
+from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
 from aai_cli.core.errors import APIError
 
 
