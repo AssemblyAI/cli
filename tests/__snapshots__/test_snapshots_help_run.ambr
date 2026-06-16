@@ -50,6 +50,9 @@
   │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
   │                                            lines as plain stdout,            │
   │                                            pipe-friendly) or json            │
+  │ --show-code                                Print the equivalent Python SDK   │
+  │                                            code and exit (does not start a   │
+  │                                            session)                          │
   │ --help                                     Show this message and exit.       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Text-to-speech ─────────────────────────────────────────────────────────────╮
@@ -100,6 +103,8 @@
    $ assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."
    See available voices
    $ assembly --sandbox agent-cascade --list-voices
+   Print equivalent Python instead of running
+   $ assembly --sandbox agent-cascade --show-code
   
   
   

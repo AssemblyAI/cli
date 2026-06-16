@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from aai_cli.code_gen import agent as _agent
+from aai_cli.code_gen import agent_cascade as _agent_cascade
 from aai_cli.code_gen import stream as _stream
 from aai_cli.code_gen import transcribe as _transcribe
+
+if TYPE_CHECKING:
+    from aai_cli.agent_cascade.config import CascadeConfig
 
 
 def gateway_options(
@@ -26,6 +32,17 @@ def gateway_options(
 def agent(voice: str, system_prompt: str, greeting: str) -> str:
     """Generate runnable Python that reproduces this voice-agent session."""
     return _agent.render(voice, system_prompt, greeting)
+
+
+def agent_cascade(config: CascadeConfig, *, speech_model: str) -> str:
+    """Generate runnable Python that reproduces this terminal cascade session.
+
+    Unlike `agent` (one Voice Agent socket), the cascade wires the three primitives
+    itself — Streaming STT, the LLM Gateway, and streaming TTS — so the script mirrors
+    the CLI's client-side orchestration. Sandbox hosts only, since streaming TTS has no
+    production host.
+    """
+    return _agent_cascade.render(config, speech_model=speech_model)
 
 
 def transcribe(

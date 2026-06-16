@@ -57,6 +57,10 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
                 'assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."',
             ),
             ("See available voices", "assembly --sandbox agent-cascade --list-voices"),
+            (
+                "Print equivalent Python instead of running",
+                "assembly --sandbox agent-cascade --show-code",
+            ),
         ]
     ),
 )
@@ -159,6 +163,11 @@ def agent_cascade(
         "--output",
         help="Output mode: text (you:/agent: lines as plain stdout, pipe-friendly) or json",
     ),
+    show_code: bool = typer.Option(
+        False,
+        "--show-code",
+        help="Print the equivalent Python SDK code and exit (does not start a session)",
+    ),
 ) -> None:
     """\\[sandbox] Hold a live voice conversation through a self-wired cascade
 
@@ -201,5 +210,6 @@ def agent_cascade(
         llm_config=tuple(llm_config or ()),
         language=language,
         tts_config=tuple(tts_config or ()),
+        show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

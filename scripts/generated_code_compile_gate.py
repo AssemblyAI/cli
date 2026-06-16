@@ -104,6 +104,19 @@ def main() -> int:
                 "--show-code",
             ),
         ),
+        (
+            # Sandbox-only: streaming TTS has no prod host, so --sandbox makes the URLs valid.
+            "agent-cascade-basic",
+            (
+                "--sandbox",
+                "agent-cascade",
+                "--voice",
+                "jane",
+                "--greeting",
+                "Hello there",
+                "--show-code",
+            ),
+        ),
     )
 
     runner = CliRunner()

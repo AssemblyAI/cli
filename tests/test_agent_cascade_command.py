@@ -47,6 +47,7 @@ _DEFAULTS = AgentCascadeOptions(
     llm_config=(),
     language=None,
     tts_config=(),
+    show_code=False,
 )
 
 

@@ -36,7 +36,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 - **🎯 One command for everything**: transcription, real-time streaming, voice agents, LLM prompts, and WER benchmarking — no SDK boilerplate.
 - **🔌 Built for pipelines**: data goes to stdout, errors to stderr, `--json` gives stable machine-readable output, and `-` reads audio from stdin.
 - **🔐 Secure by default**: your API key lives in the OS keyring, never in a dotfile — and run commands have no `--api-key` flag, so keys can't leak into `ps` or shell history.
-- **🛠️ From demo to deployed app**: `assembly init` scaffolds a runnable FastAPI starter, `assembly dev` / `share` / `deploy` run, tunnel, and ship it, and `--show-code` prints the equivalent Python SDK script for any run command.
+- **🛠️ From demo to deployed app**: `assembly init` scaffolds a runnable FastAPI starter, `assembly dev` / `share` / `deploy` run, tunnel, and ship it, and `--show-code` prints the equivalent Python SDK script for any run command (`transcribe` / `stream` / `agent` / `agent-cascade`).
 - **🤖 Agent-ready**: `assembly setup install` wires your coding agent up with the AssemblyAI docs MCP server and skills.
 - **📖 Open source**: MIT licensed.
 
@@ -62,7 +62,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly transcripts` / `sessions` | Browse and fetch past transcripts and streaming sessions |
 | `assembly keys` / `balance` / `usage` / `limits` / `audit` | Account self-service via browser login |
 
-Add `--show-code` to `transcribe` / `stream` / `agent` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
+Add `--show-code` to `transcribe` / `stream` / `agent` / `agent-cascade` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
 
 ## ✨ Things you can do with it
 
@@ -152,7 +152,7 @@ printf '%s\n' \
 assembly agent --voice ivy --system-prompt "you're a helpful interviewer"
 ```
 
-**Graduate to the SDK** — `--show-code` prints the equivalent Python script for any `transcribe`/`stream`/`agent` run instead of executing it:
+**Graduate to the SDK** — `--show-code` prints the equivalent Python script for any `transcribe`/`stream`/`agent`/`agent-cascade` run instead of executing it:
 
 ```sh
 assembly agent --system-prompt "you're a story generator" --show-code > story.py
