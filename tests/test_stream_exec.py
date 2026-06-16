@@ -165,6 +165,14 @@ def test_stream_options_are_immutable():
         setattr(DEFAULTS, field_name, True)
 
 
+def test_save_targets_are_immutable():
+    # The resolved save destinations are a frozen carrier (like StreamOptions), so a
+    # later step can't quietly retarget a file mid-run.
+    field_name = "audio"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(stream_exec.SaveTargets(), field_name, Path("x.wav"))
+
+
 # --- batch streaming (--from-stdin) validation -----------------------------
 # Each conflict is rejected before stdin is read, so these raise without a pipe.
 @pytest.mark.parametrize(
@@ -292,6 +300,35 @@ def test_save_audio_rejects_system_audio():
             AppState(),
             json_mode=False,
         )
+
+
+def test_save_audio_allows_system_audio_only(monkeypatch, tmp_path):
+    # --save-audio is rejected for the two-stream --system-audio, but --system-audio-only
+    # is a single stream, so it tees to the one explicit WAV like any other source.
+    config.set_api_key("default", "sk_live")
+    out = tmp_path / "rec.wav"
+
+    class FakeSystemAudio:
+        def __init__(self, *, on_open=None):
+            self.sample_rate = 16000
+
+        def __iter__(self):
+            return iter([RecordingMic.PCM])
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        assert b"".join(source) == RecordingMic.PCM
+
+    monkeypatch.setattr(stream_exec, "MacSystemAudioSource", FakeSystemAudio)
+    monkeypatch.setattr(stream_exec.client, "stream_audio", fake_stream_audio)
+
+    stream_exec.run_stream(
+        dataclasses.replace(DEFAULTS, save_audio=out, system_audio_only=True),
+        AppState(),
+        json_mode=True,
+    )
+
+    with wave.open(str(out), "rb") as w:
+        assert w.readframes(w.getnframes()) == RecordingMic.PCM
 
 
 def test_save_audio_rejects_show_code():
@@ -425,7 +462,6 @@ def test_save_dir_auto_names_transcript_and_matching_wav(monkeypatch, tmp_path):
     [
         {"save_dir": Path("rec"), "save_audio": Path("a.wav")},  # save-dir owns the audio name
         {"save_dir": Path("rec"), "save_transcript": Path("a.txt")},  # ...and the transcript
-        {"save_dir": Path("rec"), "system_audio": True},  # two streams can't share one wav
         {"name": "Standup"},  # --name without --save-dir is meaningless
     ],
 )
