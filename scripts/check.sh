@@ -21,6 +21,13 @@ cleanup_generated_code_dir() {
 echo "==> uv lock freshness"
 uv lock --check
 
+echo "==> validate-pyproject (pyproject.toml schema)"
+# Validate pyproject's standardized tables ([build-system]/[project]) against the PyPA
+# JSON schemas. Run via uvx (like twine/codespell below) so it needs no dev-dep/uv.lock
+# entry; --with packaging enables full requirement/license-expression checks. Unknown
+# [tool.*] tables (ruff/mypy/pyright/…) are intentionally left to those tools.
+uvx --with "packaging>=24.2" validate-pyproject pyproject.toml
+
 echo "==> ruff check (src + tests)"
 uv run ruff check .
 
