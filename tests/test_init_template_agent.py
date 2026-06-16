@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/voice-agent")
+TEMPLATE_DIR = Path("aai_cli/init/templates/voice_agent")
 
 
 def _load_app(monkeypatch):

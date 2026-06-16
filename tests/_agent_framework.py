@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/agent-framework")
+TEMPLATE_DIR = Path("aai_cli/init/templates/agent_framework")
 
 
 def _load(module: str, monkeypatch: pytest.MonkeyPatch, **env: str):

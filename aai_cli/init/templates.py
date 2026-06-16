@@ -31,6 +31,11 @@ DESCRIPTIONS: dict[str, str] = {
 }
 
 
+def dir_for(name: str) -> str:
+    """The on-disk template directory for an id: kebab id -> underscore package dir."""
+    return name.replace("-", "_")
+
+
 def is_template(name: str) -> bool:
     return name in TEMPLATES
 

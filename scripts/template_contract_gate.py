@@ -44,7 +44,9 @@ def _fail(message: str) -> NoReturn:
 
 
 def _template_dirs() -> dict[str, Path]:
-    dirs = {path.name: path for path in _ROOT.iterdir() if path.is_dir()}
+    # On-disk dirs are underscore package names; registry ids are kebab. Map each
+    # shipped dir back to its kebab id so both sets compare in the id namespace.
+    dirs = {path.name.replace("_", "-"): path for path in _ROOT.iterdir() if path.is_dir()}
     registered = set(templates.TEMPLATES)
     shipped = set(dirs)
     missing = registered - shipped

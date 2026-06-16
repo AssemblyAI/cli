@@ -153,7 +153,7 @@ def test_runtime_pins_supported_python(template_dir):
 
 
 def test_realtime_templates_have_audio_helpers(template_dir):
-    if template_dir.name in {"live-captions", "voice-agent"}:
+    if template_dir.name in {"live_captions", "voice_agent"}:
         assert (template_dir / "static" / "audio.js").exists()
 
 

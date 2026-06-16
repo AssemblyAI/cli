@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/live-captions")
+TEMPLATE_DIR = Path("aai_cli/init/templates/live_captions")
 
 
 def _load_app(monkeypatch):
