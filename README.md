@@ -148,6 +148,21 @@ assembly transcribe \
 
 (Prefer to stream a generated list in? `--from-stdin` reads one source per line, so `find . -name '*.wav' | assembly transcribe --from-stdin …` works too.)
 
+**Map-reduce a batch of talks** — extract structured notes from each video (`--llm`, a map), then reduce across all of them with a stronger model (`--model`):
+
+```sh
+assembly transcribe \
+  https://youtu.be/LCEmiRjPEtQ \
+  https://youtu.be/1yvBqasHLZs \
+  https://youtu.be/MiqLoAZFRSE \
+  https://youtu.be/s7_NlkBwdj8 \
+  https://youtu.be/60iW8FZ7MJU \
+  https://youtu.be/V979Wd1gmTU \
+  --concurrency 6 \
+  --llm 'Extract JSON {thesis, key_claims[]}' \
+  --llm-reduce 'Where do the speakers disagree?' --model claude-opus-4-7
+```
+
 **Summarize your recent transcripts and surface the themes** — pipe a list of past transcripts into `transcripts get`, summarize each (`--llm`, a map), then reduce them all into one answer (`--llm-reduce`):
 
 ```sh
