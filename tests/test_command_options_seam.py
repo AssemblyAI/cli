@@ -71,6 +71,7 @@ TRANSCRIBE_DEFAULTS = transcribe_exec.TranscribeOptions(
     config_kv=None,
     config_file=None,
     llm_prompt=None,
+    llm_reduce=None,
     model=llm.DEFAULT_MODEL,
     max_tokens=llm.DEFAULT_MAX_TOKENS,
     output_field=None,

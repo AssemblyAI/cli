@@ -310,6 +310,14 @@ def transcribe(
         "prompt runs on the previous one's response (a chain), the first on the transcript.",
         rich_help_panel=help_panels.OPT_LLM,
     ),
+    llm_reduce: list[str] | None = typer.Option(
+        None,
+        "--llm-reduce",
+        help="Run one LLM-Gateway prompt over all batch results (a reduce). "
+        "Repeatable: each runs on the previous one's output. For a single source it "
+        "extends the --llm chain over that transcript.",
+        rich_help_panel=help_panels.OPT_LLM,
+    ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
         "--model",
@@ -410,6 +418,7 @@ def transcribe(
         config_kv=config_kv,
         config_file=config_file,
         llm_prompt=llm_prompt,
+        llm_reduce=llm_reduce,
         model=model,
         max_tokens=max_tokens,
         output_field=output_field,
