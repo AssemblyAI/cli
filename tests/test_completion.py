@@ -3,8 +3,15 @@ from __future__ import annotations
 import typer
 
 from aai_cli.agent.voices import VOICE_NAMES, complete_voice
+from aai_cli.core import choices
 from aai_cli.core.llm import KNOWN_MODELS, complete_model
 from aai_cli.main import app
+
+
+def test_complete_prefix_keeps_only_matching_options():
+    # The shared completion body that complete_voice/complete_model delegate to: it
+    # filters to the prefix (dropping "banana") rather than echoing every option back.
+    assert choices.complete_prefix(["apple", "apricot", "banana"], "ap") == ["apple", "apricot"]
 
 
 def test_shell_completion_is_enabled():

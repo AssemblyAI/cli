@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
+
+
+def complete_prefix(options: Iterable[str], incomplete: str) -> list[str]:
+    """Shell-completion callback body: the ``options`` that start with the typed prefix."""
+    return [option for option in options if option.startswith(incomplete)]
+
 
 # CLI-owned closed value sets for ``-o/--output``. ``StrEnum`` members *are* their
 # string values: Typer renders them as choices in ``--help`` (e.g.

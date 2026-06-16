@@ -20,9 +20,10 @@ from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent.session import AgentRunConfig, run_session
 from aai_cli.agent.voices import VOICE_NAMES
+from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client
-from aai_cli.core.errors import CLIError, UsageError
+from aai_cli.core.errors import UsageError
 from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
 from aai_cli.ui import output
@@ -46,21 +47,6 @@ class AgentOptions:
     device: int | None
     output_field: choices.TextOrJson | None
     show_code: bool
-
-
-def _resolve_system_prompt(system_prompt: str, system_prompt_file: Path | None) -> str:
-    """The persona text: a --system-prompt-file (if given) overrides --system-prompt."""
-    if system_prompt_file is None:
-        return system_prompt
-    try:
-        return system_prompt_file.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise CLIError(
-            f"Could not read --system-prompt-file {system_prompt_file}: {exc}",
-            error_type="file_not_found",
-            exit_code=2,
-            suggestion="Check the path and that the file is readable.",
-        ) from exc
 
 
 def _open_audio(

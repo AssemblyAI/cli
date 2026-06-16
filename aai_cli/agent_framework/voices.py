@@ -9,6 +9,7 @@ that catches a typo'd ``--voice``, the completion callback, and the grouped
 
 from __future__ import annotations
 
+from aai_cli.core import choices
 from aai_cli.tts import voices as tts_voices
 
 DEFAULT_VOICE = "jane"
@@ -29,7 +30,7 @@ _LANGUAGE_LABELS: dict[str, str] = {
 
 def complete_voice(incomplete: str) -> list[str]:
     """Shell-completion callback for ``--voice``: catalog ids matching the prefix."""
-    return [name for name in VOICE_NAMES if name.startswith(incomplete)]
+    return choices.complete_prefix(VOICE_NAMES, incomplete)
 
 
 def format_voice_list() -> str:

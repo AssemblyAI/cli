@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from aai_cli.core import environments
+from aai_cli.core import choices, environments
 from aai_cli.core.errors import APIError, UsageError, auth_failure
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ def complete_model(incomplete: str) -> list[str]:
     The gateway accepts more than this curated list, so completion only *suggests*
     these — it never restricts what you can type.
     """
-    return [m for m in KNOWN_MODELS if m.startswith(incomplete)]
+    return choices.complete_prefix(KNOWN_MODELS, incomplete)
 
 
 def parse_gateway_overrides(pairs: Sequence[str]) -> dict[str, object]:
