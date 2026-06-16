@@ -117,6 +117,39 @@ def test_chain_appends_reduce_to_map() -> None:
     assert transform.chain() == ["a", "b"]
 
 
+def test_reduce_input_prefers_map_output_then_text_then_empty() -> None:
+    # The last --llm step's output wins over the transcript text.
+    assert (
+        transcribe_batch._reduce_input(
+            {"transform": {"steps": [{"output": "judged"}]}, "transcript": {"text": "raw"}}
+        )
+        == "judged"
+    )
+    # Falls back to transcript text when no --llm step ran.
+    assert transcribe_batch._reduce_input({"transcript": {"text": "raw text"}}) == "raw text"
+    # Empty when the record carries neither.
+    assert transcribe_batch._reduce_input({}) == ""
+
+
+def test_gather_reduce_inputs_skips_non_completed_items() -> None:
+    done = transcribe_batch._Item("https://a", status="completed")
+    failed = transcribe_batch._Item("https://b", status="failed")
+    transcribe_batch._dump_sidecar(
+        transcribe_batch.sidecar_path("https://a"),
+        {"status": "completed", "transcript": {"text": "alpha text"}},
+    )
+    # `b` has a perfectly valid completed sidecar; only its item status excludes it,
+    # so dropping the status guard would wrongly pull "beta text" into the reduce.
+    transcribe_batch._dump_sidecar(
+        transcribe_batch.sidecar_path("https://b"),
+        {"status": "completed", "transcript": {"text": "beta text"}},
+    )
+    combined = transcribe_batch._gather_reduce_inputs([done, failed])
+    assert "### Source: https://a" in combined
+    assert "alpha text" in combined
+    assert "beta text" not in combined
+
+
 def test_single_source_runs_reduce_as_chain_step(mocker):
     _auth()
     mocker.patch(
