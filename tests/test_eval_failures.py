@@ -21,6 +21,7 @@ from tests.test_eval_command import (
     _mock_transcribe,
     _payload_of,
     _transcript,
+    _without_latency,
     _write_wer_manifest,
 )
 
@@ -172,9 +173,11 @@ def test_failed_row_keeps_completed_rows_and_summary_pools_scored_only(tmp_path,
     payload = _payload_of(result)
     assert payload["items"] == 3
     assert payload["failed"] == 1
-    assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
-    assert payload["rows"][1] == {"item": "b.wav", "error": "rate limited"}
-    assert payload["rows"][2] == {"item": "c.wav", "words": 2, "errors": 0, "wer": 0.0}
+    rows = [_without_latency(row) for row in payload["rows"]]
+    assert rows[0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
+    assert rows[1] == {"item": "b.wav", "error": "rate limited"}
+    assert rows[2] == {"item": "c.wav", "words": 2, "errors": 0, "wer": 0.0}
+    assert all(isinstance(row["latency"], float) for row in payload["rows"])
     # Pooled over the two scored rows only — the failed row contributes no words.
     assert payload["words"] == 4
     assert payload["errors"] == 0
