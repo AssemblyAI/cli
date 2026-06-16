@@ -50,20 +50,25 @@ _GLOB_CHARS = frozenset("*?[")
 
 
 def expand_sources(
-    source: str | None, *, from_stdin: bool, sample: bool, detect_feeds: bool = True
+    sources: list[str], *, from_stdin: bool, sample: bool, detect_feeds: bool = True
 ) -> list[str] | None:
     """The batch source list, or ``None`` when this is a single-source invocation.
 
-    Batch mode triggers on ``--from-stdin``, a directory (scanned recursively for
-    audio files), a glob pattern that names no existing file, a bucket URL that is
-    a glob or trailing-slash folder, or an http(s) URL that turns out to be a
-    podcast RSS/Atom feed (each episode becomes one batch source). A plain file,
-    direct media URL, ``-`` (audio piped on stdin), or ``--sample`` stays on the
-    single-source path. ``detect_feeds=False`` skips the feed probe (and its
-    network fetch) for paths that must not touch the network, e.g. ``--show-code``.
+    Batch mode triggers on ``--from-stdin``, **two or more positional sources**
+    (each taken literally — a hand-picked list, no glob/feed expansion), a
+    directory (scanned recursively for audio files), a glob pattern that names no
+    existing file, a bucket URL that is a glob or trailing-slash folder, or an
+    http(s) URL that turns out to be a podcast RSS/Atom feed (each episode becomes
+    one batch source). A lone plain file, direct media URL, ``-`` (audio piped on
+    stdin), or ``--sample`` stays on the single-source path. ``detect_feeds=False``
+    skips the feed probe (and its network fetch) for paths that must not touch the
+    network, e.g. ``--show-code``.
     """
     if from_stdin:
-        return _stdin_sources(source, sample=sample)
+        return _stdin_sources(sources, sample=sample)
+    if len(sources) > 1:
+        return _explicit_sources(sources, sample=sample)
+    source = sources[0] if sources else None
     # `not source` (rather than `is None`) also catches the empty string — e.g. an
     # unset shell variable in `assembly transcribe "$FILE"`. `Path("")` is `Path(".")`,
     # so it would otherwise fall into the directory branch and batch-transcribe the
@@ -92,8 +97,20 @@ def _local_sources(source: str) -> list[str] | None:
     return None
 
 
-def _stdin_sources(source: str | None, *, sample: bool) -> list[str]:
-    if source is not None or sample:
+def _explicit_sources(sources: list[str], *, sample: bool) -> list[str]:
+    """Several explicit positional sources (``assembly transcribe a.mp3 b.mp3 …``).
+
+    An as-is batch list, so a caller can hand-pick files/URLs without quoting a glob
+    or piping a stdin list. Each is taken literally — no per-source glob, directory
+    scan, or feed probe — since the user already enumerated exactly what to run.
+    """
+    if sample:
+        raise UsageError("Pass either --sample or your own sources, not both.")
+    return list(dict.fromkeys(sources))  # dedupe, keep order
+
+
+def _stdin_sources(sources: list[str], *, sample: bool) -> list[str]:
+    if sources or sample:
         raise UsageError(
             "--from-stdin reads sources from stdin; don't also pass a source or --sample."
         )

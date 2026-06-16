@@ -232,7 +232,7 @@ def test_expand_sources_routes_feed_url_to_batch(monkeypatch):
         feed, "feed_episode_urls", lambda url: ["https://x/a.mp3", "https://x/b.mp3"]
     )
     assert transcribe_sources.expand_sources(
-        "https://feeds.example.com/show", from_stdin=False, sample=False
+        ["https://feeds.example.com/show"], from_stdin=False, sample=False
     ) == ["https://x/a.mp3", "https://x/b.mp3"]
 
 
@@ -243,7 +243,7 @@ def test_expand_sources_skips_feed_probe_when_detect_feeds_false(monkeypatch):
     monkeypatch.setattr(feed, "feed_episode_urls", _boom)
     assert (
         transcribe_sources.expand_sources(
-            "https://feeds.example.com/show", from_stdin=False, sample=False, detect_feeds=False
+            ["https://feeds.example.com/show"], from_stdin=False, sample=False, detect_feeds=False
         )
         is None
     )
