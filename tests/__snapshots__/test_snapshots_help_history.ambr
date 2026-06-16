@@ -102,7 +102,7 @@
   │                              transcript.                                     │
   │ --model             TEXT     LLM Gateway model                               │
   │                              [default: claude-haiku-4-5-20251001]            │
-  │ --max-tokens        INTEGER  Max tokens [default: 1000]                      │
+  │ --max-tokens        INTEGER  Max tokens [default: 8192]                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
