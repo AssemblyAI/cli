@@ -88,9 +88,9 @@ With `--llm-reduce`, batch mode emits one final
 `{"type":"reduce","model","prompts","output"}` record after the per-source
 `result` records — the aggregate prompt(s) run once over every result, with the
 output printed to stdout (the progress table is routed to stderr so stdout stays
-clean for piping). `--llm-reduce` is repeatable, each prompt running on the
-previous one's output; for a single source it extends the `--llm` chain over
-that transcript.
+clean for piping; the global `-q`/`--quiet` drops that table entirely). `--llm-reduce`
+is repeatable, each prompt running on the previous one's output; for a single
+source it extends the `--llm` chain over that transcript.
 
 `assembly eval` takes the same `--llm`/`--llm-reduce` flags but emits one JSON
 object per dataset (not NDJSON; a single dataset is therefore one object):
