@@ -32,52 +32,58 @@
   │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Quick Start ────────────────────────────────────────────────────────────────╮
-  │ onboard      Guided setup: sign in and run your first transcription          │
+  │ onboard          Guided setup: sign in and run your first transcription      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Build an App ───────────────────────────────────────────────────────────────╮
-  │ init         Scaffold a new app from a template and launch it                │
-  │ dev          Run the dev server for the app in the current directory         │
-  │ share        Expose the local app on a public URL via a cloudflared tunnel   │
-  │ deploy       Deploy the current project to Vercel, Railway, or Fly.io        │
+  │ init             Scaffold a new app from a template and launch it            │
+  │ dev              Run the dev server for the app in the current directory     │
+  │ share            Expose the local app on a public URL via a cloudflared      │
+  │                  tunnel                                                      │
+  │ deploy           Deploy the current project to Vercel, Railway, or Fly.io    │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Run AssemblyAI ─────────────────────────────────────────────────────────────╮
-  │ transcribe   Transcribe a file, URL, or YouTube/podcast link — or a whole    │
-  │              batch                                                           │
-  │ stream       Transcribe live audio in real time from a mic, file, URL, or    │
-  │              pipe                                                            │
-  │ dictate      Push-to-talk dictation: record the mic, get the transcript back │
-  │ agent        Hold a live two-way voice conversation with a voice agent       │
-  │ speak        [sandbox] Synthesize speech from text with AssemblyAI streaming │
-  │              TTS                                                             │
-  │ llm          Send a prompt to AssemblyAI's LLM Gateway and print the reply   │
-  │ clip         Cut clips from media by speaker, text match, LLM pick, or time  │
-  │              range                                                           │
-  │ dub          [sandbox] Dub a video or audio file into another language       │
-  │ caption      Burn always-visible captions into a video                       │
-  │ eval         Transcribe a dataset and score WER against its reference texts  │
-  │ webhooks     Receive webhook deliveries on a public dev URL                  │
+  │ transcribe       Transcribe a file, URL, or YouTube/podcast link — or a      │
+  │                  whole batch                                                 │
+  │ stream           Transcribe live audio in real time from a mic, file, URL,   │
+  │                  or pipe                                                     │
+  │ dictate          Push-to-talk dictation: record the mic, get the transcript  │
+  │                  back                                                        │
+  │ agent            Hold a live two-way voice conversation with a voice agent   │
+  │ agent-framework  [sandbox] Hold a live voice conversation through a          │
+  │                  self-wired cascade                                          │
+  │ speak            [sandbox] Synthesize speech from text with AssemblyAI       │
+  │                  streaming TTS                                               │
+  │ llm              Send a prompt to AssemblyAI's LLM Gateway and print the     │
+  │                  reply                                                       │
+  │ clip             Cut clips from media by speaker, text match, LLM pick, or   │
+  │                  time range                                                  │
+  │ dub              [sandbox] Dub a video or audio file into another language   │
+  │ caption          Burn always-visible captions into a video                   │
+  │ eval             Transcribe a dataset and score WER against its reference    │
+  │                  texts                                                       │
+  │ webhooks         Receive webhook deliveries on a public dev URL              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Setup & Tools ──────────────────────────────────────────────────────────────╮
-  │ doctor       Check that your environment is ready for AssemblyAI             │
-  │ setup        Set up your coding agent for AssemblyAI (docs MCP + skills)     │
-  │ config       Inspect and edit persisted CLI settings (profiles, env,         │
-  │              telemetry)                                                      │
-  │ update       Update the CLI to the latest release (brew/pipx/uv)             │
-  │ telemetry    Anonymous usage telemetry: status, enable, disable              │
+  │ doctor           Check that your environment is ready for AssemblyAI         │
+  │ setup            Set up your coding agent for AssemblyAI (docs MCP + skills) │
+  │ config           Inspect and edit persisted CLI settings (profiles, env,     │
+  │                  telemetry)                                                  │
+  │ update           Update the CLI to the latest release (brew/pipx/uv)         │
+  │ telemetry        Anonymous usage telemetry: status, enable, disable          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ History ────────────────────────────────────────────────────────────────────╮
-  │ transcripts  Browse and fetch past transcripts                               │
-  │ sessions     Browse your past streaming (real-time) sessions                 │
+  │ transcripts      Browse and fetch past transcripts                           │
+  │ sessions         Browse your past streaming (real-time) sessions             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Account ────────────────────────────────────────────────────────────────────╮
-  │ login        Authenticate via your browser and store a CLI API key           │
-  │ logout       Clear stored credentials for the active profile                 │
-  │ whoami       Show the active profile and whether its key works               │
-  │ balance      Show your remaining account balance                             │
-  │ usage        Show usage over a date range (default: last 30 days)            │
-  │ limits       Show your account's rate limits per service                     │
-  │ keys         List, create, and rename your AssemblyAI API keys               │
-  │ audit        List recent audit-log entries for your account                  │
+  │ login            Authenticate via your browser and store a CLI API key       │
+  │ logout           Clear stored credentials for the active profile             │
+  │ whoami           Show the active profile and whether its key works           │
+  │ balance          Show your remaining account balance                         │
+  │ usage            Show usage over a date range (default: last 30 days)        │
+  │ limits           Show your account's rate limits per service                 │
+  │ keys             List, create, and rename your AssemblyAI API keys           │
+  │ audit            List recent audit-log entries for your account              │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

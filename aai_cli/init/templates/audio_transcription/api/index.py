@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import tempfile
 import uuid
+from abc import abstractmethod
 from pathlib import Path
 from typing import Protocol
 
@@ -118,7 +119,9 @@ def ask(transcript_id: str = Body(...), question: str = Body(...)) -> dict[str, 
 class _Serializable(Protocol):
     """The pydantic-model surface we use: a `.dict()` returning the full JSON."""
 
-    def dict(self) -> dict[str, object]: ...
+    @abstractmethod
+    def dict(self) -> dict[str, object]:
+        """Return the model's full JSON as a dict."""
 
 
 def _to_payload(model: _Serializable) -> dict[str, object]:

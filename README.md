@@ -48,6 +48,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
 | `assembly dictate` | Push-to-talk dictation: press Enter to record, Enter again for instant text (Sync STT API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
+| `assembly agent-framework` | Same live conversation, but wired client-side from Streaming STT + the LLM Gateway + streaming TTS, like the `agent-framework` starter (sandbox-only) |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, stdin, or a live stream |
 | `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range (`--video` keeps the picture for URL sources) — clip boundaries snap into nearby silence |

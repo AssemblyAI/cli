@@ -135,7 +135,7 @@ def test_speak_propagates_cancellation(monkeypatch):
         await asyncio.sleep(0)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await asyncio.gather(task)
 
     asyncio.run(drive())
     assert not any(e["type"] == "session.error" for e in browser.sent)
@@ -246,7 +246,7 @@ def test_generate_reply_records_spoken_partial_on_cancel(monkeypatch):
             await asyncio.sleep(0)  # let it stream + synthesize the sentence, then block
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await asyncio.gather(task)
 
     asyncio.run(drive())
     assert session.history == [{"role": "assistant", "content": "First sentence."}]

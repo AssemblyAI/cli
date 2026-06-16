@@ -1,4 +1,78 @@
 # serializer version: 1
+# name: test_command_help_matches_snapshot[agent-framework]
+  '''
+  
+   Usage: assembly agent-framework [OPTIONS] [SOURCE]
+  
+   [sandbox] Hold a live voice conversation through a self-wired cascade
+  
+   Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
+   wires the three primitives together itself — Streaming STT, the LLM Gateway,
+   and streaming TTS — exactly like the 'agent-framework' init template does
+   server-side. Because it uses streaming TTS it only runs in the sandbox: run
+   it as 'assembly --sandbox agent-framework' (--sandbox goes before the
+   subcommand).
+  
+   Use headphones: the mic stays open while the agent speaks, so on speakers it
+   would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
+   recorded clip instead of the microphone; the session then ends after the
+   agent's reply.
+  
+   This only runs a conversation in the terminal — it writes no code. To build
+   an agent-framework app, run 'assembly init agent-framework' instead.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
+  │                         to use the microphone.                               │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --sample                                   Speak the hosted wildfires.mp3    │
+  │                                            sample to the agent               │
+  │ --voice                       TEXT         TTS voice. See --list-voices.     │
+  │                                            [default: jane]                   │
+  │ --model                       TEXT         LLM Gateway model that powers the │
+  │                                            agent's replies                   │
+  │                                            [default:                         │
+  │                                            claude-haiku-4-5-20251001]        │
+  │ --system-prompt               TEXT         System prompt (the agent's        │
+  │                                            persona)                          │
+  │                                            [default: You are a friendly,     │
+  │                                            concise voice assistant. Keep     │
+  │                                            replies short and conversational. │
+  │                                            Your reply is read aloud by a     │
+  │                                            text-to-speech engine, so write   │
+  │                                            plain spoken prose — no markdown, │
+  │                                            emoji, bullet lists, or code.]    │
+  │ --system-prompt-file          FILE         Read the system prompt from a     │
+  │                                            file (overrides --system-prompt)  │
+  │ --greeting                    TEXT         Spoken greeting                   │
+  │                                            [default: Hi! I'm your AssemblyAI │
+  │                                            voice agent. What can I help you  │
+  │                                            with?]                            │
+  │ --device                      INTEGER      Microphone device index           │
+  │ --list-voices                              Print known voices and exit       │
+  │ --json                -j                   Emit newline-delimited JSON       │
+  │                                            events                            │
+  │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
+  │                                            lines as plain stdout,            │
+  │                                            pipe-friendly) or json            │
+  │ --help                                     Show this message and exit.       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Start a live cascade conversation
+   $ assembly --sandbox agent-framework
+   Pick a voice and opening line
+   $ assembly --sandbox agent-framework --voice michael --greeting "Hi there"
+   Give the agent a persona
+   $ assembly --sandbox agent-framework --system-prompt "You are a terse pirate."
+   See available voices
+   $ assembly --sandbox agent-framework --list-voices
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[agent]
   '''
   
