@@ -95,11 +95,24 @@ def run_transcription(
 
 
 class TransformOptions(NamedTuple):
-    """The ``--llm`` chain options: the prompts plus the gateway model settings."""
+    """The ``--llm`` chain options: the prompts plus the gateway model settings.
+
+    ``reduce_prompts`` is the ``--llm-reduce`` chain — the aggregate step run over
+    all batch results (or appended to the per-transcript chain for a single source).
+    """
 
     prompts: list[str]
     model: str
     max_tokens: int
+    reduce_prompts: list[str]
+
+    def chain(self) -> list[str]:
+        """The full single-source chain: the map prompts followed by the reduce ones.
+
+        With one source there is nothing to aggregate, so the reduce prompts simply
+        extend the ``--llm`` chain over that transcript.
+        """
+        return self.prompts + self.reduce_prompts
 
 
 def deliver_result(
@@ -213,6 +226,7 @@ class TranscribeOptions:
     config_kv: list[str] | None
     config_file: Path | None
     llm_prompt: list[str] | None
+    llm_reduce: list[str] | None
     model: str
     max_tokens: int
     output_field: choices.TranscriptOutput | None
@@ -272,7 +286,10 @@ class TranscribeOptions:
     def transform_options(self) -> TransformOptions:
         """The post-transcription LLM transform spec built from the `--llm` flags."""
         return TransformOptions(
-            prompts=list(self.llm_prompt or []), model=self.model, max_tokens=self.max_tokens
+            prompts=list(self.llm_prompt or []),
+            model=self.model,
+            max_tokens=self.max_tokens,
+            reduce_prompts=list(self.llm_reduce or []),
         )
 
 
