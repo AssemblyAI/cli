@@ -101,13 +101,10 @@ _DEFAULT_OPTS = transcribe_run.TranscribeOptions(
 )
 
 
-def _defaults(**overrides: object) -> transcribe_run.TranscribeOptions:
-    """A minimal TranscribeOptions for seam tests; override only what matters."""
-    return dataclasses.replace(_DEFAULT_OPTS, **overrides)
-
-
 def test_transform_options_carries_reduce_prompts() -> None:
-    opts = _defaults(llm_prompt=["judge"], llm_reduce=["rank", "summarize"])
+    opts = dataclasses.replace(
+        _DEFAULT_OPTS, llm_prompt=["judge"], llm_reduce=["rank", "summarize"]
+    )
     transform = opts.transform_options()
     assert transform.prompts == ["judge"]
     assert transform.reduce_prompts == ["rank", "summarize"]
