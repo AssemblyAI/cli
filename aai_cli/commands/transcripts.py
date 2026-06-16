@@ -5,8 +5,8 @@ from rich.markup import escape
 
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import AppState, run_command
-from aai_cli.core import choices, client, timeparse
-from aai_cli.core.errors import APIError
+from aai_cli.core import choices, client, stdio, timeparse
+from aai_cli.core.errors import APIError, UsageError
 from aai_cli.ui import output, theme
 from aai_cli.ui.help_text import examples_epilog
 
@@ -65,6 +65,64 @@ def list_(
     run_command(ctx, body, json=json_out)
 
 
+def _resolve_ids(transcript_id: str | None) -> tuple[list[str], bool]:
+    """The transcript ids to fetch, and whether this is a stdin batch.
+
+    A positional id stays the single-fetch path (output shape unchanged). With no
+    id, ids are read from piped stdin so ``transcripts list --json | …`` composes;
+    running interactively with no id is a usage error rather than a hang.
+    """
+    if transcript_id is not None:
+        return [transcript_id], False
+    piped = stdio.piped_stdin_text()
+    if piped is None:
+        raise UsageError(
+            "Give a transcript id, or pipe transcript ids on stdin.",
+            suggestion="e.g. assembly transcripts list --json | assembly transcripts get -o text",
+        )
+    ids = client.parse_transcript_ids(piped)
+    if not ids:
+        raise UsageError(
+            "No transcript ids found on stdin.",
+            suggestion="Pipe `assembly transcripts list --json`, or one id per line.",
+        )
+    return ids, True
+
+
+def _emit_transcript(
+    transcript: object,
+    output_field: choices.TranscriptOutput | None,
+    chars_per_caption: int | None,
+    *,
+    json_mode: bool,
+    batch: bool,
+) -> None:
+    """Render one fetched transcript for the chosen output mode."""
+    if output_field is not None:
+        # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
+        output.emit_text(
+            client.select_transcript_field(
+                transcript, output_field, chars_per_caption=chars_per_caption
+            )
+        )
+    elif json_mode and batch:
+        # One NDJSON record per id so a downstream stage can map over the stream;
+        # "type" discriminates NDJSON lines CLI-wide (matching `transcribe` batch).
+        output.emit_ndjson({"type": "transcript", **client.transcript_json_payload(transcript)})
+    elif json_mode:
+        # The full SDK payload, identical to `assembly transcribe … --json`, so the
+        # same `jq` works whether the transcript is fetched fresh or re-fetched.
+        output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
+    elif batch:
+        output.emit_text(str(client.transcript_summary(transcript)["text"]))
+    else:
+        output.emit(
+            client.transcript_summary(transcript),
+            lambda d: escape(str(d["text"])),
+            json_mode=False,
+        )
+
+
 @app.command(
     epilog=examples_epilog(
         [
@@ -73,12 +131,18 @@ def list_(
             ("Save SRT subtitles", "assembly transcripts get 5551234-abcd -o srt > captions.srt"),
             ("Save VTT subtitles", "assembly transcripts get 5551234-abcd -o vtt > captions.vtt"),
             ("Get the raw JSON", "assembly transcripts get 5551234-abcd --json"),
+            (
+                "Fetch many at once from a piped list",
+                "assembly transcripts list --json | assembly transcripts get -o text",
+            ),
         ]
     )
 )
 def get(
     ctx: typer.Context,
-    transcript_id: str = typer.Argument(..., help="Transcript id"),
+    transcript_id: str | None = typer.Argument(
+        None, help="Transcript id; omit to read ids from stdin"
+    ),
     output_field: choices.TranscriptOutput | None = typer.Option(
         None,
         "-o",
@@ -93,32 +157,20 @@ def get(
     def body(state: AppState, json_mode: bool) -> None:
         # Cheap local validation first: a malformed id or flag conflict is a usage
         # error whether or not the user is signed in, so it must not trigger auth.
-        client.validate_transcript_id(transcript_id)
         client.validate_chars_per_caption(chars_per_caption, output_field)
+        ids, batch = _resolve_ids(transcript_id)
+        for tid in ids:
+            client.validate_transcript_id(tid)
         api_key = state.resolve_api_key()
-        transcript = client.get_transcript(api_key, transcript_id)
-        if client.status_str(transcript) == "error":
-            raise APIError(
-                getattr(transcript, "error", None) or "Transcript failed.",
-                transcript_id=transcript_id,
-            )
-        if output_field is not None:
-            # Raw single-field output for pipelines (overrides --json), matching `transcribe`.
-            output.emit_text(
-                client.select_transcript_field(
-                    transcript, output_field, chars_per_caption=chars_per_caption
+        for tid in ids:
+            transcript = client.get_transcript(api_key, tid)
+            if client.status_str(transcript) == "error":
+                raise APIError(
+                    getattr(transcript, "error", None) or "Transcript failed.",
+                    transcript_id=tid,
                 )
-            )
-            return
-        if json_mode:
-            # The full SDK payload, identical to `assembly transcribe … --json`, so the
-            # same `jq` works whether the transcript is fetched fresh or re-fetched.
-            output.emit(client.transcript_json_payload(transcript), lambda d: d, json_mode=True)
-        else:
-            output.emit(
-                client.transcript_summary(transcript),
-                lambda d: escape(str(d["text"])),
-                json_mode=False,
+            _emit_transcript(
+                transcript, output_field, chars_per_caption, json_mode=json_mode, batch=batch
             )
 
     run_command(ctx, body, json=json_out)

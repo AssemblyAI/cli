@@ -301,6 +301,40 @@ def validate_transcript_id(transcript_id: str) -> str:
     return transcript_id
 
 
+def _extract_id(item: object) -> str:
+    """The transcript id from one parsed stdin item (a mapping's ``id`` or a bare line)."""
+    mapping = jsonshape.as_mapping(item)
+    if mapping is not None:
+        return str(mapping.get("id") or "").strip()
+    return str(item).strip()
+
+
+def _stdin_items(stripped: str) -> list[object]:
+    """Items in piped stdin: a JSON array's elements, a single JSON object, or text lines."""
+    try:
+        loaded: object = json.loads(stripped)
+    except json.JSONDecodeError:
+        return list(stripped.splitlines())
+    mapping = jsonshape.as_mapping(loaded)
+    return [mapping] if mapping is not None else jsonshape.object_list(loaded)
+
+
+def parse_transcript_ids(text: str) -> list[str]:
+    """Transcript ids parsed from piped stdin, order-preserving and de-duplicated.
+
+    Accepts the shapes a pipeline naturally produces: the JSON array printed by
+    ``assembly transcripts list --json`` (objects carrying an ``id``), a single
+    transcript JSON object (``transcripts get --json``), or plain text with one id
+    per line (e.g. piped through ``jq -r '.[].id'``). Input that isn't JSON falls
+    back to the line form, so both the jq-free ``list --json | get`` and the
+    explicit ``… | jq -r '.[].id' | get`` compose.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return []
+    return list(dict.fromkeys(id_ for id_ in map(_extract_id, _stdin_items(stripped)) if id_))
+
+
 def get_transcript(api_key: str, transcript_id: str) -> aai.Transcript:
     validate_transcript_id(transcript_id)
     _configure(api_key)

@@ -68,7 +68,7 @@ def _json_error(result):
 @pytest.mark.parametrize(
     ("argv", "fragment"),
     [
-        (["transcripts", "get", "--json"], "Missing argument 'TRANSCRIPT_ID'"),
+        (["sessions", "get", "--json"], "Missing argument 'SESSION_ID'"),
         (["llm", "hi", "--max-tokens", "abc", "--json"], "not a valid integer"),
     ],
     ids=["missing-argument", "bad-option-value"],
@@ -86,11 +86,11 @@ def test_parse_error_with_json_emits_error_envelope(argv, fragment):
 
 
 def test_parse_error_without_json_keeps_human_panel():
-    result = runner.invoke(app, ["transcripts", "get"])
+    result = runner.invoke(app, ["sessions", "get"])
     assert result.exit_code == 2
     plain = _plain(result.output)
-    assert "Usage: assembly transcripts get" in plain
-    assert "Missing argument 'TRANSCRIPT_ID'" in plain
+    assert "Usage: assembly sessions get" in plain
+    assert "Missing argument 'SESSION_ID'" in plain
     assert '{"error"' not in plain
 
 

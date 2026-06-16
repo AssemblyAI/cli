@@ -61,12 +61,13 @@
 # name: test_command_help_matches_snapshot[transcripts_get]
   '''
   
-   Usage: assembly transcripts get [OPTIONS] TRANSCRIPT_ID
+   Usage: assembly transcripts get [OPTIONS] [TRANSCRIPT_ID]
   
    Fetch a past transcript by id and print its text
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    transcript_id      TEXT  Transcript id [required]                       │
+  │   transcript_id      [TRANSCRIPT_ID]  Transcript id; omit to read ids from   │
+  │                                       stdin                                  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --output             -o      [text|id|status|uttera  Print one field of the  │
@@ -90,6 +91,8 @@
    $ assembly transcripts get 5551234-abcd -o vtt > captions.vtt
    Get the raw JSON
    $ assembly transcripts get 5551234-abcd --json
+   Fetch many at once from a piped list
+   $ assembly transcripts list --json | assembly transcripts get -o text
   
   
   

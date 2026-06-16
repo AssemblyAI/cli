@@ -3,7 +3,7 @@ import json
 from typer.testing import CliRunner
 
 from aai_cli.auth.flow import LoginResult
-from aai_cli.core import config
+from aai_cli.core import client, config
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -109,6 +109,9 @@ def test_get_json_emits_full_payload(mocker):
     data = json.loads(result.output)
     assert data["id"] == "t_42"
     assert data["text"] == "retrieved text"
+    # A single positional fetch emits the bare payload, not the batch NDJSON record
+    # (pins `json_mode and batch`: the single path must not carry a "type" wrapper).
+    assert "type" not in data
 
 
 def test_get_json_emits_full_sdk_payload_when_present(mocker):
@@ -276,3 +279,91 @@ def test_transcripts_no_subcommand_shows_help():
     result = runner.invoke(app, ["transcripts"])
     assert "Missing command" not in result.output
     assert "list" in result.output and "get" in result.output
+
+
+def test_parse_transcript_ids_reads_list_json_array():
+    # The array `transcripts list --json` prints: ids pulled out, order preserved, deduped.
+    text = json.dumps([{"id": "t1", "status": "completed"}, {"id": "t2"}, {"id": "t1"}, {"id": ""}])
+    assert client.parse_transcript_ids(text) == ["t1", "t2"]
+
+
+def test_parse_transcript_ids_reads_single_object_and_string_array():
+    assert client.parse_transcript_ids('{"id": "t9", "text": "hi"}') == ["t9"]
+    assert client.parse_transcript_ids('["t1", "t2"]') == ["t1", "t2"]
+
+
+def test_parse_transcript_ids_falls_back_to_lines():
+    # Plain text (e.g. `jq -r '.[].id'`): one id per line, blanks dropped, deduped in order.
+    assert client.parse_transcript_ids("t1\n\n t2 \nt1\n") == ["t1", "t2"]
+
+
+def test_parse_transcript_ids_empty_input_yields_no_ids():
+    assert client.parse_transcript_ids("   \n  ") == []
+
+
+def _fake_transcript(mocker, *, id_, text):
+    fake = mocker.MagicMock()
+    fake.id = id_
+    fake.text = text
+    fake.status = "completed"
+    fake.json_response = None
+    return fake
+
+
+def _dispatch_by_id(mocker, mapping):
+    def fetch(_api_key, transcript_id):
+        return _fake_transcript(mocker, id_=transcript_id, text=mapping[transcript_id])
+
+    return mocker.patch(
+        "aai_cli.commands.transcripts.client.get_transcript", autospec=True, side_effect=fetch
+    )
+
+
+def test_get_reads_ids_from_piped_list_json(mocker):
+    # The headline pipeline: `transcripts list --json | transcripts get -o text`, jq-free.
+    config.set_api_key("default", "sk_live")
+    _dispatch_by_id(mocker, {"t1": "first text", "t2": "second text"})
+    piped = json.dumps([{"id": "t1", "status": "completed"}, {"id": "t2", "status": "completed"}])
+    result = runner.invoke(app, ["transcripts", "get", "-o", "text"], input=piped)
+    assert result.exit_code == 0
+    # One transcript's text per line, in the piped order.
+    assert result.output.splitlines() == ["first text", "second text"]
+
+
+def test_get_batch_json_emits_one_ndjson_record_per_id(mocker):
+    config.set_api_key("default", "sk_live")
+    _dispatch_by_id(mocker, {"t1": "first", "t2": "second"})
+    result = runner.invoke(app, ["transcripts", "get", "--json"], input="t1\nt2\n")
+    assert result.exit_code == 0
+    records = [json.loads(line) for line in result.output.splitlines() if line.strip()]
+    # NDJSON stream: one record per id, each tagged with the CLI-wide "type" discriminator.
+    assert [r["type"] for r in records] == ["transcript", "transcript"]
+    assert [r["id"] for r in records] == ["t1", "t2"]
+
+
+def test_get_batch_human_prints_plain_text_not_json(mocker):
+    config.set_api_key("default", "sk_live")
+    _dispatch_by_id(mocker, {"t1": "alpha", "t2": "beta"})
+    result = runner.invoke(app, ["transcripts", "get"], input="t1\nt2\n")
+    assert result.exit_code == 0
+    # Human batch stays plain text — no NDJSON "type" wrapper leaks in.
+    assert "alpha" in result.output and "beta" in result.output
+    assert "type" not in result.output
+
+
+def test_get_no_id_and_no_stdin_is_usage_error(mocker):
+    config.set_api_key("default", "sk_live")
+    get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
+    result = runner.invoke(app, ["transcripts", "get"])
+    assert result.exit_code == 2
+    assert "Give a transcript id" in result.output
+    get.assert_not_called()
+
+
+def test_get_stdin_without_ids_is_usage_error(mocker):
+    config.set_api_key("default", "sk_live")
+    get = mocker.patch("aai_cli.commands.transcripts.client.get_transcript", autospec=True)
+    result = runner.invoke(app, ["transcripts", "get"], input="[]")
+    assert result.exit_code == 2
+    assert "No transcript ids found on stdin" in result.output
+    get.assert_not_called()
