@@ -116,6 +116,8 @@ def test_resolve_system_prompt_unreadable_file_errors(tmp_path):
     with pytest.raises(CLIError, match="Could not read --system-prompt-file") as exc:
         _exec._resolve_system_prompt("x", missing)
     assert exc.value.exit_code == 2
+    assert exc.value.error_type == "file_not_found"
+    assert "readable" in (exc.value.suggestion or "")
 
 
 # --- _open_audio -------------------------------------------------------------
