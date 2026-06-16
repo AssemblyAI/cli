@@ -3,14 +3,14 @@ class Assembly < Formula
 
   desc "Command-line interface for AssemblyAI"
   homepage "https://github.com/AssemblyAI/cli"
-  url "https://github.com/AssemblyAI/cli/archive/refs/tags/v0.1.6.tar.gz"
-  sha256 "ec013bd6d425b20f167f3cc5ebd486e8dca1bc89bd3a9edf723bc425b1983cba"
+  url "https://github.com/AssemblyAI/cli/archive/refs/tags/v0.1.7.tar.gz"
+  sha256 "3ac05802525099f68277c322cde3c0de91c1833519cd641b4baf79caa5e2f66b"
   license "MIT"
   head "https://github.com/AssemblyAI/cli.git", branch: "main"
 
   bottle do
-    root_url "https://github.com/AssemblyAI/cli/releases/download/v0.1.6"
-    sha256 cellar: :any, arm64_sonoma: "4ebd3599b74a2dce2f0d103d98603c4e6ba43772b0fed998a2df7528ad9a9be7"
+    root_url "https://github.com/AssemblyAI/cli/releases/download/v0.1.7"
+    sha256 cellar: :any, arm64_sonoma: "ecfcaafd36e6d7a5390f69993342ba3fdba128dfbb37d0b6bc6c750dae373178"
   end
 
   depends_on "pkgconf" => :build      # cffi native build (sounddevice; +cryptography on Linux)
