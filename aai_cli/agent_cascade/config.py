@@ -1,6 +1,6 @@
 """Per-run configuration for the terminal voice cascade.
 
-Defaults mirror the ``agent-framework`` ``assembly init`` template's
+Defaults mirror the ``agent-cascade`` ``assembly init`` template's
 ``api/settings.py`` so the CLI conversation and the scaffolded app behave the
 same out of the box.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aai_cli.agent_framework.voices import DEFAULT_VOICE
+from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.core import llm
 
 DEFAULT_MODEL = llm.DEFAULT_MODEL

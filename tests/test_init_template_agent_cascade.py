@@ -1,4 +1,4 @@
-"""Hermetic tests for the agent-framework (cascaded voice agent) template.
+"""Hermetic tests for the agent-cascade (cascaded voice agent) template.
 
 The template ships a standalone FastAPI app under api/; load it by path with its
 own `api` package, evicting any other template's cached `api` modules so imports
@@ -12,7 +12,7 @@ import base64
 
 import pytest
 
-from tests._agent_framework import (
+from tests._agent_cascade import (
     FakeBrowser,
     FakeWS,
     _async_return,
@@ -86,7 +86,7 @@ def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) ->
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = ""
     reason = cascade.unavailable_reason(settings)
-    assert "sandbox" in reason and "assembly --sandbox init agent-framework" in reason
+    assert "sandbox" in reason and "assembly --sandbox init agent-cascade" in reason
 
 
 def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,16 +1,16 @@
 # serializer version: 1
-# name: test_command_help_matches_snapshot[agent-framework]
+# name: test_command_help_matches_snapshot[agent-cascade]
   '''
   
-   Usage: assembly agent-framework [OPTIONS] [SOURCE]
+   Usage: assembly agent-cascade [OPTIONS] [SOURCE]
   
    [sandbox] Hold a live voice conversation through a self-wired cascade
   
    Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
    wires the three primitives together itself — Streaming STT, the LLM Gateway,
-   and streaming TTS — exactly like the 'agent-framework' init template does
+   and streaming TTS — exactly like the 'agent-cascade' init template does
    server-side. Because it uses streaming TTS it only runs in the sandbox: run
-   it as 'assembly --sandbox agent-framework' (--sandbox goes before the
+   it as 'assembly --sandbox agent-cascade' (--sandbox goes before the
    subcommand).
   
    Use headphones: the mic stays open while the agent speaks, so on speakers it
@@ -19,7 +19,7 @@
    agent's reply.
   
    This only runs a conversation in the terminal — it writes no code. To build
-   an agent-framework app, run 'assembly init agent-framework' instead.
+   an agent-cascade app, run 'assembly init agent-cascade' instead.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
@@ -61,13 +61,13 @@
   
    Examples
    Start a live cascade conversation
-   $ assembly --sandbox agent-framework
+   $ assembly --sandbox agent-cascade
    Pick a voice and opening line
-   $ assembly --sandbox agent-framework --voice michael --greeting "Hi there"
+   $ assembly --sandbox agent-cascade --voice michael --greeting "Hi there"
    Give the agent a persona
-   $ assembly --sandbox agent-framework --system-prompt "You are a terse pirate."
+   $ assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."
    See available voices
-   $ assembly --sandbox agent-framework --list-voices
+   $ assembly --sandbox agent-cascade --list-voices
   
   
   

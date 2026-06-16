@@ -1,4 +1,4 @@
-# Talk to a cascaded voice agent — AssemblyAI agent-framework starter
+# Talk to a cascaded voice agent — AssemblyAI agent-cascade starter
 
 Click connect and talk. Unlike the `voice-agent` template (which uses AssemblyAI's
 all-in-one Voice Agent API), this app is a **cascade your own backend orchestrates**:
@@ -12,7 +12,7 @@ Streaming TTS has no production host, so the whole cascade runs against the Asse
 sandbox with a sandbox key. Scaffold it that way:
 
 ```sh
-assembly --sandbox init agent-framework
+assembly --sandbox init agent-cascade
 ```
 
 That pins the sandbox hosts in `.env`. Running against production exits with a hint.

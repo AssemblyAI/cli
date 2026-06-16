@@ -1,4 +1,4 @@
-"""Run-logic shared by the two voice commands (`agent` and `agent-framework`).
+"""Run-logic shared by the two voice commands (`agent` and `agent-cascade`).
 
 Both build a live terminal conversation and resolve the persona the same way, so
 the shared piece lives in the `app/` layer (the `doctor_checks`/`setup_exec`

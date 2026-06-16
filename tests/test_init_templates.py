@@ -47,7 +47,7 @@ def test_description_for_each_template_has_distinctive_text():
     assert "Transcribe" in templates.description_for("audio-transcription")
     assert "captions" in templates.description_for("live-captions")
     assert "Voice Agent" in templates.description_for("voice-agent")
-    assert "Cascaded" in templates.description_for("agent-framework")
+    assert "Cascaded" in templates.description_for("agent-cascade")
     assert templates.description_for("nope") == ""  # unknown id -> no description
 
 

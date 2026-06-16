@@ -5,15 +5,15 @@ from pathlib import Path
 import typer
 
 from aai_cli import command_registry, help_panels, options
-from aai_cli.agent_framework import voices
-from aai_cli.agent_framework.config import (
+from aai_cli.agent_cascade import voices
+from aai_cli.agent_cascade.config import (
     DEFAULT_GREETING,
     DEFAULT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
 )
-from aai_cli.agent_framework.voices import DEFAULT_VOICE
+from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.app.context import AppState, run_command, run_with_options
-from aai_cli.commands.agent_framework import _exec as agent_framework_exec
+from aai_cli.commands.agent_cascade import _exec as agent_cascade_exec
 from aai_cli.core import choices, llm
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
@@ -23,7 +23,7 @@ app = typer.Typer()
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.TRANSCRIPTION,
     order=45,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
-    commands=("agent-framework",),
+    commands=("agent-cascade",),
 )
 
 
@@ -35,24 +35,24 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
 
 
 @app.command(
-    name="agent-framework",
+    name="agent-cascade",
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Start a live cascade conversation", "assembly --sandbox agent-framework"),
+            ("Start a live cascade conversation", "assembly --sandbox agent-cascade"),
             (
                 "Pick a voice and opening line",
-                'assembly --sandbox agent-framework --voice michael --greeting "Hi there"',
+                'assembly --sandbox agent-cascade --voice michael --greeting "Hi there"',
             ),
             (
                 "Give the agent a persona",
-                'assembly --sandbox agent-framework --system-prompt "You are a terse pirate."',
+                'assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."',
             ),
-            ("See available voices", "assembly --sandbox agent-framework --list-voices"),
+            ("See available voices", "assembly --sandbox agent-cascade --list-voices"),
         ]
     ),
 )
-def agent_framework(
+def agent_cascade(
     ctx: typer.Context,
     source: str | None = typer.Argument(
         None, help="Audio file path or URL to speak to the agent. Omit to use the microphone."
@@ -97,9 +97,9 @@ def agent_framework(
 
     Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
     wires the three primitives together itself — Streaming STT, the LLM Gateway,
-    and streaming TTS — exactly like the 'agent-framework' init template does
+    and streaming TTS — exactly like the 'agent-cascade' init template does
     server-side. Because it uses streaming TTS it only runs in the sandbox: run
-    it as 'assembly --sandbox agent-framework' (--sandbox goes before the
+    it as 'assembly --sandbox agent-cascade' (--sandbox goes before the
     subcommand).
 
     Use headphones: the mic stays open while the agent speaks, so on speakers it
@@ -108,14 +108,14 @@ def agent_framework(
     agent's reply.
 
     This only runs a conversation in the terminal — it writes no code. To build
-    an agent-framework app, run 'assembly init agent-framework' instead.
+    an agent-cascade app, run 'assembly init agent-cascade' instead.
     """
 
     if list_voices:
         run_command(ctx, _emit_voice_list, json=json_out)
         return
 
-    opts = agent_framework_exec.AgentFrameworkOptions(
+    opts = agent_cascade_exec.AgentCascadeOptions(
         source=source,
         sample=sample,
         voice=voice,
@@ -126,4 +126,4 @@ def agent_framework(
         device=device,
         output_field=output_field,
     )
-    run_with_options(ctx, agent_framework_exec.run_agent_framework, opts, json=json_out)
+    run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

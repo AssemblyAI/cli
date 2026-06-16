@@ -18,8 +18,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from aai_cli.agent_framework.config import CascadeConfig
-from aai_cli.agent_framework.text import split_sentences, trim_history
+from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.agent_cascade.text import split_sentences, trim_history
 from aai_cli.core import client, config_builder, llm
 from aai_cli.core.errors import CLIError
 from aai_cli.tts import session as tts_session
@@ -96,7 +96,7 @@ def _spawn_thread(target: Callable[[], None]) -> _Worker:
     return thread
 
 
-# The realtime model the cascade transcribes with (same as the agent-framework template).
+# The realtime model the cascade transcribes with (same as the agent-cascade template).
 STT_SPEECH_MODEL = "u3-rt-pro"
 
 
@@ -253,7 +253,7 @@ class CascadeSession:
         since the worker thread can't surface an exit code itself."""
         if self.error is None:
             self.error = exc
-        output.error_console.print(f"[aai.warn]agent-framework:[/aai.warn] {exc.message}")
+        output.error_console.print(f"[aai.warn]agent-cascade:[/aai.warn] {exc.message}")
 
     def shutdown(self) -> None:
         """Stop and join any in-flight reply worker (run on every exit path)."""

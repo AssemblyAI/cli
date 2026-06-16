@@ -1,4 +1,4 @@
-"""Shared loaders and fakes for the agent-framework template tests."""
+"""Shared loaders and fakes for the agent-cascade template tests."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/agent_framework")
+TEMPLATE_DIR = Path("aai_cli/init/templates/agent_cascade")
 
 
 def _load(module: str, monkeypatch: pytest.MonkeyPatch, **env: str):

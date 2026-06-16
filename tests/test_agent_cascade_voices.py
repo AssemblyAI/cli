@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aai_cli.agent_framework import voices
+from aai_cli.agent_cascade import voices
 from aai_cli.tts import voices as tts_voices
 
 

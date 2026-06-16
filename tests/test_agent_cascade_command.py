@@ -1,4 +1,4 @@
-"""Command + wiring tests for `assembly agent-framework`.
+"""Command + wiring tests for `assembly agent-cascade`.
 
 Covers the argv -> options seam, the validation guards, _open_audio source
 selection, and CascadeDeps.real's three live legs (all driven against fakes).
@@ -14,12 +14,12 @@ import typer
 from typer.testing import CliRunner
 
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_framework import engine
-from aai_cli.agent_framework.config import CascadeConfig
-from aai_cli.agent_framework.engine import CascadeDeps
+from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
-from aai_cli.commands.agent_framework import _exec
-from aai_cli.commands.agent_framework._exec import AgentFrameworkOptions, run_agent_framework
+from aai_cli.commands.agent_cascade import _exec
+from aai_cli.commands.agent_cascade._exec import AgentCascadeOptions, run_agent_cascade
 from aai_cli.core import config
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.main import app
@@ -27,7 +27,7 @@ from aai_cli.main import app
 runner = CliRunner()
 
 
-_DEFAULTS = AgentFrameworkOptions(
+_DEFAULTS = AgentCascadeOptions(
     source=None,
     sample=False,
     voice="jane",
@@ -40,7 +40,7 @@ _DEFAULTS = AgentFrameworkOptions(
 )
 
 
-def _opts(**overrides) -> AgentFrameworkOptions:
+def _opts(**overrides) -> AgentCascadeOptions:
     return dataclasses.replace(_DEFAULTS, **overrides)
 
 
@@ -48,14 +48,14 @@ def _opts(**overrides) -> AgentFrameworkOptions:
 
 
 def test_list_voices_human_lists_catalog():
-    result = runner.invoke(app, ["agent-framework", "--list-voices"])
+    result = runner.invoke(app, ["agent-cascade", "--list-voices"])
     assert result.exit_code == 0
     assert "jane" in result.output
     assert "English:" in result.output
 
 
 def test_list_voices_json_emits_array():
-    result = runner.invoke(app, ["agent-framework", "--list-voices", "--json"])
+    result = runner.invoke(app, ["agent-cascade", "--list-voices", "--json"])
     assert result.exit_code == 0
     assert result.output.lstrip().startswith("[")
     assert '"jane"' in result.output
@@ -72,7 +72,7 @@ def test_options_are_frozen():
 
 def test_unknown_voice_is_a_usage_error():
     with pytest.raises(UsageError, match="Unknown voice"):
-        run_agent_framework(_opts(voice="nope"), AppState(), json_mode=False)
+        run_agent_cascade(_opts(voice="nope"), AppState(), json_mode=False)
 
 
 def test_missing_system_prompt_file_is_rejected_by_typer():
@@ -80,14 +80,14 @@ def test_missing_system_prompt_file_is_rejected_by_typer():
     # so the sandbox guard (the other exit-2 path) never runs. Asserting the guard's
     # message is absent kills the exists=True mutant without depending on the Rich error
     # text, which CI renders with ANSI + width ellipsis.
-    result = runner.invoke(app, ["agent-framework", "--system-prompt-file", "/no/such/file"])
+    result = runner.invoke(app, ["agent-cascade", "--system-prompt-file", "/no/such/file"])
     assert result.exit_code == 2
     assert "sandbox" not in result.output.lower()
 
 
 def test_production_env_is_rejected_with_sandbox_hint():
     # Default env is production, which has no streaming-TTS host.
-    result = runner.invoke(app, ["agent-framework", "--voice", "jane"])
+    result = runner.invoke(app, ["agent-cascade", "--voice", "jane"])
     assert result.exit_code == 2
     assert "only available in the sandbox" in result.output
 
@@ -95,7 +95,7 @@ def test_production_env_is_rejected_with_sandbox_hint():
 def test_device_with_file_source_is_rejected(monkeypatch):
     monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
     with pytest.raises(UsageError, match="--device applies only to microphone"):
-        run_agent_framework(_opts(source="clip.wav", device=2), AppState(), json_mode=False)
+        run_agent_cascade(_opts(source="clip.wav", device=2), AppState(), json_mode=False)
 
 
 # --- system prompt resolution ------------------------------------------------
@@ -154,7 +154,7 @@ def test_open_audio_mic_warns_and_uses_duplex_rate(monkeypatch):
     assert any("headphones" in note for note in notices)
 
 
-# --- run_agent_framework wiring ----------------------------------------------
+# --- run_agent_cascade wiring ----------------------------------------------
 
 
 def test_run_wires_deps_and_invokes_cascade(monkeypatch):
@@ -170,7 +170,7 @@ def test_run_wires_deps_and_invokes_cascade(monkeypatch):
         captured["deps"] = deps
 
     monkeypatch.setattr(_exec.engine, "run_cascade", fake_run_cascade)
-    run_agent_framework(
+    run_agent_cascade(
         _opts(source="clip.wav", voice="michael", greeting="hi there"), AppState(), json_mode=False
     )
     # File-driven runs drop the greeting and carry the chosen voice into the config.
@@ -196,7 +196,7 @@ class _RecordingRenderer:
 
 
 def _wire_run(monkeypatch, run_cascade):
-    """Stub out auth/audio/cascade so run_agent_framework reaches the run_cascade call."""
+    """Stub out auth/audio/cascade so run_agent_cascade reaches the run_cascade call."""
     monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
     monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
@@ -214,7 +214,7 @@ def test_keyboard_interrupt_stops_cleanly(monkeypatch):
         raise KeyboardInterrupt
 
     rendered = _wire_run(monkeypatch, boom)
-    run_agent_framework(_opts(source="clip.wav"), AppState(), json_mode=False)
+    run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
     assert rendered["r"].stopped_called is True
     assert rendered["r"].closed is True
 
@@ -225,7 +225,7 @@ def test_broken_pipe_exits_zero(monkeypatch):
 
     rendered = _wire_run(monkeypatch, boom)
     with pytest.raises(typer.Exit) as exc:
-        run_agent_framework(_opts(source="clip.wav"), AppState(), json_mode=False)
+        run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
     assert exc.value.exit_code == 0
     assert rendered["r"].closed is True
 
