@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 import types
 
+import pytest
+
 from aai_cli.core import debuglog
 from aai_cli.core.errors import APIError, NotAuthenticated
 from aai_cli.core.ws import (
@@ -87,36 +89,26 @@ def test_auth_or_api_error_wraps_other_failures_with_context():
     assert err.message == "Could not connect: network unreachable"
 
 
+@pytest.mark.usefixtures("preserve_logging_state")
 def test_silence_websockets_logging_raises_both_loggers_to_critical():
-    loggers = [logging.getLogger(name) for name in WEBSOCKETS_LOGGERS]
-    previous = [lg.level for lg in loggers]
-    try:
-        for lg in loggers:
-            lg.setLevel(logging.NOTSET)
-        silence_websockets_logging()
-        for lg in loggers:
-            assert lg.level == logging.CRITICAL
-            assert not lg.isEnabledFor(logging.ERROR)
-    finally:
-        for lg, level in zip(loggers, previous, strict=True):
-            lg.setLevel(level)
+    # preserve_logging_state resets the websockets loggers to NOTSET up front and
+    # restores them after, so the silencer's CRITICAL clamp is the only level change
+    # the assertions can see.
+    silence_websockets_logging()
+    for name in WEBSOCKETS_LOGGERS:
+        lg = logging.getLogger(name)
+        assert lg.level == logging.CRITICAL
+        assert not lg.isEnabledFor(logging.ERROR)
 
 
+@pytest.mark.usefixtures("preserve_logging_state")
 def test_silence_websockets_logging_stands_down_in_verbose_mode(monkeypatch):
     # -vv exists to show wire-level frames, so the silencer must leave the
     # websockets loggers untouched while verbose mode is active.
     monkeypatch.setattr(debuglog, "_verbosity", 2)
-    loggers = [logging.getLogger(name) for name in WEBSOCKETS_LOGGERS]
-    previous = [lg.level for lg in loggers]
-    try:
-        for lg in loggers:
-            lg.setLevel(logging.NOTSET)
-        silence_websockets_logging()
-        for lg in loggers:
-            assert lg.level == logging.NOTSET
-    finally:
-        for lg, level in zip(loggers, previous, strict=True):
-            lg.setLevel(level)
+    silence_websockets_logging()
+    for name in WEBSOCKETS_LOGGERS:
+        assert logging.getLogger(name).level == logging.NOTSET
 
 
 def test_websockets_logger_names_cover_the_sync_client():
