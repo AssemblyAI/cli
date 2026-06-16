@@ -24,13 +24,31 @@ def silence_stdout() -> None:
             os.close(devnull_fd)
 
 
+def stdin_is_tty() -> bool:
+    """True when stdin is an interactive terminal. The single raw-``isatty`` chokepoint
+    for stdin, so higher layers compose this rather than re-reaching for ``sys.stdin``."""
+    return sys.stdin.isatty()
+
+
+def stdout_is_tty() -> bool:
+    """True when stdout is an interactive terminal. The single raw-``isatty`` chokepoint
+    for stdout (e.g. `output.is_agentic`/`print_code` compose it)."""
+    return sys.stdout.isatty()
+
+
+def stderr_is_tty() -> bool:
+    """True when stderr is an interactive terminal. The single raw-``isatty`` chokepoint
+    for stderr (the browser-login interactivity probe composes it)."""
+    return sys.stderr.isatty()
+
+
 def interactive_stdio() -> bool:
     """True only when stdin and stdout are both real TTYs — i.e. a human can answer
     a prompt and see it. The shared "may we prompt here?" predicate for the bare-`assembly`
     setup offer, the onboarding prompter, and the `assembly init` template picker, so the
     three can't drift on what counts as interactive.
     """
-    return sys.stdin.isatty() and sys.stdout.isatty()
+    return stdin_is_tty() and stdout_is_tty()
 
 
 def stdin_is_piped() -> bool:

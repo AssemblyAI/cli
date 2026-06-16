@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import sys
-
 import typer
 from rich.markup import escape
 from rich.table import Table
 
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import AppState, persist_browser_login, run_command
-from aai_cli.core import client, config, environments
+from aai_cli.core import client, config, environments, stdio
 from aai_cli.core.errors import STDIN_KEY_RECIPE, APIError, CLIError, UsageError, mutually_exclusive
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
@@ -28,13 +26,15 @@ def _read_stdin_key() -> str:
     Stdin-only on purpose (the Codex-CLI pattern): a key passed as an argv value
     lands in shell history and ``ps`` output; a piped key does not.
     """
-    if sys.stdin.isatty():
+    if not stdio.stdin_is_piped():
         raise UsageError(
             "--with-api-key reads the key from stdin, but stdin is a terminal.",
             suggestion=f"Pipe the key in: {STDIN_KEY_RECIPE}",
         )
-    key = sys.stdin.read().strip()
-    if not key:
+    # stdin is piped, so a None here means an empty/blank pipe (not a terminal) —
+    # distinct from the terminal case above, so the recipe hint stays accurate.
+    key = stdio.piped_stdin_text()
+    if key is None:
         raise UsageError(
             "--with-api-key found no key on stdin.",
             suggestion=(
@@ -42,7 +42,7 @@ def _read_stdin_key() -> str:
                 "(check that the variable you piped is set)."
             ),
         )
-    return key
+    return key.strip()
 
 
 @app.command(

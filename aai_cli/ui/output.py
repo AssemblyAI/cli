@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from aai_cli import __version__
-from aai_cli.core import choices, env, jsonshape
+from aai_cli.core import choices, env, jsonshape, stdio
 from aai_cli.ui import theme
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ _MIN_MASKABLE_SECRET_LENGTH = 8
 
 
 def _stdout_is_tty() -> bool:
-    return sys.stdout.isatty()
+    return stdio.stdout_is_tty()
 
 
 def is_agentic() -> bool:

@@ -30,6 +30,39 @@ def test_stdin_is_piped(monkeypatch):
     assert stdio.stdin_is_piped() is False
 
 
+def test_stdin_is_tty(monkeypatch):
+    monkeypatch.setattr("sys.stdin", _Tty(""))
+    assert stdio.stdin_is_tty() is True
+    monkeypatch.setattr("sys.stdin", _Pipe(""))
+    assert stdio.stdin_is_tty() is False
+
+
+def test_stdout_is_tty(monkeypatch):
+    monkeypatch.setattr("sys.stdout", _Tty(""))
+    assert stdio.stdout_is_tty() is True
+    monkeypatch.setattr("sys.stdout", _Pipe(""))
+    assert stdio.stdout_is_tty() is False
+
+
+def test_stderr_is_tty(monkeypatch):
+    monkeypatch.setattr("sys.stderr", _Tty(""))
+    assert stdio.stderr_is_tty() is True
+    monkeypatch.setattr("sys.stderr", _Pipe(""))
+    assert stdio.stderr_is_tty() is False
+
+
+def test_interactive_stdio_requires_both_stdin_and_stdout_tty(monkeypatch):
+    # Both must be terminals; either one piped flips it false (kills the and->or mutant).
+    monkeypatch.setattr("sys.stdin", _Tty(""))
+    monkeypatch.setattr("sys.stdout", _Tty(""))
+    assert stdio.interactive_stdio() is True
+    monkeypatch.setattr("sys.stdout", _Pipe(""))
+    assert stdio.interactive_stdio() is False
+    monkeypatch.setattr("sys.stdin", _Pipe(""))
+    monkeypatch.setattr("sys.stdout", _Tty(""))
+    assert stdio.interactive_stdio() is False
+
+
 def test_piped_stdin_text_returns_none_on_tty(monkeypatch):
     monkeypatch.setattr("sys.stdin", _Tty("ignored\n"))
     assert stdio.piped_stdin_text() is None
