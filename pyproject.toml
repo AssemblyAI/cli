@@ -214,8 +214,12 @@ disable_error_code = ["annotation-unchecked"]
 # pyrightconfig.tests.json from scripts/check.sh so pytest fixtures/mocks don't
 # create thousands of low-value strict diagnostics.
 include = ["aai_cli"]
-# Init templates are NOT excluded: their api/ code is strict-clean and type-checked
-# in-tree (aai_cli.init.templates.<name>.api.*), same bar as the rest of the package.
+# Re-list pyright's built-in excludes explicitly (defining any `exclude` drops the
+# defaults, which pyright warns about). NOTE: init templates are deliberately NOT here —
+# their api/ code is strict-clean and type-checked in-tree
+# (aai_cli.init.templates.<name>.api.*), the same bar as the rest of the package; only
+# generated/hidden dirs are skipped.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
