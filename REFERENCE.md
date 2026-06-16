@@ -69,6 +69,24 @@ your local browser.
 the output shape. One-shot commands emit a single JSON object on stdout;
 errors and warnings are single JSON objects on stderr.
 
+### Field projection (`-o`)
+
+The list/account read commands — `assembly transcripts list`, `assembly
+sessions list`/`get`, `assembly balance`, `assembly usage`, `assembly limits`,
+`assembly keys list`, and `assembly audit` — also accept `-o FIELDS` to project
+columns straight out of the JSON, so a "grab one column" pipeline needs no
+external `jq`. Pass a single field (`-o id`) or a comma-separated list (`-o
+id,status`); dotted paths (`-o transform.model`) reach nested objects. A list
+result prints one tab-separated line per row, a single record one line; a
+missing field (or `null`) is an empty column, and a nested object/list is
+re-serialized as compact JSON. `-o` takes precedence over `--json`.
+
+```sh
+assembly transcripts list -o id | head -1          # newest transcript id
+assembly keys list -o id,name                       # id<TAB>name per key
+assembly balance -o balance_in_cents                # the raw integer
+```
+
 Streaming commands emit newline-delimited JSON (NDJSON), one event per line,
 each carrying a `"type"` field to dispatch on:
 

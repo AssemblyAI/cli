@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from aai_cli import __version__
-from aai_cli.core import choices, env, jsonshape, stdio
+from aai_cli.core import choices, env, jsonshape, project, stdio
 from aai_cli.ui import theme
 
 if TYPE_CHECKING:
@@ -196,11 +196,38 @@ def stack(*items: RenderableType | None) -> RenderableType:
     return present[0] if len(present) == 1 else Group(*present)
 
 
-def emit[T](data: T, human_renderer: Callable[[T], object], *, json_mode: bool) -> None:
-    if json_mode:
+def emit[T](
+    data: T,
+    human_renderer: Callable[[T], object],
+    *,
+    json_mode: bool,
+    fields: str | None = None,
+) -> None:
+    """Emit ``data`` in one of three shapes: projected fields, raw JSON, or human render.
+
+    ``fields`` (a comma-separated ``-o`` spec) wins when set, so a read command's
+    ``-o id,status`` projection takes precedence over ``--json`` and prints
+    pipe-friendly columns; otherwise ``json_mode`` selects the raw JSON dump, and
+    the default is the command's human renderer.
+    """
+    if fields is not None:
+        emit_fields(data, project.parse_fields(fields))
+    elif json_mode:
         print(jsonshape.dumps(data))
     else:
         console.print(human_renderer(data))
+
+
+def emit_fields(data: object, fields: list[str]) -> None:
+    """Project ``fields`` from JSON ``data`` to stdout — one tab-separated line per
+    list item, or a single line for one record.
+
+    Backs the ``-o id,status`` projection that lets read commands drop the external
+    ``jq`` from a 'grab a column' pipeline. A list result yields one line per row; a
+    single object yields one line.
+    """
+    for line in project.project_any(data, fields):
+        print(line)
 
 
 def emit_ndjson(obj: object) -> None:

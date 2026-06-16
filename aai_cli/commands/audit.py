@@ -90,6 +90,7 @@ def _audit_rows(payload: Mapping[str, object]) -> list[dict[str, object]]:
             ("Include login events", "assembly audit --include-logins"),
             ("Filter by action", "assembly audit --action token.create"),
             ("Filter by resource, as JSON", "assembly audit --resource token --json"),
+            ("Pull action and actor as columns", "assembly audit -o action_taken,actor_id"),
         ]
     ),
 )
@@ -102,6 +103,7 @@ def audit(
         False, "--include-logins", help="Show successful login events"
     ),
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """List recent audit-log entries for your account"""
 
@@ -133,6 +135,6 @@ def audit(
                 )
             return output.stack(table, hidden_note)
 
-        output.emit(rows, render, json_mode=json_mode)
+        output.emit(rows, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)

@@ -13,6 +13,9 @@
   │ --resource                TEXT                  Filter by raw resource type  │
   │ --include-logins                                Show successful login events │
   │ --json            -j                            Output raw JSON              │
+  │ --output          -o      FIELDS                Project fields from the JSON │
+  │                                                 result (comma-separated,     │
+  │                                                 e.g. id,status)              │
   │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
@@ -27,6 +30,8 @@
    $ assembly audit --action token.create
    Filter by resource, as JSON
    $ assembly audit --resource token --json
+   Pull action and actor as columns
+   $ assembly audit -o action_taken,actor_id
   
   
   
@@ -40,15 +45,17 @@
    Show your remaining account balance
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON                                            │
-  │ --help            Show this message and exit.                                │
+  │ --json    -j              Output raw JSON                                    │
+  │ --output  -o      FIELDS  Project fields from the JSON result                │
+  │                           (comma-separated, e.g. id,status)                  │
+  │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Show your remaining balance
    $ assembly balance
    Get the raw cents for scripting
-   $ assembly balance --json | jq '.balance_in_cents'
+   $ assembly balance -o balance_in_cents
   
   
   
@@ -90,8 +97,10 @@
    List API keys across your projects (shown masked)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON                                            │
-  │ --help            Show this message and exit.                                │
+  │ --json    -j              Output raw JSON                                    │
+  │ --output  -o      FIELDS  Project fields from the JSON result                │
+  │                           (comma-separated, e.g. id,status)                  │
+  │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -100,7 +109,7 @@
    As JSON for scripting
    $ assembly keys list --json
    Get key ids to use with rename
-   $ assembly keys list --json | jq '.[].id'
+   $ assembly keys list -o id
   
   
   
@@ -138,8 +147,10 @@
    Show your account's rate limits per service
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --json  -j        Output raw JSON                                            │
-  │ --help            Show this message and exit.                                │
+  │ --json    -j              Output raw JSON                                    │
+  │ --output  -o      FIELDS  Project fields from the JSON result                │
+  │                           (comma-separated, e.g. id,status)                  │
+  │ --help                    Show this message and exit.                        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -205,14 +216,16 @@
    Show usage over a date range (default: last 30 days)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --start                       TEXT  Start date (YYYY-MM-DD). Default: 30d    │
-  │                                     ago.                                     │
-  │ --end                         TEXT  End date (YYYY-MM-DD). Default: today.   │
-  │ --window                      TEXT  Window size: 'day', 'week', or 'month'   │
-  │ --include-zero,--all                Include zero-usage windows (matches      │
-  │                                     --include-logins on `assembly audit`)    │
-  │ --json                -j            Output raw JSON                          │
-  │ --help                              Show this message and exit.              │
+  │ --start                       TEXT    Start date (YYYY-MM-DD). Default: 30d  │
+  │                                       ago.                                   │
+  │ --end                         TEXT    End date (YYYY-MM-DD). Default: today. │
+  │ --window                      TEXT    Window size: 'day', 'week', or 'month' │
+  │ --include-zero,--all                  Include zero-usage windows (matches    │
+  │                                       --include-logins on `assembly audit`)  │
+  │ --json                -j              Output raw JSON                        │
+  │ --output              -o      FIELDS  Project fields from the JSON result    │
+  │                                       (comma-separated, e.g. id,status)      │
+  │ --help                                Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

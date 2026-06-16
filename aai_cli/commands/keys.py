@@ -58,13 +58,14 @@ def _default_project_id(account_id: int, jwt: str) -> int:
         [
             ("List your API keys (masked)", "assembly keys list"),
             ("As JSON for scripting", "assembly keys list --json"),
-            ("Get key ids to use with rename", "assembly keys list --json | jq '.[].id'"),
+            ("Get key ids to use with rename", "assembly keys list -o id"),
         ]
     ),
 )
 def list_(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """List API keys across your projects (shown masked)"""
 
@@ -100,7 +101,7 @@ def list_(
                 )
             return table
 
-        output.emit(rows, render, json_mode=json_mode)
+        output.emit(rows, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
 

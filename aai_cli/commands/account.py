@@ -141,13 +141,14 @@ SPEC = command_registry.CommandModuleSpec(
     epilog=examples_epilog(
         [
             ("Show your remaining balance", "assembly balance"),
-            ("Get the raw cents for scripting", "assembly balance --json | jq '.balance_in_cents'"),
+            ("Get the raw cents for scripting", "assembly balance -o balance_in_cents"),
         ]
     ),
 )
 def balance(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """Show your remaining account balance"""
 
@@ -159,6 +160,7 @@ def balance(
             data,
             lambda _d: f"Balance: [aai.success]${cents / 100:,.2f}[/aai.success]",
             json_mode=json_mode,
+            fields=fields,
         )
 
     run_command(ctx, body, json=json_out)
@@ -194,6 +196,7 @@ def usage(
         help="Include zero-usage windows (matches --include-logins on `assembly audit`)",
     ),
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """Show usage over a date range (default: last 30 days)"""
 
@@ -254,7 +257,7 @@ def usage(
             hidden_note = output.hidden_note(hidden_count, "zero-usage window", "--include-zero")
             return output.stack(summary, table, hidden_note)
 
-        output.emit(data, render, json_mode=json_mode)
+        output.emit(data, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
 
@@ -271,6 +274,7 @@ def usage(
 def limits(
     ctx: typer.Context,
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """Show your account's rate limits per service"""
 
@@ -292,6 +296,6 @@ def limits(
                 )
             return table
 
-        output.emit(data, render, json_mode=json_mode)
+        output.emit(data, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
