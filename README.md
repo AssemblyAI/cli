@@ -179,6 +179,14 @@ assembly init voice-agent && assembly deploy --prod
 assembly eval librispeech --speech-model universal-3-pro --limit 50
 ```
 
+Add `--llm` to run an LLM-Gateway chain over each transcript (the WER score still
+uses the raw transcript), and `--llm-reduce` to run one prompt over every item's
+result and summarize the errors across the whole run:
+
+```sh
+assembly eval tedlium --limit 50 --llm-reduce "Summarize the common error patterns"
+```
+
 ## 📦 Installation
 
 Requires Python 3.12+ (Homebrew brings its own; for pipx/uv see the `--python` hint below).

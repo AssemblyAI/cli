@@ -13,6 +13,7 @@ from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import run_with_options
 from aai_cli.commands.evaluate import _exec as evaluate_exec
 from aai_cli.commands.evaluate._exec import EvalSpeechModel
+from aai_cli.core import llm
 from aai_cli.ui.help_text import examples_epilog
 
 app = typer.Typer()
@@ -44,6 +45,10 @@ SPEC = command_registry.CommandModuleSpec(
             (
                 "Evaluate non-English audio",
                 "assembly eval commonvoice --subset fr --language-code fr",
+            ),
+            (
+                "Summarize error patterns across the set",
+                'assembly eval tedlium --llm-reduce "Summarize the common error patterns"',
             ),
         ]
     ),
@@ -79,6 +84,34 @@ def evaluate(
         min=1,
         help="How many items to transcribe at once (sequential by default)",
     ),
+    llm_prompt: list[str] | None = typer.Option(
+        None,
+        "--llm",
+        help="Transform each transcript through LLM Gateway before reporting (the WER "
+        "score still uses the raw transcript). Repeatable: each prompt runs on the "
+        "previous one's response, the first on the transcript.",
+        rich_help_panel=help_panels.OPT_LLM,
+    ),
+    llm_reduce: list[str] | None = typer.Option(
+        None,
+        "--llm-reduce",
+        help="Run one LLM-Gateway prompt over every item's result (a reduce). "
+        "Repeatable: each runs on the previous one's output.",
+        rich_help_panel=help_panels.OPT_LLM,
+    ),
+    model: str = typer.Option(
+        llm.DEFAULT_MODEL,
+        "--model",
+        help="LLM Gateway model",
+        rich_help_panel=help_panels.OPT_LLM,
+        autocompletion=llm.complete_model,
+    ),
+    max_tokens: int = typer.Option(
+        llm.DEFAULT_MAX_TOKENS,
+        "--max-tokens",
+        help="Max tokens",
+        rich_help_panel=help_panels.OPT_LLM,
+    ),
     json_out: bool = options.json_option("Output the rows and summary as one JSON object"),
 ) -> None:
     """Transcribe a dataset and score WER against its reference texts
@@ -99,6 +132,10 @@ def evaluate(
     (English; --subset fr etc. for its 98 other locales), voxpopuli
     (parliament speech), switchboard (phone calls), expresso (expressive
     speech), loquacious, and callhome (phone calls).
+
+    --llm runs an LLM-Gateway chain over each transcript (the WER score still
+    uses the raw transcript); --llm-reduce then runs one prompt over every
+    item's result to summarize patterns across the run.
     """
     opts = evaluate_exec.EvalOptions(
         dataset=dataset,
@@ -110,5 +147,9 @@ def evaluate(
         speech_model=speech_model,
         language_code=language_code,
         concurrency=concurrency,
+        llm_prompt=llm_prompt,
+        llm_reduce=llm_reduce,
+        model=model,
+        max_tokens=max_tokens,
     )
     run_with_options(ctx, evaluate_exec.run_evaluate, opts, json=json_out)

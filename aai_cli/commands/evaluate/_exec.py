@@ -20,10 +20,12 @@ from enum import StrEnum
 
 import assemblyai as aai
 from rich.console import RenderableType
+from rich.markup import escape
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.evaluate import _data as eval_data
 from aai_cli.core import client, jsonshape, wer
+from aai_cli.core import llm as gateway
 from aai_cli.core.errors import CLIError, NotAuthenticated
 from aai_cli.ui import output
 
@@ -50,6 +52,31 @@ class EvalOptions:
     speech_model: EvalSpeechModel | None
     language_code: str | None
     concurrency: int
+    llm_prompt: list[str] | None
+    llm_reduce: list[str] | None
+    model: str
+    max_tokens: int
+
+    def llm_options(self) -> _LlmOptions:
+        """The ``--llm`` / ``--llm-reduce`` chain settings as plain data."""
+        return _LlmOptions(
+            prompts=list(self.llm_prompt or []),
+            reduce_prompts=list(self.llm_reduce or []),
+            model=self.model,
+            max_tokens=self.max_tokens,
+        )
+
+
+@dataclass(frozen=True)
+class _LlmOptions:
+    """The post-transcription LLM-Gateway transform: the per-item ``--llm`` chain
+    (a *map*) and the across-items ``--llm-reduce`` chain (a *reduce*), plus the
+    gateway model + token budget both run under."""
+
+    prompts: list[str]
+    reduce_prompts: list[str]
+    model: str
+    max_tokens: int
 
 
 def _pct(value: object) -> str:
@@ -75,11 +102,16 @@ def _percentile(values: list[float], q: float) -> float:
 
 @dataclass(frozen=True)
 class _ItemResult:
-    """One scored row: the emitted dict plus the score and latency kept for pooling."""
+    """One scored row: the emitted dict plus the score and latency kept for pooling.
+
+    ``hypothesis`` is the transcript text (``None`` for a failed row) — kept so the
+    optional ``--llm`` map / ``--llm-reduce`` reduce can run over it after scoring.
+    """
 
     row: dict[str, object]
     words: wer.Score | None
     latency: float
+    hypothesis: str | None = None
 
 
 def _failed_result(item: eval_data.EvalItem, err: CLIError, latency: float) -> _ItemResult:
@@ -94,7 +126,8 @@ def _failed_result(item: eval_data.EvalItem, err: CLIError, latency: float) -> _
 def _score_item(
     item: eval_data.EvalItem, transcript: aai.Transcript, latency: float
 ) -> _ItemResult:
-    words = wer.score(item.reference, str(transcript.text or ""))
+    hypothesis = str(transcript.text or "")
+    words = wer.score(item.reference, hypothesis)
     row: dict[str, object] = {
         "item": item.item_id,
         "words": words.words,
@@ -102,7 +135,7 @@ def _score_item(
         "wer": words.wer,
         "latency": latency,
     }
-    return _ItemResult(row=row, words=words, latency=latency)
+    return _ItemResult(row=row, words=words, latency=latency, hypothesis=hypothesis)
 
 
 def _pooled_metrics(results: list[_ItemResult]) -> dict[str, object]:
@@ -204,6 +237,87 @@ def _transcripts(
         )
 
 
+def _run_llm_map(
+    api_key: str,
+    results: list[_ItemResult],
+    llm_opts: _LlmOptions,
+    *,
+    json_mode: bool,
+    quiet: bool,
+) -> None:
+    """Run the ``--llm`` chain over each transcribed row and attach it under ``llm``.
+
+    A *map*: the chain runs over the row's transcript text (inline, like
+    ``stream --llm``) and lands as ``{"model", "steps"}`` on the row — the WER score
+    is untouched. Failed rows have no transcript, so they're skipped.
+    """
+    scored = [result for result in results if result.hypothesis is not None]
+    with output.status(
+        f"Running --llm over {len(scored)} transcripts…", json_mode=json_mode, quiet=quiet
+    ):
+        for result in scored:
+            steps = gateway.run_chain_steps(
+                api_key,
+                llm_opts.prompts,
+                transcript_text=result.hypothesis,
+                model=llm_opts.model,
+                max_tokens=llm_opts.max_tokens,
+            )
+            result.row["llm"] = {"model": llm_opts.model, "steps": steps}
+
+
+def _reduce_input(result: _ItemResult) -> str:
+    """A row's contribution to the reduce: its last ``--llm`` output, else its transcript."""
+    llm_data = jsonshape.as_mapping(result.row.get("llm"))
+    if llm_data is not None:
+        steps = jsonshape.mapping_list(llm_data.get("steps"))
+        if steps:
+            return str(steps[-1].get("output", "") or "")
+    return result.hypothesis or ""
+
+
+def _gather_reduce_inputs(results: list[_ItemResult]) -> str:
+    """Concatenate every transcribed row's reduce input under an item header."""
+    blocks: list[str] = []
+    for result in results:
+        if result.hypothesis is None:
+            continue
+        text = _reduce_input(result)
+        if text:
+            blocks.append(f"### Item: {result.row.get('item')}\n{text}")
+    return "\n\n".join(blocks)
+
+
+def _run_reduce(
+    api_key: str,
+    results: list[_ItemResult],
+    llm_opts: _LlmOptions,
+    *,
+    json_mode: bool,
+    quiet: bool,
+) -> dict[str, object] | None:
+    """Run the ``--llm-reduce`` chain once over every row's result; the payload entry.
+
+    ``None`` when there's nothing to aggregate (every row failed or transcribed to
+    empty text) so the caller skips the (billable) gateway call and the payload key.
+    """
+    combined = _gather_reduce_inputs(results)
+    if not combined:
+        output.emit_warning(
+            "Nothing to reduce: no transcript text across items.", json_mode=json_mode
+        )
+        return None
+    with output.status("Running --llm-reduce over all items…", json_mode=json_mode, quiet=quiet):
+        result = gateway.run_chain(
+            api_key,
+            llm_opts.reduce_prompts,
+            transcript_text=combined,
+            model=llm_opts.model,
+            max_tokens=llm_opts.max_tokens,
+        )
+    return {"model": llm_opts.model, "prompts": llm_opts.reduce_prompts, "output": result}
+
+
 def _payload(
     label: str, speech_model: EvalSpeechModel | None, results: list[_ItemResult]
 ) -> dict[str, object]:
@@ -249,6 +363,36 @@ def _secs_cell(row: dict[str, object], key: str) -> str:
     return _secs(row[key]) if key in row else ""
 
 
+def _final_llm_output(row: dict[str, object]) -> str | None:
+    """A row's last ``--llm`` step output, or ``None`` when no chain ran on it."""
+    llm_data = jsonshape.as_mapping(row.get("llm"))
+    if llm_data is None:
+        return None
+    steps = jsonshape.mapping_list(llm_data.get("steps"))
+    return str(steps[-1].get("output", "") or "") if steps else ""
+
+
+def _llm_block(payload: dict[str, object]) -> str | None:
+    """The per-item ``--llm`` outputs as a heading + one ``item: output`` line each,
+    or ``None`` when no ``--llm`` chain ran."""
+    lines: list[str] = []
+    for row in jsonshape.mapping_list(payload.get("rows")):
+        final = _final_llm_output(row)
+        if final is not None:
+            lines.append(f"{escape(str(row.get('item')))}: {escape(final)}")
+    if not lines:
+        return None
+    return "\n".join([output.heading("--llm"), *lines])
+
+
+def _reduce_block(payload: dict[str, object]) -> str | None:
+    """The ``--llm-reduce`` aggregate as a heading + the output, or ``None`` when unset."""
+    reduce = jsonshape.as_mapping(payload.get("reduce"))
+    if reduce is None:
+        return None
+    return f"{output.heading('--llm-reduce')}\n{escape(str(reduce.get('output', '')))}"
+
+
 def _render(payload: dict[str, object]) -> RenderableType:
     has_wer = "wer" in payload
     has_failed = "failed" in payload
@@ -271,7 +415,11 @@ def _render(payload: dict[str, object]) -> RenderableType:
         table.add_row(*cells)
     model = payload.get("speech_model") or "default model"
     return output.stack(
-        output.muted(f"{payload.get('dataset')} · {model}"), table, _summary(payload)
+        output.muted(f"{payload.get('dataset')} · {model}"),
+        table,
+        _summary(payload),
+        _llm_block(payload),
+        _reduce_block(payload),
     )
 
 
@@ -310,7 +458,14 @@ def run_evaluate(opts: EvalOptions, state: AppState, *, json_mode: bool) -> None
             strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one outcome per item)
         )
     ]
+    llm_opts = opts.llm_options()
+    if llm_opts.prompts:
+        _run_llm_map(api_key, results, llm_opts, json_mode=json_mode, quiet=state.quiet)
     payload = _payload(data.label, opts.speech_model, results)
+    if llm_opts.reduce_prompts:
+        reduce = _run_reduce(api_key, results, llm_opts, json_mode=json_mode, quiet=state.quiet)
+        if reduce is not None:
+            payload["reduce"] = reduce
     output.emit(payload, _render, json_mode=json_mode)
     failed = jsonshape.as_int(payload.get("failed"))
     if failed:
