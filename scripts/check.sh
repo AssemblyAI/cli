@@ -203,6 +203,12 @@ echo "==> docstring coverage gate (public API ratchet)"
 # in: public-API docstring coverage may not drop below the floor in scripts/.
 uv run python scripts/docstring_coverage_gate.py
 
+echo "==> gate-stage docs sync (the /check skill mirrors this script)"
+# This script is the single source of truth for the gate. Keep the /check skill's
+# human-readable stage checklist derived from these `==>` labels so it can't drift
+# (regenerate with: uv run python scripts/check_stages_gate.py --write).
+uv run python scripts/check_stages_gate.py
+
 echo "==> brew audit (Homebrew formula)"
 # Lint the formula we ship (Formula/assembly.rb) the way Homebrew's own CI does, so a
 # formula regression fails here instead of on the release PR. brew is macOS/Linuxbrew
