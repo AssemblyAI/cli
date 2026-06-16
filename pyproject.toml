@@ -161,8 +161,9 @@ markers = [
 [tool.mypy]
 python_version = "3.12"
 files = ["aai_cli", "tests"]
-# Init templates are packaged scaffold assets, not importable package modules.
-exclude = ["^aai_cli/init/templates/"]
+# Init templates ARE type-checked: they're importable packages
+# (aai_cli.init.templates.<name>.api.*) whose api/ code must stay strict-clean against
+# the real SDK types, not just shipped as scaffold text.
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true
@@ -213,7 +214,8 @@ disable_error_code = ["annotation-unchecked"]
 # pyrightconfig.tests.json from scripts/check.sh so pytest fixtures/mocks don't
 # create thousands of low-value strict diagnostics.
 include = ["aai_cli"]
-exclude = ["aai_cli/init/templates/**"]
+# Init templates are NOT excluded: their api/ code is strict-clean and type-checked
+# in-tree (aai_cli.init.templates.<name>.api.*), same bar as the rest of the package.
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.

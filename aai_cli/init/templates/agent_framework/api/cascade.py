@@ -20,8 +20,14 @@ import contextlib
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import urlencode
+
+from fastapi import WebSocket
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletionMessageParam
+    from websockets.asyncio.client import ClientConnection
 
 
 class _Settings(Protocol):
@@ -36,16 +42,6 @@ class _Settings(Protocol):
     MAX_HISTORY: int
     INPUT_SAMPLE_RATE: int
     OUTPUT_SAMPLE_RATE: int
-
-
-class _Socket(Protocol):
-    """The websockets STT/TTS socket surface the cascade drives."""
-
-    async def send(self, data: str | bytes) -> None: ...
-    async def recv(self) -> str | bytes: ...
-    async def close(self) -> None: ...
-    def __aiter__(self) -> _Socket: ...
-    async def __anext__(self) -> str | bytes: ...
 
 
 class _Browser(Protocol):
@@ -93,12 +89,14 @@ def is_final_user_turn(msg: dict[str, object]) -> bool:
     return bool(msg.get("end_of_turn")) and bool(msg.get("turn_is_formatted"))
 
 
-def build_messages(system_prompt: str, history: list[dict[str, str]]) -> list[dict[str, str]]:
+def build_messages(
+    system_prompt: str, history: list[ChatCompletionMessageParam]
+) -> list[ChatCompletionMessageParam]:
     """The chat `messages` array: the system prompt followed by the conversation so far."""
     return [{"role": "system", "content": system_prompt}, *history]
 
 
-def _trim_history(history: list[dict[str, str]], max_messages: int) -> None:
+def _trim_history(history: list[ChatCompletionMessageParam], max_messages: int) -> None:
     """Cap the running history to the most recent ``max_messages`` (sliding window)."""
     if len(history) > max_messages:
         del history[: len(history) - max_messages]
@@ -122,9 +120,9 @@ class Deps:
     """Injected cascade dependencies. `Deps.real(settings)` wires the live clients;
     tests pass fakes with the same shapes."""
 
-    connect_stt: Callable[[], Awaitable[_Socket]]
-    connect_tts: Callable[[], Awaitable[_Socket]]
-    llm_stream: Callable[[list[dict[str, str]]], AsyncIterator[str]]
+    connect_stt: Callable[[], Awaitable[ClientConnection]]
+    connect_tts: Callable[[], Awaitable[ClientConnection]]
+    llm_stream: Callable[[list[ChatCompletionMessageParam]], AsyncIterator[str]]
     settings: _Settings
 
     @classmethod
@@ -142,7 +140,7 @@ class Session:
 
     def __init__(self) -> None:
         self.reply_task: asyncio.Task[None] | None = None
-        self.history: list[dict[str, str]] = []
+        self.history: list[ChatCompletionMessageParam] = []
 
     async def cancel_reply(self) -> None:
         task, self.reply_task = self.reply_task, None
@@ -159,7 +157,7 @@ class Session:
                 await task
 
 
-async def _connect_stt(settings: _Settings) -> _Socket:
+async def _connect_stt(settings: _Settings) -> ClientConnection:
     import websockets
 
     return await websockets.connect(
@@ -167,7 +165,7 @@ async def _connect_stt(settings: _Settings) -> _Socket:
     )
 
 
-async def _connect_tts(settings: _Settings) -> _Socket:
+async def _connect_tts(settings: _Settings) -> ClientConnection:
     import websockets
 
     # max_size=None: a synthesis's Audio frames can exceed the 1 MiB default.
@@ -178,7 +176,9 @@ async def _connect_tts(settings: _Settings) -> _Socket:
     )
 
 
-async def _llm_stream(settings: _Settings, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+async def _llm_stream(
+    settings: _Settings, messages: list[ChatCompletionMessageParam]
+) -> AsyncIterator[str]:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(base_url=settings.LLM_GATEWAY_URL, api_key=settings.API_KEY)
@@ -195,12 +195,12 @@ async def _llm_stream(settings: _Settings, messages: list[dict[str, str]]) -> As
             yield delta
 
 
-async def _safe_close(conn: _Socket) -> None:
+async def _safe_close(conn: ClientConnection) -> None:
     with contextlib.suppress(Exception):
         await conn.close()
 
 
-async def _pump_mic(browser: _Browser, stt: _Socket) -> None:
+async def _pump_mic(browser: _Browser, stt: ClientConnection) -> None:
     """Forward each base64 mic frame from the browser to the STT socket."""
     while True:
         msg = await browser.recv()
@@ -211,7 +211,7 @@ async def _pump_mic(browser: _Browser, stt: _Socket) -> None:
             await stt.send(base64.b64decode(audio))
 
 
-async def _synthesize(browser: _Browser, tts: _Socket, text: str) -> None:
+async def _synthesize(browser: _Browser, tts: ClientConnection, text: str) -> None:
     """Drive the TTS protocol on an open socket, forwarding Audio as reply.audio."""
     begin = json.loads(await tts.recv())
     if begin.get("type") != "Begin":
@@ -290,7 +290,7 @@ async def maybe_barge_in(browser: _Browser, session: Session) -> None:
         await session.cancel_reply()
 
 
-async def _pump_stt(browser: _Browser, stt: _Socket, deps: Deps, session: Session) -> None:
+async def _pump_stt(browser: _Browser, stt: ClientConnection, deps: Deps, session: Session) -> None:
     """Read STT turns: display only the finalized (formatted end-of-turn) user
     transcript and reply to it. An interim turn isn't shown — it only barges in on a
     playing reply. Drain the last reply when the socket closes."""
@@ -358,7 +358,7 @@ class FastAPIBrowser:
     """Adapts a Starlette WebSocket to the (send, recv) shape run_session expects.
     recv() returns None when the client disconnects, so the pumps exit cleanly."""
 
-    def __init__(self, websocket: object) -> None:
+    def __init__(self, websocket: WebSocket) -> None:
         self._ws = websocket
 
     async def send(self, event: dict[str, object]) -> None:
@@ -368,6 +368,7 @@ class FastAPIBrowser:
         from fastapi import WebSocketDisconnect
 
         try:
-            return await self._ws.receive_json()
+            data: dict[str, object] = await self._ws.receive_json()
         except WebSocketDisconnect:
             return None
+        return data
