@@ -7,6 +7,7 @@ selection, and CascadeDeps.real's three live legs (all driven against fakes).
 from __future__ import annotations
 
 import dataclasses
+import re
 import types
 
 import pytest
@@ -25,6 +26,10 @@ from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.main import app
 
 runner = CliRunner()
+
+# CI renders CLI output with FORCE_COLOR, so error text arrives wrapped in ANSI SGR
+# escapes; strip them before matching (same approach as the snapshot goldens' normalize).
+_ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
 
 _DEFAULTS = AgentFrameworkOptions(
@@ -76,13 +81,14 @@ def test_unknown_voice_is_a_usage_error():
 
 
 def test_missing_system_prompt_file_is_rejected_by_typer():
-    # exists=True on the option makes Typer reject a nonexistent path before the body,
-    # so the sandbox guard (the other exit-2 path) never runs. Asserting the guard's
-    # message is absent kills the exists=True mutant without depending on the Rich error
-    # text, which CI renders with ANSI + width ellipsis.
-    result = runner.invoke(app, ["agent-framework", "--system-prompt-file", "/no/such/file"])
+    # exists=True on the option makes Typer reject a nonexistent path before the body
+    # (distinct from the sandbox guard a passing path would hit). Render wide so the Rich
+    # panel doesn't wrap the message, and strip ANSI so the match is color-independent.
+    result = runner.invoke(
+        app, ["agent-framework", "--system-prompt-file", "/no/such/file"], env={"COLUMNS": "200"}
+    )
     assert result.exit_code == 2
-    assert "sandbox" not in result.output.lower()
+    assert "Invalid value for '--system-prompt-file'" in _ANSI_SGR.sub("", result.output)
 
 
 def test_production_env_is_rejected_with_sandbox_hint():
