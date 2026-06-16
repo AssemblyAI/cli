@@ -37,6 +37,17 @@ def test_scaffold_tightens_existing_env_on_overwrite(tmp_path):
         assert stat.S_IMODE(stale.stat().st_mode) == 0o600
 
 
+def test_scaffold_omits_template_root_init_but_keeps_api_init(tmp_path):
+    # The in-repo template dir is an importable package (templates/<name>/__init__.py),
+    # but that root marker is repo-only and must NOT ship into the scaffolded project —
+    # while api/'s own __init__.py must, since the shipped app's `from . import settings`
+    # needs `api` to be a package.
+    target = tmp_path / "app"
+    scaffold.scaffold("agent-framework", target, api_key="sk-real-key")
+    assert not (target / "__init__.py").exists()  # root marker skipped
+    assert (target / "api" / "__init__.py").is_file()  # api package kept
+
+
 def test_scaffold_copies_files_and_renames_dotfiles(tmp_path):
     target = tmp_path / "app"
     scaffold.scaffold("audio-transcription", target, api_key="sk-real-key")

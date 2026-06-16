@@ -59,3 +59,15 @@ def test_title_for_known_and_unknown():
 def test_is_template():
     assert templates.is_template("audio-transcription") is True
     assert templates.is_template("nope") is False
+
+
+def test_every_template_is_an_importable_package():
+    # Each template ships as a real package (templates/<dir>/api/...) so it can be
+    # imported and type-checked in-tree, not just copied out as scaffold text.
+    import importlib
+
+    for tid in templates.TEMPLATES:
+        module = importlib.import_module(
+            f"aai_cli.init.templates.{templates.dir_for(tid)}.api.index"
+        )
+        assert hasattr(module, "app"), f"{tid}: api.index must export `app`"

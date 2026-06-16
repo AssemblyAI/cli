@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI  # the LLM Gateway is OpenAI-compatible
 
-from api import settings
+from . import settings
 
 aai.settings.api_key = settings.API_KEY
 # Target the same AssemblyAI environment the key was minted for. `assembly init` writes

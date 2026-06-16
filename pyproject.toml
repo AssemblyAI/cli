@@ -361,7 +361,11 @@ max-statements = 40
 # BLE001: starter apps funnel any leg failure into one user-facing error event/response
 # (a broad `except Exception` is the right shape to ship), so the blind-except lint
 # doesn't apply to scaffolds.
-"aai_cli/init/templates/**" = ["S105", "TID251", "BLE001"]
+# TID252: scaffolds ship as a self-contained top-level `api/` package, so their inner
+# imports must be relative (`from . import settings`) — that's the one form that resolves
+# both in the shipped app (`uvicorn api.index:app`) and when type-checked in-tree as
+# aai_cli.init.templates.<name>.api. Absolute `from api import …` can't satisfy both.
+"aai_cli/init/templates/**" = ["S105", "TID251", "BLE001", "TID252"]
 # ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
 # source (release builds inject the write-only client token).
 "aai_cli/core/telemetry.py" = ["S105"]

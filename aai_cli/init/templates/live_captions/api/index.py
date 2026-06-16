@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api import settings
+from . import settings
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"

@@ -16,7 +16,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api import cascade, settings
+from . import cascade, settings
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
