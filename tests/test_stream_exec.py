@@ -9,6 +9,8 @@ no merged-stream output parsing.
 from __future__ import annotations
 
 import dataclasses
+import wave
+from pathlib import Path
 
 import pytest
 
@@ -16,7 +18,7 @@ from aai_cli.app.context import AppState
 from aai_cli.commands.stream import DEFAULT_SPEECH_MODEL
 from aai_cli.commands.stream import _exec as stream_exec
 from aai_cli.core import config, llm
-from aai_cli.core.errors import UsageError
+from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.streaming.turn_presets import TurnDetectionPreset
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
@@ -60,6 +62,7 @@ DEFAULTS = stream_exec.StreamOptions(
     config_file=None,
     output_field=None,
     show_code=False,
+    save_audio=None,
 )
 
 
@@ -170,6 +173,7 @@ def test_stream_options_are_immutable():
         {"from_stdin": True, "device": 2},  # mic-only capture flags
         {"from_stdin": True, "sample_rate": 44100},
         {"from_stdin": True, "show_code": True},  # renders one source
+        {"from_stdin": True, "save_audio": Path("out.wav")},  # tees one stream
     ],
 )
 def test_from_stdin_rejects_incompatible_flags(overrides):
@@ -222,3 +226,84 @@ def test_from_stdin_dedupes_sources_keeping_order(monkeypatch):
         dataclasses.replace(DEFAULTS, from_stdin=True), AppState(), json_mode=True
     )
     assert seen["sources"] == ["a.wav", "b.wav"]
+
+
+# --- --save-audio (tee the streamed PCM to a WAV) --------------------------
+class RecordingMic(FakeMic):
+    """A mic that yields known PCM so the tee'd WAV's contents can be asserted."""
+
+    PCM = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+
+    def __iter__(self):
+        return iter([self.PCM])
+
+
+def test_save_audio_tees_streamed_pcm_to_a_wav(monkeypatch, tmp_path):
+    # The bytes the streaming API receives are also written to --save-audio, verbatim,
+    # as a 16-bit mono WAV at the source's sample rate.
+    config.set_api_key("default", "sk_live")
+    out = tmp_path / "rec.wav"
+
+    def fake_stream_audio(api_key, source, *, params, **_kwargs):
+        # Draining the iterable is what drives the tee — mirror the real SDK consuming it.
+        sent = b"".join(source)
+        assert sent == RecordingMic.PCM  # the API still sees the unaltered audio
+
+    monkeypatch.setattr(stream_exec.client, "stream_audio", fake_stream_audio)
+    monkeypatch.setattr(stream_exec, "MicrophoneSource", RecordingMic)
+
+    stream_exec.run_stream(
+        dataclasses.replace(DEFAULTS, save_audio=out), AppState(), json_mode=True
+    )
+
+    assert out.is_file()
+    with wave.open(str(out), "rb") as w:
+        assert w.getnchannels() == 1
+        assert w.getsampwidth() == 2
+        assert w.getframerate() == 16000  # FakeMic's reported rate
+        assert w.readframes(w.getnframes()) == RecordingMic.PCM
+
+
+def test_save_audio_not_written_when_flag_unset(monkeypatch, tmp_path):
+    # Without --save-audio, the default run leaves no stray WAV behind (kills a mutant
+    # that tees unconditionally).
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(stream_exec.client, "stream_audio", lambda *a, **k: b"".join(a[1]))
+    monkeypatch.setattr(stream_exec, "MicrophoneSource", RecordingMic)
+
+    stream_exec.run_stream(DEFAULTS, AppState(), json_mode=True)
+
+    assert list(tmp_path.glob("*.wav")) == []
+
+
+def test_save_audio_rejects_system_audio():
+    # The mic + system streams can't share one file, so the combo is a usage error
+    # (raised before credentials).
+    with pytest.raises(UsageError):
+        stream_exec.run_stream(
+            dataclasses.replace(DEFAULTS, save_audio=Path("rec.wav"), system_audio=True),
+            AppState(),
+            json_mode=False,
+        )
+
+
+def test_save_audio_rejects_show_code():
+    # --show-code emits SDK code that doesn't tee audio, so the combo is rejected.
+    with pytest.raises(UsageError):
+        stream_exec.run_stream(
+            dataclasses.replace(DEFAULTS, save_audio=Path("rec.wav"), show_code=True),
+            AppState(),
+            json_mode=False,
+        )
+
+
+def test_save_audio_rejects_missing_parent_dir(tmp_path):
+    # A path under a directory that doesn't exist is a clean path error, before auth.
+    config.set_api_key("default", "sk_live")
+    with pytest.raises(CLIError) as excinfo:
+        stream_exec.run_stream(
+            dataclasses.replace(DEFAULTS, save_audio=tmp_path / "nope" / "rec.wav"),
+            AppState(),
+            json_mode=False,
+        )
+    assert excinfo.value.error_type == "save_audio_path"

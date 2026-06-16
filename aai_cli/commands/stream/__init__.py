@@ -33,6 +33,7 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
             ("Stream a list of files in turn", "ls *.wav | assembly stream --from-stdin"),
             ("Stream the hosted sample", "assembly stream --sample"),
             ("Label speakers in the live transcript", "assembly stream --speaker-labels"),
+            ("Save a WAV of the audio while streaming", "assembly stream --save-audio out.wav"),
             (
                 "Boost domain terms with keyterm prompts",
                 'assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
@@ -81,6 +82,16 @@ def stream(
         "--system-audio-only",
         help="macOS only: stream system/app audio without the microphone",
         rich_help_panel=help_panels.OPT_CAPTURE,
+    ),
+    save_audio: Path | None = typer.Option(
+        None,
+        "--save-audio",
+        help="Tee the streamed PCM to PATH as a 16-bit mono WAV while transcribing",
+        rich_help_panel=help_panels.OPT_CAPTURE,
+        dir_okay=False,
+        # Click guardrail; flipping it changes no behavior a unit test can observe
+        # (and the writable check is a no-op under the test runner's root uid).
+        writable=True,  # pragma: no mutate
     ),
     # model & input
     speech_model: SpeechModel = typer.Option(
@@ -355,5 +366,6 @@ def stream(
         config_file=config_file,
         output_field=output_field,
         show_code=show_code,
+        save_audio=save_audio,
     )
     run_with_options(ctx, stream_exec.run_stream, opts, json=json_out)
