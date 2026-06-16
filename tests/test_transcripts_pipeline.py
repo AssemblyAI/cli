@@ -218,6 +218,26 @@ def test_get_batch_reduce_over_transcript_texts(mocker):
     assert "alpha" not in result.output
 
 
+def test_get_batch_reduce_with_output_field_suppresses_per_item(mocker):
+    # -o + --llm-reduce in human mode: the per-id field is suppressed like the other
+    # branches, so only the aggregate reaches stdout — the field still feeds the reduce.
+    config.set_api_key("default", "sk_live")
+    _dispatch_by_id(mocker, {"t1": "alpha", "t2": "beta"})
+    captured = {}
+
+    def reduce(api_key, prompts, *, transcript_text, model, max_tokens):
+        captured["text"] = transcript_text
+        return "RANKED"
+
+    _patch_reduce(mocker, reduce)
+    result = runner.invoke(
+        app, ["transcripts", "get", "-o", "text", "--llm-reduce", "rank"], input="t1\nt2\n"
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "RANKED"
+    assert "alpha" in captured["text"] and "beta" in captured["text"]
+
+
 def test_get_batch_reduce_feeds_map_outputs(mocker):
     config.set_api_key("default", "sk_live")
     _dispatch_by_id(mocker, {"t1": "a", "t2": "b"})

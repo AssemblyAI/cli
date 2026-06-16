@@ -150,12 +150,14 @@ def _deliver_transcript(
     """Emit one fetched transcript (unless ``suppress``ed for a pending reduce) and return
     its ``--llm-reduce`` contribution — the last ``--llm`` output, else the transcript text."""
     if output_field is not None:
-        # -o wins over the chain, matching `transcribe` deliver_result precedence.
-        output.emit_text(
-            client.select_transcript_field(
-                transcript, output_field, chars_per_caption=chars_per_caption
+        # -o wins over the chain, matching `transcribe` deliver_result precedence; a
+        # pending human reduce suppresses the per-id field so only the aggregate prints.
+        if not suppress:
+            output.emit_text(
+                client.select_transcript_field(
+                    transcript, output_field, chars_per_caption=chars_per_caption
+                )
             )
-        )
         return _text_of(transcript)
     if chain:
         steps = llm.run_chain_steps(
