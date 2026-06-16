@@ -269,3 +269,44 @@ def test_batch_reduce_routes_table_to_stderr(mocker, monkeypatch, capsys):
     assert "AGGREGATE" in out
     assert "AGGREGATE" not in err
     assert "https://a" in err
+
+
+def test_batch_reduce_skips_when_nothing_to_reduce(mocker, monkeypatch, capsys):
+    """An all-empty batch result must not fire a (billable) reduce call."""
+    import assemblyai as aai
+
+    _auth()
+
+    def _empty(api_key, audio, *, config):
+        t = mocker.MagicMock()
+        t.id = "t_a"
+        t.text = ""
+        t.status = "completed"
+        t.json_response = {"id": "t_a", "text": "", "status": "completed"}
+        return t
+
+    monkeypatch.setattr(_TRANSCRIBE, _empty)
+    calls = {"n": 0}
+
+    def _spy(*args, **kwargs):
+        calls["n"] += 1
+        return "SHOULD NOT RUN"
+
+    monkeypatch.setattr(transcribe_batch.llm, "run_chain", _spy)
+    transform = transcribe_run.TransformOptions(
+        prompts=[], model="m", max_tokens=10, reduce_prompts=["summarize"]
+    )
+    transcribe_batch.run_batch(
+        "sk_live",
+        ["https://a"],
+        transcription_config=aai.TranscriptionConfig(),
+        concurrency=1,
+        force=False,
+        transform=transform,
+        json_mode=False,
+        quiet=False,
+    )
+    out, err = capsys.readouterr()
+    assert calls["n"] == 0
+    assert "SHOULD NOT RUN" not in out
+    assert "Nothing to reduce" in err

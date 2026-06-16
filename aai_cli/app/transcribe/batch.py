@@ -333,6 +333,14 @@ def _run_reduce(
 ) -> None:
     """Run the --llm-reduce chain once over every source's result; print to stdout."""
     combined = _gather_reduce_inputs(items)
+    if not combined:
+        # Every source had empty transcript text and no --llm output, so there is
+        # nothing to aggregate — skip the (billable) Gateway call rather than prompt
+        # it over an empty transcript and print a meaningless answer to stdout.
+        output.emit_warning(
+            "Nothing to reduce: no transcript text across sources.", json_mode=json_mode
+        )
+        return
     result = llm.run_chain(
         api_key,
         transform.reduce_prompts,
