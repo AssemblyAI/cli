@@ -712,6 +712,9 @@
   │ --system-audio-only                              macOS only: stream          │
   │                                                  system/app audio without    │
   │                                                  the microphone              │
+  │ --save-audio               FILE                  Tee the streamed PCM to     │
+  │                                                  PATH as a 16-bit mono WAV   │
+  │                                                  while transcribing          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
@@ -813,6 +816,8 @@
    $ assembly stream --sample
    Label speakers in the live transcript
    $ assembly stream --speaker-labels
+   Save a WAV of the audio while streaming
+   $ assembly stream --save-audio out.wav
    Boost domain terms with keyterm prompts
    $ assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk

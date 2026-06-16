@@ -22,7 +22,7 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, stdio, youtube
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
-from aai_cli.streaming import turn_presets
+from aai_cli.streaming import record, turn_presets
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
@@ -85,6 +85,7 @@ class StreamOptions:
     config_file: Path | None
     output_field: choices.TextOrJson | None
     show_code: bool
+    save_audio: Path | None
 
     def source_options(self) -> SourceOptions:
         """The audio-input subset, in the shape the validation/dispatch helpers read."""
@@ -246,6 +247,11 @@ def _collect_batch_sources(opts: StreamOptions, *, text_mode: bool) -> list[str]
         suggestion="--show-code renders one source; pass a single file or URL.",
     )
     mutually_exclusive(
+        ("--from-stdin", True),
+        ("--save-audio", opts.save_audio is not None),
+        suggestion="--save-audio tees one stream; run a single source to record it.",
+    )
+    mutually_exclusive(
         ("--llm", bool(opts.llm_prompt)),
         ("-o text", text_mode),
         suggestion="--llm renders a live panel (or NDJSON when piped).",
@@ -305,12 +311,25 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
     base_flags = opts.base_flags()
 
     if opts.show_code:
+        if opts.save_audio is not None:
+            raise UsageError(
+                "--save-audio cannot be combined with --show-code; the generated SDK "
+                "code does not tee audio to disk."
+            )
         _print_show_code(opts, sources, base_flags, text_mode=text_mode)
         return
 
     # Validate the requested sources (including that a local file exists) before
     # credentials, so a typo'd path reads as "file not found" — not as a login.
     validate_sources(sources, has_llm=bool(opts.llm_prompt), text_mode=text_mode)
+    if opts.save_audio is not None:
+        if sources.from_system_audio:
+            raise UsageError(
+                "--save-audio cannot be combined with --system-audio; the mic and system "
+                "streams can't share one file.",
+                suggestion="Record a single source (mic, file, URL, or - on stdin).",
+            )
+        record.validate_target(opts.save_audio)
     if sources.from_file and not sources.from_stdin:
         client.resolve_audio_source(sources.source, sample=sources.sample)
     api_key = state.resolve_api_key()
@@ -326,6 +345,7 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
         llm_prompts=llm_prompts,
         model=opts.model,
         max_tokens=opts.max_tokens,
+        save_audio=opts.save_audio,
         llm_interval=opts.llm_interval,
     )
     _dispatch(session, sources)

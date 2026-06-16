@@ -17,6 +17,7 @@ from aai_cli.core.errors import (
     UsageError,
     mutually_exclusive,
 )
+from aai_cli.streaming import record
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
@@ -137,6 +138,9 @@ class StreamSession:
     llm_prompts: list[str]
     model: str
     max_tokens: int
+    # When set, tee the streamed PCM to this path as a WAV (see record.tee_wav). Only
+    # the single-source path sets it — the parallel/batch callers reject --save-audio.
+    save_audio: Path | None = None
     # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
     llm_interval: float = 0.0
     # Monotonic clock, injectable so the interval throttle is deterministic in tests.
@@ -242,6 +246,9 @@ class StreamSession:
     def stream_one(
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
+        if self.save_audio is not None:
+            # Tee verbatim to disk at the source's true rate before it hits the wire.
+            audio = record.tee_wav(audio, self.save_audio, rate=rate)
         flags = self.base_flags | {"sample_rate": rate}
         if source_label == "you":
             # The microphone captures you alone, so never diarize it into separate
