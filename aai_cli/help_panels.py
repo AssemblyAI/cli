@@ -47,3 +47,4 @@ OPT_BATCH = "Batch"  # many-source mode: --from-stdin, --concurrency, --force
 OPT_CAPTURE = "Audio Capture"
 OPT_TURNS = "Turn Detection"
 OPT_FEATURES = "Features"
+OPT_SAVING = "Saving"  # write the audio/transcript to disk: --save-audio/-transcript/-dir, --name

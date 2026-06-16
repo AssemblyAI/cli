@@ -19,11 +19,27 @@ from aai_cli.core.errors import (
 )
 from aai_cli.streaming import record
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
+from aai_cli.streaming.transcript import TranscriptWriter
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
 
 # Sources that can be transcribed in parallel sessions: (label, audio chunks, sample rate).
 _ParallelStreams = list[tuple[str, Iterable[bytes], int]]
+
+
+def _finalized_turn_line(event: object, source_label: str | None) -> str | None:
+    """The transcript line for a finalized, non-empty turn, or None for a partial/empty one.
+
+    Prefixes the speaker/source label exactly as the text renderer does, so the saved
+    file and the ``--llm`` transcript record both read like the on-screen turns.
+    """
+    if not getattr(event, "end_of_turn", False):
+        return None  # partials don't belong in the transcript
+    text = getattr(event, "transcript", "") or ""
+    if not text:
+        return None
+    prefix = speaker_prefix(source_label, getattr(event, "speaker_label", None))
+    return f"{prefix[0]}: {text}" if prefix is not None else text
 
 
 @dataclass(frozen=True)
@@ -141,11 +157,17 @@ class StreamSession:
     # When set, tee the streamed PCM to this path as a WAV (see record.tee_wav). Only
     # the single-source path sets it — the parallel/batch callers reject --save-audio.
     save_audio: Path | None = None
+    # When set, write each finalized turn to this path as plain text (see TranscriptWriter).
+    # Like save_audio, only the single-source path sets it; batch rejects --save-transcript.
+    save_transcript: Path | None = None
     # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
     llm_interval: float = 0.0
     # Monotonic clock, injectable so the interval throttle is deterministic in tests.
     clock: Callable[[], float] = time.monotonic
     transcript: list[str] = field(default_factory=list[str])
+    # The open transcript-file writer for a single run; created/closed in _guarded so a
+    # save target is opened once per session and a Ctrl-C still leaves a flushed file.
+    _transcript_writer: TranscriptWriter | None = None
     _callback_lock: threading.RLock = field(default_factory=threading.RLock)
     _listening_lock: threading.Lock = field(default_factory=threading.Lock)
     _listening_started: bool = False
@@ -176,23 +198,33 @@ class StreamSession:
         if self.follow is None:
             with self._callback_lock:
                 self.renderer.turn(event, source=source_label)
+                line = _finalized_turn_line(event, source_label)
+                if line is not None:
+                    self._save_line(line)
         else:
             # --llm mode locks only to record the turn; the chain re-runs (network) are
             # left unlocked so the other source's turns keep flowing during a refresh.
             self._record_turn(event, source_label)
 
+    def _save_line(self, line: str) -> None:
+        """Append one finalized turn to the open --save-transcript/--save-dir file, if any.
+
+        Always called under ``_callback_lock`` so parallel source threads can't interleave
+        a partial write into the file.
+        """
+        if self._transcript_writer is not None:
+            self._transcript_writer.write_turn(line)
+
     def _record_turn(self, event: object, source_label: str | None) -> None:
-        """Append a finalized turn to the running transcript, then refresh the --llm
-        answer if a refresh is due (every turn, or once per ``llm_interval`` seconds)."""
-        if not getattr(event, "end_of_turn", False):
-            return  # partials don't change the transcript
-        text = getattr(event, "transcript", "") or ""
-        if not text:
+        """Append a finalized turn to the running transcript (and the saved file), then
+        refresh the --llm answer if a refresh is due (every turn, or once per
+        ``llm_interval`` seconds)."""
+        line = _finalized_turn_line(event, source_label)
+        if line is None:
             return
-        prefix = speaker_prefix(source_label, getattr(event, "speaker_label", None))
-        line = f"{prefix[0]}: {text}" if prefix is not None else text
         with self._callback_lock:
             self.transcript.append(line)
+            self._save_line(line)
         self._maybe_summarize()
 
     def _maybe_summarize(self, *, final: bool = False) -> None:
@@ -287,6 +319,10 @@ class StreamSession:
         being swallowed here — the batch driver owns those signals across the whole
         ``--from-stdin`` sequence, so one Ctrl-C stops the batch rather than just
         advancing to the next source."""
+        if self.save_transcript is not None:
+            # Open before streaming so a bad path fails up front; the finally closes it
+            # (flushing the turns so far) even on Ctrl-C or a worker error.
+            self._transcript_writer = TranscriptWriter(self.save_transcript)
         try:
             if self.follow is not None:
                 with self.follow:
@@ -311,6 +347,8 @@ class StreamSession:
             # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
             raise typer.Exit(code=0) from None
         finally:
+            if self._transcript_writer is not None:
+                self._transcript_writer.close()
             if self.follow is None:
                 self.renderer.close()
 

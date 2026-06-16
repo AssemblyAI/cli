@@ -12,6 +12,7 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from assemblyai import PIISubstitutionPolicy
@@ -22,7 +23,7 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, stdio, youtube
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
-from aai_cli.streaming import record, turn_presets
+from aai_cli.streaming import naming, record, transcript, turn_presets
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
@@ -86,6 +87,9 @@ class StreamOptions:
     output_field: choices.TextOrJson | None
     show_code: bool
     save_audio: Path | None
+    save_transcript: Path | None
+    save_dir: Path | None
+    name: str | None
 
     def source_options(self) -> SourceOptions:
         """The audio-input subset, in the shape the validation/dispatch helpers read."""
@@ -179,6 +183,70 @@ def _print_show_code(
     output.print_code(code_gen.stream(merged, llm=gateway, source=code_source))
 
 
+def _reject_save_with_show_code(opts: StreamOptions) -> None:
+    """Reject any save flag combined with --show-code: the generated SDK code never
+    writes audio or a transcript to disk, so silently dropping the save would mislead."""
+    for flag, given in (
+        ("--save-audio", opts.save_audio is not None),
+        ("--save-transcript", opts.save_transcript is not None),
+        ("--save-dir", opts.save_dir is not None),
+    ):
+        if given:
+            raise UsageError(
+                f"{flag} cannot be combined with --show-code; the generated SDK code "
+                "does not save to disk."
+            )
+
+
+def _resolve_save_targets(
+    opts: StreamOptions, sources: SourceOptions
+) -> tuple[Path | None, Path | None]:
+    """Resolve the save flags into the (audio, transcript) paths the session writes.
+
+    ``--save-dir`` owns filename assembly — it auto-names both the transcript and a
+    matching WAV under ``DIR/YYYY-MM-DD/`` — so it can't be combined with the explicit
+    ``--save-audio``/``--save-transcript`` paths, and ``--name`` only feeds that assembly.
+    Audio can't tee to a single WAV under ``--system-audio`` (two streams), which rejects
+    both the explicit ``--save-audio`` and ``--save-dir``'s audio leg.
+    """
+    if opts.save_dir is not None:
+        mutually_exclusive(
+            ("--save-dir", True),
+            ("--save-audio", opts.save_audio is not None),
+            ("--save-transcript", opts.save_transcript is not None),
+            suggestion="--save-dir names the files for you; drop the explicit path.",
+        )
+        if sources.from_system_audio:
+            raise UsageError(
+                "--save-dir cannot be combined with --system-audio; the mic and system "
+                "streams can't share one recording.",
+                suggestion="Record a single source (mic, file, URL, or - on stdin).",
+            )
+        # Local wall-clock time (what a meeting filename wants); the explicit utc-then-
+        # astimezone keeps the now() call timezone-aware for the linter.
+        now = datetime.now(UTC).astimezone()
+        paths = naming.resolve(opts.save_dir, opts.name, now=now)
+        naming.ensure_dir(paths.transcript.parent)
+        return paths.audio, paths.transcript
+    if opts.name is not None:
+        raise UsageError(
+            "--name applies only with --save-dir.",
+            suggestion="Pass --save-dir DIR to auto-name the files, "
+            "or --save-transcript PATH for an explicit path.",
+        )
+    if opts.save_audio is not None:
+        if sources.from_system_audio:
+            raise UsageError(
+                "--save-audio cannot be combined with --system-audio; the mic and system "
+                "streams can't share one file.",
+                suggestion="Record a single source (mic, file, URL, or - on stdin).",
+            )
+        record.validate_target(opts.save_audio)
+    if opts.save_transcript is not None:
+        transcript.validate_target(opts.save_transcript)
+    return opts.save_audio, opts.save_transcript
+
+
 def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
     """Open the right audio source(s) for the flags and stream them."""
     if opts.from_system_audio:
@@ -249,7 +317,10 @@ def _collect_batch_sources(opts: StreamOptions, *, text_mode: bool) -> list[str]
     mutually_exclusive(
         ("--from-stdin", True),
         ("--save-audio", opts.save_audio is not None),
-        suggestion="--save-audio tees one stream; run a single source to record it.",
+        ("--save-transcript", opts.save_transcript is not None),
+        ("--save-dir", opts.save_dir is not None),
+        ("--name", opts.name is not None),
+        suggestion="--from-stdin streams many sources; saving applies to a single run.",
     )
     mutually_exclusive(
         ("--llm", bool(opts.llm_prompt)),
@@ -311,25 +382,14 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
     base_flags = opts.base_flags()
 
     if opts.show_code:
-        if opts.save_audio is not None:
-            raise UsageError(
-                "--save-audio cannot be combined with --show-code; the generated SDK "
-                "code does not tee audio to disk."
-            )
+        _reject_save_with_show_code(opts)
         _print_show_code(opts, sources, base_flags, text_mode=text_mode)
         return
 
     # Validate the requested sources (including that a local file exists) before
     # credentials, so a typo'd path reads as "file not found" — not as a login.
     validate_sources(sources, has_llm=bool(opts.llm_prompt), text_mode=text_mode)
-    if opts.save_audio is not None:
-        if sources.from_system_audio:
-            raise UsageError(
-                "--save-audio cannot be combined with --system-audio; the mic and system "
-                "streams can't share one file.",
-                suggestion="Record a single source (mic, file, URL, or - on stdin).",
-            )
-        record.validate_target(opts.save_audio)
+    save_audio, save_transcript = _resolve_save_targets(opts, sources)
     if sources.from_file and not sources.from_stdin:
         client.resolve_audio_source(sources.source, sample=sources.sample)
     api_key = state.resolve_api_key()
@@ -345,7 +405,8 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
         llm_prompts=llm_prompts,
         model=opts.model,
         max_tokens=opts.max_tokens,
-        save_audio=opts.save_audio,
+        save_audio=save_audio,
+        save_transcript=save_transcript,
         llm_interval=opts.llm_interval,
     )
     _dispatch(session, sources)
