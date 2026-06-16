@@ -76,11 +76,13 @@ def test_unknown_voice_is_a_usage_error():
 
 
 def test_missing_system_prompt_file_is_rejected_by_typer():
-    # exists=True on the option makes Typer reject a nonexistent path before the body
-    # (distinct from the sandbox guard a passing path would hit).
+    # exists=True on the option makes Typer reject a nonexistent path before the body,
+    # so the sandbox guard (the other exit-2 path) never runs. Asserting the guard's
+    # message is absent kills the exists=True mutant without depending on the Rich error
+    # text, which CI renders with ANSI + width ellipsis.
     result = runner.invoke(app, ["agent-framework", "--system-prompt-file", "/no/such/file"])
     assert result.exit_code == 2
-    assert "Invalid value for '--system-prompt-file'" in " ".join(result.output.split())
+    assert "sandbox" not in result.output.lower()
 
 
 def test_production_env_is_rejected_with_sandbox_hint():
