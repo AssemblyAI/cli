@@ -187,3 +187,31 @@ def test_stream_batch_sources_reports_exact_failure_count():
             json_mode=True,
         )
     assert excinfo.value.message == "2 of 2 sources failed."
+
+
+def test_stream_source_strips_newlines_from_failure_warning(capsys):
+    # A crafted source/error with embedded CR/LF must not inject extra log lines: the
+    # emitted warning is flattened to a single line (pins the newline sanitization).
+    import io
+    import json as _json
+
+    from aai_cli.core.errors import CLIError
+    from aai_cli.streaming import batch
+    from aai_cli.streaming.render import StreamRenderer
+
+    def open_source(source):
+        raise CLIError("bad\ninjected line")
+
+    failed = batch._stream_source(
+        "a\nb.wav",
+        index=1,
+        total=1,
+        make_session=lambda: (_ for _ in ()).throw(AssertionError("never")),
+        open_source=open_source,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        json_mode=True,
+    )
+    assert failed is True
+    warning = _json.loads(capsys.readouterr().err.strip())["warning"]
+    assert warning == "a b.wav: bad injected line"
+    assert "\n" not in warning

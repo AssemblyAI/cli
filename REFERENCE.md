@@ -107,12 +107,15 @@ writes:
 
 - `<stem>.txt` — the transcript, one finalized turn per line (flushed live).
 - `<stem>.wav` — the recorded audio, 16-bit mono PCM. Suppress it with
-  `--no-save-audio` to keep only the text.
+  `--no-save-audio` to keep only the text. Under `--system-audio` the two channels
+  can't share a file, so each gets its own `<stem>-you.wav` / `<stem>-system.wav`.
 - `<stem>.md` — written when `--llm "…"` is also passed: the final answer of the
   live prompt chain, captured as a note next to the transcript.
 - `<stem>.aai.json` — a metadata sidecar so a list/browse UI needs no transcript
   parsing: `{"title", "date", "duration_seconds", "speakers", "turns",
-  "transcript", "audio", "note"}` (`audio`/`note` are `null` when not written).
+  "transcript", "audio", "note"}`. `audio` is the list of WAV file names (empty
+  under `--no-save-audio`, two entries under `--system-audio`); `note` is `null`
+  when no `--llm` note was written.
 
 `--name "Title"` slugs an explicit title into the stem; `--auto-name` instead
 derives that title from the transcript via the LLM Gateway once the stream ends,

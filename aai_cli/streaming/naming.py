@@ -86,6 +86,16 @@ def resolve(save_dir: Path, name: str | None, *, now: datetime) -> SavePaths:
     return SavePaths(directory=bucket, stem=_stem(now, name))
 
 
+def channel_audio(audio: Path, channel: str) -> Path:
+    """Insert a per-channel suffix into an auto-named WAV path.
+
+    ``--system-audio`` records two parallel streams that can't share one WAV, so each
+    channel ("you", "system") gets its own file beside the shared transcript: the base
+    ``DIR/.../<stem>.wav`` becomes ``DIR/.../<stem>-<channel>.wav``.
+    """
+    return audio.with_name(f"{audio.stem}-{channel}{audio.suffix}")
+
+
 def ensure_dir(path: Path) -> None:
     """Create ``path`` (and parents) for the auto-named files, as a clean CLIError on failure."""
     try:

@@ -49,13 +49,18 @@ URL_PREFIXES = ("http://", "https://")
 _GLOB_CHARS = frozenset("*?[")
 
 
-def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> list[str] | None:
+def expand_sources(
+    source: str | None, *, from_stdin: bool, sample: bool, detect_feeds: bool = True
+) -> list[str] | None:
     """The batch source list, or ``None`` when this is a single-source invocation.
 
     Batch mode triggers on ``--from-stdin``, a directory (scanned recursively for
-    audio files), a glob pattern that names no existing file, or a bucket URL
-    that is a glob or trailing-slash folder. A plain file, URL, ``-`` (audio
-    piped on stdin), or ``--sample`` stays on the single-source path.
+    audio files), a glob pattern that names no existing file, a bucket URL that is
+    a glob or trailing-slash folder, or an http(s) URL that turns out to be a
+    podcast RSS/Atom feed (each episode becomes one batch source). A plain file,
+    direct media URL, ``-`` (audio piped on stdin), or ``--sample`` stays on the
+    single-source path. ``detect_feeds=False`` skips the feed probe (and its
+    network fetch) for paths that must not touch the network, e.g. ``--show-code``.
     """
     if from_stdin:
         return _stdin_sources(source, sample=sample)
@@ -63,10 +68,22 @@ def expand_sources(source: str | None, *, from_stdin: bool, sample: bool) -> lis
     # unset shell variable in `assembly transcribe "$FILE"`. `Path("")` is `Path(".")`,
     # so it would otherwise fall into the directory branch and batch-transcribe the
     # whole working directory; instead it stays single-source and fails validation.
-    if not source or sample or source == "-" or source.startswith(URL_PREFIXES):
+    if not source or sample or source == "-":
         return None
+    if source.startswith(URL_PREFIXES):
+        # A podcast feed URL expands into its episode enclosure URLs (batch mode);
+        # a direct media URL or ordinary page returns None and stays single-source.
+        from aai_cli.app.transcribe import feed
+
+        return feed.feed_episode_urls(source) if detect_feeds else None
     if remotefs.is_remote_url(source):
         return _remote_sources(source)
+    return _local_sources(source)
+
+
+def _local_sources(source: str) -> list[str] | None:
+    """Batch sources for a local path: a directory's audio files or a glob's matches,
+    else ``None`` (a single file, which the single-source path handles)."""
     path = Path(source)
     if path.is_dir():
         return _directory_sources(path)

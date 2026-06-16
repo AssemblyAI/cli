@@ -45,7 +45,9 @@ def _stream_source(
     except NotAuthenticated:
         raise
     except CLIError as exc:
-        output.emit_warning(f"{source}: {exc.message}", json_mode=json_mode)
+        # Flatten newlines so a crafted path/URL can't inject extra log lines (CR/LF).
+        detail = f"{source}: {exc.message}".replace("\n", " ").replace("\r", " ")
+        output.emit_warning(detail, json_mode=json_mode)
         return True
     else:
         return False

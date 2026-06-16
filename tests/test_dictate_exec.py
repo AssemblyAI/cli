@@ -70,6 +70,10 @@ def seams(monkeypatch):
     harness = {"keys": FakeKeys([]), "chunks": [CHUNK, CHUNK], "mic": {}, "calls": []}
 
     monkeypatch.setattr(dictate_exec, "TerminalKeys", lambda: harness["keys"])
+    # Default to interactive stdout (a real terminal); the piped tests flip this.
+    # capsys leaves stdout a non-tty, which would otherwise force single-utterance
+    # mode and end every looping session after one utterance.
+    monkeypatch.setattr(dictate_exec.stdio, "stdout_is_tty", lambda: True)
 
     def fake_mic(*, target_rate, device=None, on_open=None):
         harness["mic"].update(target_rate=target_rate, device=device)
@@ -187,6 +191,28 @@ def test_once_exits_after_a_single_utterance(seams):
     assert len(seams["calls"]) == 1
     # The session ended on --once, not by draining the key script.
     assert seams["keys"].script
+
+
+def test_piped_stdout_auto_starts_one_utterance_then_exits(seams, monkeypatch, capsys):
+    # `assembly dictate | assembly llm …`: stdout is a pipe, not a tty. A looping
+    # session would keep the pipe open and hang the consumer, so recording
+    # auto-starts, the first Enter stops it, and the session exits on its own.
+    monkeypatch.setattr(dictate_exec.stdio, "stdout_is_tty", lambda: False)
+    # No leading toggle to *start* and no quit key: a single read(0) pops the
+    # Enter that stops the auto-started recording, then dictate exits.
+    seams["keys"] = FakeKeys(["\r", "\r", "\r"])
+    _run()
+    assert len(seams["calls"]) == 1
+    # Ended on the single-shot, not by draining the key script.
+    assert seams["keys"].script
+    # Auto-start: the only key read is the zero-timeout in-recording poll — no
+    # blocking idle read(None) waiting for a start keypress.
+    assert seams["keys"].timeouts == [0]
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "hello world"
+    # The mic-open note fires immediately; the interactive start prompt is absent.
+    assert "Recording — press Enter to stop" in captured.err
+    assert "start recording" not in captured.err
 
 
 @pytest.mark.parametrize("quit_key", ["q", "Q", "\x1b", "\x04"])

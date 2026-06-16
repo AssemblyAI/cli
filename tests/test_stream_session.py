@@ -13,9 +13,7 @@ def _turn(text, *, speaker_label=None):
     return types.SimpleNamespace(transcript=text, end_of_turn=True, speaker_label=speaker_label)
 
 
-def _save_plan(
-    tmp_path, *, auto_name=False, save_audio=True, write_note=False, name: str | None = "Meeting"
-):
+def _save_plan(tmp_path, *, auto_name=False, write_note=False, name: str | None = "Meeting"):
     from aai_cli.streaming.savedir import SaveDirPlan
 
     return SaveDirPlan(
@@ -23,7 +21,6 @@ def _save_plan(
         now=datetime(2026, 6, 16, 14, 30, 5),
         name=name,
         auto_name=auto_name,
-        save_audio=save_audio,
         write_note=write_note,
     )
 
@@ -63,6 +60,7 @@ def test_save_dir_finalize_passes_recorded_metadata(monkeypatch, tmp_path):
         llm_prompts=[],
         model="m",
         max_tokens=1,
+        save_audio=tmp_path / "out.wav",
         save_plan=_save_plan(tmp_path),
         clock=lambda: next(ticks),
     )
@@ -73,6 +71,38 @@ def test_save_dir_finalize_passes_recorded_metadata(monkeypatch, tmp_path):
     assert captured["duration_seconds"] == 7  # 107.0 - 100.0
     assert captured["title"] is None  # no --auto-name
     assert captured["note"] is None  # no --llm note
+    assert captured["audio"] == [tmp_path / "out.wav"]  # the single teed WAV is handed on
+
+
+def test_audio_files_lists_per_channel_or_single_or_none(tmp_path):
+    # _audio_files reports what finalize should rename/record: the per-channel WAVs under
+    # --system-audio, the lone save_audio otherwise, or nothing under --no-save-audio.
+    import io
+
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    def _session(**kw):
+        return session_mod.StreamSession(
+            api_key="sk",
+            base_flags={},
+            overrides=None,
+            config_file=None,
+            renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+            follow=None,
+            llm_prompts=[],
+            model="m",
+            max_tokens=1,
+            **kw,
+        )
+
+    you, system = tmp_path / "you.wav", tmp_path / "system.wav"
+    assert _session(save_audio=tmp_path / "a.wav")._audio_files() == [tmp_path / "a.wav"]
+    assert _session(save_audio_by_label={"you": you, "system": system})._audio_files() == [
+        you,
+        system,
+    ]
+    assert _session()._audio_files() == []
 
 
 def test_save_dir_finalize_derives_title_and_note(monkeypatch, tmp_path):

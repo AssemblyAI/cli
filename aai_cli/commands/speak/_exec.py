@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aai_cli.app.context import AppState
-from aai_cli.core import stdio
+from aai_cli.core import signals, stdio
 from aai_cli.core.errors import UsageError
 from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.ui import output
@@ -182,29 +182,32 @@ def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
     spoken = _read_text(opts.text)
     api_key = state.resolve_api_key()
     bare_voice, overrides = dialogue.parse_voice_overrides(opts.voice)
-    if dialogue.looks_like_speaker_labeled(spoken):
-        _speak_dialogue(
-            api_key,
-            spoken,
-            bare_voice,
-            overrides,
-            opts,
-            json_mode=json_mode,
-            quiet=state.quiet,
-        )
-    else:
-        if overrides:
-            # Mirror the inverse warning in _speak_dialogue: never drop a
-            # requested voice mapping silently.
-            output.emit_warning(
-                "Ignoring --voice SPEAKER=VOICE mappings; input has no speaker labels.",
+    # SIGTERM aborts synthesis/playback the same way Ctrl-C does, so an external
+    # supervisor (Hammerspoon, a service manager, a wrapper's `kill`) can stop it.
+    with signals.terminate_as_interrupt():
+        if dialogue.looks_like_speaker_labeled(spoken):
+            _speak_dialogue(
+                api_key,
+                spoken,
+                bare_voice,
+                overrides,
+                opts,
                 json_mode=json_mode,
+                quiet=state.quiet,
             )
-        _speak_single(
-            api_key,
-            spoken,
-            bare_voice or voices.default_voice(opts.language),
-            opts,
-            json_mode=json_mode,
-            quiet=state.quiet,
-        )
+        else:
+            if overrides:
+                # Mirror the inverse warning in _speak_dialogue: never drop a
+                # requested voice mapping silently.
+                output.emit_warning(
+                    "Ignoring --voice SPEAKER=VOICE mappings; input has no speaker labels.",
+                    json_mode=json_mode,
+                )
+            _speak_single(
+                api_key,
+                spoken,
+                bare_voice or voices.default_voice(opts.language),
+                opts,
+                json_mode=json_mode,
+                quiet=state.quiet,
+            )

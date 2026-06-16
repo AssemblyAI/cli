@@ -5,12 +5,14 @@ Five commands. All accept `--json` (auto-enabled when piped); `transcribe`,
 `transcribe`, `stream`, and `agent` accept `--show-code` to print equivalent
 Python SDK code without calling the API.
 
-## `assembly transcribe [SOURCE]` — file / URL / YouTube / podcast page
+## `assembly transcribe [SOURCE]` — file / URL / YouTube / podcast page / RSS feed
 
 `SOURCE` is a local file path, public URL, or a media-page URL yt-dlp can extract
 (YouTube, Apple Podcasts, Spreaker, SoundCloud, …) — those are downloaded first.
-Use `--sample` for the hosted `wildfires.mp3`. Analysis results (summary,
-chapters, sentiment, …) render automatically in human mode.
+A podcast RSS/Atom feed URL expands into a resumable batch run over every episode
+enclosure (one `.aai.json` sidecar apiece). Use `--sample` for the hosted
+`wildfires.mp3`. Analysis results (summary, chapters, sentiment, …) render
+automatically in human mode.
 
 High-value flags (run `assembly transcribe --help` for the full set):
 
@@ -37,13 +39,15 @@ assembly transcribe --sample
 assembly transcribe call.mp3 --speaker-labels --speakers-expected 2 --redact-pii
 assembly transcribe call.mp3 -o text
 assembly transcribe call.mp3 --show-code
+assembly transcribe "https://feeds.simplecast.com/54nAGcIl"   # every episode in the feed
 ```
 
 ## `assembly stream [SOURCE]` — live real-time transcription
 
 Omit `SOURCE` to use the microphone; pass a file/URL/media page to stream that, or
 `--sample`. macOS can capture system audio with `--system-audio` (mic + system)
-or `--system-audio-only`.
+or `--system-audio-only`. With `--save-dir`, `--system-audio` writes one WAV per
+channel (`<stem>-you.wav`, `<stem>-system.wav`) beside the shared transcript.
 
 High-value flags (run `assembly stream --help` for the full set):
 

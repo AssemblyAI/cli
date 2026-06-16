@@ -31,6 +31,10 @@ SPEC = command_registry.CommandModuleSpec(
             ("Try it with the hosted sample", "assembly transcribe --sample"),
             ("Transcribe a YouTube video", "assembly transcribe https://youtu.be/dtp6b76pMak"),
             ("Transcribe a podcast page", 'assembly transcribe "https://podcasts.apple.com/…"'),
+            (
+                "Transcribe a whole podcast feed",
+                'assembly transcribe "https://feeds.simplecast.com/…"',
+            ),
             ("Label who said what", "assembly transcribe call.mp3 --speaker-labels"),
             ("Redact PII for compliance", "assembly transcribe call.mp3 --redact-pii"),
             ("Summarize a recording", "assembly transcribe call.mp3 --summarization"),
@@ -43,8 +47,8 @@ def transcribe(
     ctx: typer.Context,
     source: str | None = typer.Argument(
         None,
-        help="Audio file, URL, YouTube/podcast URL, bucket URL (s3://, gs://, …), or a "
-        "directory/glob (batch mode)",
+        help="Audio file, URL, YouTube/podcast URL, podcast RSS feed, bucket URL "
+        "(s3://, gs://, …), or a directory/glob (batch mode)",
     ),
     sample: bool = typer.Option(False, "--sample", help="Use the hosted wildfires.mp3 sample"),
     # batch mode
@@ -362,10 +366,11 @@ def transcribe(
     URLs (any page yt-dlp can extract) are downloaded first, then transcribed.
 
     Batch mode: pass a directory or glob (or pipe a list with --from-stdin) to
-    transcribe many sources concurrently. Each source gets a .aai.json sidecar
-    with the full result (including any --llm responses), and a re-run skips
-    sources already transcribed — with changed --llm prompts it replays just
-    the LLM step, never a second transcription.
+    transcribe many sources concurrently. A podcast RSS/Atom feed URL also expands
+    to batch mode — every episode enclosure becomes one source. Each source gets a
+    .aai.json sidecar with the full result (including any --llm responses), and a
+    re-run skips sources already transcribed — with changed --llm prompts it
+    replays just the LLM step, never a second transcription.
 
     Bucket URLs (s3://, gs://, az://, sftp://, …) work for single files and for
     batches (a glob, or a folder ending in /); install the matching fsspec

@@ -115,7 +115,7 @@ def stream(
         None,
         "--save-dir",
         help="Auto-name the transcript and a matching WAV under DIR/YYYY-MM-DD/ "
-        "with a timestamped file",
+        "with a timestamped file; --system-audio saves one WAV per channel",
         rich_help_panel=help_panels.OPT_SAVING,
         file_okay=False,
     ),

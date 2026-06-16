@@ -50,7 +50,6 @@ def test_save_dir_auto_names_transcript_and_matching_wav(monkeypatch, tmp_path):
     [
         {"save_dir": Path("rec"), "save_audio": Path("a.wav")},  # save-dir owns the audio name
         {"save_dir": Path("rec"), "save_transcript": Path("a.txt")},  # ...and the transcript
-        {"save_dir": Path("rec"), "system_audio": True},  # two streams can't share one wav
         {"save_dir": Path("rec"), "name": "X", "auto_name": True},  # both set the title
         {"name": "Standup"},  # --name without --save-dir is meaningless
         {"auto_name": True},  # --auto-name needs --save-dir
@@ -96,7 +95,7 @@ def test_no_save_audio_writes_transcript_and_sidecar_but_no_wav(monkeypatch, tmp
     bucket = tmp_path / "rec" / "2026-06-16"
     assert (bucket / "2026-06-16-143005-talk.txt").read_text(encoding="utf-8") == "hi there\n"
     record = json.loads((bucket / "2026-06-16-143005-talk.aai.json").read_text(encoding="utf-8"))
-    assert record["audio"] is None
+    assert record["audio"] == []
     assert list(bucket.glob("*.wav")) == []
 
 

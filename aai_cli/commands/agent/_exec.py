@@ -22,7 +22,7 @@ from aai_cli.agent.session import AgentRunConfig, run_session
 from aai_cli.agent.voices import VOICE_NAMES
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client
+from aai_cli.core import choices, client, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
@@ -130,7 +130,10 @@ def run_agent(opts: AgentOptions, state: AppState, *, json_mode: bool) -> None:
         exit_after_reply=from_file,
     )
     try:
-        run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
+        # SIGTERM stops the agent as cleanly as Ctrl-C, so an external supervisor
+        # (Hammerspoon, a service manager, a wrapper's `kill`) can end the session.
+        with signals.terminate_as_interrupt():
+            run_session(api_key, renderer=renderer, player=player, mic=audio, config=run_config)
     except KeyboardInterrupt:
         renderer.stopped()
     except BrokenPipeError as exc:

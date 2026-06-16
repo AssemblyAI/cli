@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-D6402E)](https://github.com/AssemblyAI/cli/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-assemblyai-D6402E)](https://www.assemblyai.com/docs)
 
-The AssemblyAI CLI (`assembly`) brings speech AI directly into your terminal: transcribe files, URLs, and YouTube/podcast pages, stream live audio, talk to a two-way voice agent, prompt the LLM Gateway, benchmark speech models, and scaffold ready-to-deploy starter apps.
+The AssemblyAI CLI (`assembly`) brings speech AI directly into your terminal: transcribe files, URLs, YouTube/podcast pages, and whole podcast RSS feeds, stream live audio, talk to a two-way voice agent, prompt the LLM Gateway, benchmark speech models, and scaffold ready-to-deploy starter apps.
 
 <p align="center">
   <img src="assets/welcome.png" alt="The assembly CLI welcome screen, listing command groups for transcription, streaming, voice agents, app scaffolding, and account management" width="820">
@@ -44,7 +44,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 
 | Command | What it does |
 | :--- | :--- |
-| `assembly transcribe` | Transcribe files, URLs, YouTube/podcast pages, directories, globs, or bucket storage (`s3://`, `gs://`, `az://`) — with speaker labels, PII redaction, summarization, SRT/VTT captions, and resumable batch runs |
+| `assembly transcribe` | Transcribe files, URLs, YouTube/podcast pages, podcast RSS feeds, directories, globs, or bucket storage (`s3://`, `gs://`, `az://`) — with speaker labels, PII redaction, summarization, SRT/VTT captions, and resumable batch runs |
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
 | `assembly dictate` | Push-to-talk dictation: press Enter to record, Enter again for instant text (Sync STT API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
@@ -285,11 +285,13 @@ assembly transcribe video.mp4 -o srt   # captions
 assembly transcribe call.mp3 --speaker-labels --summarization --json
 ```
 
-Transcribe in batches — a directory, a glob, or a piped list, resumable on re-run:
+Transcribe in batches — a directory, a glob, a piped list, or a whole podcast
+RSS feed (every episode becomes one source), resumable on re-run:
 
 ```sh
 assembly transcribe ./recordings
 assembly transcribe "s3://bucket/calls/*.mp3"   # needs: pip install s3fs
+assembly transcribe "https://feeds.simplecast.com/54nAGcIl"   # every episode in the feed
 find . -name "*.wav" | assembly transcribe --from-stdin
 ```
 

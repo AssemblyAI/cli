@@ -56,6 +56,15 @@ def test_resolve_without_name_is_just_the_timestamp():
     assert naming.resolve(Path("rec"), "!!!", now=NOW).transcript.name == "2026-06-16-143005.txt"
 
 
+def test_channel_audio_inserts_channel_suffix_before_extension():
+    # --system-audio splits the auto-named WAV into one file per channel, keeping the
+    # date-bucketed stem and .wav extension and only appending the channel name.
+    audio = naming.resolve(Path("rec"), "Sync", now=NOW).audio
+    assert naming.channel_audio(audio, "you").name == "2026-06-16-143005-sync-you.wav"
+    assert naming.channel_audio(audio, "system").name == "2026-06-16-143005-sync-system.wav"
+    assert naming.channel_audio(audio, "you").parent == audio.parent  # same date bucket
+
+
 def test_ensure_dir_creates_nested_dirs(tmp_path):
     target = tmp_path / "rec" / "2026-06-16"
     naming.ensure_dir(target)
