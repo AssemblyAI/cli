@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import types
+from collections.abc import Callable
 
 import pytest
 
@@ -16,6 +17,7 @@ from aai_cli.streaming.diagnostics import (
     SDK_STREAMING_LOGGER,
     handshake_error,
     handshake_suggestion,
+    open_authorized_ws,
     silence_streaming_logging,
 )
 
@@ -139,3 +141,31 @@ def test_non_handshake_errors_return_none():
     assert handshake_error(closed, "Streaming error", host="h") is None
     # Other HTTP statuses (e.g. a 500 on the upgrade) are not auth-shaped.
     assert handshake_error(_WsHandshake(500), "Streaming error", host="h") is None
+
+
+def _header_capture() -> tuple[Callable[..., str], dict[str, str]]:
+    """A connect double plus the dict its Authorization header lands in."""
+    captured: dict[str, str] = {}
+
+    def _connect(url: str, *, additional_headers: dict[str, str], **kwargs: object) -> str:
+        captured.update(additional_headers)
+        return "ws"
+
+    return _connect, captured
+
+
+def test_open_authorized_ws_defaults_to_bearer_token():
+    # The Voice Agent endpoint expects a Bearer token, so that's the default when
+    # `bearer` is omitted entirely (not just when passed True).
+    connect, captured = _header_capture()
+    open_authorized_ws(connect, "secret", "wss://h/ws", message="m", host="h")
+    assert captured["Authorization"] == "Bearer secret"
+
+
+def test_open_authorized_ws_sends_raw_key_when_bearer_false():
+    # Streaming endpoints (STT, TTS) authenticate with the raw API key — no "Bearer "
+    # prefix. bearer=False must send the key verbatim, not a Bearer token.
+    connect, captured = _header_capture()
+    open_authorized_ws(connect, "secret", "wss://h/ws", message="m", host="h", bearer=False)
+    assert captured["Authorization"] == "secret"
+    assert "Bearer" not in captured["Authorization"]

@@ -20,9 +20,10 @@ from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import AgentCascadeOptions, run_agent_cascade
-from aai_cli.core import config
+from aai_cli.core import config, config_builder
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.main import app
+from aai_cli.streaming import turn_presets
 
 runner = CliRunner()
 
@@ -37,6 +38,15 @@ _DEFAULTS = AgentCascadeOptions(
     greeting="hello",
     device=None,
     output_field=None,
+    speech_model="u3-rt-pro",
+    format_turns=True,
+    turn_detection=None,
+    stt_config=(),
+    stt_config_file=None,
+    max_tokens=1000,
+    llm_config=(),
+    language=None,
+    tts_config=(),
 )
 
 
@@ -96,6 +106,40 @@ def test_device_with_file_source_is_rejected(monkeypatch):
     monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
     with pytest.raises(UsageError, match="--device applies only to microphone"):
         run_agent_cascade(_opts(source="clip.wav", device=2), AppState(), json_mode=False)
+
+
+# --- argv -> options seam ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [([], True), (["--no-format-turns"], False), (["--format-turns"], True)],
+)
+def test_format_turns_flag_resolves_into_options(monkeypatch, argv, expected):
+    # Pin the Typer default (omitted -> True) and both explicit forms, captured at the
+    # argv->options seam so the run body never executes.
+    captured = {}
+
+    def fake_run(opts, state, *, json_mode):
+        captured["opts"] = opts
+
+    monkeypatch.setattr(_exec, "run_agent_cascade", fake_run)
+    result = runner.invoke(app, ["agent-cascade", *argv])
+    assert result.exit_code == 0
+    assert captured["opts"].format_turns is expected
+
+
+def test_stt_config_file_must_exist():
+    # --stt-config-file is existence-checked at parse time (exists=True), so a missing
+    # path fails as a Typer usage error before the body runs — not later on open. Wide
+    # terminal so the "does not exist" message isn't wrapped by the 80-col error box.
+    result = runner.invoke(
+        app,
+        ["agent-cascade", "--stt-config-file", "/no/such/file.json"],
+        env={"COLUMNS": "300"},
+    )
+    assert result.exit_code == 2
+    assert "does not exist" in result.output
 
 
 # --- system prompt resolution ------------------------------------------------
@@ -230,10 +274,110 @@ def test_broken_pipe_exits_zero(monkeypatch):
     assert rendered["r"].closed is True
 
 
+# --- STT param + TTS config builders -----------------------------------------
+
+
+def test_build_stt_params_threads_named_flags():
+    params = _exec._build_stt_params(_opts(speech_model="u3-rt-pro", format_turns=False), 8000)
+    assert params.sample_rate == 8000  # fixed by the audio source, not a flag
+    assert params.format_turns is False
+    assert params.speech_model.value == "u3-rt-pro"
+
+
+def test_build_stt_params_expands_turn_detection_preset():
+    params = _exec._build_stt_params(
+        _opts(turn_detection=turn_presets.TurnDetectionPreset.conservative), 16000
+    )
+    # The conservative preset's published end-of-turn confidence threshold.
+    assert params.end_of_turn_confidence_threshold == 0.7
+
+
+def test_build_stt_params_stt_config_overrides_any_field():
+    params = _exec._build_stt_params(
+        _opts(stt_config=("end_of_turn_confidence_threshold=0.9",)), 16000
+    )
+    assert params.end_of_turn_confidence_threshold == 0.9
+
+
+def test_build_stt_params_reads_config_file(tmp_path):
+    cfg = tmp_path / "stt.json"
+    cfg.write_text('{"min_turn_silence": 123}', encoding="utf-8")
+    params = _exec._build_stt_params(_opts(stt_config_file=cfg), 16000)
+    assert params.min_turn_silence == 123
+
+
+def test_parse_tts_config_parses_pairs():
+    assert _exec._parse_tts_config(("chunk_size_ms=100", "foo=bar")) == {
+        "chunk_size_ms": "100",
+        "foo": "bar",
+    }
+
+
+def test_parse_tts_config_rejects_malformed_pair():
+    with pytest.raises(UsageError, match="expects KEY=VALUE"):
+        _exec._parse_tts_config(("no-equals",))
+
+
+@pytest.mark.parametrize(
+    ("key", "hint"),
+    [("voice", "--voice"), ("language", "--language"), ("sample_rate", "fixed")],
+)
+def test_parse_tts_config_rejects_reserved_keys(key, hint):
+    with pytest.raises(UsageError, match=hint):
+        _exec._parse_tts_config((f"{key}=x",))
+
+
+def test_run_threads_all_leg_options_into_config_and_params(monkeypatch):
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
+    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
+    captured = {}
+
+    def fake_real(api_key, config, *, audio, stt_params):
+        captured["config"] = config
+        captured["stt_params"] = stt_params
+        return CascadeDeps(
+            run_stt=lambda _o: None, complete_reply=lambda _m: "", synthesize=lambda _t: b""
+        )
+
+    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
+    run_agent_cascade(
+        _opts(
+            source="clip.wav",
+            language="en",
+            max_tokens=321,
+            format_turns=False,
+            llm_config=("temperature=0.3",),
+            tts_config=("chunk_size_ms=100",),
+            speech_model="u3-rt-pro",
+        ),
+        AppState(),
+        json_mode=False,
+    )
+    cfg = captured["config"]
+    assert cfg.language == "en"
+    assert cfg.max_tokens == 321
+    assert cfg.format_turns is False
+    assert cfg.llm_extra == {"temperature": 0.3}
+    assert cfg.tts_extra == {"chunk_size_ms": "100"}
+    # The STT flags are realized into the params the cascade will stream with.
+    assert captured["stt_params"].format_turns is False
+    assert captured["stt_params"].sample_rate == 16000
+
+
 # --- CascadeDeps.real (the three live legs) ----------------------------------
 
 
-def test_deps_real_run_stt_passes_formatted_params(monkeypatch):
+def _stt_params(**flags: object):
+    merged = config_builder.merge_streaming_params(
+        flags={"sample_rate": 16000, "format_turns": True, "speech_model": "u3-rt-pro", **flags}
+    )
+    return config_builder.construct_streaming_params(merged)
+
+
+def test_deps_real_run_stt_passes_prebuilt_params_through(monkeypatch):
     captured = {}
 
     def fake_stream_audio(api_key, source, *, params, on_turn):
@@ -243,34 +387,66 @@ def test_deps_real_run_stt_passes_formatted_params(monkeypatch):
 
     monkeypatch.setattr(engine.client, "stream_audio", fake_stream_audio)
     audio: list[bytes] = []
-    deps = CascadeDeps.real("k", CascadeConfig(), audio=audio, sample_rate=16000)
+    params = _stt_params()
+    deps = CascadeDeps.real("k", CascadeConfig(), audio=audio, stt_params=params)
     deps.run_stt(lambda event: None)
     assert captured["api_key"] == "k"
     assert captured["source"] is audio
-    assert captured["params"].sample_rate == 16000
-    assert captured["params"].format_turns is True
+    # The cascade streams exactly the params it was handed — no re-derivation.
+    assert captured["params"] is params
 
 
-def test_deps_real_complete_reply_returns_content(monkeypatch):
-    monkeypatch.setattr(engine.llm, "complete", lambda api_key, **kwargs: "raw-response")
+def test_deps_real_complete_reply_threads_model_tokens_and_extra(monkeypatch):
+    captured = {}
+
+    def fake_complete(api_key, **kwargs):
+        captured.update(kwargs)
+        return "raw-response"
+
+    monkeypatch.setattr(engine.llm, "complete", fake_complete)
     monkeypatch.setattr(engine.llm, "content_of", lambda response: response.upper())
-    deps = CascadeDeps.real("k", CascadeConfig(model="m"), audio=[], sample_rate=16000)
+    cfg = CascadeConfig(model="m", max_tokens=222, llm_extra={"temperature": 0.5})
+    deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
     assert deps.complete_reply([{"role": "user", "content": "hi"}]) == "RAW-RESPONSE"
+    assert captured["model"] == "m"
+    assert captured["max_tokens"] == 222
+    assert captured["extra"] == {"temperature": 0.5}
 
 
-def test_deps_real_synthesize_returns_pcm(monkeypatch):
+def test_deps_real_complete_reply_sends_no_extra_when_unset(monkeypatch):
+    captured = {}
+
+    def fake_complete(api_key, **kwargs):
+        captured.update(kwargs)
+        return "x"
+
+    monkeypatch.setattr(engine.llm, "complete", fake_complete)
+    monkeypatch.setattr(engine.llm, "content_of", lambda response: response)
+    deps = CascadeDeps.real("k", CascadeConfig(), audio=[], stt_params=_stt_params())
+    deps.complete_reply([{"role": "user", "content": "hi"}])
+    # Empty overrides collapse to None, not an empty dict, so the gateway sees no extra body.
+    assert captured["extra"] is None
+
+
+def test_deps_real_synthesize_threads_voice_language_and_extra(monkeypatch):
     captured = {}
 
     def fake_synth(api_key, spec):
         captured["voice"] = spec.voice
+        captured["language"] = spec.language
         captured["text"] = spec.text
         captured["sample_rate"] = spec.sample_rate
+        captured["params"] = spec.query_params()
         return types.SimpleNamespace(pcm=b"AUDIO")
 
     monkeypatch.setattr(engine.tts_session, "synthesize", fake_synth)
-    deps = CascadeDeps.real("k", CascadeConfig(voice="vera"), audio=[], sample_rate=16000)
+    cfg = CascadeConfig(voice="vera", language="en", tts_extra={"chunk_size_ms": "100"})
+    deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
     assert deps.synthesize("say this") == b"AUDIO"
     assert captured["voice"] == "vera"
+    assert captured["language"] == "en"
     assert captured["text"] == "say this"
     # TTS always synthesizes at the 24 kHz the live player is opened at.
     assert captured["sample_rate"] == engine.TTS_SAMPLE_RATE == 24000
+    # The --tts-config escape hatch rides along as an extra query param.
+    assert captured["params"]["chunk_size_ms"] == "100"

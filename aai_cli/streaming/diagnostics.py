@@ -92,17 +92,23 @@ def open_authorized_ws[T](
     *,
     message: str,
     host: str,
+    bearer: bool = True,
     **connect_kwargs: object,
 ) -> T:
-    """Open a Bearer-authorized WebSocket, mapping a connect failure via ``classify_error``.
+    """Open an ``Authorization``-headered WebSocket, mapping a connect failure via
+    ``classify_error``.
 
     The one connect path for the raw-websocket sessions (agent, speak), so a
     rejected handshake (HTTP 401/403) carries the same actionable suggestion in
     both and everything else keeps the shared classification.
+
+    ``bearer`` selects the AssemblyAI auth scheme for the endpoint: the Voice Agent
+    socket expects a ``Bearer <key>`` token (the default), while the streaming
+    sockets (STT, TTS) authenticate with the **raw** key — pass ``bearer=False``
+    for those, or the server refuses the session with an in-band Error frame.
     """
+    token = f"Bearer {api_key}" if bearer else api_key
     try:
-        return connect(
-            url, additional_headers={"Authorization": f"Bearer {api_key}"}, **connect_kwargs
-        )
+        return connect(url, additional_headers={"Authorization": token}, **connect_kwargs)
     except Exception as exc:
         raise classify_error(exc, message, host=host) from exc

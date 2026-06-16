@@ -85,8 +85,9 @@ class FakeWS:
 
 
 def _audio_frame(pcm: bytes, *, final: bool) -> str:
-    # The real server's Audio frames carry only the PCM payload and the final flag;
-    # the sample rate is reported once, up front, in the Begin frame's configuration.
+    # An Audio frame with an explicit is_final flag — the defensive end-of-stream path
+    # (the live server instead omits is_final and ends with FlushDone, see _audio_chunk).
+    # The sample rate is reported once, up front, in the Begin frame's configuration.
     return json.dumps(
         {
             "type": "Audio",
@@ -94,6 +95,18 @@ def _audio_frame(pcm: bytes, *, final: bool) -> str:
             "is_final": final,
         }
     )
+
+
+def _audio_chunk(pcm: bytes) -> str:
+    # The real server's Audio frames carry the PCM payload and a flush_id, but NO
+    # is_final flag — completion is signalled by a separate FlushDone frame.
+    return json.dumps(
+        {"type": "Audio", "audio": base64.b64encode(pcm).decode("ascii"), "flush_id": 0}
+    )
+
+
+def _flush_done_frame() -> str:
+    return json.dumps({"type": "FlushDone", "flush_id": 0, "audio_duration_ms": 880})
 
 
 def _begin_frame(*, sample_rate: int = 24000) -> str:
@@ -128,8 +141,10 @@ def test_synthesize_drives_the_full_protocol():
     cfg = session.SpeakConfig(text="hello", voice="jane")
     result = session.synthesize("k", cfg, connect=_connect_returning(ws, captured))
 
-    # Sends Generate(text), then ForceFlushTextBuffer, then Terminate — in that order.
-    assert [m["type"] for m in ws.sent] == ["Generate", "ForceFlushTextBuffer", "Terminate"]
+    # Sends Generate(text), then Flush, then Terminate — in that order. The flush tag
+    # is "Flush" (the server's accepted tag, as the agent-cascade template sends),
+    # not "ForceFlushTextBuffer", which the server rejects with a validation error.
+    assert [m["type"] for m in ws.sent] == ["Generate", "Flush", "Terminate"]
     assert ws.sent[0]["text"] == "hello"
     # Accumulates decoded PCM across chunks and stops on the is_final frame.
     assert result.pcm == b"\x01\x02\x03\x04\x05\x06"
@@ -137,10 +152,31 @@ def test_synthesize_drives_the_full_protocol():
     assert result.sample_rate == 24000
     # 6 bytes / 2 bytes-per-sample / 24000 Hz.
     assert result.audio_duration_seconds == pytest.approx(6 / 2 / 24000)
-    # Auth header carries the key as a Bearer token.
-    assert captured["kwargs"]["additional_headers"]["Authorization"] == "Bearer k"
+    # Streaming TTS authenticates with the raw API key — no "Bearer " prefix (the
+    # AssemblyAI streaming convention; the working agent-cascade template does the
+    # same). A Bearer token makes the server reject the session with an Error frame.
+    assert captured["kwargs"]["additional_headers"]["Authorization"] == "k"
+    assert "Bearer" not in captured["kwargs"]["additional_headers"]["Authorization"]
     # The frame-size cap is lifted: Audio frames can exceed websockets' 1 MiB default.
     assert captured["kwargs"]["max_size"] is None
+
+
+def test_synthesize_stops_on_flush_done_when_audio_omits_is_final():
+    # The live server ends a synthesis with a FlushDone frame and never sets is_final
+    # on its Audio frames. Without handling FlushDone the loop blocks until the recv
+    # timeout (the audio is silently lost), so FlushDone must end collection and return
+    # every PCM byte gathered so far — then Terminate the session as usual.
+    ws = FakeWS(
+        [
+            _begin_frame(sample_rate=24000),
+            _audio_chunk(b"\x01\x02\x03\x04"),
+            _audio_chunk(b"\x05\x06"),
+            _flush_done_frame(),
+        ]
+    )
+    result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert result.pcm == b"\x01\x02\x03\x04\x05\x06"
+    assert [m["type"] for m in ws.sent] == ["Generate", "Flush", "Terminate"]
     assert ws.closed is True
 
 
@@ -167,8 +203,17 @@ def test_synthesize_falls_back_to_default_rate_when_begin_omits_configuration():
 
 def test_synthesize_raises_on_missing_begin():
     ws = FakeWS([json.dumps({"type": "Audio"})])
-    with pytest.raises(APIError):
+    with pytest.raises(APIError, match="did not start the session"):
         session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+
+
+def test_synthesize_session_start_error_frame_surfaces_its_reason():
+    # When the very first frame is an Error (not Begin), the server is explaining why
+    # it refused the session — surface that reason and code, not a generic "got 'Error'".
+    ws = FakeWS([json.dumps({"type": "Error", "error_code": 401, "error": "bad token"})])
+    with pytest.raises(APIError, match="bad token") as excinfo:
+        session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert "401" in str(excinfo.value)
 
 
 def test_synthesize_maps_audio_frame_without_payload_to_api_error():

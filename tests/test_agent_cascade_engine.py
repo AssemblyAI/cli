@@ -335,16 +335,33 @@ def test_shutdown_without_worker_is_safe():
     ("end_of_turn", "formatted", "expected"),
     [(True, True, True), (True, False, False), (False, True, False), (False, False, False)],
 )
-def test_is_final_turn(end_of_turn, formatted, expected):
+def test_is_final_turn_with_formatting_waits_for_formatted(end_of_turn, formatted, expected):
+    # With formatting on, only a formatted end-of-turn is the cue (better text for the LLM).
     event = _turn("hi", end_of_turn=end_of_turn, turn_is_formatted=formatted)
-    assert engine._is_final_turn(event) is expected
+    assert engine._is_final_turn(event, format_turns=True) is expected
+
+
+@pytest.mark.parametrize(
+    ("end_of_turn", "formatted", "expected"),
+    [(True, False, True), (True, True, True), (False, False, False), (False, True, False)],
+)
+def test_is_final_turn_without_formatting_triggers_on_end_of_turn(end_of_turn, formatted, expected):
+    # With --no-format-turns the server never sets turn_is_formatted, so a bare
+    # end-of-turn must be the cue — otherwise the agent would never reply.
+    event = _turn("hi", end_of_turn=end_of_turn, turn_is_formatted=formatted)
+    assert engine._is_final_turn(event, format_turns=False) is expected
 
 
 def test_is_final_turn_defaults_missing_attrs_to_not_final():
     # A formatted turn missing end_of_turn (and vice versa) must read as not-final, so
     # each absent field defaults to False rather than being treated as present-and-true.
-    assert engine._is_final_turn(types.SimpleNamespace(turn_is_formatted=True)) is False
-    assert engine._is_final_turn(types.SimpleNamespace(end_of_turn=True)) is False
+    assert (
+        engine._is_final_turn(types.SimpleNamespace(turn_is_formatted=True), format_turns=True)
+        is False
+    )
+    assert (
+        engine._is_final_turn(types.SimpleNamespace(end_of_turn=True), format_turns=True) is False
+    )
 
 
 def test_spawn_thread_runs_target():

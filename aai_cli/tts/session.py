@@ -5,8 +5,8 @@ import binascii
 import contextlib
 import json
 from abc import abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -54,15 +54,20 @@ _RECV_TIMEOUT_SECONDS = 60.0
 @dataclass(frozen=True)
 class SpeakConfig:
     """Per-run TTS parameters. Optional fields are only sent when set, so the
-    server applies its own defaults (voice/language/sample_rate) otherwise."""
+    server applies its own defaults (voice/language/sample_rate) otherwise.
+
+    ``extra`` carries any further query params verbatim (the escape hatch for
+    fields the named ones don't cover); the named fields always win a key clash."""
 
     text: str
     voice: str | None = None
     language: str | None = None
     sample_rate: int | None = None
+    extra: Mapping[str, str] = field(default_factory=dict[str, str])
 
     def query_params(self) -> dict[str, str]:
-        params: dict[str, str] = {}
+        # extra first so the named fields below override it on a key clash.
+        params: dict[str, str] = {str(k): str(v) for k, v in self.extra.items()}
         if self.voice is not None:
             params["voice"] = self.voice
         if self.language is not None:
@@ -125,6 +130,12 @@ def _decode_audio_frame(msg: dict[str, object]) -> bytes:
         raise APIError(f"TTS service sent an Audio frame that is not valid base64: {exc}") from exc
 
 
+def _error_frame_detail(msg: dict[str, object]) -> str:
+    """The ``(code): reason`` tail of an Error frame, with an ``unknown`` reason
+    fallback so a detail-less frame still yields a non-empty message."""
+    return f"({msg.get('error_code', '')}): {msg.get('error') or 'unknown'}"
+
+
 def _recv_raw(ws: _WebSocket) -> str | bytes:
     """One frame off the socket, with a bounded wait: a server that goes silent
     mid-session (e.g. never sends the final Audio frame) must fail the command,
@@ -149,14 +160,22 @@ def _default_connect(
 def _run_protocol(
     ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
 ) -> SpeakResult:
-    """Send Generate + ForceFlushTextBuffer, collect Audio until is_final, then Terminate."""
+    """Send Generate + Flush, collect Audio until is_final, then Terminate."""
     begin = json.loads(_recv_raw(ws))
-    if begin.get("type") != "Begin":
-        raise APIError(f"TTS service did not start the session (got {begin.get('type')!r}).")
+    begin_type = begin.get("type")
+    if begin_type == "Error":
+        # The server refused the session and put the reason in the frame — surface it
+        # (e.g. a Bearer-vs-raw auth mismatch reads as the auth error here), rather
+        # than discarding it behind a generic "got 'Error'".
+        raise APIError(f"TTS service rejected the session {_error_frame_detail(begin)}")
+    if begin_type != "Begin":
+        raise APIError(f"TTS service did not start the session (got {begin_type!r}).")
     sample_rate = int(begin.get("configuration", {}).get("sample_rate", _DEFAULT_SAMPLE_RATE))
 
     ws.send(json.dumps({"type": "Generate", "text": config.text}))
-    ws.send(json.dumps({"type": "ForceFlushTextBuffer"}))
+    # "Flush" forces synthesis of any buffered text; the server rejects the older
+    # "ForceFlushTextBuffer" tag with a validation error (matches the template).
+    ws.send(json.dumps({"type": "Flush"}))
 
     pcm = bytearray()
     while True:
@@ -166,10 +185,13 @@ def _run_protocol(
             pcm.extend(_decode_audio_frame(msg))
             if msg.get("is_final"):
                 break
+        elif mtype == "FlushDone":
+            # The live server ends a synthesis with FlushDone (its Audio frames carry
+            # no is_final flag), so this is the real end-of-stream marker — stop here,
+            # or the loop blocks until the recv timeout and the audio is lost.
+            break
         elif mtype == "Error":
-            raise APIError(
-                f"TTS error ({msg.get('error_code', '')}): {msg.get('error') or 'unknown'}"
-            )
+            raise APIError(f"TTS error {_error_frame_detail(msg)}")
         elif mtype == "Warning" and on_warning is not None:
             on_warning(str(msg.get("warning", "")))
 
@@ -201,6 +223,10 @@ def synthesize(
         ws_url(config.query_params()),
         message="Could not connect to the TTS service",
         host=environments.active().streaming_tts_host,
+        # Streaming TTS authenticates with the raw API key, not a Bearer token (the
+        # AssemblyAI streaming convention the agent-cascade template follows); a
+        # Bearer token upgrades fine but is rejected in-band as an Error frame.
+        bearer=False,
         max_size=None,  # no frame cap: a synthesis's Audio frames can exceed the 1 MiB default
     )
     try:

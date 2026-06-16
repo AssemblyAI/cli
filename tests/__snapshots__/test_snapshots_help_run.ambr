@@ -28,12 +28,6 @@
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --sample                                   Speak the hosted wildfires.mp3    │
   │                                            sample to the agent               │
-  │ --voice                       TEXT         TTS voice. See --list-voices.     │
-  │                                            [default: jane]                   │
-  │ --model                       TEXT         LLM Gateway model that powers the │
-  │                                            agent's replies                   │
-  │                                            [default:                         │
-  │                                            claude-haiku-4-5-20251001]        │
   │ --system-prompt               TEXT         System prompt (the agent's        │
   │                                            persona)                          │
   │                                            [default: You are a friendly,     │
@@ -57,6 +51,44 @@
   │                                            lines as plain stdout,            │
   │                                            pipe-friendly) or json            │
   │ --help                                     Show this message and exit.       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Text-to-speech ─────────────────────────────────────────────────────────────╮
+  │ --voice             TEXT  TTS voice. See --list-voices. [default: jane]      │
+  │ --language          TEXT  TTS language (defaults to the voice's language)    │
+  │ --tts-config        TEXT  Set any extra streaming-TTS query field as         │
+  │                           KEY=VALUE (repeatable)                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Language model ─────────────────────────────────────────────────────────────╮
+  │ --model             TEXT                  LLM Gateway model that powers the  │
+  │                                           agent's replies                    │
+  │                                           [default:                          │
+  │                                           claude-haiku-4-5-20251001]         │
+  │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
+  │                                           [default: 1000]                    │
+  │ --llm-config        TEXT                  Set any LLM Gateway request field  │
+  │                                           as KEY=VALUE (repeatable)          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Speech-to-text ─────────────────────────────────────────────────────────────╮
+  │ --speech-model                            TEXT              Streaming speech │
+  │                                                             model            │
+  │                                                             [default:        │
+  │                                                             u3-rt-pro]       │
+  │ --format-turns       --no-format-turns                      Format           │
+  │                                                             (punctuate)      │
+  │                                                             finalized turns  │
+  │                                                             before replying  │
+  │                                                             [default:        │
+  │                                                             format-turns]    │
+  │ --turn-detection                          [aggressive|bala  Turn-detection   │
+  │                                           nced|conservativ  sensitivity      │
+  │                                           e]                preset           │
+  │ --stt-config                              TEXT              Set any          │
+  │                                                             StreamingParame… │
+  │                                                             field as         │
+  │                                                             KEY=VALUE        │
+  │                                                             (repeatable)     │
+  │ --stt-config-file                         FILE              JSON file of     │
+  │                                                             streaming fields │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

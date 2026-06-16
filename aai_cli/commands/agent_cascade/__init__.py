@@ -8,15 +8,23 @@ from aai_cli import command_registry, help_panels, options
 from aai_cli.agent_cascade import voices
 from aai_cli.agent_cascade.config import (
     DEFAULT_GREETING,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
+    DEFAULT_SPEECH_MODEL,
     DEFAULT_SYSTEM_PROMPT,
 )
 from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.app.context import AppState, run_command, run_with_options
 from aai_cli.commands.agent_cascade import _exec as agent_cascade_exec
 from aai_cli.core import choices, llm
+from aai_cli.streaming.turn_presets import TurnDetectionPreset
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
+
+# Option panels that group the per-leg knobs in `--help` instead of one flat wall.
+_PANEL_STT = "Speech-to-text"
+_PANEL_LLM = "Language model"
+_PANEL_TTS = "Text-to-speech"
 
 app = typer.Typer()
 
@@ -65,12 +73,71 @@ def agent_cascade(
         "--voice",
         help="TTS voice. See --list-voices.",
         autocompletion=voices.complete_voice,
+        rich_help_panel=_PANEL_TTS,
+    ),
+    language: str | None = typer.Option(
+        None,
+        "--language",
+        help="TTS language (defaults to the voice's language)",
+        rich_help_panel=_PANEL_TTS,
+    ),
+    tts_config: list[str] | None = typer.Option(
+        None,
+        "--tts-config",
+        help="Set any extra streaming-TTS query field as KEY=VALUE (repeatable)",
+        rich_help_panel=_PANEL_TTS,
     ),
     model: str = typer.Option(
         DEFAULT_MODEL,
         "--model",
         help="LLM Gateway model that powers the agent's replies",
         autocompletion=llm.complete_model,
+        rich_help_panel=_PANEL_LLM,
+    ),
+    max_tokens: int = typer.Option(
+        DEFAULT_MAX_TOKENS,
+        "--max-tokens",
+        help="Max tokens per reply",
+        min=1,
+        rich_help_panel=_PANEL_LLM,
+    ),
+    llm_config: list[str] | None = typer.Option(
+        None,
+        "--llm-config",
+        help="Set any LLM Gateway request field as KEY=VALUE (repeatable)",
+        rich_help_panel=_PANEL_LLM,
+    ),
+    speech_model: str = typer.Option(
+        DEFAULT_SPEECH_MODEL,
+        "--speech-model",
+        help="Streaming speech model",
+        rich_help_panel=_PANEL_STT,
+    ),
+    format_turns: bool = typer.Option(
+        True,
+        "--format-turns/--no-format-turns",
+        help="Format (punctuate) finalized turns before replying",
+        rich_help_panel=_PANEL_STT,
+    ),
+    turn_detection: TurnDetectionPreset | None = typer.Option(
+        None,
+        "--turn-detection",
+        help="Turn-detection sensitivity preset",
+        rich_help_panel=_PANEL_STT,
+    ),
+    stt_config: list[str] | None = typer.Option(
+        None,
+        "--stt-config",
+        help="Set any StreamingParameters field as KEY=VALUE (repeatable)",
+        rich_help_panel=_PANEL_STT,
+    ),
+    stt_config_file: Path | None = typer.Option(
+        None,
+        "--stt-config-file",
+        help="JSON file of streaming fields",
+        exists=True,
+        dir_okay=False,
+        rich_help_panel=_PANEL_STT,
     ),
     system_prompt: str = typer.Option(
         DEFAULT_SYSTEM_PROMPT, "--system-prompt", help="System prompt (the agent's persona)"
@@ -125,5 +192,14 @@ def agent_cascade(
         greeting=greeting,
         device=device,
         output_field=output_field,
+        speech_model=speech_model,
+        format_turns=format_turns,
+        turn_detection=turn_detection,
+        stt_config=tuple(stt_config or ()),
+        stt_config_file=stt_config_file,
+        max_tokens=max_tokens,
+        llm_config=tuple(llm_config or ()),
+        language=language,
+        tts_config=tuple(tts_config or ()),
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)
