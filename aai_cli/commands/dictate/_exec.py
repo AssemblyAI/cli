@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aai_cli.app.context import AppState
-from aai_cli.core import sync_stt
+from aai_cli.core import stdio, sync_stt
 from aai_cli.core.config_builder import split_csv
 from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
 from aai_cli.core.microphone import MicrophoneSource
@@ -135,7 +135,7 @@ def _transcribe_utterance(
     _emit(result, json_mode=json_mode)
 
 
-def _session(
+def _capture_and_transcribe(
     keys: TerminalKeys,
     api_key: str,
     opts: DictateOptions,
@@ -143,24 +143,44 @@ def _session(
     *,
     json_mode: bool,
 ) -> None:
-    """The dictation loop: idle until a toggle key, record, transcribe, repeat."""
+    """Record one utterance from the mic and print its transcript."""
+    mic = MicrophoneSource(
+        target_rate=TARGET_RATE,
+        device=opts.device,
+        on_open=lambda: _note(
+            "● Recording — press Enter to stop.", json_mode=json_mode, quiet=state.quiet
+        ),
+    )
+    pcm = _record(keys, mic, max_seconds=opts.max_seconds)
+    _transcribe_utterance(api_key, pcm, opts, state, json_mode=json_mode)
+
+
+def _session(
+    keys: TerminalKeys,
+    api_key: str,
+    opts: DictateOptions,
+    state: AppState,
+    *,
+    json_mode: bool,
+    single: bool,
+) -> None:
+    """Drive recording: one auto-started utterance, or the idle-toggle loop.
+
+    ``single`` (a piped stdout or --once) starts recording immediately so a
+    one-off capture takes a single keystroke to stop and then exits — which
+    closes a piped stdout and unblocks the downstream command. Otherwise it's
+    the interactive loop: idle until a toggle key, record, transcribe, repeat.
+    """
+    if single:
+        _capture_and_transcribe(keys, api_key, opts, state, json_mode=json_mode)
+        return
     while True:
         key = keys.read(None)
         if key is None or key in QUIT_KEYS:
             return
         if key not in TOGGLE_KEYS:
             continue
-        mic = MicrophoneSource(
-            target_rate=TARGET_RATE,
-            device=opts.device,
-            on_open=lambda: _note(
-                "● Recording — press Enter to stop.", json_mode=json_mode, quiet=state.quiet
-            ),
-        )
-        pcm = _record(keys, mic, max_seconds=opts.max_seconds)
-        _transcribe_utterance(api_key, pcm, opts, state, json_mode=json_mode)
-        if opts.once:
-            return
+        _capture_and_transcribe(keys, api_key, opts, state, json_mode=json_mode)
 
 
 def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> None:
@@ -179,12 +199,20 @@ def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> No
                     "state the language inside the prompt.",
                     json_mode=json_mode,
                 )
-            _note(
-                "Press Enter to start recording, Enter again to transcribe. q quits.",
-                json_mode=json_mode,
-                quiet=state.quiet,
-            )
-            _session(keys, api_key, opts, state, json_mode=json_mode)
+            # A piped stdout (`assembly dictate | assembly llm …`) only closes when
+            # dictate exits, so a looping session would keep the downstream consumer
+            # blocked on stdin forever. Single-shot mode (piped or --once) records
+            # one utterance and exits so the transcript drains to the next stage.
+            single = opts.once or not stdio.stdout_is_tty()
+            if not single:
+                # Only the interactive loop needs a start prompt; single-shot
+                # auto-starts and announces "● Recording" when the mic opens.
+                _note(
+                    "Press Enter to start recording, Enter again to transcribe. q quits.",
+                    json_mode=json_mode,
+                    quiet=state.quiet,
+                )
+            _session(keys, api_key, opts, state, json_mode=json_mode, single=single)
     except KeyboardInterrupt:
         # Ctrl-C is the normal "done dictating" signal: end cleanly, not as an error.
         return
