@@ -174,12 +174,22 @@ class _FakeClient:
 
 
 def _patch_client(monkeypatch, stream):
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _FakeClient(stream))
+    captured = {}
+
+    def factory(**kwargs):
+        captured.update(kwargs)
+        return _FakeClient(stream)
+
+    monkeypatch.setattr(httpx, "Client", factory)
+    return captured
 
 
 def test_fetch_returns_decoded_body(monkeypatch):
-    _patch_client(monkeypatch, _FakeStream(chunks=(b"<rss>", b"</rss>")))
+    captured = _patch_client(monkeypatch, _FakeStream(chunks=(b"<rss>", b"</rss>")))
     assert feed._fetch("https://feeds.example.com/show") == "<rss></rss>"
+    # Feeds commonly 301/302 to a CDN, so redirects must be followed.
+    assert captured["follow_redirects"] is True
+    assert captured["timeout"] == feed._FETCH_TIMEOUT_SECONDS
 
 
 def test_fetch_returns_none_on_http_error_status(monkeypatch):

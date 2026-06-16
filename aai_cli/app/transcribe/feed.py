@@ -1,27 +1,28 @@
 """Podcast RSS/Atom feed expansion for ``assembly transcribe``.
 
 A feed URL names a whole show, so transcribing it means transcribing every
-episode. ``feed_episode_urls`` fetches the URL and, when it parses as an RSS or
-Atom feed carrying audio/video enclosures, returns those enclosure URLs (in feed
-order — newest first) for the batch path to transcribe, one resumable sidecar per
-episode. The enclosures are direct media URLs the API fetches itself, so — unlike
-a YouTube or podcast *page*, which yt-dlp downloads first — no local download step
-is needed.
+episode. ``feed_episode_urls`` fetches the URL and, when ``feedparser`` recognizes
+it as an RSS or Atom feed, returns its episode enclosure URLs (in feed order —
+newest first) for the batch path to transcribe, one resumable sidecar per episode.
+The enclosures are direct media URLs the API fetches itself, so — unlike a YouTube
+or podcast *page*, which yt-dlp downloads first — no local download step is needed.
 
 Detection is deliberately narrow so a direct media URL or ordinary web page still
 falls through to the single-source path untouched (and is never fetched twice):
 only an http(s) URL whose path is feed-shaped — no extension, or one of
 ``.xml``/``.rss``/``.atom`` — and that no dedicated yt-dlp extractor already claims
-is sniffed, the response body is bounded, and only content that actually parses as
-a feed with at least one enclosure is treated as a feed.
+is sniffed, the response body is bounded, and only content ``feedparser`` parses as
+a real feed with at least one enclosure is treated as a feed. We hand ``feedparser``
+the already-fetched bytes (never the URL) so our bounded, safe fetch below stays the
+only network path.
 """
 
 from __future__ import annotations
 
-import html
-import re
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
+
+from pydantic import BaseModel
 
 from aai_cli.core import youtube
 
@@ -32,21 +33,28 @@ _FEED_URL_SUFFIXES = frozenset({"", ".xml", ".rss", ".atom"})
 
 # Bound the download so a hostile or huge URL can't exhaust memory; 10 MB of feed
 # already holds thousands of episodes, far past any realistic batch.
-_MAX_FEED_BYTES = 10 * 1024 * 1024
-_FETCH_TIMEOUT_SECONDS = 15.0
+_MAX_FEED_BYTES = 10 * 1024 * 1024  # pragma: no mutate -- tuning knob, not behavior
+_FETCH_TIMEOUT_SECONDS = 15.0  # pragma: no mutate -- tuning knob, not behavior
 
-# A feed body must announce itself with an <rss …> or <feed …> root element
-# (namespaced or not) before its <enclosure>s are trusted, so a stray HTML page
-# that merely contains the word "enclosure" is never mistaken for a podcast.
-_FEED_ROOT_RE = re.compile(r"<\s*(?:[\w.-]+:)?(?:rss|feed)\b", re.IGNORECASE)
-# RSS 2.0 episodes: <enclosure url="…" type="audio/mpeg" length="…"/>. The url
-# attribute can sit anywhere in the tag and use either quote style.
-_ENCLOSURE_TAG_RE = re.compile(r"<\s*enclosure\b([^>]*)>", re.IGNORECASE)
-# Atom episodes: <link rel="enclosure" href="…"/> (rel/href in either order).
-_LINK_TAG_RE = re.compile(r"<\s*link\b([^>]*)>", re.IGNORECASE)
-_URL_ATTR_RE = re.compile(r"""\burl\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
-_HREF_ATTR_RE = re.compile(r"""\bhref\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
-_REL_ENCLOSURE_RE = re.compile(r"""\brel\s*=\s*["']enclosure["']""", re.IGNORECASE)
+
+class _Enclosure(BaseModel):
+    """One ``<enclosure>`` / Atom enclosure link; ``href`` is the media URL."""
+
+    href: str = ""
+
+
+class _Entry(BaseModel):
+    enclosures: list[_Enclosure] = []
+
+
+class _ParsedFeed(BaseModel):
+    """The slice of feedparser's untyped result we use, validated into a real type
+    (the project pattern for untyped third-party returns — cf. core/wer.py)."""
+
+    # feedparser sets ``version`` to a non-empty id ("rss20", "atom10", …) for a
+    # recognized feed and to "" for anything it doesn't recognize as one.
+    version: str = ""
+    entries: list[_Entry] = []
 
 
 def feed_episode_urls(url: str) -> list[str] | None:
@@ -70,32 +78,20 @@ def _looks_like_feed_url(url: str) -> bool:
 
 
 def _episode_urls(body: str) -> list[str] | None:
-    """The enclosure URLs in a feed body, deduped in document order; ``None`` when it
-    isn't a feed or carries no enclosures."""
-    if not _FEED_ROOT_RE.search(body):
+    """The enclosure URLs in a feed body, deduped in document order; ``None`` when
+    feedparser doesn't recognize it as a feed or it carries no enclosures."""
+    import feedparser
+
+    # feedparser ships only partial inline types (its parse signature is Unknown),
+    # so the result is validated through _ParsedFeed below; mirror remotefs.py's
+    # fsspec shim in ignoring the unavoidable unknown-member report on the call.
+    raw = feedparser.parse(body)  # pyright: ignore[reportUnknownMemberType]
+    parsed = _ParsedFeed.model_validate(raw)
+    if not parsed.version:
         return None
-    urls = [*_rss_enclosure_urls(body), *_atom_enclosure_urls(body)]
-    deduped = list(dict.fromkeys(u for u in urls if u))
+    urls = [enc.href for entry in parsed.entries for enc in entry.enclosures if enc.href]
+    deduped = list(dict.fromkeys(urls))
     return deduped or None
-
-
-def _rss_enclosure_urls(body: str) -> list[str]:
-    """The ``url`` of every RSS ``<enclosure url="…">`` tag, HTML-unescaped."""
-    return [
-        html.unescape(match.group(1).strip())
-        for attrs in _ENCLOSURE_TAG_RE.findall(body)
-        if (match := _URL_ATTR_RE.search(attrs)) is not None
-    ]
-
-
-def _atom_enclosure_urls(body: str) -> list[str]:
-    """The ``href`` of every Atom ``<link rel="enclosure" href="…">``, HTML-unescaped."""
-    return [
-        html.unescape(match.group(1).strip())
-        for attrs in _LINK_TAG_RE.findall(body)
-        if _REL_ENCLOSURE_RE.search(attrs) is not None
-        and (match := _HREF_ATTR_RE.search(attrs)) is not None
-    ]
 
 
 def _fetch(url: str) -> str | None:
