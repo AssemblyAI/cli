@@ -55,6 +55,23 @@ def _payload_of(result):
     )
 
 
+def _without_latency(row):
+    return {key: value for key, value in row.items() if key != "latency"}
+
+
+def _fake_perf_counter(mocker, ticks):
+    """Pin the eval timer so each row's latency is a known constant.
+
+    The sequential path reads perf_counter as start/end per item, so ``ticks``
+    is consumed two at a time: (start, end) for item 1, then item 2, …
+    """
+    return mocker.patch(
+        "aai_cli.commands.evaluate._exec.time.perf_counter",
+        autospec=True,
+        side_effect=list(ticks),
+    )
+
+
 def test_wer_table_with_per_file_and_pooled_scores(tmp_path, mocker):
     _auth()
     _write_wer_manifest(tmp_path)
@@ -94,8 +111,13 @@ def test_json_payload_shape(tmp_path, mocker):
     assert payload["words"] == 4
     assert payload["errors"] == 1
     assert payload["wer"] == 0.25
-    assert payload["rows"][0] == {"item": "a.wav", "words": 2, "errors": 0, "wer": 0.0}
-    assert payload["rows"][1] == {"item": "b.wav", "words": 2, "errors": 1, "wer": 0.5}
+    assert _without_latency(payload["rows"][0]) == {
+        "item": "a.wav", "words": 2, "errors": 0, "wer": 0.0
+    }  # fmt: skip
+    assert _without_latency(payload["rows"][1]) == {
+        "item": "b.wav", "words": 2, "errors": 1, "wer": 0.5
+    }  # fmt: skip
+    assert all(isinstance(row["latency"], float) for row in payload["rows"])
     assert "failed" not in payload  # only present when a row failed
 
 
@@ -144,9 +166,18 @@ def _assign(obj, attribute, value):
 def test_item_results_are_immutable():
     from aai_cli.commands.evaluate._exec import _ItemResult
 
-    result = _ItemResult(row={}, words=None)
+    result = _ItemResult(row={}, words=None, latency=0.0)
     with pytest.raises(dataclasses.FrozenInstanceError):
         _assign(result, "words", None)
+
+
+def test_timed_outcome_is_immutable():
+    from aai_cli.commands.evaluate._exec import _Timed
+    from aai_cli.core.errors import APIError
+
+    timed = _Timed(outcome=APIError("boom"), latency=1.0)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _assign(timed, "latency", 2.0)
 
 
 def test_missing_transcript_text_scores_as_all_deletions(tmp_path, mocker):
@@ -247,3 +278,63 @@ def test_unauthenticated_exits_with_auth_code(tmp_path):
     (tmp_path / "m.csv").write_text("audio,text\na.wav,hello\n", encoding="utf-8")
     result = runner.invoke(app, ["eval", "m.csv"])
     assert result.exit_code == 4
+
+
+def test_per_row_latency_and_percentiles_in_json(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    # (start, end) per item: row a takes 1.5s, row b takes 0.5s (starts nonzero so a
+    # mutated `end + start` would diverge from `end - start`).
+    _fake_perf_counter(mocker, [10.0, 11.5, 20.0, 20.5])
+    payload = _payload_of(runner.invoke(app, ["eval", "manifest.csv", "--json"]))
+    assert payload["rows"][0]["latency"] == 1.5
+    assert payload["rows"][1]["latency"] == 0.5
+    # Pooled over [0.5, 1.5]: p50 = 1.0, p90 = 0.5 + 1.0*0.9 = 1.4.
+    assert payload["latency_p50"] == pytest.approx(1.0)
+    assert payload["latency_p90"] == pytest.approx(1.4)
+
+
+def test_human_output_shows_latency_column_and_summary(tmp_path, mocker):
+    _auth()
+    _write_wer_manifest(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), _transcript("goodbye now")])
+    _fake_perf_counter(mocker, [10.0, 11.5, 20.0, 20.5])
+    result = runner.invoke(app, ["eval", "manifest.csv"])
+    assert result.exit_code == 0
+    assert "LATENCY" in result.output  # the per-row column header
+    assert "1.50s" in result.output  # row a's latency, seconds-formatted
+    assert "0.50s" in result.output  # row b's latency
+    assert "latency p50 1.00s · p90 1.40s" in result.output  # the pooled summary
+
+
+def test_failed_row_still_carries_latency(tmp_path, mocker):
+    from aai_cli.core.errors import APIError
+
+    _auth()
+    _write_wer_manifest(tmp_path)
+    _mock_transcribe(mocker, [_transcript("hello there"), APIError("rate limited")])
+    _fake_perf_counter(mocker, [10.0, 11.0, 20.0, 20.25])
+    payload = _payload_of(runner.invoke(app, ["eval", "manifest.csv", "--json"]))
+    failed_row = next(row for row in payload["rows"] if "error" in row)
+    assert failed_row["latency"] == 0.25  # the timer wraps the failing call too
+    # The latency distribution pools the failed row alongside the scored one.
+    assert payload["latency_p50"] == pytest.approx(0.625)
+
+
+@pytest.mark.parametrize(
+    ("values", "q", "expected"),
+    [
+        ([5.0], 0.5, 5.0),  # single value: every quantile is that value
+        ([1.0, 2.0, 3.0], 0.5, 2.0),  # odd count, exact rank -> the median element
+        ([1.0, 2.0, 3.0, 4.0], 0.5, 2.5),  # even count -> interpolated midpoint
+        ([0.0, 10.0], 0.9, 9.0),  # interpolation between the two ranks
+        ([1.0, 2.0, 3.0, 4.0], 0.0, 1.0),  # q=0 -> minimum
+        ([1.0, 2.0, 3.0, 4.0], 1.0, 4.0),  # q=1 -> maximum
+    ],
+)
+def test_percentile_interpolates_between_ranks(values, q, expected):
+    from aai_cli.commands.evaluate._exec import _percentile
+
+    # Pass values out of order to prove _percentile sorts before interpolating.
+    assert _percentile(list(reversed(values)), q) == pytest.approx(expected)

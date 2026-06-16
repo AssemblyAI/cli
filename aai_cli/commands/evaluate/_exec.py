@@ -12,6 +12,8 @@ the command itself registers as ``eval``.
 
 from __future__ import annotations
 
+import math
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import StrEnum
@@ -54,56 +56,97 @@ def _pct(value: object) -> str:
     return f"{jsonshape.as_float(value):.2%}"
 
 
+def _secs(value: object) -> str:
+    """A latency in seconds, formatted for display."""
+    return f"{jsonshape.as_float(value):.2f}s"
+
+
+def _percentile(values: list[float], q: float) -> float:
+    """The q-quantile (q in [0, 1]) of ``values``, linearly interpolated between
+    the two closest ranks (numpy's default method). ``values`` must be non-empty."""
+    ordered = sorted(values)
+    pos = q * (len(ordered) - 1)
+    low = math.floor(pos)
+    high = math.ceil(pos)
+    if low == high:
+        return ordered[low]
+    return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
+
+
 @dataclass(frozen=True)
 class _ItemResult:
-    """One scored row: the emitted dict plus the score kept for pooling."""
+    """One scored row: the emitted dict plus the score and latency kept for pooling."""
 
     row: dict[str, object]
     words: wer.Score | None
+    latency: float
 
 
-def _failed_result(item: eval_data.EvalItem, err: CLIError) -> _ItemResult:
-    """A row whose transcription failed: the error rides along, no scores pooled."""
-    return _ItemResult(row={"item": item.item_id, "error": err.message}, words=None)
+def _failed_result(item: eval_data.EvalItem, err: CLIError, latency: float) -> _ItemResult:
+    """A row whose transcription failed: the error and latency ride along, no scores pooled."""
+    return _ItemResult(
+        row={"item": item.item_id, "error": err.message, "latency": latency},
+        words=None,
+        latency=latency,
+    )
 
 
-def _score_item(item: eval_data.EvalItem, transcript: aai.Transcript) -> _ItemResult:
+def _score_item(
+    item: eval_data.EvalItem, transcript: aai.Transcript, latency: float
+) -> _ItemResult:
     words = wer.score(item.reference, str(transcript.text or ""))
     row: dict[str, object] = {
         "item": item.item_id,
         "words": words.words,
         "errors": words.errors,
         "wer": words.wer,
+        "latency": latency,
     }
-    return _ItemResult(row=row, words=words)
+    return _ItemResult(row=row, words=words, latency=latency)
 
 
 def _pooled_metrics(results: list[_ItemResult]) -> dict[str, object]:
-    """The summary scores pooled over the scored rows (failed rows carry none)."""
+    """The summary metrics: WER pooled over the scored rows (failed rows carry none),
+    and the latency distribution over every row that ran a transcription."""
     metrics: dict[str, object] = {}
     word_scores = [result.words for result in results if result.words is not None]
     if word_scores:
         total = wer.pooled(word_scores)
         metrics.update({"words": total.words, "errors": total.errors, "wer": total.wer})
+    latencies = [result.latency for result in results]
+    if latencies:
+        metrics["latency_p50"] = _percentile(latencies, 0.5)
+        metrics["latency_p90"] = _percentile(latencies, 0.9)
     return metrics
+
+
+@dataclass(frozen=True)
+class _Timed:
+    """One transcription's outcome paired with its wall-clock latency in seconds."""
+
+    outcome: aai.Transcript | CLIError
+    latency: float
 
 
 def _transcribe_one(
     api_key: str, item: eval_data.EvalItem, config: aai.TranscriptionConfig
-) -> aai.Transcript | CLIError:
-    """One item's outcome: its transcript, or the CLIError it failed with.
+) -> _Timed:
+    """One item's timed outcome: its transcript (or the CLIError it failed with) and
+    the wall-clock latency of the request.
 
     A bad item must not discard the other (paid) items, so per-item failures
     are recorded rather than raised — except ``NotAuthenticated`` (one rejected
     key fails every row identically) and non-CLIError bugs, which propagate and
     abort the run.
     """
+    start = time.perf_counter()
     try:
-        return client.transcribe(api_key, item.audio, config=config)
+        outcome: aai.Transcript | CLIError = client.transcribe(api_key, item.audio, config=config)
     except NotAuthenticated:
         raise
     except CLIError as err:
-        return err
+        outcome = err
+    return _Timed(outcome=outcome, latency=time.perf_counter() - start)
 
 
 def _concurrent_transcripts(
@@ -112,7 +155,7 @@ def _concurrent_transcripts(
     *,
     transcription_config: aai.TranscriptionConfig,
     concurrency: int,
-) -> list[aai.Transcript | CLIError]:
+) -> list[_Timed]:
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = [
             pool.submit(_transcribe_one, api_key, item, transcription_config) for item in items
@@ -134,15 +177,15 @@ def _transcripts(
     concurrency: int,
     json_mode: bool,
     quiet: bool,
-) -> list[aai.Transcript | CLIError]:
-    """Each item's transcript — or the CLIError it failed with — in dataset order.
+) -> list[_Timed]:
+    """Each item's timed transcript — or the CLIError it failed with — in dataset order.
 
     Sequential by default, with a per-item spinner; ``--concurrency`` fans the
     API calls out across a thread pool (see ``_transcribe_one`` for which
     failures are per-item outcomes and which abort the run).
     """
     if concurrency == 1:
-        outcomes: list[aai.Transcript | CLIError] = []
+        outcomes: list[_Timed] = []
         for index, item in enumerate(items, start=1):
             with output.status(
                 f"[{index}/{len(items)}] Transcribing {item.item_id}…",
@@ -185,6 +228,11 @@ def _summary(payload: dict[str, object]) -> str:
         parts.append(
             f"WER {_pct(payload.get('wer'))} ({errors} {noun} / {payload.get('words')} words)"
         )
+    if "latency_p50" in payload:
+        parts.append(
+            f"latency p50 {_secs(payload.get('latency_p50'))}"
+            f" · p90 {_secs(payload.get('latency_p90'))}"
+        )
     return output.heading("   ".join(parts))
 
 
@@ -197,12 +245,18 @@ def _pct_cell(row: dict[str, object], key: str) -> str:
     return _pct(row[key]) if key in row else ""
 
 
+def _secs_cell(row: dict[str, object], key: str) -> str:
+    return _secs(row[key]) if key in row else ""
+
+
 def _render(payload: dict[str, object]) -> RenderableType:
     has_wer = "wer" in payload
     has_failed = "failed" in payload
+    has_latency = "latency_p50" in payload
     columns = [
         "ITEM",
         *(["WORDS", "ERRORS", "WER"] if has_wer else []),
+        *(["LATENCY"] if has_latency else []),
         *(["ERROR"] if has_failed else []),
     ]
     table = output.data_table(*columns)
@@ -210,6 +264,8 @@ def _render(payload: dict[str, object]) -> RenderableType:
         cells = [str(row.get("item"))]
         if has_wer:
             cells += [_cell(row, "words"), _cell(row, "errors"), _pct_cell(row, "wer")]
+        if has_latency:
+            cells.append(_secs_cell(row, "latency"))
         if has_failed:
             cells.append(_cell(row, "error"))
         table.add_row(*cells)
@@ -245,10 +301,10 @@ def run_evaluate(opts: EvalOptions, state: AppState, *, json_mode: bool) -> None
         quiet=state.quiet,
     )
     results = [
-        _failed_result(item, outcome)
-        if isinstance(outcome, CLIError)
-        else _score_item(item, outcome)
-        for item, outcome in zip(
+        _failed_result(item, timed.outcome, timed.latency)
+        if isinstance(timed.outcome, CLIError)
+        else _score_item(item, timed.outcome, timed.latency)
+        for item, timed in zip(
             data.items,
             outcomes,
             strict=True,  # pragma: no mutate (defensive invariant; _transcripts returns one outcome per item)
