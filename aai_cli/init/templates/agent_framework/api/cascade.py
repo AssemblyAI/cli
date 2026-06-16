@@ -211,7 +211,11 @@ async def _pump_mic(browser: _Browser, stt: ClientConnection) -> None:
             return
         audio = msg.get("audio") if msg.get("type") == "input.audio" else None
         if isinstance(audio, str):
-            await stt.send(base64.b64decode(audio))
+            try:
+                pcm = base64.b64decode(audio)
+            except ValueError:
+                continue  # ignore a malformed audio frame rather than kill the session
+            await stt.send(pcm)
 
 
 async def _synthesize(browser: _Browser, tts: ClientConnection, text: str) -> None:
@@ -221,8 +225,10 @@ async def _synthesize(browser: _Browser, tts: ClientConnection, text: str) -> No
         raise RuntimeError(f"TTS did not begin (got {begin.get('type')!r}).")
     await tts.send(json.dumps({"type": "Generate", "text": text}))
     await tts.send(json.dumps({"type": "Flush"}))
-    while True:
-        frame = json.loads(await tts.recv())
+    # Iterate the socket (like _pump_stt) so a close before the final Audio frame ends
+    # the loop cleanly instead of raising ConnectionClosed out of the reply.
+    async for raw in tts:
+        frame = json.loads(raw)
         kind = frame.get("type")
         if kind == "Audio":
             await browser.send({"type": "reply.audio", "data": frame.get("audio", "")})
@@ -236,13 +242,22 @@ async def _synthesize(browser: _Browser, tts: ClientConnection, text: str) -> No
 
 
 async def _speak(browser: _Browser, deps: Deps, text: str) -> None:
-    """Emit agent text, synthesize it, and mark the reply done."""
+    """Emit agent text, synthesize it, and mark the reply done. A synthesis failure
+    becomes one clean session.error (mirroring _generate_reply) — without this the
+    greeting runs as a bare task whose exception would only ever be swallowed by
+    cancel_reply/drain, leaving the user with no audio and no error."""
     await browser.send({"type": "transcript.agent", "text": text})
-    tts = await deps.connect_tts()
     try:
-        await _synthesize(browser, tts, text)
-    finally:
-        await _safe_close(tts)
+        tts = await deps.connect_tts()
+        try:
+            await _synthesize(browser, tts, text)
+        finally:
+            await _safe_close(tts)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        await browser.send({"type": "session.error", "message": str(exc)})
+        return
     await browser.send({"type": "reply.done", "status": "completed"})
 
 
@@ -260,8 +275,8 @@ async def _generate_reply(browser: _Browser, deps: Deps, session: Session) -> No
     """Stream the LLM reply sentence-by-sentence into TTS (low perceived latency), then
     record it in the conversation history. Errors surface as session.error."""
     messages = build_messages(deps.settings.SYSTEM_PROMPT, session.history)
+    spoken: list[str] = []
     try:
-        spoken: list[str] = []
         buffer = ""
         async for delta in deps.llm_stream(messages):
             buffer += delta
@@ -281,6 +296,13 @@ async def _generate_reply(browser: _Browser, deps: Deps, session: Session) -> No
         _trim_history(session.history, deps.settings.MAX_HISTORY)
         await browser.send({"type": "reply.done", "status": "completed"})
     except asyncio.CancelledError:
+        # Barged-in mid-reply: record what was actually spoken so history keeps its
+        # user/assistant alternation (otherwise the next user turn would follow this
+        # one with no assistant turn between them).
+        partial = " ".join(spoken).strip()
+        if partial:
+            session.history.append({"role": "assistant", "content": partial})
+            _trim_history(session.history, deps.settings.MAX_HISTORY)
         raise
     except Exception as exc:  # any leg failure becomes one clean session.error event
         await browser.send({"type": "session.error", "message": str(exc)})
@@ -306,7 +328,10 @@ async def _pump_stt(browser: _Browser, stt: ClientConnection, deps: Deps, sessio
             continue
         if is_final_user_turn(msg):
             await browser.send({"type": "transcript.user", "text": text})
-            await session.cancel_reply()
+            # Stop any reply still playing AND tell the browser to flush its queued
+            # audio (cancel_reply alone is server-side only — the old reply keeps
+            # playing in the browser).
+            await maybe_barge_in(browser, session)
             session.history.append({"role": "user", "content": text})
             _trim_history(session.history, deps.settings.MAX_HISTORY)
             session.reply_task = asyncio.create_task(_generate_reply(browser, deps, session))
@@ -342,6 +367,8 @@ async def run_session(browser: _Browser, deps: Deps) -> None:
         return
 
     session = Session()
+    # Seed history with the greeting so the model has a record of its opening line.
+    session.history.append({"role": "assistant", "content": deps.settings.GREETING})
     session.reply_task = asyncio.create_task(_speak(browser, deps, deps.settings.GREETING))
     try:
         # Race the two pumps: whichever returns first (browser hangs up → mic; STT

@@ -87,7 +87,6 @@ function onEvent(event) {
     case "input.speech.started":
       return bargeIn();
     case "reply.done":
-      if (event.status === "interrupted") bargeIn();
       return;
     case "session.error":
       return fail(event.message || "session error");

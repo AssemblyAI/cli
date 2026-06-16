@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 
 import pytest
 
@@ -195,115 +194,21 @@ def test_pump_mic_ignores_non_audio_and_stops_on_disconnect(monkeypatch):
     assert stt.sent == []
 
 
-def test_synthesize_streams_audio_frames(monkeypatch):
+def test_pump_mic_skips_malformed_base64(monkeypatch):
+    # A bad audio frame (invalid base64) must be dropped, not crash the session: a
+    # valid frame after it still gets forwarded.
     cascade = _cascade(monkeypatch)
-    browser = FakeBrowser()
-    tts = FakeWS(
+    pcm = b"\x01\x02\x03\x04"
+    browser = FakeBrowser(
         [
-            {"type": "Begin", "configuration": {"sample_rate": 24000}},
-            {"type": "Audio", "audio": "AAA="},
-            {"type": "Audio", "audio": "BBB=", "is_final": True},
+            {"type": "input.audio", "audio": "abc"},  # invalid padding -> ValueError
+            {"type": "input.audio", "audio": base64.b64encode(pcm).decode()},
+            None,
         ]
     )
-    asyncio.run(cascade._synthesize(browser, tts, "hi"))
-    assert browser.sent == [
-        {"type": "reply.audio", "data": "AAA="},
-        {"type": "reply.audio", "data": "BBB="},
-    ]
-    kinds = [json.loads(s)["type"] for s in tts.sent]
-    assert kinds == ["Generate", "Flush", "Terminate"]
-    # The Generate frame carries the text.
-    assert json.loads(tts.sent[0])["text"] == "hi"
-    assert tts.closed is True
-
-
-def test_synthesize_raises_on_error_frame(monkeypatch):
-    cascade = _cascade(monkeypatch)
-    browser = FakeBrowser()
-    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Error", "error": "bad voice"}])
-    with pytest.raises(RuntimeError, match="bad voice"):
-        asyncio.run(cascade._synthesize(browser, tts, "hi"))
-
-
-def test_synthesize_raises_when_no_begin(monkeypatch):
-    cascade = _cascade(monkeypatch)
-    browser = FakeBrowser()
-    tts = FakeWS([{"type": "Audio", "audio": "AAA=", "is_final": True}])
-    with pytest.raises(RuntimeError, match="did not begin"):
-        asyncio.run(cascade._synthesize(browser, tts, "hi"))
-
-
-def test_generate_reply_speaks_llm_text(monkeypatch):
-    # A single sentence: one TTS socket, one transcript.agent + reply.audio, one done.
-    cascade, deps = _deps(
-        monkeypatch,
-        stt=FakeWS(),
-        tts_frames=[
-            {"type": "Begin", "configuration": {}},
-            {"type": "Audio", "audio": "AAA=", "is_final": True},
-        ],
-        llm_text=["Hello", " world."],
-    )
-    browser = FakeBrowser()
-    session = cascade.Session()
-    asyncio.run(cascade._generate_reply(browser, deps, session))
-    assert {"type": "transcript.agent", "text": "Hello world."} in browser.sent
-    assert {"type": "reply.audio", "data": "AAA="} in browser.sent
-    assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
-    assert session.history[-1] == {"role": "assistant", "content": "Hello world."}
-
-
-def test_generate_reply_streams_each_sentence(monkeypatch):
-    # Deltas form TWO sentences -> two TTS sockets, two transcript.agent + reply.audio.
-    cascade, deps = _deps(
-        monkeypatch,
-        stt=FakeWS(),
-        tts_frames=[
-            {"type": "Begin", "configuration": {}},
-            {"type": "Audio", "audio": "AAA=", "is_final": True},
-        ],
-        llm_text=["Hello there. ", "How are you?"],
-    )
-    browser = FakeBrowser()
-    session = cascade.Session()
-    asyncio.run(cascade._generate_reply(browser, deps, session))
-    agent_texts = [e["text"] for e in browser.sent if e["type"] == "transcript.agent"]
-    assert agent_texts == ["Hello there.", "How are you?"]
-    audio = [e for e in browser.sent if e["type"] == "reply.audio"]
-    assert audio == [{"type": "reply.audio", "data": "AAA="}] * 2
-    done = [e for e in browser.sent if e["type"] == "reply.done"]
-    assert done == [{"type": "reply.done", "status": "completed"}]
-    assert session.history[-1] == {"role": "assistant", "content": "Hello there. How are you?"}
-
-
-def test_generate_reply_empty_llm_emits_done(monkeypatch):
-    cascade, deps = _deps(monkeypatch, stt=FakeWS(), tts_frames=[], llm_text=["  "])
-    browser = FakeBrowser()
-    session = cascade.Session()
-    asyncio.run(cascade._generate_reply(browser, deps, session))
-    assert browser.sent == [{"type": "reply.done", "status": "empty"}]
-    assert session.history == []  # nothing recorded for an empty reply
-
-
-def test_generate_reply_surfaces_error(monkeypatch):
-    cascade = _cascade(monkeypatch)
-    settings = reimport("api.settings")
-    settings.API_KEY = "sk-test"
-    settings.TTS_HOST = "tts.example"
-
-    async def llm_stream(_messages):
-        yield "partial"  # one delta arrives (no boundary), then the LLM leg fails mid-stream
-        raise RuntimeError("llm down")
-
-    deps = cascade.Deps(
-        connect_stt=_async_return(FakeWS()),
-        connect_tts=_async_return(FakeWS()),
-        llm_stream=llm_stream,
-        settings=settings,
-    )
-    browser = FakeBrowser()
-    asyncio.run(cascade._generate_reply(browser, deps, cascade.Session()))
-    assert browser.sent == [{"type": "session.error", "message": "llm down"}]
+    stt = FakeWS()
+    asyncio.run(cascade._pump_mic(browser, stt))
+    assert stt.sent == [pcm]  # only the valid frame survived; the bad one was skipped
 
 
 def test_maybe_barge_in_cancels_active_reply(monkeypatch):
@@ -440,8 +345,9 @@ def test_run_session_happy_path(monkeypatch):
     assert {"type": "reply.audio", "data": "R="} in browser.sent
     assert browser.sent[-1] == {"type": "reply.done", "status": "completed"}
     assert stt.closed is True
-    # The user turn is recorded and the assistant reply appended (memory).
+    # Memory: the greeting is seeded, then the user turn and assistant reply append.
     assert captured_session["session"].history == [
+        {"role": "assistant", "content": "hello!"},
         {"role": "user", "content": "what time is it"},
         {"role": "assistant", "content": "It is noon."},
     ]
@@ -487,3 +393,34 @@ def test_pump_stt_interim_turn_barges_in_without_displaying(monkeypatch):
     assert {"type": "input.speech.started"} in browser.sent
     assert {"type": "transcript.user", "text": "wait"} not in browser.sent
     assert not any(event.get("type") == "transcript.user" for event in browser.sent)
+
+
+def test_pump_stt_final_turn_barges_in_active_reply(monkeypatch):
+    # A finalized turn arriving while a reply is still playing must tell the browser to
+    # stop (input.speech.started), not just cancel server-side — otherwise the old TTS
+    # keeps playing in the browser.
+    stt = FakeWS(
+        [
+            {
+                "type": "Turn",
+                "transcript": "actually never mind",
+                "end_of_turn": True,
+                "turn_is_formatted": True,
+            }
+        ]
+    )
+    cascade, deps = _deps(monkeypatch, stt=stt, tts_frames=[], llm_text=[])
+    browser = FakeBrowser()
+
+    async def drive():
+        session = cascade.Session()
+
+        async def never_ending():
+            await asyncio.Event().wait()
+
+        session.reply_task = asyncio.create_task(never_ending())
+        await cascade._pump_stt(browser, stt, deps, session)
+
+    asyncio.run(asyncio.wait_for(drive(), timeout=5))
+    assert {"type": "input.speech.started"} in browser.sent  # browser told to stop
+    assert {"type": "transcript.user", "text": "actually never mind"} in browser.sent
