@@ -146,6 +146,15 @@ printf '%s\n' \
     --llm-reduce 'Rank these videos worst-to-best and summarize the failure modes'
 ```
 
+**Summarize your recent transcripts and surface the themes** — pipe a list of past transcripts into `transcripts get`, summarize each (`--llm`, a map), then reduce them all into one answer (`--llm-reduce`):
+
+```sh
+assembly transcripts list --json --limit 5 \
+| assembly transcripts get \
+    --llm "Summarize this transcript" \
+    --llm-reduce "What are the top themes in these transcripts?"
+```
+
 **Talk to a voice agent in your terminal** — full-duplex, around 20 voices:
 
 ```sh
