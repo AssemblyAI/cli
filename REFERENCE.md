@@ -74,7 +74,7 @@ each carrying a `"type"` field to dispatch on:
 
 | Command | Event types |
 | ------- | ----------- |
-| `assembly stream --json` | `begin`, `turn`, `termination` |
+| `assembly stream --json` | `begin`, `turn`, `termination` (with `--from-stdin`, a `source` event precedes each file's events) |
 | `assembly agent --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
 | `assembly agent-cascade --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
 | `assembly dictate --json` | `utterance` |

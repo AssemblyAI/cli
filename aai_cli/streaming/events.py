@@ -66,4 +66,17 @@ class Termination(_StreamEvent):
     source: str | None = None
 
 
-Event = Begin | Turn | Termination
+class Source(_StreamEvent):
+    """A ``--from-stdin`` batch advanced to its next audio source.
+
+    Emitted once before each source's own ``begin``/``turn``/``termination`` events,
+    so a consumer can segment the NDJSON stream by source. ``index`` is 1-based.
+    """
+
+    type: Literal["source"] = "source"
+    source: str
+    index: int
+    total: int
+
+
+Event = Begin | Turn | Termination | Source

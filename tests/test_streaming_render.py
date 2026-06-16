@@ -112,6 +112,38 @@ def test_text_mode_labels_sources_and_statuses_to_stderr():
     assert "Stopped." in err.getvalue()
 
 
+def test_source_header_human_mode_prints_position_and_name():
+    r, buf = _human()
+    r.source("a.wav", index=2, total=3)
+    r.close()
+    out = buf.getvalue()
+    assert "[2/3]" in out
+    assert "a.wav" in out
+
+
+def test_source_header_json_mode_emits_source_event():
+    out = io.StringIO()
+    r = StreamRenderer(json_mode=True, out=out)
+    r.source("a.wav", index=1, total=2)
+    assert json.loads(out.getvalue()) == {
+        "type": "source",
+        "source": "a.wav",
+        "index": 1,
+        "total": 2,
+    }
+
+
+def test_source_header_text_mode_goes_to_stderr_not_stdout():
+    # Text mode keeps stdout pure transcript lines, so the batch header is a stderr
+    # status — a downstream `| assembly llm` pipeline never sees it.
+    out = io.StringIO()
+    err = io.StringIO()
+    r = StreamRenderer(json_mode=False, text_mode=True, out=out, err=err)
+    r.source("a.wav", index=1, total=2)
+    assert out.getvalue() == ""
+    assert "[1/2] a.wav" in err.getvalue()
+
+
 def test_human_begin_is_silent_until_mic_opens():
     # The session opening (Begin) no longer prints "Listening…"; that waits for
     # the mic to actually open and start recording (renderer.listening()).

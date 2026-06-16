@@ -10,6 +10,7 @@ constructing a ``StreamOptions`` directly, with no CliRunner argv round-trip.
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,8 +19,8 @@ from assemblyai.streaming.v3 import Encoding, NoiseSuppressionModel, SpeechModel
 
 from aai_cli import code_gen
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, youtube
-from aai_cli.core.errors import UsageError
+from aai_cli.core import choices, client, config_builder, stdio, youtube
+from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.macos import MacSystemAudioSource
@@ -28,6 +29,7 @@ from aai_cli.streaming.session import (
     SourceOptions,
     StreamSession,
     resolve_output_modes,
+    stream_batch_sources,
     validate_sources,
 )
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
@@ -46,6 +48,7 @@ class StreamOptions:
 
     source: str | None
     sample: bool
+    from_stdin: bool
     sample_rate: int | None
     device: int | None
     system_audio: bool
@@ -214,9 +217,90 @@ def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
         session.run(mic, mic.sample_rate)
 
 
+def _collect_batch_sources(opts: StreamOptions, *, text_mode: bool) -> list[str]:
+    """The newline-delimited source list for ``--from-stdin``, with the flag combos it
+    can't honor rejected first.
+
+    ``--from-stdin`` reinterprets stdin as a list of file paths/URLs (one per line),
+    each streamed as its own realtime session — distinct from ``-`` (raw PCM bytes). It
+    therefore can't also take a positional source, ``--sample``, the mic/system-audio
+    inputs, the mic-only capture flags, or ``--show-code`` (which renders one source).
+    """
+    mutually_exclusive(
+        ("--from-stdin", True),
+        ("a source argument", opts.source is not None),
+        ("--sample", opts.sample),
+        suggestion="--from-stdin reads the source list from stdin; don't also pass one.",
+    )
+    mutually_exclusive(
+        ("--from-stdin", True),
+        ("--system-audio", opts.system_audio),
+        ("--system-audio-only", opts.system_audio_only),
+        suggestion="--from-stdin streams files/URLs, not live capture.",
+    )
+    if opts.device is not None or opts.sample_rate is not None:
+        raise UsageError("--device and --sample-rate apply only to microphone input.")
+    mutually_exclusive(
+        ("--from-stdin", True),
+        ("--show-code", opts.show_code),
+        suggestion="--show-code renders one source; pass a single file or URL.",
+    )
+    mutually_exclusive(
+        ("--llm", bool(opts.llm_prompt)),
+        ("-o text", text_mode),
+        suggestion="--llm renders a live panel (or NDJSON when piped).",
+    )
+    sources = list(dict.fromkeys(stdio.iter_piped_stdin_lines()))  # dedupe, keep order
+    if not sources:
+        raise UsageError(
+            "No sources received on stdin.",
+            suggestion="Pipe one path or URL per line, e.g. "
+            "ls *.wav | assembly stream --from-stdin.",
+        )
+    return sources
+
+
+def _run_batch(opts: StreamOptions, state: AppState, *, json_mode: bool, text_mode: bool) -> None:
+    """Stream a ``--from-stdin`` list of sources, one realtime session each, in turn."""
+    sources = _collect_batch_sources(opts, text_mode=text_mode)
+    api_key = state.resolve_api_key()
+    base_flags = opts.base_flags()
+    llm_prompts = list(opts.llm_prompt or [])
+    renderer = StreamRenderer(json_mode=json_mode, text_mode=text_mode)
+
+    def make_session() -> StreamSession:
+        return StreamSession(
+            api_key=api_key,
+            base_flags=base_flags,
+            overrides=opts.config_kv,
+            config_file=opts.config_file,
+            renderer=renderer,
+            follow=FollowRenderer(json_mode=json_mode) if llm_prompts else None,
+            llm_prompts=llm_prompts,
+            model=opts.model,
+            max_tokens=opts.max_tokens,
+            llm_interval=opts.llm_interval,
+        )
+
+    def open_source(source: str) -> tuple[Iterable[bytes], int]:
+        file_audio = FileSource(client.resolve_audio_source(source, sample=False))
+        return file_audio, file_audio.sample_rate
+
+    stream_batch_sources(
+        sources,
+        make_session=make_session,
+        open_source=open_source,
+        renderer=renderer,
+        json_mode=json_mode,
+    )
+
+
 def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly stream` invocation from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
+    if opts.from_stdin:
+        _run_batch(opts, state, json_mode=json_mode, text_mode=text_mode)
+        return
     sources = opts.source_options()
     base_flags = opts.base_flags()
 
