@@ -12,6 +12,7 @@ TEMPLATE_DIRS = sorted(
 # Map an import name to its PyPI distribution where they differ.
 _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
 _STDLIB = {
+    "abc",
     "os",
     "tempfile",
     "uuid",

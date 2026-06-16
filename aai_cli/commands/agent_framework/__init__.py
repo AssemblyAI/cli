@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import typer
+
+from aai_cli import command_registry, help_panels, options
+from aai_cli.agent_framework import voices
+from aai_cli.agent_framework.config import (
+    DEFAULT_GREETING,
+    DEFAULT_MODEL,
+    DEFAULT_SYSTEM_PROMPT,
+)
+from aai_cli.agent_framework.voices import DEFAULT_VOICE
+from aai_cli.app.context import AppState, run_command, run_with_options
+from aai_cli.commands.agent_framework import _exec as agent_framework_exec
+from aai_cli.core import choices, llm
+from aai_cli.ui import output
+from aai_cli.ui.help_text import examples_epilog
+
+app = typer.Typer()
+
+SPEC = command_registry.CommandModuleSpec(
+    panel=help_panels.TRANSCRIPTION,
+    order=45,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
+    commands=("agent-framework",),
+)
+
+
+def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
+    """--list-voices body, routed through run_command so --json yields a machine-readable
+    array instead of the human list; needs no auth."""
+    payload = [{"name": name} for name in voices.VOICE_NAMES]
+    output.emit(payload, lambda _voices: voices.format_voice_list(), json_mode=json_mode)
+
+
+@app.command(
+    name="agent-framework",
+    rich_help_panel=help_panels.TRANSCRIPTION,
+    epilog=examples_epilog(
+        [
+            ("Start a live cascade conversation", "assembly --sandbox agent-framework"),
+            (
+                "Pick a voice and opening line",
+                'assembly --sandbox agent-framework --voice michael --greeting "Hi there"',
+            ),
+            (
+                "Give the agent a persona",
+                'assembly --sandbox agent-framework --system-prompt "You are a terse pirate."',
+            ),
+            ("See available voices", "assembly --sandbox agent-framework --list-voices"),
+        ]
+    ),
+)
+def agent_framework(
+    ctx: typer.Context,
+    source: str | None = typer.Argument(
+        None, help="Audio file path or URL to speak to the agent. Omit to use the microphone."
+    ),
+    sample: bool = typer.Option(
+        False, "--sample", help="Speak the hosted wildfires.mp3 sample to the agent"
+    ),
+    voice: str = typer.Option(
+        DEFAULT_VOICE,
+        "--voice",
+        help="TTS voice. See --list-voices.",
+        autocompletion=voices.complete_voice,
+    ),
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model",
+        help="LLM Gateway model that powers the agent's replies",
+        autocompletion=llm.complete_model,
+    ),
+    system_prompt: str = typer.Option(
+        DEFAULT_SYSTEM_PROMPT, "--system-prompt", help="System prompt (the agent's persona)"
+    ),
+    system_prompt_file: Path | None = typer.Option(
+        None,
+        "--system-prompt-file",
+        help="Read the system prompt from a file (overrides --system-prompt)",
+        exists=True,
+        dir_okay=False,
+    ),
+    greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting"),
+    device: int | None = typer.Option(None, "--device", help="Microphone device index"),
+    list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit"),
+    json_out: bool = options.json_option("Emit newline-delimited JSON events"),
+    output_field: choices.TextOrJson | None = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Output mode: text (you:/agent: lines as plain stdout, pipe-friendly) or json",
+    ),
+) -> None:
+    """\\[sandbox] Hold a live voice conversation through a self-wired cascade
+
+    Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
+    wires the three primitives together itself — Streaming STT, the LLM Gateway,
+    and streaming TTS — exactly like the 'agent-framework' init template does
+    server-side. Because it uses streaming TTS it only runs in the sandbox: run
+    it as 'assembly --sandbox agent-framework' (--sandbox goes before the
+    subcommand).
+
+    Use headphones: the mic stays open while the agent speaks, so on speakers it
+    would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
+    recorded clip instead of the microphone; the session then ends after the
+    agent's reply.
+
+    This only runs a conversation in the terminal — it writes no code. To build
+    an agent-framework app, run 'assembly init agent-framework' instead.
+    """
+
+    if list_voices:
+        run_command(ctx, _emit_voice_list, json=json_out)
+        return
+
+    opts = agent_framework_exec.AgentFrameworkOptions(
+        source=source,
+        sample=sample,
+        voice=voice,
+        model=model,
+        system_prompt=system_prompt,
+        system_prompt_file=system_prompt_file,
+        greeting=greeting,
+        device=device,
+        output_field=output_field,
+    )
+    run_with_options(ctx, agent_framework_exec.run_agent_framework, opts, json=json_out)

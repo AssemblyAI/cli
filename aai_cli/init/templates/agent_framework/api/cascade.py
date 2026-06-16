@@ -150,14 +150,14 @@ class Session:
         if task is not None and not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
+                await asyncio.gather(task)
 
     async def drain(self) -> None:
         """Await the in-flight reply to natural completion (used when STT closes)."""
         task = self.reply_task
         if task is not None:
             with contextlib.suppress(Exception):
-                await task
+                await asyncio.gather(task)
 
 
 async def _connect_stt(settings: _Settings) -> ClientConnection:
@@ -347,7 +347,7 @@ class _SessionClosed(Exception):
 
 async def _until_closed(pump: Awaitable[None]) -> None:
     """Run a pump to its natural end, then raise to close the session TaskGroup."""
-    await pump
+    await asyncio.gather(pump)
     raise _SessionClosed
 
 

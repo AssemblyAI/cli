@@ -32,6 +32,7 @@ type = forbidden
 ; deliberate, so this short list does not drift the way the old core list did.
 source_modules =
     aai_cli.agent
+    aai_cli.agent_framework
     aai_cli.auth
     aai_cli.code_gen
     aai_cli.init

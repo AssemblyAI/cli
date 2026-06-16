@@ -181,7 +181,7 @@ def test_generate_reply_propagates_cancellation(monkeypatch: pytest.MonkeyPatch)
         await asyncio.sleep(0)  # let it start and block on the LLM
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await asyncio.gather(task)
 
     asyncio.run(drive())
     # Cancellation must NOT be turned into a session.error.

@@ -76,6 +76,7 @@ each carrying a `"type"` field to dispatch on:
 | ------- | ----------- |
 | `assembly stream --json` | `begin`, `turn`, `termination` |
 | `assembly agent --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
+| `assembly agent-framework --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
 | `assembly dictate --json` | `utterance` |
 | `assembly llm --follow --json` | `answer` |
 | `assembly transcribe <batch> --json` | `result` (one per source) |
