@@ -20,6 +20,11 @@ def test_score_is_an_immutable_value():
         _assign(der.Score(missed=0.0, false_alarm=0.0, confusion=0.0, speech=1.0), "missed", 1.0)
 
 
+def test_segment_is_an_immutable_value():
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _assign(seg("A", 0, 10), "speaker", "B")
+
+
 def test_errors_and_der_combine_the_components():
     score = der.Score(missed=1.0, false_alarm=2.0, confusion=3.0, speech=10.0)
     assert score.errors == 6.0
@@ -78,6 +83,17 @@ def test_one_reference_speaker_split_across_two_hypotheses_is_confusion():
     score = der.score(ref, hyp)
     assert score == der.Score(missed=0.0, false_alarm=0.0, confusion=5.0, speech=10.0)
     assert score.der == 0.5
+
+
+def test_disjoint_extra_speakers_are_missed_and_false_alarm():
+    # A<->X overlap perfectly; reference B (10s) has no hypothesis (missed) and
+    # hypothesis Y (10s) has no reference (false alarm). The leftover B/Y pair
+    # never co-occurs, so the mapping cannot credit it as correct.
+    ref = [seg("A", 0, 10), seg("B", 10, 20)]
+    hyp = [seg("X", 0, 10), seg("Y", 20, 30)]
+    score = der.score(ref, hyp)
+    assert score == der.Score(missed=10.0, false_alarm=10.0, confusion=0.0, speech=20.0)
+    assert score.der == 1.0
 
 
 def test_optimal_mapping_beats_a_greedy_one():
