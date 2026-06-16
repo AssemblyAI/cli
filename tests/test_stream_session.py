@@ -6,6 +6,221 @@ shared StreamSession plumbing (the "Listening…" latch, renderer teardown) and 
 """
 
 import types
+from datetime import datetime
+
+
+def _turn(text, *, speaker_label=None):
+    return types.SimpleNamespace(transcript=text, end_of_turn=True, speaker_label=speaker_label)
+
+
+def _save_plan(
+    tmp_path, *, auto_name=False, save_audio=True, write_note=False, name: str | None = "Meeting"
+):
+    from aai_cli.streaming.savedir import SaveDirPlan
+
+    return SaveDirPlan(
+        save_dir=tmp_path / "rec",
+        now=datetime(2026, 6, 16, 14, 30, 5),
+        name=name,
+        auto_name=auto_name,
+        save_audio=save_audio,
+        write_note=write_note,
+    )
+
+
+def test_save_dir_finalize_passes_recorded_metadata(monkeypatch, tmp_path):
+    # A --save-dir run records each finalized turn's text + diarized speaker and the
+    # wall-clock duration, then hands them to write_outputs once streaming ends. Pins
+    # the speaker dedupe, the turn count, and the injected-clock duration.
+    import io
+
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: captured.update(kw) or plan.paths
+    )
+    monkeypatch.setattr(
+        session_mod.client,
+        "stream_audio",
+        lambda api_key, source, *, on_turn, **k: [
+            b"".join(source),
+            on_turn(_turn("hello", speaker_label="A")),
+            on_turn(_turn("again", speaker_label="A")),  # same speaker -> deduped
+            on_turn(_turn("bye", speaker_label="B")),
+        ],
+    )
+    ticks = iter([100.0, 107.0])
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_plan=_save_plan(tmp_path),
+        clock=lambda: next(ticks),
+    )
+    session.run([b"\x00\x00"], 16000)
+
+    assert captured["speakers"] == ["A", "B"]
+    assert captured["turns"] == 3
+    assert captured["duration_seconds"] == 7  # 107.0 - 100.0
+    assert captured["title"] is None  # no --auto-name
+    assert captured["note"] is None  # no --llm note
+
+
+def test_save_dir_finalize_derives_title_and_note(monkeypatch, tmp_path):
+    # --auto-name derives the title from the transcript via the LLM, and --llm's final
+    # answer is handed to write_outputs as the note.
+    import io
+
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+    from aai_cli.ui.follow import FollowRenderer
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: captured.update(kw) or plan.paths
+    )
+    monkeypatch.setattr(savedir_mod, "derive_title", lambda *a, **k: "Derived Title")
+    monkeypatch.setattr(session_mod.llm, "run_chain", lambda *a, **k: "the summary")
+    monkeypatch.setattr(
+        session_mod.client,
+        "stream_audio",
+        lambda api_key, source, *, on_turn, **k: [b"".join(source), on_turn(_turn("hi"))],
+    )
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=FollowRenderer(json_mode=True),
+        llm_prompts=["summarize"],
+        model="m",
+        max_tokens=1,
+        save_plan=_save_plan(tmp_path, auto_name=True, write_note=True, name=None),
+        llm_interval=0.0,
+    )
+    session.run([b"\x00\x00"], 16000)
+
+    assert captured["title"] == "Derived Title"
+    assert captured["note"] == "the summary"
+
+
+def test_save_dir_skips_title_when_transcript_is_empty(monkeypatch, tmp_path):
+    # --auto-name with zero finalized turns has nothing to title, so derive_title is
+    # skipped and the file keeps its timestamp stem (pins the `auto_name and text` guard).
+    import io
+
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: captured.update(kw) or plan.paths
+    )
+    monkeypatch.setattr(savedir_mod, "derive_title", lambda *a, **k: "Should Not Be Used")
+    monkeypatch.setattr(
+        session_mod.client,
+        "stream_audio",
+        lambda api_key, source, *, on_turn, **k: b"".join(source),  # no turns fired
+    )
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_plan=_save_plan(tmp_path, auto_name=True, name=None),
+    )
+    session.run([b"\x00\x00"], 16000)
+
+    assert captured["title"] is None  # no transcript -> no LLM title call
+    assert captured["turns"] == 0
+
+
+def test_finalize_uses_zero_duration_when_capture_never_started(monkeypatch, tmp_path):
+    # If the capture window never opened (stream_one not reached), the sidecar duration is
+    # 0, not a bogus value (pins the `0 if _capture_start is None` literal).
+    import io
+
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: captured.update(kw) or plan.paths
+    )
+    plan = _save_plan(tmp_path)
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_plan=plan,
+    )
+    session._finalize_save_dir(plan)  # no run() -> _capture_start stayed None
+
+    assert captured["duration_seconds"] == 0
+
+
+def test_save_dir_auto_name_failure_keeps_recording(monkeypatch, tmp_path):
+    # A failed --auto-name title call must not lose the (already-saved) recording: the
+    # error is warned and write_outputs still runs, with no title.
+    import io
+
+    from aai_cli.core.errors import APIError
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    def boom(*_a, **_k):
+        raise APIError("gateway down")
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(savedir_mod, "derive_title", boom)
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: captured.update(kw) or plan.paths
+    )
+    monkeypatch.setattr(
+        session_mod.client,
+        "stream_audio",
+        lambda api_key, source, *, on_turn, **k: [b"".join(source), on_turn(_turn("hi"))],
+    )
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_plan=_save_plan(tmp_path, auto_name=True, name=None),
+    )
+    session.run([b"\x00\x00"], 16000)
+
+    assert captured["title"] is None  # finalize still ran, just without a derived title
 
 
 def test_stream_session_listening_notice_latches(monkeypatch):

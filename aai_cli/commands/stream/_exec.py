@@ -23,14 +23,14 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, stdio, youtube
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
-from aai_cli.streaming import naming, record, transcript, turn_presets
+from aai_cli.streaming import naming, record, savedir, transcript, turn_presets
+from aai_cli.streaming.batch import stream_batch_sources
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import (
     SourceOptions,
     StreamSession,
     resolve_output_modes,
-    stream_batch_sources,
     validate_sources,
 )
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
@@ -90,6 +90,8 @@ class StreamOptions:
     save_transcript: Path | None
     save_dir: Path | None
     name: str | None
+    auto_name: bool
+    no_save_audio: bool
 
     def source_options(self) -> SourceOptions:
         """The audio-input subset, in the shape the validation/dispatch helpers read."""
@@ -200,12 +202,13 @@ def _reject_save_with_show_code(opts: StreamOptions) -> None:
 
 def _resolve_save_targets(
     opts: StreamOptions, sources: SourceOptions
-) -> tuple[Path | None, Path | None]:
-    """Resolve the save flags into the (audio, transcript) paths the session writes.
+) -> tuple[Path | None, Path | None, savedir.SaveDirPlan | None]:
+    """Resolve the save flags into the (audio, transcript, save-dir plan) the session uses.
 
-    ``--save-dir`` owns filename assembly — it auto-names both the transcript and a
-    matching WAV under ``DIR/YYYY-MM-DD/`` — so it can't be combined with the explicit
-    ``--save-audio``/``--save-transcript`` paths, and ``--name`` only feeds that assembly.
+    ``--save-dir`` owns filename assembly — it auto-names the transcript, a matching WAV,
+    a ``.aai.json`` sidecar, and (with ``--llm``) a ``.md`` note under ``DIR/YYYY-MM-DD/``
+    — so it can't be combined with the explicit ``--save-audio``/``--save-transcript``
+    paths, and ``--name``/``--auto-name``/``--no-save-audio`` only feed that assembly.
     Audio can't tee to a single WAV under ``--system-audio`` (two streams), which rejects
     both the explicit ``--save-audio`` and ``--save-dir``'s audio leg.
     """
@@ -216,6 +219,12 @@ def _resolve_save_targets(
             ("--save-transcript", opts.save_transcript is not None),
             suggestion="--save-dir names the files for you; drop the explicit path.",
         )
+        mutually_exclusive(
+            ("--name", opts.name is not None),
+            ("--auto-name", opts.auto_name),
+            suggestion="Both set the title — pass --name for an explicit one or "
+            "--auto-name to derive it from the transcript.",
+        )
         if sources.from_system_audio:
             raise UsageError(
                 "--save-dir cannot be combined with --system-audio; the mic and system "
@@ -225,14 +234,31 @@ def _resolve_save_targets(
         # Local wall-clock time (what a meeting filename wants); the explicit utc-then-
         # astimezone keeps the now() call timezone-aware for the linter.
         now = datetime.now(UTC).astimezone()
-        paths = naming.resolve(opts.save_dir, opts.name, now=now)
-        naming.ensure_dir(paths.transcript.parent)
-        return paths.audio, paths.transcript
+        plan = savedir.SaveDirPlan(
+            save_dir=opts.save_dir,
+            now=now,
+            name=opts.name,
+            auto_name=opts.auto_name,
+            save_audio=not opts.no_save_audio,
+            write_note=bool(opts.llm_prompt),
+        )
+        naming.ensure_dir(plan.paths.directory)
+        return (plan.paths.audio if plan.save_audio else None), plan.paths.transcript, plan
     if opts.name is not None:
         raise UsageError(
             "--name applies only with --save-dir.",
             suggestion="Pass --save-dir DIR to auto-name the files, "
             "or --save-transcript PATH for an explicit path.",
+        )
+    if opts.auto_name:
+        raise UsageError(
+            "--auto-name applies only with --save-dir.",
+            suggestion="Pass --save-dir DIR so there's an auto-named file to title.",
+        )
+    if opts.no_save_audio:
+        raise UsageError(
+            "--no-save-audio applies only with --save-dir.",
+            suggestion="Omit --save-audio to skip the WAV, or pass --save-dir DIR.",
         )
     if opts.save_audio is not None:
         if sources.from_system_audio:
@@ -244,7 +270,7 @@ def _resolve_save_targets(
         record.validate_target(opts.save_audio)
     if opts.save_transcript is not None:
         transcript.validate_target(opts.save_transcript)
-    return opts.save_audio, opts.save_transcript
+    return opts.save_audio, opts.save_transcript, None
 
 
 def _dispatch(session: StreamSession, opts: SourceOptions) -> None:
@@ -320,6 +346,8 @@ def _collect_batch_sources(opts: StreamOptions, *, text_mode: bool) -> list[str]
         ("--save-transcript", opts.save_transcript is not None),
         ("--save-dir", opts.save_dir is not None),
         ("--name", opts.name is not None),
+        ("--auto-name", opts.auto_name),
+        ("--no-save-audio", opts.no_save_audio),
         suggestion="--from-stdin streams many sources; saving applies to a single run.",
     )
     mutually_exclusive(
@@ -389,7 +417,7 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
     # Validate the requested sources (including that a local file exists) before
     # credentials, so a typo'd path reads as "file not found" — not as a login.
     validate_sources(sources, has_llm=bool(opts.llm_prompt), text_mode=text_mode)
-    save_audio, save_transcript = _resolve_save_targets(opts, sources)
+    save_audio, save_transcript, save_plan = _resolve_save_targets(opts, sources)
     if sources.from_file and not sources.from_stdin:
         client.resolve_audio_source(sources.source, sample=sources.sample)
     api_key = state.resolve_api_key()
@@ -407,6 +435,7 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
         max_tokens=opts.max_tokens,
         save_audio=save_audio,
         save_transcript=save_transcript,
+        save_plan=save_plan,
         llm_interval=opts.llm_interval,
     )
     _dispatch(session, sources)

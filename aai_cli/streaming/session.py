@@ -13,11 +13,10 @@ from aai_cli.core import choices, client, config_builder, llm
 from aai_cli.core.errors import (
     APIError,
     CLIError,
-    NotAuthenticated,
     UsageError,
     mutually_exclusive,
 )
-from aai_cli.streaming import record
+from aai_cli.streaming import record, savedir
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 from aai_cli.streaming.transcript import TranscriptWriter
 from aai_cli.ui import output
@@ -160,11 +159,22 @@ class StreamSession:
     # When set, write each finalized turn to this path as plain text (see TranscriptWriter).
     # Like save_audio, only the single-source path sets it; batch rejects --save-transcript.
     save_transcript: Path | None = None
+    # When set, run the --save-dir finalization (auto-name rename, --llm note, sidecar)
+    # once streaming ends. Only the single-source path sets it; batch rejects --save-dir.
+    save_plan: savedir.SaveDirPlan | None = None
     # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
     llm_interval: float = 0.0
     # Monotonic clock, injectable so the interval throttle is deterministic in tests.
     clock: Callable[[], float] = time.monotonic
     transcript: list[str] = field(default_factory=list[str])
+    # Finalized turn lines + diarized speakers, recorded for the --save-dir sidecar and
+    # --auto-name title regardless of --llm; only populated when save_plan is set.
+    _meta_lines: list[str] = field(default_factory=list[str])
+    _meta_speakers: dict[str, None] = field(default_factory=dict[str, None])
+    # Wall-clock capture window (via clock) → the sidecar's duration_seconds.
+    _capture_start: float | None = None
+    # The most recent --llm answer, written as the .md note at --save-dir finalization.
+    _last_answer: str | None = None
     # The open transcript-file writer for a single run; created/closed in _guarded so a
     # save target is opened once per session and a Ctrl-C still leaves a flushed file.
     _transcript_writer: TranscriptWriter | None = None
@@ -201,6 +211,7 @@ class StreamSession:
                 line = _finalized_turn_line(event, source_label)
                 if line is not None:
                     self._save_line(line)
+                    self._note_meta(event, line)
         else:
             # --llm mode locks only to record the turn; the chain re-runs (network) are
             # left unlocked so the other source's turns keep flowing during a refresh.
@@ -215,6 +226,19 @@ class StreamSession:
         if self._transcript_writer is not None:
             self._transcript_writer.write_turn(line)
 
+    def _note_meta(self, event: object, line: str) -> None:
+        """Record a finalized turn's text + speaker for the --save-dir sidecar/auto-name.
+
+        A no-op unless --save-dir is active, so a plain run accumulates nothing. Called
+        under ``_callback_lock`` (like ``_save_line``) so the lists/sets stay consistent.
+        """
+        if self.save_plan is None:
+            return
+        self._meta_lines.append(line)
+        speaker = getattr(event, "speaker_label", None)
+        if speaker is not None:
+            self._meta_speakers[str(speaker)] = None
+
     def _record_turn(self, event: object, source_label: str | None) -> None:
         """Append a finalized turn to the running transcript (and the saved file), then
         refresh the --llm answer if a refresh is due (every turn, or once per
@@ -225,6 +249,7 @@ class StreamSession:
         with self._callback_lock:
             self.transcript.append(line)
             self._save_line(line)
+            self._note_meta(event, line)
         self._maybe_summarize()
 
     def _maybe_summarize(self, *, final: bool = False) -> None:
@@ -273,11 +298,16 @@ class StreamSession:
                 f"[aai.muted]--llm refresh failed: {exc.message}[/aai.muted]"
             )
             return
+        # Hold the latest answer so --save-dir can write it as the .md note at the end.
+        self._last_answer = answer
         follow(answer, turns)
 
     def stream_one(
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
+        if self._capture_start is None:
+            # First source opened → start the wall-clock window for the sidecar duration.
+            self._capture_start = self.clock()
         if self.save_audio is not None:
             # Tee verbatim to disk at the source's true rate before it hits the wire.
             audio = record.tee_wav(audio, self.save_audio, rate=rate)
@@ -364,6 +394,35 @@ class StreamSession:
             lambda: self.stream_one(audio, rate, source_label=source_label),
             handle_interrupt=handle_interrupt,
         )
+        # _guarded re-raises a stream error (skipping finalize) but returns normally on a
+        # clean stop or a Ctrl-C, so a stopped recording is still named + sidecared.
+        if self.save_plan is not None:
+            self._finalize_save_dir(self.save_plan)
+
+    def _finalize_save_dir(self, plan: savedir.SaveDirPlan) -> None:
+        """Auto-name, write the --llm note, and drop the sidecar for a --save-dir capture."""
+        transcript_text = " ".join(self._meta_lines)
+        title: str | None = None
+        if plan.auto_name and transcript_text:
+            try:
+                title = savedir.derive_title(
+                    self.api_key, transcript_text, model=self.model, max_tokens=self.max_tokens
+                )
+            except CLIError as exc:
+                # The recording is already saved under its timestamp stem; a failed title
+                # call shouldn't lose it, so warn and keep the timestamped name.
+                output.error_console.print(
+                    f"[aai.muted]--auto-name failed: {exc.message}[/aai.muted]"
+                )
+        duration = 0 if self._capture_start is None else round(self.clock() - self._capture_start)
+        savedir.write_outputs(
+            plan,
+            title=title,
+            note=self._last_answer if plan.write_note else None,
+            speakers=list(self._meta_speakers),
+            duration_seconds=duration,
+            turns=len(self._meta_lines),
+        )
 
     def run_parallel(self, streams: _ParallelStreams) -> None:
         self._guarded(lambda: self._drive(streams))
@@ -401,59 +460,3 @@ class StreamSession:
                 raise errors.get()
         if not errors.empty():
             raise errors.get()
-
-
-# A batch source string resolved to its real-time audio chunks and declared rate.
-_OpenedSource = tuple[Iterable[bytes], int]
-
-
-def stream_batch_sources(
-    sources: list[str],
-    *,
-    make_session: Callable[[], StreamSession],
-    open_source: Callable[[str], _OpenedSource],
-    renderer: StreamRenderer,
-    json_mode: bool,
-) -> None:
-    """Stream each source in ``sources`` in turn — the ``assembly stream --from-stdin``
-    batch mode.
-
-    The realtime API is one session at a time, so a list of files/URLs streams
-    sequentially: each source gets a fresh ``StreamSession`` from ``make_session`` (its
-    own transcript and ``--llm`` chain state) and is announced via ``renderer.source``
-    before its turns. ``open_source`` resolves a source string to ``(audio, rate)`` and
-    may raise ``CLIError`` (bad path, missing ffmpeg, decode failure), which is recorded
-    as a per-source failure so the batch carries on — except ``NotAuthenticated``, which
-    re-raises to abort the whole batch (one rejected key fails every source identically).
-
-    A Ctrl-C or a closed downstream pipe stops the batch cleanly (exit 0). When any
-    source failed, raises a ``CLIError`` at the end so a script can trust the exit code.
-    """
-    total = len(sources)
-    failures: list[str] = []
-    try:
-        for index, source in enumerate(sources, start=1):
-            renderer.source(source, index=index, total=total)
-            try:
-                audio, rate = open_source(source)
-                make_session().run(audio, rate, handle_interrupt=False)
-            except NotAuthenticated:
-                raise
-            except CLIError as exc:
-                failures.append(source)
-                output.emit_warning(f"{source}: {exc.message}", json_mode=json_mode)
-    except KeyboardInterrupt:
-        # One Ctrl-C stops the whole batch, not just the current source -> exit 0.
-        renderer.stopped()
-        return
-    except BrokenPipeError:
-        # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
-        raise typer.Exit(code=0) from None
-    finally:
-        renderer.close()
-    if failures:
-        raise CLIError(
-            f"{len(failures)} of {total} sources failed.",
-            error_type="batch_failed",
-            suggestion="Check each failed path or URL, then re-run.",
-        )
