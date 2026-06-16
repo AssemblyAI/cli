@@ -29,11 +29,11 @@ SPEC = command_registry.CommandModuleSpec(
         [
             ("List your recent transcripts", "assembly transcripts list"),
             ("Show more at once", "assembly transcripts list --limit 50"),
-            ("Grab the latest transcript id", "assembly transcripts list --json | jq -r '.[0].id'"),
+            ("Grab the latest transcript id", "assembly transcripts list -o id | head -1"),
             (
                 "Summarize your latest transcript",
                 'assembly llm "summarize" --transcript-id '
-                "$(assembly transcripts list --json | jq -r '.[0].id')",
+                "$(assembly transcripts list -o id | head -1)",
             ),
         ]
     ),
@@ -42,6 +42,7 @@ def list_(
     ctx: typer.Context,
     limit: int = typer.Option(10, "--limit", help="How many transcripts to show", min=1),
     json_out: bool = options.json_option(),
+    fields: str | None = options.fields_option(),
 ) -> None:
     """List recent transcripts"""
 
@@ -61,7 +62,7 @@ def list_(
                 )
             return table
 
-        output.emit(rows, render, json_mode=json_mode)
+        output.emit(rows, render, json_mode=json_mode, fields=fields)
 
     run_command(ctx, body, json=json_out)
 

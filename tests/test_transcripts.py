@@ -279,3 +279,21 @@ def test_transcripts_no_subcommand_shows_help():
     result = runner.invoke(app, ["transcripts"])
     assert "Missing command" not in result.output
     assert "list" in result.output and "get" in result.output
+
+
+def test_transcripts_list_projects_fields(mocker):
+    # -o projects columns from the same JSON --json emits, dropping the jq column-grab.
+    config.set_api_key("default", "sk_live")
+    rows = [
+        {"id": "t_1", "status": "completed", "created": "2026-06-01T00:00:00Z"},
+        {"id": "t_2", "status": "queued", "created": "2026-06-02T00:00:00Z"},
+    ]
+    mocker.patch(
+        "aai_cli.commands.transcripts.client.list_transcripts", autospec=True, return_value=rows
+    )
+    one = runner.invoke(app, ["transcripts", "list", "-o", "id"])
+    assert one.exit_code == 0
+    assert one.output == "t_1\nt_2\n"
+    multi = runner.invoke(app, ["transcripts", "list", "-o", "id,status"])
+    assert multi.exit_code == 0
+    assert multi.output == "t_1\tcompleted\nt_2\tqueued\n"

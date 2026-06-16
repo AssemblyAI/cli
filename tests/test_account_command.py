@@ -439,3 +439,37 @@ def test_usage_accepts_each_known_window(mocker, window):
     result = runner.invoke(app, ["usage", "--window", window, "--json"])
     assert result.exit_code == 0
     assert get_usage.call_args[0][3] == window  # passed through to AMS unchanged
+
+
+def test_balance_projects_field(mocker):
+    _auth()
+    mocker.patch(
+        "aai_cli.commands.account.ams.get_balance",
+        autospec=True,
+        return_value={"account_id": 42, "balance_in_cents": 2575},
+    )
+    result = runner.invoke(app, ["balance", "-o", "balance_in_cents"])
+    assert result.exit_code == 0
+    # The bare scalar, not the "$25.75" human line nor a JSON object.
+    assert result.output == "2575\n"
+
+
+def test_limits_projects_nested_field(mocker):
+    _auth()
+    mocker.patch(
+        "aai_cli.commands.account.ams.get_rate_limits",
+        autospec=True,
+        return_value={"account_id": 42, "rate_limits": [{"service": "transcript"}]},
+    )
+    result = runner.invoke(app, ["limits", "-o", "account_id"])
+    assert result.exit_code == 0
+    assert result.output == "42\n"
+
+
+def test_usage_projects_field(mocker):
+    _auth()
+    payload = {"usage_items": [{"line_items": [{"price": 10.0}]}], "currency": "usd"}
+    mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["usage", "-o", "currency"])
+    assert result.exit_code == 0
+    assert result.output == "usd\n"

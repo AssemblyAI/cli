@@ -19,6 +19,24 @@ def json_option(help_text: str = "Output raw JSON") -> bool:
     return flag
 
 
+def fields_option() -> str | None:
+    """The ``-o/--output`` field projection shared by the list/account read commands.
+
+    Lets ``assembly transcripts list -o id`` or ``assembly sessions list -o
+    session_id,status`` replace a ``--json | jq`` column grab: it projects the named
+    fields out of the same JSON the command would emit, one tab-separated line per
+    record. Comma-separated for multiple fields; dotted paths reach nested objects.
+    """
+    value: str | None = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Project fields from the JSON result (comma-separated, e.g. id,status)",
+        metavar="FIELDS",
+    )
+    return value
+
+
 def chars_per_caption_option() -> int | None:
     """The ``--chars-per-caption`` knob for the ``-o srt``/``-o vtt`` subtitle exports."""
     value: int | None = typer.Option(
