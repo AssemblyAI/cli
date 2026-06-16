@@ -104,6 +104,21 @@ class StreamRenderer(BaseRenderer):
             elif not self.json_mode:
                 self._line(Text("Listening… (Ctrl-C to stop)", style="aai.muted"))
 
+    def source(self, source: str, *, index: int, total: int) -> None:
+        """Announce the next source in a ``--from-stdin`` batch stream.
+
+        JSON mode emits a ``source`` event so consumers can segment the stream; text
+        mode writes a header to stderr (stdout stays pure transcript lines); human
+        mode prints a muted header above the upcoming turns.
+        """
+        with self._lock:
+            if self.json_mode:
+                self._emit(events.Source(source=source, index=index, total=total).wire())
+            elif self.text_mode:
+                self._status(f"[{index}/{total}] {source}")
+            else:
+                self._line(Text(f"[{index}/{total}] {source}", style="aai.muted"))
+
     def turn(self, event: object, *, source: str | None = None) -> None:
         text = getattr(event, "transcript", "") or ""
         end = bool(getattr(event, "end_of_turn", False))

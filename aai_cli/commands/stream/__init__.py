@@ -30,6 +30,7 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
         [
             ("Stream from your microphone", "assembly stream"),
             ("Stream a file or URL in real time", "assembly stream recording.wav"),
+            ("Stream a list of files in turn", "ls *.wav | assembly stream --from-stdin"),
             ("Stream the hosted sample", "assembly stream --sample"),
             ("Label speakers in the live transcript", "assembly stream --speaker-labels"),
             (
@@ -52,6 +53,11 @@ def stream(
         "PCM16/mono/16k on stdin. Omit to use the microphone.",
     ),
     sample: bool = typer.Option(False, "--sample", help="Stream the hosted wildfires.mp3 sample"),
+    from_stdin: bool = typer.Option(
+        False,
+        "--from-stdin",
+        help="Read a list of audio files/URLs on stdin (one per line) and stream each in turn",
+    ),
     # audio capture
     sample_rate: int | None = typer.Option(
         None,
@@ -302,6 +308,9 @@ def stream(
     Pass - as the source to read raw PCM16/mono/16k audio on stdin, e.g.
     ffmpeg -i input.mp4 -f s16le -ar 16000 -ac 1 - | assembly stream -.
 
+    --from-stdin instead reads a list of file paths/URLs on stdin (one per line)
+    and streams each as its own realtime session, in turn.
+
     --prompt biases the speech model. --llm runs a prompt over the live transcript
     in-process, refreshing the answer on every finalized turn; for a separate step
     instead, pipe the text out with -o text | assembly llm -f "…".
@@ -309,6 +318,7 @@ def stream(
     opts = stream_exec.StreamOptions(
         source=source,
         sample=sample,
+        from_stdin=from_stdin,
         sample_rate=sample_rate,
         device=device,
         system_audio=system_audio,

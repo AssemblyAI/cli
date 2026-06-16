@@ -23,6 +23,7 @@ from aai_cli.streaming.turn_presets import TurnDetectionPreset
 DEFAULTS = stream_exec.StreamOptions(
     source=None,
     sample=False,
+    from_stdin=False,
     sample_rate=None,
     device=None,
     system_audio=False,
@@ -155,3 +156,69 @@ def test_stream_options_are_immutable():
     field_name = "sample"
     with pytest.raises(dataclasses.FrozenInstanceError):
         setattr(DEFAULTS, field_name, True)
+
+
+# --- batch streaming (--from-stdin) validation -----------------------------
+# Each conflict is rejected before stdin is read, so these raise without a pipe.
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"from_stdin": True, "source": "a.wav"},  # a positional source
+        {"from_stdin": True, "sample": True},  # the hosted sample
+        {"from_stdin": True, "system_audio": True},  # live system capture
+        {"from_stdin": True, "system_audio_only": True},
+        {"from_stdin": True, "device": 2},  # mic-only capture flags
+        {"from_stdin": True, "sample_rate": 44100},
+        {"from_stdin": True, "show_code": True},  # renders one source
+    ],
+)
+def test_from_stdin_rejects_incompatible_flags(overrides):
+    with pytest.raises(UsageError):
+        stream_exec.run_stream(
+            dataclasses.replace(DEFAULTS, **overrides), AppState(), json_mode=False
+        )
+
+
+def test_from_stdin_rejects_llm_with_text_output():
+    # --llm renders a live panel; -o text is a contradictory output shape.
+    from aai_cli.core import choices
+
+    with pytest.raises(UsageError):
+        stream_exec.run_stream(
+            dataclasses.replace(
+                DEFAULTS,
+                from_stdin=True,
+                llm_prompt=["summarize"],
+                output_field=choices.TextOrJson.text,
+            ),
+            AppState(),
+            json_mode=False,
+        )
+
+
+def test_from_stdin_empty_stdin_is_a_usage_error(monkeypatch):
+    # An empty pipe (nothing to stream) is a clean usage error, not a silent no-op.
+    monkeypatch.setattr(stream_exec.stdio, "iter_piped_stdin_lines", lambda: iter([]))
+    with pytest.raises(UsageError):
+        stream_exec.run_stream(
+            dataclasses.replace(DEFAULTS, from_stdin=True), AppState(), json_mode=True
+        )
+
+
+def test_from_stdin_dedupes_sources_keeping_order(monkeypatch):
+    # Duplicate lines stream once, in first-seen order — the batch driver receives the
+    # deduped list (mirrors `transcribe --from-stdin`).
+    config.set_api_key("default", "sk_live")
+    monkeypatch.setattr(
+        stream_exec.stdio, "iter_piped_stdin_lines", lambda: iter(["a.wav", "a.wav", "b.wav"])
+    )
+    seen: dict[str, list[str]] = {"sources": []}
+
+    def fake_stream_batch(sources, *, make_session, open_source, renderer, json_mode):
+        seen["sources"] = list(sources)
+
+    monkeypatch.setattr(stream_exec, "stream_batch_sources", fake_stream_batch)
+    stream_exec.run_stream(
+        dataclasses.replace(DEFAULTS, from_stdin=True), AppState(), json_mode=True
+    )
+    assert seen["sources"] == ["a.wav", "b.wav"]

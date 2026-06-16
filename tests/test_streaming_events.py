@@ -45,6 +45,11 @@ from aai_cli.streaming import events
             events.Termination(audio_duration_seconds=None),
             {"type": "termination", "audio_duration_seconds": None},
         ),
+        # the batch (--from-stdin) source marker carries the 1-based position.
+        (
+            events.Source(source="a.wav", index=1, total=3),
+            {"type": "source", "source": "a.wav", "index": 1, "total": 3},
+        ),
     ],
 )
 def test_wire_record(event: events.Event, expected: dict[str, object]):

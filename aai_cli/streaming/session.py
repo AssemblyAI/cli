@@ -10,7 +10,13 @@ from pathlib import Path
 import typer
 
 from aai_cli.core import choices, client, config_builder, llm
-from aai_cli.core.errors import APIError, CLIError, UsageError, mutually_exclusive
+from aai_cli.core.errors import (
+    APIError,
+    CLIError,
+    NotAuthenticated,
+    UsageError,
+    mutually_exclusive,
+)
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
@@ -265,10 +271,15 @@ class StreamSession:
             ),
         )
 
-    def _guarded(self, work: Callable[[], None]) -> None:
+    def _guarded(self, work: Callable[[], None], *, handle_interrupt: bool = True) -> None:
         """Run a streaming body with the shared lifecycle handling: enter the
         FollowRenderer's live panel if present, treat Ctrl-C as a clean stop, exit 0 on
-        a closed downstream pipe, and always close the renderer."""
+        a closed downstream pipe, and always close the renderer.
+
+        ``handle_interrupt=False`` lets a Ctrl-C or a closed pipe propagate instead of
+        being swallowed here — the batch driver owns those signals across the whole
+        ``--from-stdin`` sequence, so one Ctrl-C stops the batch rather than just
+        advancing to the next source."""
         try:
             if self.follow is not None:
                 with self.follow:
@@ -281,19 +292,33 @@ class StreamSession:
             else:
                 work()
         except KeyboardInterrupt:
+            if not handle_interrupt:
+                raise
             # Ctrl-C is a normal "user stopped" signal -> exit 0.
             if self.follow is None:
                 self.renderer.close()
                 self.renderer.stopped()
         except BrokenPipeError:
+            if not handle_interrupt:
+                raise
             # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
             raise typer.Exit(code=0) from None
         finally:
             if self.follow is None:
                 self.renderer.close()
 
-    def run(self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None) -> None:
-        self._guarded(lambda: self.stream_one(audio, rate, source_label=source_label))
+    def run(
+        self,
+        audio: Iterable[bytes],
+        rate: int,
+        *,
+        source_label: str | None = None,
+        handle_interrupt: bool = True,
+    ) -> None:
+        self._guarded(
+            lambda: self.stream_one(audio, rate, source_label=source_label),
+            handle_interrupt=handle_interrupt,
+        )
 
     def run_parallel(self, streams: _ParallelStreams) -> None:
         self._guarded(lambda: self._drive(streams))
@@ -331,3 +356,59 @@ class StreamSession:
                 raise errors.get()
         if not errors.empty():
             raise errors.get()
+
+
+# A batch source string resolved to its real-time audio chunks and declared rate.
+_OpenedSource = tuple[Iterable[bytes], int]
+
+
+def stream_batch_sources(
+    sources: list[str],
+    *,
+    make_session: Callable[[], StreamSession],
+    open_source: Callable[[str], _OpenedSource],
+    renderer: StreamRenderer,
+    json_mode: bool,
+) -> None:
+    """Stream each source in ``sources`` in turn — the ``assembly stream --from-stdin``
+    batch mode.
+
+    The realtime API is one session at a time, so a list of files/URLs streams
+    sequentially: each source gets a fresh ``StreamSession`` from ``make_session`` (its
+    own transcript and ``--llm`` chain state) and is announced via ``renderer.source``
+    before its turns. ``open_source`` resolves a source string to ``(audio, rate)`` and
+    may raise ``CLIError`` (bad path, missing ffmpeg, decode failure), which is recorded
+    as a per-source failure so the batch carries on — except ``NotAuthenticated``, which
+    re-raises to abort the whole batch (one rejected key fails every source identically).
+
+    A Ctrl-C or a closed downstream pipe stops the batch cleanly (exit 0). When any
+    source failed, raises a ``CLIError`` at the end so a script can trust the exit code.
+    """
+    total = len(sources)
+    failures: list[str] = []
+    try:
+        for index, source in enumerate(sources, start=1):
+            renderer.source(source, index=index, total=total)
+            try:
+                audio, rate = open_source(source)
+                make_session().run(audio, rate, handle_interrupt=False)
+            except NotAuthenticated:
+                raise
+            except CLIError as exc:
+                failures.append(source)
+                output.emit_warning(f"{source}: {exc.message}", json_mode=json_mode)
+    except KeyboardInterrupt:
+        # One Ctrl-C stops the whole batch, not just the current source -> exit 0.
+        renderer.stopped()
+        return
+    except BrokenPipeError:
+        # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
+        raise typer.Exit(code=0) from None
+    finally:
+        renderer.close()
+    if failures:
+        raise CLIError(
+            f"{len(failures)} of {total} sources failed.",
+            error_type="batch_failed",
+            suggestion="Check each failed path or URL, then re-run.",
+        )
