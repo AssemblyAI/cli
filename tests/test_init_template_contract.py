@@ -11,7 +11,21 @@ TEMPLATE_DIRS = sorted(
 )
 # Map an import name to its PyPI distribution where they differ.
 _PKG_MAP = {"dotenv": "python-dotenv", "multipart": "python-multipart"}
-_STDLIB = {"os", "tempfile", "uuid", "pathlib", "__future__", "json", "typing"}
+_STDLIB = {
+    "os",
+    "tempfile",
+    "uuid",
+    "pathlib",
+    "__future__",
+    "json",
+    "typing",
+    "asyncio",
+    "base64",
+    "contextlib",
+    "dataclasses",
+    "collections",
+    "urllib",
+}
 _LOCAL_IMPORTS = {"api"}
 
 
@@ -139,7 +153,7 @@ def test_runtime_pins_supported_python(template_dir):
 
 
 def test_realtime_templates_have_audio_helpers(template_dir):
-    if template_dir.name in {"live-captions", "voice-agent"}:
+    if template_dir.name in {"live_captions", "voice_agent"}:
         assert (template_dir / "static" / "audio.js").exists()
 
 

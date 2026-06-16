@@ -1,6 +1,6 @@
 fastapi>=0.136.3
 uvicorn>=0.30.0
-httpx2>=2.3.0
+assemblyai>=0.64.4,<1
 python-dotenv>=1.2.2
 # Pin starlette directly: FastAPI's own floor (starlette>=0.46.0) still admits
 # versions with known CVEs, so raise the transitive floor above them.

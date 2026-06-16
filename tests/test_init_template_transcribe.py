@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-TEMPLATE_DIR = Path("aai_cli/init/templates/audio-transcription")
+TEMPLATE_DIR = Path("aai_cli/init/templates/audio_transcription")
 
 
 def _load_app(monkeypatch, mocker):

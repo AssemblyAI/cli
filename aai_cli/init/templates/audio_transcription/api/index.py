@@ -16,6 +16,7 @@ from __future__ import annotations
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Protocol
 
 import assemblyai as aai
 from assemblyai.api import get_transcript  # single non-blocking GET (see status())
@@ -25,7 +26,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI  # the LLM Gateway is OpenAI-compatible
 
-from api import settings
+from . import settings
 
 aai.settings.api_key = settings.API_KEY
 # Target the same AssemblyAI environment the key was minted for. `assembly init` writes
@@ -33,7 +34,17 @@ aai.settings.api_key = settings.API_KEY
 if settings.ASSEMBLYAI_BASE_URL:
     aai.settings.base_url = settings.ASSEMBLYAI_BASE_URL
 
-CONFIG = aai.TranscriptionConfig(**settings.TRANSCRIPTION_CONFIG_KWARGS)
+# Build the config from settings.TRANSCRIPTION_CONFIG_KWARGS by reading each flag by name.
+# (A bare `**dict[str, bool]` unpack can't type-check against the SDK's heterogeneous
+# __init__, so we pass each boolean feature explicitly.)
+_FEATURES = settings.TRANSCRIPTION_CONFIG_KWARGS
+CONFIG = aai.TranscriptionConfig(
+    speaker_labels=_FEATURES.get("speaker_labels", False),
+    auto_chapters=_FEATURES.get("auto_chapters", False),
+    sentiment_analysis=_FEATURES.get("sentiment_analysis", False),
+    entity_detection=_FEATURES.get("entity_detection", False),
+    auto_highlights=_FEATURES.get("auto_highlights", False),
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
@@ -104,6 +115,17 @@ def ask(transcript_id: str = Body(...), question: str = Body(...)) -> dict[str, 
     return {"answer": resp.choices[0].message.content or ""}
 
 
+class _Serializable(Protocol):
+    """The pydantic-model surface we use: a `.dict()` returning the full JSON."""
+
+    def dict(self) -> dict[str, object]: ...
+
+
+def _to_payload(model: _Serializable) -> dict[str, object]:
+    """Serialize the transcript model to a JSON-ready dict (typed via the protocol)."""
+    return model.dict()
+
+
 @app.get("/api/status/{transcript_id}")
 def status(transcript_id: str) -> dict[str, object]:
     _require_key()
@@ -116,5 +138,5 @@ def status(transcript_id: str) -> dict[str, object]:
     if t.status == aai.TranscriptStatus.error:
         raise HTTPException(status_code=502, detail=t.error or "Transcription failed")
     if t.status == aai.TranscriptStatus.completed:
-        return {"status": "completed", "transcript": t.dict()}
+        return {"status": "completed", "transcript": _to_payload(t)}
     return {"status": str(getattr(t.status, "value", t.status))}

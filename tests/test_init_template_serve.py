@@ -33,7 +33,9 @@ TEMPLATES_ROOT = Path("aai_cli/init/templates")
 TEMPLATE_NAMES = sorted(
     p.name for p in TEMPLATES_ROOT.iterdir() if p.is_dir() and not p.name.startswith("__")
 )
-TOKEN_TEMPLATES = ["live-captions", "voice-agent"]
+# live-captions now mints via the AssemblyAI SDK (covered in test_init_template_stream.py),
+# so it no longer has the httpx2 GET these parametrized tests mock.
+TOKEN_TEMPLATES = ["voice_agent"]
 HTTP_OK = 200
 HTTP_BAD_GATEWAY = 502
 
@@ -102,7 +104,7 @@ def test_app_applies_custom_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     # environment; the app must point the SDK at it. isolate_env strips it by default,
     # so set it here to exercise the import-time branch that applies it.
     monkeypatch.setenv("ASSEMBLYAI_BASE_URL", "https://api.example.test")
-    with serve("audio-transcription") as (module, _client):
+    with serve("audio_transcription") as (module, _client):
         assert module.aai.settings.base_url == "https://api.example.test"
 
 
@@ -118,7 +120,7 @@ def _fake_transcriber(
 
 
 def test_transcribe_url_returns_submitted_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_transcriber(monkeypatch, module, SimpleNamespace(id="t-1"))
         resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
         assert resp.status_code == HTTP_OK
@@ -126,7 +128,7 @@ def test_transcribe_url_returns_submitted_id(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_transcribe_file_upload_returns_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_transcriber(monkeypatch, module, SimpleNamespace(id="t-2"))
         resp = client.post("/api/transcribe", files={"file": ("a.wav", b"RIFFfake", "audio/wav")})
         assert resp.status_code == HTTP_OK
@@ -134,7 +136,7 @@ def test_transcribe_file_upload_returns_id(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_transcribe_without_id_is_handled(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_transcriber(monkeypatch, module, SimpleNamespace(id=None))
         resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
         assert resp.status_code == HTTP_BAD_GATEWAY
@@ -142,7 +144,7 @@ def test_transcribe_without_id_is_handled(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_transcribe_failure_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_transcriber(monkeypatch, module, None, raises=True)
         resp = client.post("/api/transcribe-url", json={"url": "https://example.com/a.mp3"})
         assert resp.status_code == HTTP_BAD_GATEWAY
@@ -167,7 +169,7 @@ def _fake_get_transcript(
 
 
 def test_status_completed_returns_transcript(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         status = module.aai.TranscriptStatus.completed
         done = SimpleNamespace(status=status, dict=lambda: {"id": "t", "text": "hi"})
         _fake_get_transcript(monkeypatch, module, done)
@@ -177,7 +179,7 @@ def test_status_completed_returns_transcript(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_status_still_processing_reports_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         status = module.aai.TranscriptStatus.processing
         _fake_get_transcript(monkeypatch, module, SimpleNamespace(status=status))
         resp = client.get("/api/status/t")
@@ -186,7 +188,7 @@ def test_status_still_processing_reports_state(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_status_error_is_handled(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         status = module.aai.TranscriptStatus.error
         _fake_get_transcript(monkeypatch, module, SimpleNamespace(status=status, error="boom"))
         resp = client.get("/api/status/t")
@@ -195,7 +197,7 @@ def test_status_error_is_handled(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_status_fetch_failure_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_get_transcript(monkeypatch, module, None, raises=True)
         resp = client.get("/api/status/t")
         assert resp.status_code == HTTP_BAD_GATEWAY
@@ -219,7 +221,7 @@ def _fake_openai(
 
 
 def test_ask_returns_answer(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         reply = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="yes"))])
         _fake_openai(monkeypatch, module, reply)
         resp = client.post("/api/ask", json={"transcript_id": "t", "question": "q?"})
@@ -228,7 +230,7 @@ def test_ask_returns_answer(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ask_failure_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
-    with serve("audio-transcription") as (module, client):
+    with serve("audio_transcription") as (module, client):
         _fake_openai(monkeypatch, module, None, raises=True)
         resp = client.post("/api/ask", json={"transcript_id": "t", "question": "q?"})
         assert resp.status_code == HTTP_BAD_GATEWAY
@@ -267,9 +269,9 @@ HTTP_INTERNAL_ERROR = 500
 
 # (template, method, path, json body) for one representative key-using endpoint each.
 MISSING_KEY_CASES = [
-    ("voice-agent", "post", "/api/token", None),
-    ("live-captions", "post", "/api/token", None),
-    ("audio-transcription", "post", "/api/transcribe-url", {"url": "https://example.com/a.mp3"}),
+    ("voice_agent", "post", "/api/token", None),
+    ("live_captions", "post", "/api/token", None),
+    ("audio_transcription", "post", "/api/transcribe-url", {"url": "https://example.com/a.mp3"}),
 ]
 
 

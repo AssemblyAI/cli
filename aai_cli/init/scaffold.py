@@ -39,7 +39,7 @@ def _template_root(template: str) -> Traversable:
         )
     # Navigate from the `aai_cli.init` package (templates/ has no __init__.py, so it
     # is not itself an importable package).
-    root = resources.files("aai_cli.init") / "templates" / template
+    root = resources.files("aai_cli.init") / "templates" / templates.dir_for(template)
     # Defense in depth: the registry should only list shipped templates, but if it ever
     # drifts ahead of the on-disk directories, fail cleanly instead of with a traceback.
     if not root.is_dir():
@@ -76,9 +76,16 @@ def existing_env_key(target: Path) -> str | None:
     return None
 
 
-def _copy_tree(node: Traversable, dest: Path) -> None:
+def _copy_tree(node: Traversable, dest: Path, *, top_level: bool = True) -> None:
     for child in node.iterdir():
         if child.name in _SKIP_NAMES or child.name.endswith(".pyc"):
+            continue
+        # The template dir is an importable package in-repo (so it can be type-checked),
+        # but its root __init__.py is just that in-repo marker — not part of the shipped
+        # app. Skip it so the scaffolded project root doesn't become a stray package.
+        # (api/'s own __init__.py is one level down and IS copied — the shipped app's
+        # `from . import settings` needs it.)
+        if top_level and child.name == "__init__.py":
             continue
         name = _DOTFILE_RENAMES.get(child.name, child.name)
         out = dest / name
@@ -87,7 +94,7 @@ def _copy_tree(node: Traversable, dest: Path) -> None:
             # node's parent before descending, so `dest` (and `out.parent`) already
             # exists. exist_ok is exercised by the idempotent re-scaffold test.
             out.mkdir(parents=True, exist_ok=True)  # pragma: no mutate
-            _copy_tree(child, out)
+            _copy_tree(child, out, top_level=False)
         else:
             out.parent.mkdir(parents=True, exist_ok=True)  # pragma: no mutate
             out.write_bytes(child.read_bytes())

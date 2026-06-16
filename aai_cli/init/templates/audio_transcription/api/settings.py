@@ -16,8 +16,9 @@ LLM_MODEL = "claude-haiku-4-5-20251001"
 # Public sample so the app works immediately without uploading a local file.
 SAMPLE_URL = "https://assembly.ai/wildfires.mp3"
 
-# Main backend customization point. Add, remove, or tune AssemblyAI features here.
-TRANSCRIPTION_CONFIG_KWARGS = {
+# Main backend customization point. Toggle AssemblyAI audio-intelligence features here;
+# api/index.py reads each flag by name when it builds the TranscriptionConfig.
+TRANSCRIPTION_CONFIG_KWARGS: dict[str, bool] = {
     "speaker_labels": True,
     "auto_chapters": True,
     "sentiment_analysis": True,

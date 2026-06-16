@@ -211,8 +211,8 @@ def test_init_template_arg_help_is_derived_from_registry():
     default = inspect.signature(init_cmd.init).parameters["template"].default
     assert isinstance(default, ArgumentInfo)
     assert default.help == (
-        "Template to scaffold: audio-transcription, live-captions, voice-agent "
-        "(omit to pick interactively)"
+        "Template to scaffold: audio-transcription, live-captions, voice-agent, "
+        "agent-framework (omit to pick interactively)"
     )
 
 
@@ -253,17 +253,30 @@ def test_init_unregistered_template_errors_cleanly(tmp_path, monkeypatch):
 
 
 def _fake_questionary(choice):
-    """A minimal stand-in for the questionary module's select(...).ask() chain."""
+    """A minimal stand-in for the questionary module's select(...).ask() chain.
+
+    The returned namespace records the choices select(...) was called with on its
+    ``choices`` attribute (read it back in a test to inspect titles/descriptions)."""
+
+    ns = types.SimpleNamespace(Choice=None, select=None, choices=None)
 
     class _Choice:
-        def __init__(self, title, value):
+        def __init__(self, title, value, description=None):
+            self.title = title
             self.value = value
+            self.description = description
 
     class _Select:
         def ask(self):
             return choice
 
-    return types.SimpleNamespace(Choice=_Choice, select=lambda *a, **k: _Select())
+    def _select(*_a, choices=None, **_k):
+        ns.choices = choices
+        return _Select()
+
+    ns.Choice = _Choice
+    ns.select = _select
+    return ns
 
 
 def test_pick_template_interactive_returns_choice(monkeypatch):
@@ -271,6 +284,21 @@ def test_pick_template_interactive_returns_choice(monkeypatch):
     monkeypatch.setattr("sys.stdout", _Tty())
     monkeypatch.setitem(sys.modules, "questionary", _fake_questionary(TEMPLATE))
     assert init_exec._pick_template() == TEMPLATE
+
+
+def test_pick_template_choices_carry_descriptions(monkeypatch):
+    # Each picker choice wires the registry's title + description for that template.
+    from aai_cli.init import templates
+
+    monkeypatch.setattr("sys.stdin", _Tty())
+    monkeypatch.setattr("sys.stdout", _Tty())
+    fake = _fake_questionary(TEMPLATE)
+    monkeypatch.setitem(sys.modules, "questionary", fake)
+    init_exec._pick_template()
+    choices = fake.choices
+    assert [c.value for c in choices] == list(templates.TEMPLATE_ORDER)
+    assert all(c.description == templates.description_for(c.value) for c in choices)
+    assert all(c.description for c in choices)  # every template advertises a description
 
 
 def test_pick_template_ctrl_c_exits_130(monkeypatch):
@@ -316,9 +344,21 @@ def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
         api_base="https://api.x",
         llm_gateway_base="https://llm.x",
         streaming_host="streaming.streaming.example.com",
+        streaming_tts_host="",
     )
     monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
     assert init_exec._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
+
+
+def test_active_env_vars_includes_streaming_tts_host(monkeypatch):
+    fake_env = types.SimpleNamespace(
+        api_base="https://api.x",
+        llm_gateway_base="https://llm.x/v1",
+        streaming_host="streaming.x",
+        streaming_tts_host="streaming-tts.x",
+    )
+    monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
+    assert init_exec._active_env_vars()["ASSEMBLYAI_TTS_HOST"] == "streaming-tts.x"
 
 
 def test_init_install_failure_reports_and_exits(tmp_path, monkeypatch):

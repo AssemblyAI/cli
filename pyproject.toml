@@ -161,8 +161,9 @@ markers = [
 [tool.mypy]
 python_version = "3.12"
 files = ["aai_cli", "tests"]
-# Init templates are packaged scaffold assets, not importable package modules.
-exclude = ["^aai_cli/init/templates/"]
+# Init templates ARE type-checked: they're importable packages
+# (aai_cli.init.templates.<name>.api.*) whose api/ code must stay strict-clean against
+# the real SDK types, not just shipped as scaffold text.
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
 ignore_missing_imports = true
 disallow_untyped_defs = true
@@ -213,7 +214,12 @@ disable_error_code = ["annotation-unchecked"]
 # pyrightconfig.tests.json from scripts/check.sh so pytest fixtures/mocks don't
 # create thousands of low-value strict diagnostics.
 include = ["aai_cli"]
-exclude = ["aai_cli/init/templates/**"]
+# Re-list pyright's built-in excludes explicitly (defining any `exclude` drops the
+# defaults, which pyright warns about). NOTE: init templates are deliberately NOT here —
+# their api/ code is strict-clean and type-checked in-tree
+# (aai_cli.init.templates.<name>.api.*), the same bar as the rest of the package; only
+# generated/hidden dirs are skipped.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
@@ -223,6 +229,28 @@ reportMissingTypeStubs = false
 # group, so pytest/fastapi/etc. resolve here. Run `uv sync` once on a fresh clone.
 venvPath = "."
 venv = ".venv"
+
+# Editors (Pylance) read this config and also analyze whatever test file you have
+# open. The `include` above scopes the *gate's* `pyright` run to aai_cli (strict), but
+# the editor checks open tests too — and applies the strict mode above, surfacing
+# thousands of low-value pytest fixture/mock diagnostics (untyped `monkeypatch`,
+# unknown member/parameter types, …). `executionEnvironments` can't set
+# `typeCheckingMode`, so we silence exactly the strict-only "unknown type" family for
+# tests/ — matching the standard mode the gate uses for tests (pyrightconfig.tests.json
+# in scripts/check.sh). Editor-facing only: the gate's `pyright` run never analyzes
+# tests/ (not in `include`), so this changes nothing about what the gate checks.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportUnknownParameterType = "none"
+reportMissingParameterType = "none"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownLambdaType = "none"
+reportPrivateUsage = "none"
+reportUnusedFunction = "none"
+reportMissingTypeArgument = "none"
+reportUntypedNamedTuple = "none"
 
 [tool.ruff]
 line-length = 100
@@ -336,7 +364,14 @@ max-statements = 40
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
 # TID251: the scaffolds are end-user example apps that read their own config straight
 # from os.environ — that's correct, idiomatic code to ship, not a CLI-internal env read.
-"aai_cli/init/templates/**" = ["S105", "TID251"]
+# BLE001: starter apps funnel any leg failure into one user-facing error event/response
+# (a broad `except Exception` is the right shape to ship), so the blind-except lint
+# doesn't apply to scaffolds.
+# TID252: scaffolds ship as a self-contained top-level `api/` package, so their inner
+# imports must be relative (`from . import settings`) — that's the one form that resolves
+# both in the shipped app (`uvicorn api.index:app`) and when type-checked in-tree as
+# aai_cli.init.templates.<name>.api. Absolute `from api import …` can't satisfy both.
+"aai_cli/init/templates/**" = ["S105", "TID251", "BLE001", "TID252"]
 # ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
 # source (release builds inject the write-only client token).
 "aai_cli/core/telemetry.py" = ["S105"]
