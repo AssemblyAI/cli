@@ -13,10 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aai_cli.app.context import AppState
-from aai_cli.core import sync_stt
+from aai_cli.core import choices, sync_stt
 from aai_cli.core.config_builder import split_csv
 from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
 from aai_cli.core.microphone import MicrophoneSource
+from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.ui import output
 
 # Capture is resampled to one rate the Sync API accepts; 16 kHz mono PCM16 keeps
@@ -41,6 +42,8 @@ class DictateOptions:
     device: int | None
     once: bool
     max_seconds: float
+    # -o/--output: text (the default bare-transcript shape) or json (== --json).
+    output_field: choices.TextOrJson | None = None
 
 
 def _note(message: str, *, json_mode: bool, quiet: bool) -> None:
@@ -165,6 +168,11 @@ def _session(
 
 def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly dictate` invocation from already-parsed flags."""
+    # Fold -o/--output into json_mode (-o json == --json) and reject the
+    # contradictory --json + -o text pair, the same way `stream`/`agent` do.
+    # dictate has no live panel, so the text_mode half is unused — plain
+    # transcript text is already the non-JSON default in `_emit`.
+    _, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     try:
         # Entering TerminalKeys validates the terminal (a usage precondition)
         # before credentials, so a piped stdin reads as "needs a terminal" — not

@@ -373,6 +373,10 @@
   │                                                   [default: 120.0]           │
   │ --json         -j                                 Emit one JSON object per   │
   │                                                   utterance                  │
+  │ --output       -o      [text|json]                Output mode: text (the     │
+  │                                                   bare transcript per        │
+  │                                                   utterance, pipe-friendly)  │
+  │                                                   or json                    │
   │ --help                                            Show this message and      │
   │                                                   exit.                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -388,6 +392,8 @@
    $ assembly dictate --word-boost AssemblyAI --word-boost LeMUR
    One JSON object per utterance
    $ assembly dictate --json
+   Pipe the bare transcript onward
+   $ assembly dictate -o text | assembly llm -f
   
   
   
