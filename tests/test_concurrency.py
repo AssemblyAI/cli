@@ -20,7 +20,62 @@ import threading
 import types
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from aai_cli.core import config, config_lock
+
+# --- config.toml: the Windows os.replace sharing-window retry -----------------------
+
+
+def test_retry_on_sharing_violation_returns_without_retrying_on_success(monkeypatch):
+    # The common case: the op succeeds first try, so no backoff sleep happens.
+    sleeps: list[float] = []
+    monkeypatch.setattr(config, "time", types.SimpleNamespace(sleep=sleeps.append))
+    calls = []
+
+    def op():
+        calls.append(1)
+        return "ok"
+
+    assert config._retry_on_sharing_violation(op) == "ok"
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_retry_on_sharing_violation_rides_out_transient_permission_errors(monkeypatch):
+    # Two transient PermissionErrors (Windows' replace window) then success: the helper
+    # backs off between attempts and ultimately returns the value, never raising.
+    sleeps: list[float] = []
+    monkeypatch.setattr(config, "time", types.SimpleNamespace(sleep=sleeps.append))
+    calls = []
+
+    def op():
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError("file is being replaced")
+        return "ok"
+
+    assert config._retry_on_sharing_violation(op) == "ok"
+    assert len(calls) == 3  # two failures, then the success
+    assert sleeps == [config._SHARING_BACKOFF, config._SHARING_BACKOFF]  # one per retry
+
+
+def test_retry_on_sharing_violation_reraises_a_persistent_permission_error(monkeypatch):
+    # A genuine, persistent permission problem is not a transient sharing race: after the
+    # full budget the last attempt's error propagates rather than looping forever.
+    sleeps: list[float] = []
+    monkeypatch.setattr(config, "time", types.SimpleNamespace(sleep=sleeps.append))
+    calls = []
+
+    def op():
+        calls.append(1)
+        raise PermissionError("denied")
+
+    with pytest.raises(PermissionError, match="denied"):
+        config._retry_on_sharing_violation(op)
+    # Exactly the full budget of attempts (loop retries + one final attempt), no more.
+    assert len(calls) == config._SHARING_RETRIES
+
 
 # --- config.toml: atomic writes vs. lost updates -----------------------------------
 

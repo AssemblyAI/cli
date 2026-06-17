@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import os
 import re
 import tempfile
+import time
 import tomllib
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import platformdirs
@@ -115,6 +118,26 @@ def _validation_summary(exc: ValidationError) -> str:
 # snapshots one for rollback), so hand out deep copies, never the cached object.
 _load_cache: dict[Path, tuple[int, int, Config]] = {}
 
+# Windows has no atomic replace-over-open like POSIX: while _dump swaps the temp
+# file in (os.replace), a racing open on the same path transiently fails with
+# PermissionError. Since readers are lock-free, both a lock-free reader's open and
+# the writer's replace can lose that race, so each retries a few short backoffs to
+# ride out the (sub-millisecond) rename window. POSIX replaces atomically and never
+# raises here, so this only ever loops on Windows.
+_SHARING_RETRIES = 5  # pragma: no mutate -- a ±1 change in the retry budget is equivalent
+_SHARING_BACKOFF = 0.02  # pragma: no mutate -- a timing constant; any small value works
+
+
+def _retry_on_sharing_violation[T](op: Callable[[], T]) -> T:
+    """Run a file op, retrying the transient PermissionError Windows raises when an
+    open and an os.replace race on the same path (see _SHARING_RETRIES)."""
+    for _ in range(_SHARING_RETRIES - 1):
+        try:
+            return op()
+        except PermissionError:
+            time.sleep(_SHARING_BACKOFF)
+    return op()  # the last attempt's error (a genuine permission problem) propagates
+
 
 def _load() -> Config:
     path = _config_file()
@@ -125,15 +148,15 @@ def _load() -> Config:
     cached = _load_cache.get(path)
     if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
         return cached[2].model_copy(deep=True)
-    with path.open("rb") as fh:
-        try:
-            data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
-            raise CLIError(
-                f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
-                error_type="invalid_config",
-                exit_code=2,
-            ) from exc
+    raw = _retry_on_sharing_violation(path.read_bytes)
+    try:
+        data = tomllib.load(io.BytesIO(raw))
+    except tomllib.TOMLDecodeError as exc:
+        raise CLIError(
+            f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
+            error_type="invalid_config",
+            exit_code=2,
+        ) from exc
     try:
         cfg = Config.model_validate(data)
     except ValidationError as exc:
@@ -159,7 +182,7 @@ def _dump(cfg: Config) -> None:
     try:
         with os.fdopen(fd, "wb") as fh:
             tomli_w.dump(cfg.model_dump(exclude_none=True), fh)
-        tmp.replace(path)
+        _retry_on_sharing_violation(lambda: tmp.replace(path))
         # The mtime/size key usually invalidates on its own, but drop the entry
         # explicitly so a same-size rewrite on a coarse-mtime filesystem can't
         # serve the pre-write parse.
