@@ -14,15 +14,19 @@ _TERMINATORS = ".!?"
 def split_sentences(text: str) -> list[str]:
     """Split ``text`` into sentences, each ending in ``.``/``!``/``?``.
 
-    A trailing fragment with no terminal punctuation is kept as a final sentence,
-    so no text is ever dropped; empty/whitespace-only pieces are discarded.
+    A terminator ends a sentence only when it is the last character or is followed by
+    whitespace — so a ``.`` inside a number ("$3.50") or stacked terminators ("..."/"?!")
+    don't fragment one spoken sentence into several TTS calls (which both clips audio
+    mid-number and writes a space-mangled copy back into the LLM history). A trailing
+    fragment with no terminal punctuation is kept, so no text is ever dropped;
+    empty/whitespace-only pieces are discarded.
     """
     sentences: list[str] = []
     start = 0
     for index, char in enumerate(text):
-        if char in _TERMINATORS:
-            # The slice always includes the terminator at ``index``, so it is never
-            # blank after stripping the inter-sentence whitespace.
+        if char in _TERMINATORS and (index + 1 == len(text) or text[index + 1].isspace()):
+            # Boundary confirmed (end-of-text or a following space); the slice includes
+            # the terminator, so it is never blank after stripping leading whitespace.
             sentences.append(text[start : index + 1].strip())
             start = index + 1
     tail = text[start:].strip()

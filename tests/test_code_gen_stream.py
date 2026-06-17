@@ -96,6 +96,8 @@ def test_llm_with_file_source_streams_file_and_flushes_summary():
     _compiles(code)
     assert "client.stream(file_chunks())" in code
     assert "run_chain" in code
+    # A null gateway message content must not crash the generated chain (str concat).
+    assert 'message.content or ""' in code
     assert "summarize(final=True)" in code
     assert code.count("import time") == 1  # llm + file both need time; imported once
 

@@ -172,7 +172,7 @@ def _no_project_error() -> APIError:
 
 
 def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
-    """Return the existing 'AssemblyAI CLI' key, or create one in the first project."""
+    """Return the existing 'AssemblyAI CLI' key, or create one in the first usable project."""
     projects = _parse(_PROJECT_LIST, ams.list_projects(account_id, session_jwt))
     if not projects:
         raise _no_project_error()
@@ -180,7 +180,9 @@ def find_or_create_cli_key(account_id: int, session_jwt: str) -> str:
         for token in entry.tokens:
             if key := _reusable_cli_key(token):
                 return key
-    project = projects[0].project
+    # Mint into the first entry that actually carries a project — an account whose
+    # first membership has no project can still have a usable one later in the list.
+    project = next((entry.project for entry in projects if entry.project is not None), None)
     if project is None:
         raise _no_project_error()
     created = ams.create_token(account_id, project.id, endpoints.CLI_TOKEN_NAME, session_jwt)

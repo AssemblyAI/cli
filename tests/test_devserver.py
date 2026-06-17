@@ -81,6 +81,18 @@ def test_dev_command_venv_swaps_python():
     ]
 
 
+def test_dev_command_venv_swaps_python3():
+    # A Procfile edited to `python3 -m uvicorn …` must still run inside the project
+    # venv, not the system interpreter (which lacks the installed deps).
+    from aai_cli.init import runner
+
+    cmd = devserver.dev_command(
+        Path("/proj"), ["python3", "-m", "uvicorn", "api.index:app"], use_uv=False
+    )
+    assert cmd[0] == str(runner.venv_python(Path("/proj")))
+    assert cmd[1:] == ["-m", "uvicorn", "api.index:app", "--host", "127.0.0.1", "--reload"]
+
+
 def test_dev_command_venv_leaves_non_python_first_token():
     # The `python`-swap only fires on a leading `python`; anything else passes through
     # (covers the False branch of the swap condition).

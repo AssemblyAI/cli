@@ -96,6 +96,32 @@ def test_keys_list_without_session_runs_login(monkeypatch, mocker):
     assert "Run the same command again" in result.output
 
 
+def test_keys_create_rejects_response_without_api_key(mocker):
+    # A 200 whose body omits api_key (proxy/version drift) must surface a clean
+    # APIError, not a KeyError traceback out of the human render path.
+    _auth()
+    projects = [{"project": {"id": 1, "name": "Default"}, "tokens": []}]
+    mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)
+    mocker.patch("aai_cli.commands.keys.ams.create_token", autospec=True, return_value={"id": 11})
+    result = runner.invoke(app, ["keys", "create", "--name", "ci"])
+    assert result.exit_code == 1
+    assert "no api_key" in result.output
+
+
+def test_keys_create_rejects_empty_api_key(mocker):
+    # api_key present but empty (a distinct failure from a missing key): still a clean
+    # APIError, never an empty key printed as if it were real.
+    _auth()
+    projects = [{"project": {"id": 1, "name": "Default"}, "tokens": []}]
+    mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)
+    mocker.patch(
+        "aai_cli.commands.keys.ams.create_token", autospec=True, return_value={"api_key": ""}
+    )
+    result = runner.invoke(app, ["keys", "create", "--name", "ci"])
+    assert result.exit_code == 1
+    assert "no api_key" in result.output
+
+
 def test_keys_create_prints_new_key(mocker):
     _auth()
     projects = [{"project": {"id": 1, "name": "Default"}, "tokens": []}]

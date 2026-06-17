@@ -56,14 +56,14 @@ def dev_command(target: Path, web: list[str], *, use_uv: bool, host: str = LOCAL
     """The Procfile web process, run in the project venv with live reload.
 
     The Procfile's `web:` line starts with `python -m uvicorn …`. With uv, run it
-    under `uv run`; without uv, swap a leading `python` for the project's venv
-    interpreter so it runs inside the scaffolded `.venv`. In both cases the
+    under `uv run`; without uv, swap a leading `python`/`python3` for the project's
+    venv interpreter so it runs inside the scaffolded `.venv`. In both cases the
     Procfile's `--host 0.0.0.0` is overridden to `host` (loopback by default) so a
     local dev run never exposes the server — and the key in `.env` — to the LAN.
     """
     argv = _override_host(web, host)
     if use_uv:
         return ["uv", "run", *argv, "--reload"]
-    if argv and argv[0] == "python":
+    if argv and argv[0] in ("python", "python3"):
         argv[0] = str(runner.venv_python(target))
     return [*argv, "--reload"]
