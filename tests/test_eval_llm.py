@@ -12,6 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aai_cli.commands.evaluate import _exec as evaluate_exec
+from aai_cli.commands.evaluate import _render as evaluate_render
 from aai_cli.core import config
 from aai_cli.main import app
 
@@ -272,14 +273,14 @@ def test_gather_reduce_inputs_headers_and_skips_failures_and_blanks():
 
 
 def test_final_llm_output_distinguishes_absent_from_empty():
-    assert evaluate_exec._final_llm_output({"item": "a"}) is None
-    assert evaluate_exec._final_llm_output({"llm": {"steps": []}}) == ""
-    assert evaluate_exec._final_llm_output({"llm": {"steps": [{"output": "x"}]}}) == "x"
+    assert evaluate_render._final_llm_output({"item": "a"}) is None
+    assert evaluate_render._final_llm_output({"llm": {"steps": []}}) == ""
+    assert evaluate_render._final_llm_output({"llm": {"steps": [{"output": "x"}]}}) == "x"
 
 
 def test_render_blocks_drop_out_when_absent():
-    assert evaluate_exec._llm_block({"rows": [{"item": "a"}]}) is None
-    assert evaluate_exec._reduce_block({}) is None
+    assert evaluate_render._llm_block({"rows": [{"item": "a"}]}) is None
+    assert evaluate_render._reduce_block({}) is None
 
 
 def _assign(obj, attribute, value):
