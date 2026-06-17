@@ -130,6 +130,21 @@ def _decode_audio_frame(msg: dict[str, object]) -> bytes:
         raise APIError(f"TTS service sent an Audio frame that is not valid base64: {exc}") from exc
 
 
+def _consume_audio_frame(
+    msg: dict[str, object],
+    pcm: bytearray,
+    sample_rate: int,
+    on_audio: Callable[[bytes, int], None] | None,
+) -> bool:
+    """Append one Audio frame's PCM, stream it to ``on_audio``, and report whether
+    it is the final frame (so the collection loop can stop)."""
+    chunk = _decode_audio_frame(msg)
+    pcm.extend(chunk)
+    if on_audio is not None:
+        on_audio(chunk, sample_rate)
+    return bool(msg.get("is_final"))
+
+
 def _error_frame_detail(msg: dict[str, object]) -> str:
     """The ``(code): reason`` tail of an Error frame, with an ``unknown`` reason
     fallback so a detail-less frame still yields a non-empty message."""
@@ -158,9 +173,16 @@ def _default_connect(
 
 
 def _run_protocol(
-    ws: _WebSocket, config: SpeakConfig, on_warning: Callable[[str], None] | None
+    ws: _WebSocket,
+    config: SpeakConfig,
+    on_warning: Callable[[str], None] | None,
+    on_audio: Callable[[bytes, int], None] | None,
 ) -> SpeakResult:
-    """Send Generate + Flush, collect Audio until is_final, then Terminate."""
+    """Send Generate + Flush, collect Audio until is_final, then Terminate.
+
+    Each decoded Audio chunk is handed to ``on_audio(chunk, sample_rate)`` (when
+    given) as it arrives, so a caller can play it immediately instead of waiting
+    for the whole synthesis; the full PCM is still accumulated and returned."""
     begin = json.loads(_recv_raw(ws))
     begin_type = begin.get("type")
     if begin_type == "Error":
@@ -182,8 +204,7 @@ def _run_protocol(
         msg = json.loads(_recv_raw(ws))
         mtype = msg.get("type")
         if mtype == "Audio":
-            pcm.extend(_decode_audio_frame(msg))
-            if msg.get("is_final"):
+            if _consume_audio_frame(msg, pcm, sample_rate, on_audio):
                 break
         elif mtype == "FlushDone":
             # The live server ends a synthesis with FlushDone (its Audio frames carry
@@ -207,10 +228,13 @@ def synthesize(
     *,
     connect: _Connect | None = None,
     on_warning: Callable[[str], None] | None = None,
+    on_audio: Callable[[bytes, int], None] | None = None,
 ) -> SpeakResult:
     """Open the streaming-TTS socket and synthesize ``config.text`` to PCM.
 
     ``connect`` defaults to websockets' synchronous client; injectable for tests.
+    ``on_audio(chunk, sample_rate)``, when given, receives each PCM chunk as it
+    arrives (for incremental playback); the full PCM is still returned regardless.
     Connect/session failures map to a clean CLIError (a rejected key -> exit 4).
     """
     wsutil.silence_websockets_logging()
@@ -230,7 +254,7 @@ def synthesize(
         max_size=None,  # no frame cap: a synthesis's Audio frames can exceed the 1 MiB default
     )
     try:
-        return _run_protocol(ws, config, on_warning)
+        return _run_protocol(ws, config, on_warning, on_audio)
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:
