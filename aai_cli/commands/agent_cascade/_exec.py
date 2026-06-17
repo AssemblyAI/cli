@@ -21,6 +21,7 @@ from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent_cascade import engine, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
+from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, errors, llm, signals
 from aai_cli.core.errors import UsageError
@@ -168,11 +169,7 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
-    if opts.voice not in voices.VOICE_NAMES:
-        raise UsageError(
-            f"Unknown voice {opts.voice!r}.",
-            suggestion="Run 'assembly agent-cascade --list-voices' to see the options.",
-        )
+    validate_voice(opts.voice, voices.VOICE_NAMES, command="agent-cascade")
     # Streaming TTS has no production host, so the whole cascade is sandbox-only.
     tts_session.require_available("agent-cascade")
     system_prompt_text = _resolve_system_prompt(opts.system_prompt, opts.system_prompt_file)

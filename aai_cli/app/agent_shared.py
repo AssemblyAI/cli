@@ -7,9 +7,19 @@ precedent) rather than being copied between the two command packages.
 
 from __future__ import annotations
 
+from collections.abc import Container
 from pathlib import Path
 
-from aai_cli.core.errors import CLIError
+from aai_cli.core.errors import CLIError, UsageError
+
+
+def validate_voice(voice: str, valid_names: Container[str], *, command: str) -> None:
+    """Reject an unknown ``--voice`` with a usage error pointing at ``--list-voices``."""
+    if voice not in valid_names:
+        raise UsageError(
+            f"Unknown voice {voice!r}.",
+            suggestion=f"Run 'assembly {command} --list-voices' to see the options.",
+        )
 
 
 def resolve_system_prompt(system_prompt: str, system_prompt_file: Path | None) -> str:

@@ -63,12 +63,11 @@ DEFAULT_VOICE = "ivy"
 
 def format_voice_list() -> str:
     """Human-readable voice IDs for --list-voices, grouped by language."""
-    groups = dict.fromkeys(voice.language for voice in VOICES)
-    blocks: list[str] = []
-    for language in groups:
-        names = "\n".join(f"  {voice.name}" for voice in VOICES if voice.language == language)
-        blocks.append(f"{language}:\n{names}")
-    return "\n\n".join(blocks)
+    languages = dict.fromkeys(voice.language for voice in VOICES)
+    return choices.render_grouped(
+        (language, [voice.name for voice in VOICES if voice.language == language])
+        for language in languages
+    )
 
 
 def complete_voice(incomplete: str) -> list[str]:
