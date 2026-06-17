@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.auth.flow import LoginResult
@@ -302,6 +303,7 @@ def test_root_callback_keeps_profile_env_without_sandbox(mocker):
     assert json.loads(result.output)["env"] == "production"
 
 
+@pytest.mark.usefixtures("internal_profile")  # `whoami --sandbox` needs an AssemblyAI login
 def test_root_callback_sandbox_overrides_profile_env(mocker):
     # --sandbox forces sandbox000 even when the profile is bound elsewhere (pins the
     # `env is None` arm: an `is not None` would leave the profile env in place).
@@ -347,6 +349,7 @@ def test_root_callback_error_honors_json_request():
         assert payload["error"]["type"] == "invalid_environment"
 
 
+@pytest.mark.usefixtures("internal_profile")  # `whoami --env sandbox000` needs an AssemblyAI login
 def test_env_override_prints_warning_to_stderr(mocker):
     # The root callback warns when an explicit --env contradicts the profile's stored
     # env (the stored key was minted for a different environment).

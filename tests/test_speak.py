@@ -11,6 +11,10 @@ from aai_cli.core import config
 from aai_cli.main import app
 from aai_cli.tts import session
 
+# `speak` is sandbox-only and runs under `--sandbox`, which the root callback gates
+# on an AssemblyAI login — run the whole module as an employee.
+pytestmark = pytest.mark.usefixtures("internal_profile")
+
 runner = CliRunner()
 
 

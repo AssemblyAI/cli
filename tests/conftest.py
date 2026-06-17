@@ -208,6 +208,18 @@ def memory_fs():
     MemoryFileSystem.pseudo_dirs[:] = [""]
 
 
+@pytest.fixture
+def internal_profile(monkeypatch):
+    """Make the active profile read as an AssemblyAI (internal) login.
+
+    The sandbox flags/commands are hidden from help and rejected at the root
+    callback for external accounts, so any test that drives `--sandbox` / a
+    sandbox-only command must run as an employee. Patches the predicate rather
+    than writing an email so it's independent of how a test sets up its config.
+    """
+    monkeypatch.setattr("aai_cli.core.access.profile_is_internal", lambda *a, **k: True)
+
+
 @pytest.fixture(autouse=True)
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"

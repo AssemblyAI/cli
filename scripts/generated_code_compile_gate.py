@@ -6,10 +6,21 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from aai_cli.core import access
 from aai_cli.main import app
 
 _ARG_COUNT = 2
 _USAGE_EXIT = 2
+
+
+def _force_internal_account() -> None:
+    """Run as an AssemblyAI login so the sandbox-only `--show-code` cases aren't gated.
+
+    The root callback restricts sandbox environments to internal logins; this gate
+    only compiles generated code, not the access check, so stub the predicate True.
+    """
+    access.profile_is_internal = lambda *_args, **_kwargs: True
+
 
 # Compile exactly what `assembly … --show-code > script.py` would capture: stdout
 # only (stderr carries human chrome like warnings), with telemetry disabled so a
@@ -39,6 +50,7 @@ def main() -> int:
         return _USAGE_EXIT
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
+    _force_internal_account()
 
     transcribe_config = out_dir / "transcribe-config.json"
     transcribe_config.write_text(

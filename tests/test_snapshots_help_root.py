@@ -15,7 +15,10 @@ import pytest
 
 from tests._snapshot_surface import assert_help_matches_snapshot
 
-pytestmark = pytest.mark.usefixtures("fixed_render_size")
+# Pin the full (internal) surface: the golden's job is to fix command ordering and
+# panel layout across *every* command, sandbox ones included. The external view (which
+# hides the sandbox flags/commands) is covered by tests/test_sandbox_access.py.
+pytestmark = pytest.mark.usefixtures("fixed_render_size", "internal_profile")
 
 
 def test_root_help_matches_snapshot(snapshot):

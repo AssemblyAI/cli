@@ -1,6 +1,11 @@
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.main import app
+
+# Drives `--sandbox` / `--env sandbox000`, which the root callback restricts to
+# AssemblyAI logins — run the module as an employee so those paths reach the env.
+pytestmark = pytest.mark.usefixtures("internal_profile")
 
 runner = CliRunner()
 

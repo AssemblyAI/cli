@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
+from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 import typer
 from typer._click.utils import PacifyFlushWrapper
-from typer.core import TyperGroup
+from typer.core import TyperGroup, TyperOption
 
 if TYPE_CHECKING:
     # Typer (>=0.13) vendors its own click; TyperGroup.list_commands receives this
     # context type, not the upstream click.Context. Imported for typing only.
+    from typer._click.core import Command as ClickCommand
     from typer._click.core import Context as ClickContext
+    from typer._click.formatting import HelpFormatter as ClickHelpFormatter
 
 from aai_cli import __version__, command_registry
 from aai_cli.app.context import AppState
 from aai_cli.commands import onboard
-from aai_cli.core import argscan, choices, debuglog, environments, stdio
+from aai_cli.core import access, argscan, choices, debuglog, environments, stdio
+from aai_cli.core.environments import Environment
 from aai_cli.core.errors import CLIError, NotAuthenticated
 from aai_cli.onboard import wizard
 from aai_cli.onboard.sections import WizardContext
@@ -36,6 +41,23 @@ _COMMAND_ORDER = command_registry.command_order(_REGISTERED_COMMAND_MODULES)
 # Rank lookup derived once from the static order; list_commands runs per `--help`
 # and per completion, so there's no reason to rebuild this on every call.
 _COMMAND_RANK = {name: i for i, name in enumerate(_COMMAND_ORDER)}
+
+
+# Root flags and the marker the sandbox-only command docstrings open with: the single
+# place the "what is a sandbox option" surface is defined, so help-filtering and the
+# command docstrings stay the lone declarations (no parallel command list to maintain).
+_SANDBOX_ROOT_FLAGS = frozenset({"sandbox", "env"})
+_SANDBOX_HELP_MARKER = "[sandbox]"
+
+
+def _is_sandbox_command(command: ClickCommand) -> bool:
+    """Whether a command is sandbox-only, detected by the ``[sandbox]`` help prefix.
+
+    The docstrings escape the bracket for Rich (``\\[sandbox]``), so strip a leading
+    backslash before matching.
+    """
+    text = (command.help or command.short_help or "").lstrip()
+    return text.lstrip("\\").startswith(_SANDBOX_HELP_MARKER)
 
 
 class _OrderedGroup(TyperGroup):
@@ -58,6 +80,51 @@ class _OrderedGroup(TyperGroup):
         # args off the context before the group callback runs.
         ctx.meta[argscan.RAW_ARGS_META_KEY] = list(args)
         return super().parse_args(ctx, args)
+
+    def _sandbox_surface(self, ctx: ClickContext) -> list[TyperOption | ClickCommand]:
+        """The sandbox root flags and ``[sandbox]`` commands — the surface to hide."""
+        flags: list[TyperOption | ClickCommand] = [
+            param
+            for param in self.get_params(ctx)
+            if isinstance(param, TyperOption) and param.name in _SANDBOX_ROOT_FLAGS
+        ]
+        commands = [
+            command
+            for name in self.list_commands(ctx)
+            if (command := self.get_command(ctx, name)) is not None and _is_sandbox_command(command)
+        ]
+        return [*flags, *commands]
+
+    @contextlib.contextmanager
+    def _sandbox_surface_hidden(self, ctx: ClickContext) -> Generator[None]:
+        """Mark the sandbox flags/commands ``hidden`` for one render, then restore.
+
+        Restored in ``finally``: the parameter/command objects are process-global
+        (one Typer tree per process), so a leaked ``hidden=True`` would wrongly hide
+        the sandbox surface from a later in-process render or from shell completion.
+        """
+        targets = self._sandbox_surface(ctx)
+        saved = [(target, target.hidden) for target in targets]
+        for target in targets:
+            target.hidden = True
+        try:
+            yield
+        finally:
+            for target, was_hidden in saved:
+                target.hidden = was_hidden
+
+    def format_help(self, ctx: ClickContext, formatter: ClickHelpFormatter) -> None:
+        """Render `assembly --help`, hiding the sandbox surface from external accounts.
+
+        The sandbox runs on internal infrastructure, so its flags and commands are
+        noise (and a dead end) for an external account — show them only to an
+        AssemblyAI login. Internal users get the full surface unchanged.
+        """
+        if access.profile_is_internal():
+            super().format_help(ctx, formatter)
+            return
+        with self._sandbox_surface_hidden(ctx):
+            super().format_help(ctx, formatter)
 
 
 # Brand-retint Typer's help palette, pin help-table columns against clipping, make
@@ -106,6 +173,36 @@ def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
     if sandbox and env is not None and env != environments.SANDBOX_ENV:
         return f"--sandbox ignored: --env {env} takes precedence."
     return None
+
+
+def _enforce_internal_env(
+    ctx: typer.Context, state: AppState, active_env: Environment, *, json_mode: bool
+) -> None:
+    """Reject an internal-only environment for a profile that isn't an AssemblyAI account.
+
+    The sandbox runs on internal infrastructure an external account can neither reach
+    nor authenticate against, so selecting it (via --sandbox / --env / AAI_ENV) fails
+    here with a clean error instead of a confusing downstream auth failure. ``login``
+    is exempt: a first-time employee must be able to target the sandbox to sign in
+    there, which is what records the email this gate then reads.
+    """
+    if active_env.name == environments.DEFAULT_ENV:
+        return
+    if ctx.invoked_subcommand == "login":
+        return
+    if access.profile_is_internal(state.resolve_profile()):
+        return
+    err = CLIError(
+        f"The {active_env.name} environment is restricted to AssemblyAI accounts.",
+        error_type="restricted_environment",
+        exit_code=2,
+        suggestion=(
+            "Drop --sandbox/--env (and unset AAI_ENV) to use production, or run "
+            "'assembly login' with an AssemblyAI account."
+        ),
+    )
+    output.emit_error(err, json_mode=json_mode)
+    raise typer.Exit(code=err.exit_code)
 
 
 def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
@@ -209,6 +306,7 @@ def main(
             raise typer.Exit(code=env_err.exit_code) from None
     active_env = environments.active()
     _LOG.debug("environment: %s (%s)", active_env.name, active_env.api_base)
+    _enforce_internal_env(ctx, state, active_env, json_mode=json_mode)
     for warning in (conflict_warning, state.env_override_warning()):
         if warning and not quiet:
             # Surfaced in JSON mode too (as {"warning": …}), so a `--json` pipeline gets

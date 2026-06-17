@@ -11,6 +11,10 @@ from aai_cli.core import config
 from aai_cli.core.errors import APIError
 from aai_cli.main import app
 
+# A few cases select the sandbox via `--sandbox` / `--env sandbox000`, which the root
+# callback gates on an AssemblyAI login — run the module as an employee.
+pytestmark = pytest.mark.usefixtures("internal_profile")
+
 runner = CliRunner()
 
 

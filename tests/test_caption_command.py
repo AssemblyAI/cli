@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.commands.caption import _exec as caption_exec
@@ -117,6 +118,7 @@ def test_caption_json_error_shape(tmp_path, monkeypatch):
     assert err["error"]["type"] == "file_not_found"
 
 
+@pytest.mark.usefixtures("internal_profile")  # dub is sandbox-only, hidden from external help
 def test_caption_is_listed_between_dub_and_eval_in_root_help():
     # Pins caption's slot in _COMMAND_ORDER: it renders in the "Run AssemblyAI"
     # panel after dub, not alphabetically at the end of the help.
