@@ -171,6 +171,17 @@ def reset_active_environment():
 
 
 @pytest.fixture(autouse=True)
+def reset_llm_client_cache():
+    # llm._client memoizes one OpenAI client per (api_key, gateway base) for the
+    # process; clear it before each test so a client cached by an earlier test can't
+    # leak across the (pytest-randomly shuffled) suite and make _client's cache-miss
+    # branch order-dependent.
+    from aai_cli.core import llm
+
+    llm._CLIENTS.clear()
+
+
+@pytest.fixture(autouse=True)
 def memory_keyring():
     backend = MemoryKeyring()
     keyring.set_keyring(backend)

@@ -48,6 +48,13 @@ def test_client_targets_active_gateway_base():
     assert str(client.base_url).rstrip("/") == environments.active().llm_gateway_base.rstrip("/")
 
 
+def test_client_is_cached_per_key():
+    # Repeated gateway calls reuse one OpenAI client (one kept-alive connection pool)
+    # rather than rebuilding it — the same instance comes back for the same key.
+    first = llm._client("sk_live")
+    assert llm._client("sk_live") is first
+
+
 def test_complete_sends_model_and_messages(monkeypatch):
     seen = _fake_client(monkeypatch, result=_response("hi there"))
     resp = llm.complete(

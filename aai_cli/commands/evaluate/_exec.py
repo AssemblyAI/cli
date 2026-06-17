@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import StrEnum
@@ -182,21 +183,13 @@ def _transcribe_one(
     return _Timed(outcome=outcome, latency=time.perf_counter() - start)
 
 
-def _concurrent_transcripts(
-    api_key: str,
-    items: list[eval_data.EvalItem],
-    *,
-    transcription_config: aai.TranscriptionConfig,
-    concurrency: int,
-) -> list[_Timed]:
+def _fan_out[T, R](work: Callable[[T], R], items: list[T], *, concurrency: int) -> list[R]:
+    """Run ``work`` over ``items`` across ``concurrency`` threads (results in submission
+    order); the first exception aborts the rest, cancelling not-yet-started items."""
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = [
-            pool.submit(_transcribe_one, api_key, item, transcription_config) for item in items
-        ]
+        futures = [pool.submit(work, item) for item in items]
         for future in as_completed(futures):
             if (exc := future.exception()) is not None:
-                # Only aborting failures escape _transcribe_one: drop the
-                # not-yet-started items rather than burn an API call on each.
                 pool.shutdown(cancel_futures=True)
                 raise exc
         return [future.result() for future in futures]
@@ -227,14 +220,16 @@ def _transcripts(
             ):
                 outcomes.append(_transcribe_one(api_key, item, transcription_config))
         return outcomes
+
+    def _one(item: eval_data.EvalItem) -> _Timed:
+        return _transcribe_one(api_key, item, transcription_config)
+
     with output.status(
         f"Transcribing {len(items)} items (concurrency {concurrency})…",
         json_mode=json_mode,
         quiet=quiet,
     ):
-        return _concurrent_transcripts(
-            api_key, items, transcription_config=transcription_config, concurrency=concurrency
-        )
+        return _fan_out(_one, items, concurrency=concurrency)
 
 
 def _run_llm_map(
@@ -242,28 +237,33 @@ def _run_llm_map(
     results: list[_ItemResult],
     llm_opts: _LlmOptions,
     *,
+    concurrency: int,
     json_mode: bool,
     quiet: bool,
 ) -> None:
     """Run the ``--llm`` chain over each transcribed row and attach it under ``llm``.
 
-    A *map*: the chain runs over the row's transcript text (inline, like
-    ``stream --llm``) and lands as ``{"model", "steps"}`` on the row — the WER score
-    is untouched. Failed rows have no transcript, so they're skipped.
+    A *map*: the chain runs over the row's transcript text (inline, like ``stream
+    --llm``) and lands as ``{"model", "steps"}`` on the row — the WER score is untouched.
+    Failed rows have no transcript, so they're skipped; the rest fan out across
+    ``--concurrency`` (each lands on its own dict; the first gateway error aborts).
     """
     scored = [result for result in results if result.hypothesis is not None]
+
+    def _map_one(result: _ItemResult) -> None:
+        steps = gateway.run_chain_steps(
+            api_key,
+            llm_opts.prompts,
+            transcript_text=result.hypothesis,
+            model=llm_opts.model,
+            max_tokens=llm_opts.max_tokens,
+        )
+        result.row["llm"] = {"model": llm_opts.model, "steps": steps}
+
     with output.status(
         f"Running --llm over {len(scored)} transcripts…", json_mode=json_mode, quiet=quiet
     ):
-        for result in scored:
-            steps = gateway.run_chain_steps(
-                api_key,
-                llm_opts.prompts,
-                transcript_text=result.hypothesis,
-                model=llm_opts.model,
-                max_tokens=llm_opts.max_tokens,
-            )
-            result.row["llm"] = {"model": llm_opts.model, "steps": steps}
+        _fan_out(_map_one, scored, concurrency=concurrency)
 
 
 def _reduce_input(result: _ItemResult) -> str:
@@ -459,7 +459,14 @@ def _evaluate_one(
     ]
     llm_opts = opts.llm_options()
     if llm_opts.prompts:
-        _run_llm_map(api_key, results, llm_opts, json_mode=json_mode, quiet=state.quiet)
+        _run_llm_map(
+            api_key,
+            results,
+            llm_opts,
+            concurrency=opts.concurrency,
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
     payload = _payload(data.label, opts.speech_model, results)
     if llm_opts.reduce_prompts:
         reduce = _run_reduce(api_key, results, llm_opts, json_mode=json_mode, quiet=state.quiet)

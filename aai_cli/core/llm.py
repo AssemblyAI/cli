@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -98,10 +99,27 @@ def build_messages(
     return messages
 
 
+# One OpenAI client per (api_key, gateway base) for the process lifetime: building
+# it sets up an httpx connection pool + TLS state, so callers that loop — a --llm
+# chain, dub's per-utterance translate, agent-cascade's per-turn reply, eval's
+# per-row map — reuse one kept-alive pool instead of paying a fresh setup each call.
+# The OpenAI client is safe to share across the batch worker threads; the lock only
+# guards the cache so a concurrent miss builds one client, not several.
+_CLIENT_LOCK = threading.Lock()
+_CLIENTS: dict[tuple[str, str], OpenAI] = {}
+
+
 def _client(api_key: str) -> OpenAI:
     from openai import OpenAI
 
-    return OpenAI(api_key=api_key, base_url=environments.active().llm_gateway_base)
+    base = environments.active().llm_gateway_base
+    cache_key = (api_key, base)
+    with _CLIENT_LOCK:
+        client = _CLIENTS.get(cache_key)
+        if client is None:
+            client = OpenAI(api_key=api_key, base_url=base)
+            _CLIENTS[cache_key] = client
+        return client
 
 
 # Lowercased substrings that mark a gateway 401/403 as a plan-entitlement block

@@ -9,6 +9,9 @@ from here. Runtime precedence for everything this file stores: command flags
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import NamedTuple
+
 import typer
 from rich.markup import escape
 
@@ -58,26 +61,57 @@ def _validated_env(value: str) -> str:
     return name
 
 
-def _current_value(key: ConfigKey, state: AppState) -> object:
-    if key is ConfigKey.active_profile:
-        return config.get_active_profile()
-    if key is ConfigKey.env:
-        return config.get_profile_env(state.resolve_profile())
+class _Setting(NamedTuple):
+    """How one ``ConfigKey`` is read and written, so each setting lives in one place
+    (a new key is one ``_SETTINGS`` entry, not a branch in two parallel ladders)."""
+
+    read: Callable[[AppState], object]
+    write: Callable[[str, AppState], object]
+
+
+def _read_active_profile(_state: AppState) -> object:
+    return config.get_active_profile()
+
+
+def _write_active_profile(raw: str, _state: AppState) -> object:
+    config.set_active_profile(raw)
+    return raw
+
+
+def _read_env(state: AppState) -> object:
+    return config.get_profile_env(state.resolve_profile())
+
+
+def _write_env(raw: str, state: AppState) -> object:
+    env = _validated_env(raw)
+    config.set_profile_env(state.resolve_profile(), env)
+    return env
+
+
+def _read_telemetry(_state: AppState) -> object:
     return config.get_telemetry_enabled()
+
+
+def _write_telemetry(raw: str, _state: AppState) -> object:
+    enabled = _parse_bool(ConfigKey.telemetry_enabled, raw)
+    config.set_telemetry_enabled(enabled=enabled)
+    return enabled
+
+
+_SETTINGS: dict[ConfigKey, _Setting] = {
+    ConfigKey.active_profile: _Setting(_read_active_profile, _write_active_profile),
+    ConfigKey.env: _Setting(_read_env, _write_env),
+    ConfigKey.telemetry_enabled: _Setting(_read_telemetry, _write_telemetry),
+}
+
+
+def _current_value(key: ConfigKey, state: AppState) -> object:
+    return _SETTINGS[key].read(state)
 
 
 def _store_value(key: ConfigKey, raw: str, state: AppState) -> object:
     """Persist ``raw`` under ``key`` and return the typed value that was stored."""
-    if key is ConfigKey.active_profile:
-        config.set_active_profile(raw)
-        return raw
-    if key is ConfigKey.env:
-        env = _validated_env(raw)
-        config.set_profile_env(state.resolve_profile(), env)
-        return env
-    enabled = _parse_bool(key, raw)
-    config.set_telemetry_enabled(enabled=enabled)
-    return enabled
+    return _SETTINGS[key].write(raw, state)
 
 
 def _render_value(value: object) -> str:

@@ -18,12 +18,11 @@ behavior is unit-tested without a gateway; the LLM title call lives in
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from aai_cli.core import llm
+from aai_cli.core import jsonshape, llm
 from aai_cli.core.errors import CLIError
 from aai_cli.streaming import naming
 
@@ -180,5 +179,5 @@ def write_outputs(
         duration_seconds=duration_seconds,
         turns=turns,
     )
-    _write(final.sidecar, json.dumps(record, indent=2) + "\n")
+    _write(final.sidecar, jsonshape.dumps_sidecar(record))
     return final

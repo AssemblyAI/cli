@@ -119,6 +119,23 @@ def test_llm_map_skips_failed_rows(tmp_path, mocker):
     assert steps.call_count == 1
 
 
+def test_llm_map_gateway_error_aborts_the_run(tmp_path, mocker):
+    from aai_cli.core.errors import APIError
+
+    _auth()
+    _write_manifest(tmp_path)
+    _mock_transcribe(mocker, ["hello there", "goodbye now"])
+    # A gateway failure during the fanned-out map must propagate (not be swallowed by
+    # the worker), so the run aborts rather than emitting a half-mapped payload.
+    mocker.patch(
+        "aai_cli.commands.evaluate._exec.gateway.run_chain_steps",
+        side_effect=APIError("gateway boom"),
+    )
+    result = runner.invoke(app, ["eval", "manifest.csv", "--llm", "fix", "--json"])
+    assert result.exit_code != 0
+    assert "gateway boom" in result.output
+
+
 def test_model_and_max_tokens_reach_the_gateway(tmp_path, mocker):
     _auth()
     _write_manifest(tmp_path)

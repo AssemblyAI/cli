@@ -51,6 +51,14 @@ def test_dumps_falls_back_to_str_for_unserializable_values():
     assert jsonshape.dumps({"at": moment}) == '{"at": "2026-06-13 14:00:00"}'
 
 
+def test_dumps_sidecar_is_pretty_and_stringifies():
+    # The on-disk sidecar form: 2-space-indented, a trailing newline, and the same
+    # default=str safety as dumps (a datetime stringifies instead of raising).
+    moment = datetime.datetime(2026, 6, 13, 14, 0, 0)
+    out = jsonshape.dumps_sidecar({"a": 1, "at": moment})
+    assert out == '{\n  "a": 1,\n  "at": "2026-06-13 14:00:00"\n}\n'
+
+
 def test_compact_drops_only_none_values():
     assert jsonshape.compact({"keep": 0, "blank": "", "false": False, "drop": None}) == {
         "keep": 0,

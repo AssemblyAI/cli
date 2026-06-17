@@ -82,6 +82,17 @@ def dumps(obj: object) -> str:
     return json.dumps(obj, default=str)
 
 
+def dumps_sidecar(obj: object) -> str:
+    """Serialize ``obj`` as a pretty-printed JSON file document (with a trailing newline).
+
+    The on-disk counterpart of ``dumps``: 2-space-indented for a human-diffable sidecar
+    artifact (``transcribe`` batch's ``.aai.json``, ``stream --save-dir``'s sidecar),
+    sharing the same ``default=str`` safety so a non-natively-serializable value falls
+    back to ``str(...)`` instead of raising.
+    """
+    return json.dumps(obj, indent=2, default=str) + "\n"
+
+
 def compact(mapping: dict[str, object]) -> dict[str, object]:
     """Return ``mapping`` without the keys whose value is ``None``.
 
