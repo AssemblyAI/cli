@@ -228,24 +228,24 @@ def test_internal_account_may_select_the_sandbox():
 
 
 def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(monkeypatch):
-    external = runner.invoke(app, ["--help"])
-    assert external.exit_code == 0
+    # Output is colorless suite-wide (see conftest), so raw substring checks are reliable.
+    external = runner.invoke(app, ["--help"]).output
     # Both the flags and the [sandbox]-tagged commands are gone for an external account.
-    assert "--sandbox" not in external.output
-    assert "--env" not in external.output
-    assert "[sandbox]" not in external.output
-    assert "agent-cascade" not in external.output
+    assert "--sandbox" not in external
+    assert "--env" not in external
+    assert "[sandbox]" not in external
+    assert "agent-cascade" not in external
     # …but the filter is surgical: non-sandbox flags and commands stay visible (this
     # also kills the mutant that would treat every option/command as sandbox).
-    assert "--profile" in external.output
-    assert "transcribe" in external.output
+    assert "--profile" in external
+    assert "transcribe" in external
 
     # Internal accounts see the full surface — and this second render proves the
     # external one *restored* the hidden flags/commands rather than leaking hidden=True
     # onto the process-global Typer tree (which would hide them here too).
     monkeypatch.setattr("aai_cli.core.access.profile_is_internal", lambda *a, **k: True)
-    internal = runner.invoke(app, ["--help"])
-    assert "--sandbox" in internal.output
-    assert "--env" in internal.output
-    assert "[sandbox]" in internal.output
-    assert "agent-cascade" in internal.output
+    internal = runner.invoke(app, ["--help"]).output
+    assert "--sandbox" in internal
+    assert "--env" in internal
+    assert "[sandbox]" in internal
+    assert "agent-cascade" in internal

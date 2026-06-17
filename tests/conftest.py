@@ -11,6 +11,18 @@ from keyring.backend import KeyringBackend
 # unit tests still run fully isolated.
 REAL_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 
+# Render the whole suite colorless — done at conftest *import*, before any test module
+# imports `aai_cli` and builds the module-level Rich consoles, so it takes effect on a
+# CI runner that exported FORCE_COLOR too. Why it matters: CliRunner captures to a
+# non-tty, so locally help/output is plain and `"--flag" in result.output` works — but
+# CI exports FORCE_COLOR, and Rich then splits a flag's leading dash into its own SGR
+# span ("\x1b[..m-\x1b[..m-profile"), so that same substring check fails in CI (and,
+# worse, a `"--flag" not in output` check passes *vacuously*, hiding a real regression).
+# Stripping FORCE_COLOR makes local == CI for every output test. Color-specific tests
+# build their own forced consoles (force_terminal=True / _environ={}), so they're
+# unaffected; the isolate_env fixture re-strips it per test for late console rebuilds.
+os.environ.pop("FORCE_COLOR", None)
+
 # Suites that legitimately reach the real network in-process (PyPI reachability
 # probes before a real install, real-API e2e) are gated behind these markers. They
 # opt out of the suite-wide --disable-socket; every other test stays blocked, so an
@@ -75,6 +87,9 @@ def isolate_env(monkeypatch):
         "CLAUDECODE",
         "CLAUDE_CODE_ENTRYPOINT",
         "NO_COLOR",
+        # See the module-level pop above: keep the suite colorless even if a test or
+        # CI runner re-sets it, so colored ANSI never breaks an output substring assert.
+        "FORCE_COLOR",
         # With these cleared (and SHIPPED_CLIENT_TOKEN empty in source), telemetry
         # is inert in every test unless one opts in explicitly.
         "AAI_TELEMETRY_CLIENT_TOKEN",
