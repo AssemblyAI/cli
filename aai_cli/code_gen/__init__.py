@@ -6,6 +6,7 @@ from aai_cli.code_gen import agent as _agent
 from aai_cli.code_gen import agent_cascade as _agent_cascade
 from aai_cli.code_gen import stream as _stream
 from aai_cli.code_gen import transcribe as _transcribe
+from aai_cli.code_gen.serialize import GatewayOptions
 
 if TYPE_CHECKING:
     from aai_cli.agent_cascade.config import CascadeConfig
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 def gateway_options(
     prompts: list[str], model: str, max_tokens: int, *, interval: float = 0.0
-) -> dict[str, object] | None:
+) -> GatewayOptions | None:
     """The LLM-gateway options dict consumed by `transcribe`/`stream`, or None if no prompts.
 
     `interval` (streaming only) is the seconds between summary refreshes baked into the
@@ -49,7 +50,7 @@ def transcribe(
     merged: dict[str, object],
     source: str,
     *,
-    llm_gateway: dict[str, object] | None = None,
+    llm_gateway: GatewayOptions | None = None,
     download_sections: list[str] | None = None,
 ) -> str:
     """Generate runnable Python that reproduces this transcribe invocation."""
@@ -61,7 +62,7 @@ def transcribe(
 def stream(
     merged: dict[str, object],
     *,
-    llm: dict[str, object] | None = None,
+    llm: GatewayOptions | None = None,
     source: str | None = None,
 ) -> str:
     """Generate runnable Python that reproduces this streaming invocation.

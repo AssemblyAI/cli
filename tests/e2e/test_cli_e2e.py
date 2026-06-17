@@ -56,7 +56,7 @@ def _transcribe_sample(key: str, *flags: str, timeout: int = 180) -> dict[str, A
     """Transcribe the hosted sample with `flags`, asserting success, return JSON."""
     proc = _run_cli(["transcribe", "--sample", *flags, "--json"], key, timeout=timeout)
     assert proc.returncode == 0, f"args={flags} stderr:\n{proc.stderr}"
-    return json.loads(proc.stdout)  # type: ignore[no-any-return]
+    return dict(json.loads(proc.stdout))
 
 
 # --- Batch transcription --------------------------------------------------

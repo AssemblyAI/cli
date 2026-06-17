@@ -10,8 +10,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from aai_cli import code_gen
+from aai_cli.code_gen.serialize import GatewayOptions
 
-_LLM = {"prompts": ["summarize"], "model": "m", "max_tokens": 100, "interval": 5.0}
+_LLM: GatewayOptions = {"prompts": ["summarize"], "model": "m", "max_tokens": 100, "interval": 5.0}
 
 
 def _compiles(code: str) -> None:
