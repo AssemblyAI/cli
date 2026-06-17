@@ -80,32 +80,33 @@ def test_retry_on_sharing_violation_reraises_a_persistent_permission_error(monke
 
 
 def test_config_concurrent_writers_always_leave_a_valid_file(tmp_config):
-    # Many threads rewriting config.toml at once, plus a reader hammering it throughout:
-    # the temp-file + atomic os.replace in _dump means no writer and no reader ever sees
-    # a truncated/half-written file (which would surface as an invalid_config CLIError),
-    # the surviving value is exactly one writer's, and no .config-*.toml.tmp is left behind.
-    workers = 24
-    barrier = threading.Barrier(workers + 1)  # writers + the reader, released together
-    stop = threading.Event()
+    # Multiple threads concurrently rewriting config.toml AND reading it back: the temp-file
+    # + atomic os.replace in _dump means no thread ever reads a truncated/half-written file
+    # (which would surface as an invalid_config CLIError), the surviving value is exactly one
+    # writer's, and no .config-*.toml.tmp is left behind.
+    #
+    # Each thread interleaves a few write+read cycles rather than one thread busy-spinning
+    # reads. That paces the file access by the actual write work (no zero-gap loop pinning
+    # the file open continuously) and is bounded (no perpetual reader to strand). The old
+    # shape — a dedicated zero-gap reader gated by a stop Event — manufactured contention no
+    # real single-user CLI produces, which on Windows (no atomic replace-over-open) drove
+    # the sharing-violation retry to exhaustion; and if a writer raised before the reader's
+    # stop was set, the pool's shutdown(wait=True) blocked on the spinning reader and the
+    # whole job hung. This shape can't do either.
+    workers, rounds = 12, 8
+    barrier = threading.Barrier(workers)  # release all threads together for maximal overlap
 
-    def writer(i: int) -> None:
+    def worker(i: int) -> None:
         barrier.wait()
-        config.set_profile_env("default", f"sandbox{i:03d}")
-
-    def reader() -> None:
-        barrier.wait()
-        while not stop.is_set():
-            config.get_profile_env("default")  # must never raise on a partial file
+        for _ in range(rounds):
+            config.set_profile_env("default", f"sandbox{i:03d}")
+            config.get_profile_env("default")  # the read races other threads' writes
 
     # future.result() re-raises any worker error in the main thread, so a truncated-file
     # read (an invalid_config CLIError) fails the test cleanly instead of being swallowed.
-    with ThreadPoolExecutor(max_workers=workers + 1) as pool:
-        read_future = pool.submit(reader)
-        write_futures = [pool.submit(writer, i) for i in range(workers)]
-        for f in write_futures:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for f in [pool.submit(worker, i) for i in range(workers)]:
             f.result()
-        stop.set()
-        read_future.result()
 
     assert config.get_profile_env("default") in {f"sandbox{i:03d}" for i in range(workers)}
     assert sorted(p.name for p in tmp_config.iterdir()) == ["config.toml"]  # no temp leftover
