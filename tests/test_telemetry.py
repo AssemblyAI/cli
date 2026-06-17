@@ -170,6 +170,15 @@ def test_build_event_success_is_info_with_no_error_attribute():
     assert "error" not in event
 
 
+def test_build_event_cancelled_is_info_with_no_error_attribute():
+    # Cancelling a command (Ctrl-C / SIGTERM) is a normal part of CLI use, not a crash:
+    # it stays an info log with no `error` namespace, so it never lands in Datadog Error
+    # Tracking nor inflates the crash rate (the regression these telemetry events showed).
+    event = telemetry.build_event("aai llm", outcome="cancelled", exit_code=130, duration_ms=1)
+    assert event["status"] == "info"
+    assert "error" not in event
+
+
 def test_build_event_failure_feeds_error_tracking(monkeypatch):
     monkeypatch.setenv("CI", "true")
     event = telemetry.build_event("aai stream", outcome="api_error", exit_code=1, duration_ms=5)
@@ -371,8 +380,10 @@ def test_track_typer_exit_maps_code(events, code, outcome):
     (event,) = events
     assert event["outcome"] == outcome
     assert event["exit_code"] == code
-    # A bare typer.Exit carries no message, so the failure event has only the kind.
-    assert event.get("error") == ({"kind": outcome} if code else None)
+    # Only a genuine error (exit 3) feeds Error Tracking; a clean exit (0) and a cancel
+    # (130) are normal CLI use and carry no `error` block. A bare typer.Exit has no message.
+    assert event.get("error") == ({"kind": outcome} if outcome == "error" else None)
+    assert event["status"] == ("error" if outcome == "error" else "info")
 
 
 def test_track_keyboard_interrupt_is_cancelled(events):
