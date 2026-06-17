@@ -12,6 +12,7 @@ from aai_cli.app import coding_agent
 from aai_cli.commands.code import _exec as code_exec
 from aai_cli.core import environments
 from aai_cli.main import app
+from aai_cli.ui import theme
 from tests._snapshot_surface import normalize
 
 runner = CliRunner()
@@ -61,7 +62,7 @@ def _base_argv(cmd: object) -> list[str]:
 
 
 def _prefix(model: str) -> list[str]:
-    """The fixed flag prefix every launch carries: main model + cheap weak model + quiet."""
+    """The fixed flag prefix every launch carries: models, quiet warnings, brand theme."""
     return [
         "aider",
         "--model",
@@ -69,6 +70,17 @@ def _prefix(model: str) -> list[str]:
         "--weak-model",
         f"openai/{code_exec.WEAK_MODEL}",
         "--no-show-model-warnings",
+        # Brand theme mapped from ui/theme.py.
+        "--user-input-color",
+        theme.BRAND,
+        "--assistant-output-color",
+        theme.ACCENT,
+        "--tool-output-color",
+        theme.MUTED,
+        "--tool-error-color",
+        theme.ERROR,
+        "--code-theme",
+        "ansi_dark",
     ]
 
 

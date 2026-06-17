@@ -31,7 +31,7 @@ from aai_cli.app import coding_agent
 from aai_cli.app.context import AppState
 from aai_cli.core import env, environments, llm
 from aai_cli.core.errors import missing_dependency
-from aai_cli.ui import output
+from aai_cli.ui import output, theme
 
 # The external coding agent we launch. Shelled out to (not embedded) so its heavy,
 # explicitly-unstable Python API never enters our locked deps or our gates.
@@ -87,6 +87,28 @@ def _gather_skill_docs() -> list[tuple[str, str]]:
     return docs
 
 
+def _theme_args() -> list[str]:
+    """aider color flags mapped to the CLI's Cobolt brand theme (see ui/theme.py).
+
+    Only the colors with a clear brand value are set — your input and the assistant get
+    the brand/secondary accents, tool output recedes (muted), errors use the brand red,
+    and code blocks reuse the CLI's own syntax theme. Warnings/completion-menu/dark-mode
+    keep aider's defaults rather than invent contrast pairs for an unknown background.
+    """
+    return [
+        "--user-input-color",
+        theme.BRAND,
+        "--assistant-output-color",
+        theme.ACCENT,
+        "--tool-output-color",
+        theme.MUTED,
+        "--tool-error-color",
+        theme.ERROR,
+        "--code-theme",
+        "ansi_dark",
+    ]
+
+
 def _write_conventions(docs: list[tuple[str, str]], dest_dir: Path) -> Path:
     """Write the gathered skills into one aider read-only conventions file."""
     parts = [
@@ -133,6 +155,7 @@ def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
             "--weak-model",
             f"openai/{WEAK_MODEL}",
             "--no-show-model-warnings",
+            *_theme_args(),
             *opts.files,
             "--read",
             str(conventions),
