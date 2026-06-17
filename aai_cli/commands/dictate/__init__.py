@@ -22,10 +22,9 @@ SPEC = command_registry.CommandModuleSpec(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Dictate: Enter starts a recording, Enter transcribes it", "assembly dictate"),
-            ("One utterance, then exit", "assembly dictate --once"),
+            ("Dictate one utterance: recording starts, Enter transcribes it", "assembly dictate"),
             (
-                "Pipe one utterance into another command",
+                "Pipe the utterance into another command",
                 'assembly dictate | assembly llm "write a conventional commit"',
             ),
             ("Dictate in Spanish", "assembly dictate --language es"),
@@ -33,7 +32,7 @@ SPEC = command_registry.CommandModuleSpec(
                 "Bias recognition toward tricky terms",
                 "assembly dictate --word-boost AssemblyAI --word-boost LeMUR",
             ),
-            ("One JSON object per utterance", "assembly dictate --json"),
+            ("Emit the utterance as a JSON object", "assembly dictate --json"),
             ("Pipe the bare transcript onward", "assembly dictate -o text | assembly llm -f"),
         ]
     ),
@@ -55,7 +54,12 @@ def dictate(
         None, "--word-boost", help="Bias recognition toward a term (repeatable)"
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
-    once: bool = typer.Option(False, "--once", help="Record one utterance immediately, then exit"),
+    once: bool = typer.Option(
+        False,
+        "--once",
+        hidden=True,
+        help="Deprecated: recording one utterance and exiting is now the default",
+    ),
     max_seconds: float = typer.Option(
         float(MAX_AUDIO_SECONDS),
         "--max-seconds",
@@ -73,12 +77,11 @@ def dictate(
 ) -> None:
     """Push-to-talk dictation: record the mic, get the transcript back
 
-    Press Enter (or Space) to start recording and press it again to stop; the
-    utterance is sent to the AssemblyAI Sync API and the transcript prints
-    immediately — no polling. Press q (or Esc/Ctrl-C) to finish. Each utterance
-    can be up to 120 seconds long. With --once, or when stdout is piped,
-    recording starts immediately and dictate exits after one utterance so the
-    transcript flows to the next command.
+    Recording starts immediately; press Enter (or Space) to stop and the
+    utterance is sent to the AssemblyAI Sync API — the transcript prints right
+    away (no polling) and dictate exits, so it flows straight to the next
+    command in a pipe. The recording can be up to 120 seconds long. Press
+    Ctrl-C to cancel without transcribing.
     """
     opts = dictate_exec.DictateOptions(
         language=language,

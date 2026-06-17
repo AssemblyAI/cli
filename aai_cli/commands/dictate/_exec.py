@@ -1,11 +1,12 @@
 """Run logic for `assembly dictate`: the options/run split (see AGENTS.md).
 
-Push-to-talk dictation over the Sync STT API: wait for a hotkey, record the
-microphone until the hotkey is pressed again (or the duration cap), POST the
-utterance to the Sync API, print the transcript, repeat. The command module
-(aai_cli/commands/dictate/__init__.py) only parses argv into a ``DictateOptions``; tests
-drive the session by constructing options directly and injecting the key/mic/
-HTTP boundaries, with no CliRunner argv round-trip and no real terminal.
+Push-to-talk dictation over the Sync STT API: recording starts immediately,
+runs until a hotkey is pressed (or the duration cap), then the utterance is
+POSTed to the Sync API, the transcript is printed, and dictate exits. The
+command module (aai_cli/commands/dictate/__init__.py) only parses argv into a
+``DictateOptions``; tests drive the session by constructing options directly and
+injecting the key/mic/HTTP boundaries, with no CliRunner argv round-trip and no
+real terminal.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 import typer
 
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, errors, stdio, sync_stt
+from aai_cli.core import choices, errors, sync_stt
 from aai_cli.core.config_builder import split_csv
 from aai_cli.core.hotkey import CTRL_C, CTRL_D, ESC, TerminalKeys
 from aai_cli.core.microphone import MicrophoneSource
@@ -27,10 +28,9 @@ from aai_cli.ui import output
 TARGET_RATE = 16000
 _BYTES_PER_SECOND = TARGET_RATE * 2  # PCM16 mono
 
-# Enter or Space toggles recording; q / Esc / Ctrl-D ends the session at the
-# idle prompt (Ctrl-C works anywhere — cbreak mode keeps SIGINT delivery).
-TOGGLE_KEYS = frozenset({"\r", "\n", " "})
-QUIT_KEYS = frozenset({"q", "Q", ESC, CTRL_C, CTRL_D})
+# Enter or Space stops the (auto-started) recording; q / Esc / Ctrl-D also stop
+# it (Ctrl-C cancels — cbreak mode keeps SIGINT delivery).
+STOP_KEYS = frozenset({"\r", "\n", " ", "q", "Q", ESC, CTRL_C, CTRL_D})
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,9 @@ class DictateOptions:
     prompt: str | None
     word_boost: list[str] | None
     device: int | None
+    # Deprecated no-op: recording one utterance and exiting is now the default,
+    # so --once is kept only so existing scripts don't break (it warns + does
+    # nothing). See run_dictate.
     once: bool
     max_seconds: float
     # -o/--output: text (the default bare-transcript shape) or json (== --json).
@@ -78,8 +81,8 @@ def _record(keys: TerminalKeys, mic: MicrophoneSource, *, max_seconds: float) ->
             pcm += chunk
             if len(pcm) >= int(max_seconds * _BYTES_PER_SECOND):
                 break
-            # None (no key pending) is simply not in either set.
-            if keys.read(0) in TOGGLE_KEYS | QUIT_KEYS:
+            # None (no key pending) is simply not in the set.
+            if keys.read(0) in STOP_KEYS:
                 break
     finally:
         # MicrophoneSource yields from a generator whose cleanup releases the
@@ -160,34 +163,6 @@ def _capture_and_transcribe(
     _transcribe_utterance(api_key, pcm, opts, state, json_mode=json_mode)
 
 
-def _session(
-    keys: TerminalKeys,
-    api_key: str,
-    opts: DictateOptions,
-    state: AppState,
-    *,
-    json_mode: bool,
-    single: bool,
-) -> None:
-    """Drive recording: one auto-started utterance, or the idle-toggle loop.
-
-    ``single`` (a piped stdout or --once) starts recording immediately so a
-    one-off capture takes a single keystroke to stop and then exits — which
-    closes a piped stdout and unblocks the downstream command. Otherwise it's
-    the interactive loop: idle until a toggle key, record, transcribe, repeat.
-    """
-    if single:
-        _capture_and_transcribe(keys, api_key, opts, state, json_mode=json_mode)
-        return
-    while True:
-        key = keys.read(None)
-        if key is None or key in QUIT_KEYS:
-            return
-        if key not in TOGGLE_KEYS:
-            continue
-        _capture_and_transcribe(keys, api_key, opts, state, json_mode=json_mode)
-
-
 def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly dictate` invocation from already-parsed flags."""
     # Fold -o/--output into json_mode (-o json == --json) and reject the
@@ -209,20 +184,18 @@ def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> No
                     "state the language inside the prompt.",
                     json_mode=json_mode,
                 )
-            # A piped stdout (`assembly dictate | assembly llm …`) only closes when
-            # dictate exits, so a looping session would keep the downstream consumer
-            # blocked on stdin forever. Single-shot mode (piped or --once) records
-            # one utterance and exits so the transcript drains to the next stage.
-            single = opts.once or not stdio.stdout_is_tty()
-            if not single:
-                # Only the interactive loop needs a start prompt; single-shot
-                # auto-starts and announces "● Recording" when the mic opens.
-                _note(
-                    "Press Enter to start recording, Enter again to transcribe. q quits.",
+            if opts.once and not state.quiet:
+                # Deprecation trap, not removal: --once still parses so old scripts
+                # don't break, but recording one utterance and exiting is now the
+                # default, so the flag does nothing — say so once (mirrors `login`).
+                output.emit_warning(
+                    "--once is now the default and can be omitted.",
                     json_mode=json_mode,
-                    quiet=state.quiet,
                 )
-            _session(keys, api_key, opts, state, json_mode=json_mode, single=single)
+            # Recording auto-starts and exits after one utterance: a single
+            # keystroke stops the capture, which also closes a piped stdout so
+            # `assembly dictate | assembly llm …` unblocks the downstream command.
+            _capture_and_transcribe(keys, api_key, opts, state, json_mode=json_mode)
     except KeyboardInterrupt:
         # Ctrl-C cancels dictation, so it exits 130 (cancel) — distinct from `q`, which
         # ends the session normally (exit 0). The with-block above already restored the
