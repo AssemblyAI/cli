@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
-
 from aai_cli.code_gen import serialize, snippets
+from aai_cli.code_gen.serialize import GatewayOptions
 from aai_cli.core import environments, llm, youtube
 
 # ``-o/--output`` choice -> printed-result code, mirroring the run path's
@@ -28,7 +27,7 @@ def render(
     merged: dict[str, object],
     source: str,
     *,
-    llm_gateway: dict[str, object] | None = None,
+    llm_gateway: GatewayOptions | None = None,
     output: str | None = None,
     chars_per_caption: int | None = None,
     download_sections: list[str] | None = None,
@@ -95,7 +94,7 @@ def _download_ranges(sections: list[str]) -> tuple[str | None, bool]:
 
 
 def _header_block(
-    llm_gateway: dict[str, object] | None,
+    llm_gateway: GatewayOptions | None,
     output: str | None,
     *,
     needs_download: bool,
@@ -189,7 +188,7 @@ def _transcribe_block(
 
 def _result_block(
     merged: dict[str, object],
-    llm_gateway: dict[str, object] | None,
+    llm_gateway: GatewayOptions | None,
     output: str | None,
     chars_per_caption: int | None,
 ) -> list[str]:
@@ -207,14 +206,14 @@ def _result_block(
     return [snippets.result_handling(merged)]
 
 
-def _llm_gateway_block(llm_gateway: dict[str, object]) -> list[str]:
+def _llm_gateway_block(llm_gateway: GatewayOptions) -> list[str]:
     """Emit a chained OpenAI-compatible LLM Gateway transform over the transcript.
 
     The generated script loops over the prompts: the first runs over the transcript
     (injected server-side via ``transcript_id`` wherever the ``{{ transcript }}`` tag
     appears), and each subsequent prompt runs over the previous response.
     """
-    prompts = cast("list[str]", llm_gateway["prompts"])
+    prompts = llm_gateway["prompts"]
     prompt_lines = "\n".join(f"    {p!r}," for p in prompts)
     return [
         "# Transform the transcript through AssemblyAI's LLM Gateway (OpenAI-compatible).",

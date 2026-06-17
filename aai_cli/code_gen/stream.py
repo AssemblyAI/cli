@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
-
 from aai_cli.code_gen import serialize
+from aai_cli.code_gen.serialize import GatewayOptions
 from aai_cli.core import environments
 
 # Streaming-class imports always used by the generated scaffold. SpeechModel is added
@@ -176,7 +175,7 @@ def _imports_block(merged: dict[str, object]) -> str:
     return "\n".join(f"    {name}," for name in sorted(names))
 
 
-def _build_preamble(imports: str, llm: dict[str, object] | None, stdlib_imports: str) -> str:
+def _build_preamble(imports: str, llm: GatewayOptions | None, stdlib_imports: str) -> str:
     """Pick and fill the plain vs. LLM-Gateway preamble for the given imports.
 
     Hosts come from the active environment, so a sandbox run generates a script
@@ -184,7 +183,7 @@ def _build_preamble(imports: str, llm: dict[str, object] | None, stdlib_imports:
     """
     env = environments.active()
     if llm:
-        prompts = "\n".join(f"    {p!r}," for p in cast("list[str]", llm["prompts"]))
+        prompts = "\n".join(f"    {p!r}," for p in llm["prompts"])
         return _LLM_PREAMBLE.format(
             stdlib_imports=stdlib_imports,
             imports=imports,
@@ -240,7 +239,7 @@ def _source_parts(source: str | None, rate: object) -> tuple[set[str], str, str,
 def render(
     merged: dict[str, object],
     *,
-    llm: dict[str, object] | None = None,
+    llm: GatewayOptions | None = None,
     source: str | None = None,
 ) -> str:
     """Generate a runnable streaming script with the given params.
