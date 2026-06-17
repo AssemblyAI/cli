@@ -65,6 +65,10 @@ dependencies = [
     # lazily). Strips boilerplate down to the readable body; ships prebuilt wheels
     # (lxml included), so it adds no source-compile step to Homebrew bottling.
     "trafilatura>=2.1.0",
+    # PDF text extraction for `assembly speak --url` when the URL serves a PDF
+    # (webpage.py, imported lazily). Pure-Python, permissively licensed, ships a
+    # universal wheel, so it adds no source-compile step to Homebrew bottling.
+    "pypdf>=5.1.0",
 ]
 
 [project.urls]
