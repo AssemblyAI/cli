@@ -350,12 +350,11 @@
   
    Push-to-talk dictation: record the mic, get the transcript back
   
-   Press Enter (or Space) to start recording and press it again to stop; the
-   utterance is sent to the AssemblyAI Sync API and the transcript prints
-   immediately — no polling. Press q (or Esc/Ctrl-C) to finish. Each utterance
-   can be up to 120 seconds long. With --once, or when stdout is piped,
-   recording starts immediately and dictate exits after one utterance so the
-   transcript flows to the next command.
+   Recording starts immediately; press Enter (or Space) to stop and the
+   utterance is sent to the AssemblyAI Sync API — the transcript prints right
+   away (no polling) and dictate exits, so it flows straight to the next
+   command in a pipe. The recording can be up to 120 seconds long. Press
+   Ctrl-C to cancel without transcribing.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --language             TEXT                       ISO 639-1 language code,   │
@@ -368,8 +367,6 @@
   │ --word-boost           TEXT                       Bias recognition toward a  │
   │                                                   term (repeatable)          │
   │ --device               INTEGER                    Microphone device index    │
-  │ --once                                            Record one utterance       │
-  │                                                   immediately, then exit     │
   │ --max-seconds          FLOAT RANGE                Auto-stop a recording      │
   │                        [1.0<=x<=120.0]            after this many seconds    │
   │                                                   [default: 120.0]           │
@@ -384,17 +381,15 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Dictate: Enter starts a recording, Enter transcribes it
+   Dictate one utterance: recording starts, Enter transcribes it
    $ assembly dictate
-   One utterance, then exit
-   $ assembly dictate --once
-   Pipe one utterance into another command
+   Pipe the utterance into another command
    $ assembly dictate | assembly llm "write a conventional commit"
    Dictate in Spanish
    $ assembly dictate --language es
    Bias recognition toward tricky terms
    $ assembly dictate --word-boost AssemblyAI --word-boost LeMUR
-   One JSON object per utterance
+   Emit the utterance as a JSON object
    $ assembly dictate --json
    Pipe the bare transcript onward
    $ assembly dictate -o text | assembly llm -f

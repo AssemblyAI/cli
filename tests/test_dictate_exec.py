@@ -71,10 +71,6 @@ def seams(monkeypatch):
     harness = {"keys": FakeKeys([]), "chunks": [CHUNK, CHUNK], "mic": {}, "calls": []}
 
     monkeypatch.setattr(dictate_exec, "TerminalKeys", lambda: harness["keys"])
-    # Default to interactive stdout (a real terminal); the piped tests flip this.
-    # capsys leaves stdout a non-tty, which would otherwise force single-utterance
-    # mode and end every looping session after one utterance.
-    monkeypatch.setattr(dictate_exec.stdio, "stdout_is_tty", lambda: True)
 
     def fake_mic(*, target_rate, device=None, on_open=None):
         harness["mic"].update(target_rate=target_rate, device=device)
@@ -105,10 +101,10 @@ def test_options_are_immutable():
         setattr(DICTATE_DEFAULTS, field_name, None)
 
 
-def test_hotkey_records_then_prints_bare_transcript(seams, capsys):
-    # Enter starts; the in-recording poll sees nothing after chunk 1, Enter after
-    # chunk 2 stops; q at the idle prompt quits.
-    seams["keys"] = FakeKeys(["\r", None, "\r", "q"])
+def test_records_then_prints_bare_transcript(seams, capsys):
+    # Recording auto-starts; the in-recording poll sees nothing after chunk 1,
+    # Enter after chunk 2 stops the capture, then dictate exits.
+    seams["keys"] = FakeKeys([None, "\r"])
     _run()
     # Both chunks were captured and uploaded as one utterance at the resampled rate.
     assert seams["calls"] == [
@@ -125,18 +121,18 @@ def test_hotkey_records_then_prints_bare_transcript(seams, capsys):
     captured = capsys.readouterr()
     # Human mode: the bare text on stdout (pipe-friendly), not a JSON object.
     assert captured.out.strip() == "hello world"
-    # The interactive hints (idle prompt + recording note) go to stderr only.
-    assert "Press Enter to start recording" in captured.err
+    # The mic-open note fires on stderr; there is no interactive start prompt.
     assert "Recording — press Enter to stop" in captured.err
+    assert "start recording" not in captured.err
     assert seams["mic"] == {"target_rate": 16000, "device": None}
     assert seams["keys"].entered and seams["keys"].exited  # terminal restored
-    # Idle waits block (None); in-recording polls must not wait at all (0), or
-    # every audio chunk would stall behind the keyboard.
-    assert seams["keys"].timeouts == [None, 0, 0, None]
+    # Recording auto-started, so every read is the zero-timeout in-recording poll
+    # — no blocking idle read(None) waiting for a start keypress.
+    assert seams["keys"].timeouts == [0, 0]
 
 
 def test_json_mode_emits_one_ndjson_object_per_utterance(seams, capsys):
-    seams["keys"] = FakeKeys(["\r", "\r"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(json_mode=True)
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {
@@ -153,14 +149,14 @@ def test_json_mode_emits_one_ndjson_object_per_utterance(seams, capsys):
 def test_output_json_folds_into_ndjson_without_the_json_flag(seams, capsys):
     # -o json must enable NDJSON on its own (json_mode stays the --json flag,
     # which is False here) — proving the -o/--output resolution runs.
-    seams["keys"] = FakeKeys(["\r", "\r"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.json))
     assert json.loads(capsys.readouterr().out)["text"] == "hello world"
 
 
 def test_output_text_emits_bare_transcript(seams, capsys):
     # -o text is the explicit spelling of the human default: bare text, no JSON.
-    seams["keys"] = FakeKeys(["\r", "\r"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.text))
     out = capsys.readouterr().out
     assert out.strip() == "hello world"
@@ -179,59 +175,56 @@ def test_output_text_conflicts_with_json_flag(seams):
 
 
 def test_quiet_suppresses_the_interactive_hints(seams, capsys):
-    seams["keys"] = FakeKeys(["\r", "\r"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(state=AppState(quiet=True))
     captured = capsys.readouterr()
     assert captured.out.strip() == "hello world"
     assert captured.err == ""
 
 
-def test_once_exits_after_a_single_utterance(seams):
-    seams["keys"] = FakeKeys(["\r", "\r", "\r", "\r", "\r", "\r"])
-    _run(dataclasses.replace(DICTATE_DEFAULTS, once=True))
-    assert len(seams["calls"]) == 1
-    # The session ended on --once, not by draining the key script.
-    assert seams["keys"].script
-
-
-def test_piped_stdout_auto_starts_one_utterance_then_exits(seams, monkeypatch, capsys):
-    # `assembly dictate | assembly llm …`: stdout is a pipe, not a tty. A looping
-    # session would keep the pipe open and hang the consumer, so recording
-    # auto-starts, the first Enter stops it, and the session exits on its own.
-    monkeypatch.setattr(dictate_exec.stdio, "stdout_is_tty", lambda: False)
-    # No leading toggle to *start* and no quit key: a single read(0) pops the
-    # Enter that stops the auto-started recording, then dictate exits.
+def test_auto_starts_recording_then_exits_after_one_utterance(seams, capsys):
+    # Recording auto-starts: a single read(0) pops the Enter that stops the
+    # capture, then dictate exits — no blocking idle read(None) waiting for a
+    # start keypress, and the rest of the key script is left undrained.
     seams["keys"] = FakeKeys(["\r", "\r", "\r"])
     _run()
     assert len(seams["calls"]) == 1
-    # Ended on the single-shot, not by draining the key script.
-    assert seams["keys"].script
-    # Auto-start: the only key read is the zero-timeout in-recording poll — no
-    # blocking idle read(None) waiting for a start keypress.
+    assert seams["keys"].script  # ended on the single utterance, not by draining keys
     assert seams["keys"].timeouts == [0]
     captured = capsys.readouterr()
     assert captured.out.strip() == "hello world"
-    # The mic-open note fires immediately; the interactive start prompt is absent.
+    # The mic-open note fires immediately; there is no interactive start prompt.
     assert "Recording — press Enter to stop" in captured.err
     assert "start recording" not in captured.err
 
 
+def test_once_flag_is_a_deprecated_noop_that_warns(seams, capsys):
+    # --once is kept only so old scripts don't break: it does nothing (single
+    # utterance is the default) but warns that it can be dropped.
+    seams["keys"] = FakeKeys(["\r"])
+    _run(dataclasses.replace(DICTATE_DEFAULTS, once=True))
+    assert len(seams["calls"]) == 1
+    assert "--once is now the default" in capsys.readouterr().err
+
+
+def test_once_warning_is_silenced_by_quiet(seams, capsys):
+    seams["keys"] = FakeKeys(["\r"])
+    _run(dataclasses.replace(DICTATE_DEFAULTS, once=True), state=AppState(quiet=True))
+    assert "--once" not in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("quit_key", ["q", "Q", "\x1b", "\x04"])
-def test_quit_keys_end_the_session_without_recording(seams, quit_key, capsys):
-    seams["keys"] = FakeKeys([quit_key, "\r", "\r"])
+def test_quit_keys_stop_recording_and_transcribe(seams, quit_key):
+    # No idle prompt anymore: q / Esc / Ctrl-D stop the auto-started recording
+    # and the captured utterance is still transcribed.
+    seams["keys"] = FakeKeys([quit_key])
     _run()
-    assert seams["calls"] == []
-    assert capsys.readouterr().out == ""
+    assert len(seams["calls"]) == 1
+    assert seams["calls"][0]["pcm"] == CHUNK  # stopped after the first chunk
 
 
-def test_unbound_keys_are_ignored_at_the_idle_prompt(seams):
-    seams["keys"] = FakeKeys(["x", "7", "q"])
-    _run()
-    assert seams["calls"] == []
-
-
-def test_space_also_toggles_recording(seams):
-    seams["keys"] = FakeKeys([" ", " ", "q"])
+def test_space_also_stops_recording(seams):
+    seams["keys"] = FakeKeys([" "])
     _run()
     assert len(seams["calls"]) == 1
 
@@ -239,23 +232,16 @@ def test_space_also_toggles_recording(seams):
 def test_unbound_keys_during_recording_do_not_stop_capture(seams):
     # A stray keystroke mid-utterance is ignored; only Enter/Space (or a quit
     # key) ends the capture.
-    seams["keys"] = FakeKeys(["\r", "x", "\r", "q"])
+    seams["keys"] = FakeKeys(["x", "\r"])
     seams["chunks"] = [CHUNK, CHUNK, CHUNK]
     _run()
     assert seams["calls"][0]["pcm"] == CHUNK + CHUNK
 
 
-def test_quit_key_during_recording_still_transcribes_the_utterance(seams):
-    seams["keys"] = FakeKeys(["\r", "q"])
-    _run()
-    assert len(seams["calls"]) == 1
-    assert seams["calls"][0]["pcm"] == CHUNK  # stopped after the first chunk
-
-
 def test_recording_stops_at_the_duration_cap(seams):
     # 0.2 s at 16 kHz PCM16 = 6400 bytes = exactly two chunks; the poll never
     # reports a key, so only the cap can stop the capture.
-    seams["keys"] = FakeKeys(["\r"])
+    seams["keys"] = FakeKeys([])
     seams["chunks"] = [CHUNK] * 5
     _run(dataclasses.replace(DICTATE_DEFAULTS, max_seconds=0.2))
     assert len(seams["calls"]) == 1
@@ -273,7 +259,7 @@ def test_recording_closes_the_mic_generator(seams):
         finally:
             closed.append(True)
 
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     seams["chunks"] = chunk_gen()
     _run()
     assert closed == [True]  # the device-releasing cleanup ran at stop, not at GC
@@ -281,7 +267,7 @@ def test_recording_closes_the_mic_generator(seams):
 
 @pytest.mark.parametrize("size", [200, 2558])  # 2558: just under the exact 2560-byte floor
 def test_too_short_recording_is_skipped_with_a_warning(seams, capsys, size):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     seams["chunks"] = [b"\x01" * size]  # below 80 ms of 16 kHz PCM16 (2560 bytes)
     _run()
     assert seams["calls"] == []
@@ -291,39 +277,39 @@ def test_too_short_recording_is_skipped_with_a_warning(seams, capsys, size):
 
 
 def test_recording_at_the_80ms_floor_is_transcribed(seams):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     seams["chunks"] = [b"\x01" * 2560]  # exactly 80 ms: allowed, not skipped
     _run()
     assert len(seams["calls"]) == 1
 
 
 def test_language_and_boost_flags_are_forwarded(seams):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, language="es", word_boost=["AssemblyAI"]))
     assert seams["calls"][0]["language_code"] == "es"
     assert seams["calls"][0]["word_boost"] == ["AssemblyAI"]
 
 
 def test_comma_separated_languages_become_a_list(seams):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, language="en, es"))
     assert seams["calls"][0]["language_code"] == ["en", "es"]
 
 
 def test_blank_language_reads_as_unset(seams):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, language=" , "))
     assert seams["calls"][0]["language_code"] is None
 
 
 def test_prompt_with_language_warns_that_language_is_ignored(seams, capsys):
-    seams["keys"] = FakeKeys(["q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, prompt="Verbatim.", language="es"))
     assert "--language is ignored when --prompt is set" in capsys.readouterr().err
 
 
 def test_prompt_alone_is_forwarded_without_warning(seams, capsys):
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(dataclasses.replace(DICTATE_DEFAULTS, prompt="Verbatim."))
     assert seams["calls"][0]["prompt"] == "Verbatim."
     assert "ignored" not in capsys.readouterr().err
@@ -338,7 +324,7 @@ def test_transcription_runs_under_the_status_spinner(seams, monkeypatch):
         yield
 
     monkeypatch.setattr(dictate_exec.output, "status", fake_status)
-    seams["keys"] = FakeKeys(["\r", "\r", "q"])
+    seams["keys"] = FakeKeys(["\r"])
     _run(state=AppState(quiet=True))
     assert seen == {"message": "Transcribing…", "json_mode": False, "quiet": True}
 
