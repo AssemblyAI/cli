@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
@@ -69,11 +70,13 @@ class ApprovalScreen(ModalScreen[bool]):
 
     def __init__(self, name: str, args: Mapping[str, object]) -> None:
         super().__init__()
-        self._name = name
+        self._tool_name = name  # not _name: that shadows Textual Widget's str|None attr
         self._args = args
 
     def compose(self) -> ComposeResult:
-        yield Label(f"Run tool [b]{self._name}[/b]?\n{_format_args(self._args)}")
+        yield Label(
+            f"Run tool [b]{escape(self._tool_name)}[/b]?\n{escape(_format_args(self._args))}"
+        )
         with Horizontal():
             yield Button("Approve (y)", id="approve", variant="success")
             yield Button("Reject (n)", id="reject", variant="error")
@@ -97,7 +100,7 @@ class AskScreen(ModalScreen[str]):
         self._question = question
 
     def compose(self) -> ComposeResult:
-        yield Label(f"[b]The agent asks:[/b]\n{self._question}")
+        yield Label(f"[b]The agent asks:[/b]\n{escape(self._question)}")
         yield Input(id="answer", placeholder="Type your answer and press Enter…")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -197,15 +200,17 @@ class CodeAgentApp(App[None]):
 
     def _write_event(self, event: Event) -> None:
         log = self.query_one("#log", RichLog)
+        # Escape dynamic content: a model/tool string containing "[" would otherwise be
+        # parsed as Rich markup and raise MarkupError (crashing the turn), or inject styling.
         if isinstance(event, AssistantText):
             self._last_reply = event.text
-            log.write(event.text)
+            log.write(escape(event.text))
         elif isinstance(event, ToolCall):
-            log.write(f"[dim]→ {event.name}({_format_args(event.args)})[/dim]")
+            log.write(f"[dim]→ {escape(event.name)}({escape(_format_args(event.args))})[/dim]")
         elif isinstance(event, ToolResult):
-            log.write(f"[dim]  {event.name}: {event.content.strip()[:2000]}[/dim]")
+            log.write(f"[dim]  {escape(event.name)}: {escape(event.content.strip()[:2000])}[/dim]")
         elif isinstance(event, ErrorText):
-            log.write(f"[#F04438]✗ {event.text}[/#F04438]")
+            log.write(f"[#F04438]✗ {escape(event.text)}[/#F04438]")
 
     def action_copy_last(self) -> None:
         """Copy the most recent assistant reply to the system clipboard."""
@@ -249,7 +254,7 @@ class CodeAgentApp(App[None]):
 
     def _submit(self, text: str) -> None:
         log = self.query_one("#log", RichLog)
-        log.write(f"[b cyan]» {text}[/b cyan]")
+        log.write(f"[b cyan]» {escape(text)}[/b cyan]")
         self.query_one("#prompt", Input).disabled = True
         self._run_turn(text)
 

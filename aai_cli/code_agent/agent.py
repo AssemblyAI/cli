@@ -42,7 +42,6 @@ class CompiledAgent(Protocol):
         self, input: object, config: Mapping[str, object] | None = None
     ) -> dict[str, object]:
         """Run one step of the graph, returning the updated state (incl. messages)."""
-        ...
 
 
 def _interrupt_config(*, auto_approve: bool) -> dict[str, bool] | None:

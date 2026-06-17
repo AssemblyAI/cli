@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from rich.markup import escape
+
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
 from aai_cli.code_agent.session import Approver
 from aai_cli.ui import output
@@ -26,17 +28,19 @@ class RichRenderer:
     """An :data:`~aai_cli.code_agent.session.EventSink` that prints to the Rich console."""
 
     def __call__(self, event: Event) -> None:
+        # escape() dynamic content so a model/tool string with "[" can't inject Rich
+        # markup or raise MarkupError (matches the inline-escape convention in output.py).
         if isinstance(event, AssistantText):
-            output.console.print(event.text)
+            output.console.print(escape(event.text))
         elif isinstance(event, ToolCall):
             output.console.print(
-                f"[aai.muted]→ {event.name}({_format_args(event.args)})[/aai.muted]"
+                f"[aai.muted]→ {escape(event.name)}({escape(_format_args(event.args))})[/aai.muted]"
             )
         elif isinstance(event, ToolResult):
-            preview = event.content.strip()[:_RESULT_PREVIEW]
-            output.console.print(f"[aai.muted]  {event.name}: {preview}[/aai.muted]")
+            preview = escape(event.content.strip()[:_RESULT_PREVIEW])
+            output.console.print(f"[aai.muted]  {escape(event.name)}: {preview}[/aai.muted]")
         elif isinstance(event, ErrorText):
-            output.error_console.print(output.fail(event.text))
+            output.error_console.print(output.fail(escape(event.text)))
 
     def notice(self, text: str) -> None:
         """A dim advisory on stderr (so it never pollutes piped stdout)."""

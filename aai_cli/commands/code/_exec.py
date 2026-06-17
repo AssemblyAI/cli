@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
+from rich.markup import escape
 
 from aai_cli.app.context import AppState
 from aai_cli.code_agent.agent import CompiledAgent, build_agent
@@ -97,7 +98,9 @@ def _build_agent(api_key: str, opts: CodeOptions, bridge: AskBridge) -> Compiled
 def _confirm(name: str, args: dict[str, object]) -> bool:
     """Headless approval: print the pending tool call and read a y/N from stdin."""
     rendered = ", ".join(f"{key}={value!r}" for key, value in args.items())
-    output.error_console.print(output.warn(f"Run {name}({rendered})? [y/N] "))
+    # escape() the tool name/args: they're echoed for approval but may contain "[" that
+    # Rich would parse as markup (or raise on). The user still sees the full action.
+    output.error_console.print(output.warn(f"Run {escape(name)}({escape(rendered)})? [y/N] "))
     try:
         answer = input().strip().lower()
     except EOFError:
@@ -107,7 +110,7 @@ def _confirm(name: str, args: dict[str, object]) -> bool:
 
 def _ask_repl(question: str) -> str:
     """Headless ask-user: print the agent's question and read the answer from stdin."""
-    output.console.print(output.heading(f"Agent asks: {question}"))
+    output.console.print(output.heading(f"Agent asks: {escape(question)}"))
     try:
         return input("» ")
     except EOFError:

@@ -152,7 +152,7 @@ def test_memory_middleware_creates_dir(tmp_path: Path) -> None:
     assert middleware is not None
 
 
-def test_checkpointer_in_memory_vs_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_checkpointer_in_memory_vs_sqlite(tmp_path, monkeypatch):  # untyped: touches saver.conn
     from langgraph.checkpoint.memory import InMemorySaver
 
     assert isinstance(store.build_checkpointer(persist=False), InMemorySaver)
@@ -160,6 +160,10 @@ def test_checkpointer_in_memory_vs_sqlite(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(store, "sessions_db_path", lambda: tmp_path / "s.sqlite")
     saver = store.build_checkpointer(persist=True)
     assert not isinstance(saver, InMemorySaver)  # a SQLite-backed saver instead
+    # Close the underlying connection so it isn't GC'd mid-suite — an unclosed
+    # sqlite3.Connection raises PytestUnraisableExceptionWarning on py3.13/Windows,
+    # which `filterwarnings=error` turns into a failure in an unrelated later test.
+    saver.conn.close()
 
 
 def test_cli_tool_invokes_runner_with_args() -> None:
@@ -384,3 +388,17 @@ def test_cli_tool_truncates_and_includes_stderr() -> None:
 def test_rich_renderer_notice(capsys: pytest.CaptureFixture[str]) -> None:
     RichRenderer().notice("heads up")
     assert "heads up" in capsys.readouterr().err
+
+
+def test_rich_renderer_escapes_markup(capsys: pytest.CaptureFixture[str]) -> None:
+    renderer = RichRenderer()
+    renderer(AssistantText("[bold]x[/bold]"))
+    renderer(ToolCall(name="t", args={"a": "[red]"}))
+    renderer(ToolResult(name="t", content="[u]z[/u]"))
+    renderer(ErrorText("[i]e[/i]"))
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    # Without escaping, Rich would consume these as style tags (and strip the brackets);
+    # escaped, the literal brackets survive in the output.
+    assert "[bold]" in combined and "[red]" in combined
+    assert "[u]" in combined and "[i]" in combined

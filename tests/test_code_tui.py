@@ -17,7 +17,7 @@ from textual.widgets import Input, RichLog
 
 from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
-from aai_cli.code_agent.tui import ApprovalScreen, CodeAgentApp
+from aai_cli.code_agent.tui import ApprovalScreen, AskScreen, CodeAgentApp
 
 
 class FakeAgent:
@@ -44,7 +44,10 @@ class _Interrupt:
 def test_format_args_and_abbrev_home() -> None:
     assert tui._format_args({"a": 1, "b": "x"}) == "a=1, b='x'"
     assert tui._abbrev_home(Path.home() / "proj") == "~/proj"
-    assert tui._abbrev_home(Path("/etc/hosts")) == "/etc/hosts"
+    # A path outside home renders as-is; compare to the platform-native string so this
+    # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
+    outside = Path("/etc/hosts")
+    assert tui._abbrev_home(outside) == str(outside)
 
 
 def test_git_branch_and_status(tmp_path: Path) -> None:
@@ -98,7 +101,9 @@ def test_submit_runs_turn_and_renders_reply() -> None:
         app = CodeAgentApp(agent=agent)
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.query_one("#prompt", Input).value = "build"
+            # "[build" contains unbalanced Rich markup: without escaping, _submit's
+            # log.write would raise MarkupError, so this also guards the escape().
+            app.query_one("#prompt", Input).value = "[build"
             await pilot.press("enter")
             await app.workers.wait_for_complete()
             await pilot.pause()
@@ -115,13 +120,15 @@ def test_write_event_each_type_and_copy(monkeypatch: pytest.MonkeyPatch) -> None
         app = CodeAgentApp(agent=FakeAgent([]))
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app._write_event(AssistantText("reply text"))
-            app._write_event(ToolCall(name="write_file", args={"file_path": "a"}))
-            app._write_event(ToolResult(name="write_file", content="Updated a"))
-            app._write_event(ErrorText("kaboom"))
-            assert app._last_reply == "reply text"
+            # Each value carries unbalanced "[" markup: without escaping, RichLog.write
+            # would raise MarkupError here, so these calls also guard the escape() paths.
+            app._write_event(AssistantText("[reply"))
+            app._write_event(ToolCall(name="write_file", args={"file_path": "[a"}))
+            app._write_event(ToolResult(name="write_file", content="[unclosed"))
+            app._write_event(ErrorText("[boom"))
+            assert app._last_reply == "[reply"
             app.action_copy_last()
-            assert copied == ["reply text"]
+            assert copied == ["[reply"]
 
     _run(go())
 
@@ -192,17 +199,34 @@ def test_full_turn_with_approval_interrupt() -> None:
 
 def test_approval_button_press_dismisses() -> None:
     # Covers ApprovalScreen.on_button_pressed (the click path; key paths are covered
-    # by the approve/reject modal tests above).
+    # by the approve/reject modal tests above). The bracketed name/args also guard the
+    # compose() escape() — without it, Label markup parsing would raise on mount.
     results: list[bool | None] = []
 
     async def go() -> None:
         app = CodeAgentApp(agent=FakeAgent([]))
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.push_screen(ApprovalScreen("execute", {"cmd": "ls"}), results.append)
+            app.push_screen(ApprovalScreen("exec[", {"cmd": "[ls"}), results.append)
             await pilot.pause()
             await pilot.click("#reject")
             await pilot.pause()
 
     _run(go())
     assert results == [False]
+
+
+def test_ask_screen_compose_escapes_markup() -> None:
+    # Mounting AskScreen with a bracketed question exercises its compose() escape();
+    # without it, the Label markup parse would raise MarkupError on mount.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(AskScreen("which port [x?"), lambda answer: None)
+            await pilot.pause()
+            app.screen.query_one("#answer", Input).value = "8080"
+            await pilot.press("enter")
+            await pilot.pause()
+
+    _run(go())
