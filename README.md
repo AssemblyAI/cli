@@ -127,6 +127,8 @@ assembly stream -o text | assembly llm -f "summarize my to-dos as I talk"
 assembly stream --system-audio --speaker-labels -o text
 ```
 
+**Build a WisprFlow clone** — `assembly dictate` records on launch and prints the transcript on SIGTERM, so a hotkey tool can drive push-to-talk dictation that types into any app. The [`examples/wisprflow-hammerspoon`](examples/wisprflow-hammerspoon) recipe wires it up with [Hammerspoon](https://www.hammerspoon.org): hold a hotkey, speak, release, and the text lands at your cursor.
+
 **Get pinged when your name comes up** in a live meeting:
 
 ```sh
