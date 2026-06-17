@@ -163,6 +163,7 @@ def test_help_lists_commands_in_workflow_order():
         "agent-cascade",
         "speak",
         "llm",
+        "code",
         "clip",
         "dub",
         "caption",

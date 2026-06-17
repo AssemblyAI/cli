@@ -16,8 +16,9 @@ is the docstring in `aai_cli/errors.py`):
 | `4` | Not authenticated: no usable credential, a rejected key, or a self-service command that needs a browser login. |
 | `130` | Cancelled with Ctrl-C. |
 
-A subprocess the CLI shells out to (`assembly deploy`, `assembly dev`,
-`assembly update`) propagates that process's own exit code unchanged. Under
+A subprocess the CLI shells out to (`assembly code`, `assembly deploy`,
+`assembly dev`, `assembly update`) propagates that process's own exit code
+unchanged. Under
 `--json`, every failure also emits one `{"error": {"type": …, "message": …}}`
 object on stderr; the `error.type` pairs 1:1 with the exit code.
 

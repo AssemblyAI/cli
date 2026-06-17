@@ -375,6 +375,41 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[code]
+  '''
+  
+   Usage: assembly code [OPTIONS] [FILES]...
+  
+   Launch an AI coding agent powered by the AssemblyAI LLM Gateway
+  
+   Starts aider pointed at the gateway (it edits your files over plain chat
+   completions), so the same paid-plan key that runs `assembly llm` powers a
+   coding
+   agent in your terminal. Requires aider to be installed (`uv tool install
+   aider-chat`).
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   files      [FILES]...  Files or directories to open in the agent           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --model          TEXT  Gateway model for the agent                           │
+  │                        [default: claude-opus-4-7]                            │
+  │ --json   -j            Output raw JSON                                       │
+  │ --help                 Show this message and exit.                           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Launch a coding agent in the current directory
+   $ assembly code
+   Open specific files
+   $ assembly code api/index.py README.md
+   Use a different gateway model
+   $ assembly code --model gpt-5.1
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[dictate]
   '''
   

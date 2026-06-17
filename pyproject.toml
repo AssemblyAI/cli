@@ -401,6 +401,7 @@ max-statements = 40
 "aai_cli/app/coding_agent.py" = ["TID251"]
 "aai_cli/app/mediafile.py" = ["TID251"]
 "aai_cli/app/setup_exec.py" = ["TID251"]
+"aai_cli/commands/code/_exec.py" = ["TID251"]
 "aai_cli/commands/deploy/_exec.py" = ["TID251"]
 "aai_cli/commands/update.py" = ["TID251"]
 "aai_cli/commands/webhooks/_listen.py" = ["TID251"]

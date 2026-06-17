@@ -53,6 +53,8 @@
   │ speak          [sandbox] Synthesize speech from text with AssemblyAI         │
   │                streaming TTS                                                 │
   │ llm            Send a prompt to AssemblyAI's LLM Gateway and print the reply │
+  │ code           Launch an AI coding agent powered by the AssemblyAI LLM       │
+  │                Gateway                                                       │
   │ clip           Cut clips from media by speaker, text match, LLM pick, or     │
   │                time range                                                    │
   │ dub            [sandbox] Dub a video or audio file into another language     │
