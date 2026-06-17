@@ -329,19 +329,12 @@ else
   echo "   origin/main not found; skipping escape-hatch diff gate (CI provides it)"
 fi
 
-echo "==> codeql (security + quality suites, mirrors codeql.yml minus swift)"
-# Runs the same query suites the CodeQL workflow uploads to GitHub's code-scanning
-# and quality tabs, so an alert fails here instead of surfacing on the PR after
-# push. The CLI ships as a ~1 GB bundle with no PyPI/npm distribution, so this
-# self-skips when absent — codeql.yml is the CI enforcement (the hosted runner's
-# PATH has no codeql, so ci.yml's check job skips this too and the PR isn't
-# double-scanned), and the web session-start hook provisions the bundle. Last of
-# the analysis gates because it's the slowest (~minutes, not diff-scoped).
-if command -v codeql >/dev/null 2>&1; then
-  uv run python scripts/codeql_gate.py
-else
-  echo "   codeql not found; skipping (codeql.yml runs it in CI; install: https://github.com/github/codeql-action/releases)"
-fi
+# CodeQL is NOT run here. It's the single slowest gate (~minutes) and is enforced in CI
+# by codeql.yml, which runs the same security + quality suites on its own schedule and
+# uploads them to GitHub's code-scanning/quality tabs. ci.yml's check job never ran it
+# either (the hosted runner has no codeql on PATH, so this step self-skipped there), so
+# dropping it from the local gate loses no CI coverage — it just keeps `check.sh` fast.
+# To reproduce a code-scanning alert locally: `uv run python scripts/codeql_gate.py`.
 
 echo "==> build + twine check (PyPI publish readiness)"
 # Build sdist + wheel into ./dist, then validate the metadata and README render
