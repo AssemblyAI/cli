@@ -44,8 +44,8 @@ def _list_models(output_field: choices.TextOrJson | None, json_mode: bool) -> No
             ),
             ("Pipe any text in", 'echo "meeting notes" | assembly llm "turn into action items"'),
             (
-                "Read one or more files as context",
-                'assembly llm "answer using only these notes: who owns the deploy?" notes/*.md',
+                "Read files or a whole directory as context",
+                'assembly llm "summarize the key decisions" transcripts/',
             ),
             (
                 "Pick a model and add a system prompt",
@@ -60,8 +60,9 @@ def llm(
     prompt: str | None = typer.Argument(None, help="The prompt to send to the model"),
     files: list[Path] | None = typer.Argument(
         None,
-        help="Optional input files to read as the prompt's context (each is header-prefixed "
-        "with its name and concatenated; takes priority over piped stdin)",
+        help="Optional input files or directories to read as the prompt's context "
+        "(a directory recurses for .md/.txt files; each is header-prefixed with its "
+        "name and concatenated; takes priority over piped stdin)",
     ),
     # Note: text piped on stdin is injected into the prompt (e.g. `cat notes | assembly llm "summarize"`).
     model: str = typer.Option(

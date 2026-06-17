@@ -27,6 +27,9 @@ _FOLLOW_STDIN_MESSAGE = (
     '`assembly stream -o text | assembly llm -f "summarize action items as I talk"`.'
 )
 
+# Suffixes a directory argument recurses for (matched case-insensitively).
+_DIR_SUFFIXES = (".md", ".txt")
+
 
 @dataclass(frozen=True)
 class LlmOptions:
@@ -82,17 +85,46 @@ def _validate_follow_args(
     return prompt
 
 
+def _expand_paths(files: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Expand any directory argument into the ``.md``/``.txt`` files it holds.
+
+    A directory recurses (depth-first via ``rglob``, path-sorted so the header
+    order is deterministic) for files whose suffix is in ``_DIR_SUFFIXES``; a plain
+    file passes through unchanged. A directory holding no matching files is a usage
+    error — the empty-check the justfile's ``transcripts/**/*.md(.N)`` glob used to
+    carry, now that the CLI can. This lets `assembly llm "…" transcripts/` stand in
+    for the glob-and-guard the caller would otherwise hand-roll.
+    """
+    expanded: list[Path] = []
+    for path in files:
+        if not path.is_dir():
+            expanded.append(path)
+            continue
+        matches = sorted(
+            p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in _DIR_SUFFIXES
+        )
+        if not matches:
+            raise UsageError(
+                f"No {' or '.join(_DIR_SUFFIXES)} files found in {path}.",
+                suggestion="Point at a directory containing .md or .txt notes, "
+                "or pass files directly.",
+            )
+        expanded.extend(matches)
+    return tuple(expanded)
+
+
 def _read_files(files: tuple[Path, ...]) -> str:
     """Read each file and join them, each prefixed with a ``===== name =====`` header.
 
-    The header names each source (the file's stem) so a multi-file prompt can cite
-    which note an answer came from; it's applied uniformly, even for a single file,
-    so the format the model sees is predictable. A missing or unreadable path is a
-    usage error raised before any auth or network — the same fail-fast ordering as
-    the --transcript-id check.
+    A directory argument is first expanded into its ``.md``/``.txt`` files
+    (see ``_expand_paths``). The header names each source (the file's stem) so a
+    multi-file prompt can cite which note an answer came from; it's applied
+    uniformly, even for a single file, so the format the model sees is predictable.
+    A missing or unreadable path is a usage error raised before any auth or
+    network — the same fail-fast ordering as the --transcript-id check.
     """
     sections: list[str] = []
-    for path in files:
+    for path in _expand_paths(files):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
