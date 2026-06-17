@@ -21,10 +21,24 @@ def test_split_sentences_empty_string_is_empty_list():
     assert split_sentences("") == []
 
 
-def test_split_sentences_each_terminator_ends_a_sentence():
-    # Every terminator closes the current chunk, so consecutive ones each yield one.
-    assert split_sentences("...") == [".", ".", "."]
+def test_split_sentences_terminator_followed_by_space_ends_a_sentence():
+    # A terminator only closes the chunk when it ends the text or is followed by space.
     assert split_sentences(" . ") == ["."]
+    assert split_sentences("Hi . Bye .") == ["Hi .", "Bye ."]
+
+
+def test_split_sentences_keeps_decimals_and_abbreviations_intact():
+    # A '.' wedged between non-space characters is not a sentence boundary, so a
+    # number ("$3.50") or abbreviation stays one piece instead of fragmenting TTS.
+    assert split_sentences("It costs $3.50 today.") == ["It costs $3.50 today."]
+    assert split_sentences("Total 12.5") == ["Total 12.5"]
+
+
+def test_split_sentences_does_not_split_stacked_terminators():
+    # Ellipsis and "?!" are followed by non-space chars (or each other), so they
+    # don't each spawn a separate sentence.
+    assert split_sentences("...") == ["..."]
+    assert split_sentences("Wait...what?!") == ["Wait...what?!"]
 
 
 def test_trim_history_drops_oldest_beyond_limit():

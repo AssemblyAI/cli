@@ -337,17 +337,18 @@ def test_pick_template_errors_when_either_stream_not_a_tty(monkeypatch, stdin_tt
     assert exc.value.exit_code == 2
 
 
-def test_active_env_vars_agents_host_replaces_only_first_streaming(monkeypatch):
-    # The agents host is derived by swapping the FIRST "streaming" token for "agents"
-    # (replace count=1); a host containing it twice must keep the later occurrence.
+def test_active_env_vars_uses_authoritative_agents_host(monkeypatch):
+    # The Voice Agent host comes straight from the environment's agents_host field,
+    # not a string-munge of streaming_host that only coincides by naming convention.
     fake_env = types.SimpleNamespace(
         api_base="https://api.x",
         llm_gateway_base="https://llm.x",
-        streaming_host="streaming.streaming.example.com",
+        streaming_host="streaming.example.com",
+        agents_host="voice-agent.example.com",
         streaming_tts_host="",
     )
     monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)
-    assert init_exec._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "agents.streaming.example.com"
+    assert init_exec._active_env_vars()["ASSEMBLYAI_AGENTS_HOST"] == "voice-agent.example.com"
 
 
 def test_active_env_vars_includes_streaming_tts_host(monkeypatch):
@@ -355,6 +356,7 @@ def test_active_env_vars_includes_streaming_tts_host(monkeypatch):
         api_base="https://api.x",
         llm_gateway_base="https://llm.x/v1",
         streaming_host="streaming.x",
+        agents_host="agents.x",
         streaming_tts_host="streaming-tts.x",
     )
     monkeypatch.setattr(init_exec.environments, "active", lambda: fake_env)

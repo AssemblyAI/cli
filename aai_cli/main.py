@@ -110,11 +110,18 @@ def _sandbox_conflict_warning(sandbox: bool, env: str | None) -> str | None:
 
 def _offer_or_help(ctx: typer.Context, state: AppState) -> None:
     """No subcommand given: offer guided setup to a credential-less, interactive user;
-    otherwise print help. Never prompts in a non-interactive session, and never on
-    `--help` (Click handles that eagerly before the callback)."""
+    otherwise print help. Never prompts in a non-interactive session, never on
+    `--help` (Click handles that eagerly before the callback), and never when the
+    stored config is unparseable — a deferred ``invalid_config`` error means
+    ``resolve_api_key``/``resolve_profile`` would re-raise (escaping the callback as
+    a traceback), and the wizard would only write atop a broken file."""
     if not state.quiet:
         output.print_banner()
-    if stdio.interactive_stdio() and not _profile_has_key(state):
+    if (
+        state.deferred_config_error is None
+        and stdio.interactive_stdio()
+        and not _profile_has_key(state)
+    ):
         if not state.quiet:
             output.console.print()  # blank line so the prompt isn't flush against the banner
         if typer.confirm("Welcome to AssemblyAI. Run guided setup now?", default=True):
