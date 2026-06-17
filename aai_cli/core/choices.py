@@ -9,6 +9,21 @@ def complete_prefix(options: Iterable[str], incomplete: str) -> list[str]:
     return [option for option in options if option.startswith(incomplete)]
 
 
+def render_grouped(groups: Iterable[tuple[str, Iterable[str]]]) -> str:
+    """Render labelled groups of names as an indented, blank-line-separated block list.
+
+    Each non-empty group renders as a ``label:`` header followed by its names
+    indented two spaces, one per line; groups are separated by a blank line and
+    empty groups are skipped. Backs the voice commands' grouped ``--list-voices``.
+    """
+    blocks: list[str] = []
+    for label, names in groups:
+        listing = "\n".join(f"  {name}" for name in names)
+        if listing:
+            blocks.append(f"{label}:\n{listing}")
+    return "\n\n".join(blocks)
+
+
 # CLI-owned closed value sets for ``-o/--output``. ``StrEnum`` members *are* their
 # string values: Typer renders them as choices in ``--help`` (e.g.
 # [text|id|status|utterances|srt|json]), validates input with a clean listing error,

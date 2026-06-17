@@ -35,10 +35,7 @@ def complete_voice(incomplete: str) -> list[str]:
 
 def format_voice_list() -> str:
     """Human-readable voice ids for ``--list-voices``, grouped by language."""
-    blocks: list[str] = []
-    for code, label in _LANGUAGE_LABELS.items():
-        names = [name for name in VOICE_NAMES if tts_voices.VOICE_LANGUAGES[name] == code]
-        if names:
-            listing = "\n".join(f"  {name}" for name in names)
-            blocks.append(f"{label}:\n{listing}")
-    return "\n\n".join(blocks)
+    return choices.render_grouped(
+        (label, [name for name in VOICE_NAMES if tts_voices.VOICE_LANGUAGES[name] == code])
+        for code, label in _LANGUAGE_LABELS.items()
+    )
