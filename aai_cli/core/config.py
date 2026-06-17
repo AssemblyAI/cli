@@ -8,14 +8,14 @@ import tempfile
 import time
 import tomllib
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aai_cli.core import config_lock, debuglog, env, keyring_store
+from aai_cli.core import debuglog, env, keyring_store
 from aai_cli.core.errors import CLIError, NotAuthenticated
 
 ENV_API_KEY = "ASSEMBLYAI_API_KEY"
@@ -193,6 +193,17 @@ def _dump(cfg: Config) -> None:
         raise
 
 
+@contextlib.contextmanager
+def _update() -> Generator[Config]:
+    """Run a config.toml read-modify-write: ``_load`` -> mutate the yielded config ->
+    ``_dump``. The dump runs on clean exit; an exception in the block propagates and
+    skips it. The atomic os.replace in ``_dump`` keeps a reader from ever seeing a torn
+    file (writers and readers are otherwise unsynchronized: last write wins)."""
+    cfg = _load()
+    yield cfg
+    _dump(cfg)
+
+
 def get_active_profile() -> str:
     return _load().active_profile or DEFAULT_PROFILE
 
@@ -210,7 +221,7 @@ def set_active_profile(name: str) -> None:
     with no hint why, so the typo is rejected here with the known names listed.
     """
     validate_profile(name)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         if name not in cfg.profiles:
             known = ", ".join(sorted(cfg.profiles)) or "none yet"
             raise CLIError(
@@ -225,7 +236,7 @@ def set_active_profile(name: str) -> None:
 def set_api_key(profile: str, api_key: str) -> None:
     validate_profile(profile)
     keyring_store.set_secret(profile, api_key)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile())
         if cfg.active_profile is None:
             cfg.active_profile = profile
@@ -255,7 +266,7 @@ def get_profile_env(profile: str) -> str | None:
 def set_profile_env(profile: str, env: str) -> None:
     """Bind a backend environment to a profile so its key and hosts stay matched."""
     validate_profile(profile)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).env = env
 
 
@@ -268,7 +279,7 @@ def get_profile_email(profile: str) -> str | None:
 def set_profile_email(profile: str, email: str) -> None:
     """Persist the login email for a profile (gates internal-environment access)."""
     validate_profile(profile)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).email = email
 
 
@@ -294,7 +305,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
         _session_username(profile),
         StoredSession(jwt=session_jwt, token=session_token).model_dump_json(),
     )
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).account_id = account_id
 
 
@@ -318,12 +329,11 @@ def get_account_id(profile: str) -> int | None:
 
 def clear_session(profile: str) -> None:
     keyring_store.delete_secret(_session_username(profile))
-    with config_lock.locked():
-        cfg = _load()
-        prof = cfg.profiles.get(profile)
-        if prof and prof.account_id is not None:
-            prof.account_id = None
-            _dump(cfg)
+    cfg = _load()
+    prof = cfg.profiles.get(profile)
+    if prof and prof.account_id is not None:
+        prof.account_id = None
+        _dump(cfg)
 
 
 def persist_login(
@@ -346,32 +356,29 @@ def persist_login(
     restored best-effort.
     """
     validate_profile(profile)
-    # Hold the write lock across the whole snapshot -> writes -> rollback so a concurrent
-    # writer can't slip a change between the snapshot and a rollback dump. The set_*
-    # helpers re-take the same (reentrant) lock, so the nesting is safe.
-    with config_lock.locked():
-        prior_api_key = keyring_store.get_secret(profile)
-        prior_session = keyring_store.get_secret(_session_username(profile))
-        prior_cfg = _load()
-        done = False
-        try:
-            set_api_key(profile, api_key)
-            set_profile_env(profile, env)
-            set_session(
-                profile,
-                session_jwt=session_jwt,
-                session_token=session_token,
-                account_id=account_id,
-            )
-            # Within the same atomic rollback so the sandbox gate can't read stale identity.
-            if email is not None:
-                set_profile_email(profile, email)
-            done = True
-        finally:
-            if not done:
-                keyring_store.restore_secret(profile, prior_api_key)
-                keyring_store.restore_secret(_session_username(profile), prior_session)
-                _dump(prior_cfg)
+    # Snapshot the prior state so a mid-sequence failure rolls back cleanly to it.
+    prior_api_key = keyring_store.get_secret(profile)
+    prior_session = keyring_store.get_secret(_session_username(profile))
+    prior_cfg = _load()
+    done = False
+    try:
+        set_api_key(profile, api_key)
+        set_profile_env(profile, env)
+        set_session(
+            profile,
+            session_jwt=session_jwt,
+            session_token=session_token,
+            account_id=account_id,
+        )
+        # Within the same atomic rollback so the sandbox gate can't read stale identity.
+        if email is not None:
+            set_profile_email(profile, email)
+        done = True
+    finally:
+        if not done:
+            keyring_store.restore_secret(profile, prior_api_key)
+            keyring_store.restore_secret(_session_username(profile), prior_session)
+            _dump(prior_cfg)
 
 
 def has_device_id() -> bool:
@@ -385,12 +392,11 @@ def get_device_id() -> str:
     """A stable anonymous install id for telemetry: a random UUID minted locally on
     first use and persisted in config.toml. Carries nothing derivable from the
     machine or account."""
-    with config_lock.locked():
-        cfg = _load()
-        if cfg.device_id is None:
-            cfg.device_id = str(uuid.uuid4())
-            _dump(cfg)
-        return cfg.device_id
+    cfg = _load()
+    if cfg.device_id is None:
+        cfg.device_id = str(uuid.uuid4())
+        _dump(cfg)
+    return cfg.device_id
 
 
 def get_telemetry_enabled() -> bool | None:
@@ -400,7 +406,7 @@ def get_telemetry_enabled() -> bool | None:
 
 
 def set_telemetry_enabled(*, enabled: bool) -> None:
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.telemetry_enabled = enabled
 
 
@@ -413,7 +419,7 @@ def get_update_cache() -> tuple[float | None, str | None]:
 def set_update_cache(*, last_check: float, latest_version: str | None) -> None:
     """Persist the update-notifier cache. ``latest_version`` is None when the last
     fetch failed — the timestamp is still recorded so we don't re-spawn every run."""
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.update_last_check = last_check
         cfg.update_latest_version = latest_version
 

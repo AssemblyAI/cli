@@ -3,11 +3,10 @@
 Two real concurrency surfaces exist in the CLI, and neither was directly exercised:
 
 1. ``core.config`` persists ``config.toml`` with a temp-file + atomic ``os.replace``
-   (`config._dump`) so a reader never observes a truncated file, and serializes its
-   read-modify-write under a cross-process ``filelock`` (`config._write_lock`) so two
-   concurrent ``assembly`` processes can't lose each other's updates. These tests pin
-   both: the at-rest atomicity under thread contention, and that distinct concurrent
-   updates all survive (no last-writer-wins clobber).
+   (`config._dump`) so a reader never observes a truncated file. Writers and readers are
+   otherwise unsynchronized (last write wins), and on Windows the replace window is ridden
+   out by a small retry (`config._retry_on_sharing_violation`). These tests pin the at-rest
+   atomicity under thread contention and that retry helper.
 2. ``streaming.StreamSession.on_turn`` runs on the SDK reader thread, and the
    ``--system-audio`` path drives two of those threads at once (`session._drive`). The
    turn write is serialized by ``_callback_lock`` so two sources can't interleave a
@@ -22,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from aai_cli.core import config, config_lock
+from aai_cli.core import config
 
 # --- config.toml: the Windows os.replace sharing-window retry -----------------------
 
@@ -110,58 +109,6 @@ def test_config_concurrent_writers_always_leave_a_valid_file(tmp_config):
 
     assert config.get_profile_env("default") in {f"sandbox{i:03d}" for i in range(workers)}
     assert sorted(p.name for p in tmp_config.iterdir()) == ["config.toml"]  # no temp leftover
-
-
-def test_concurrent_writers_do_not_lose_distinct_updates(tmp_config):
-    # The cross-process write lock makes the read-modify-write atomic, so many threads
-    # each adding a DISTINCT profile through the public API all survive. Without the lock
-    # the interleaved RMW would drop some (two writers _load the same config; the second
-    # _dump clobbers the first's new profile) — this is the lost-update race the lock closes.
-    workers = 16
-    barrier = threading.Barrier(workers)  # release all writers at once for max contention
-
-    def add(i: int) -> None:
-        barrier.wait()
-        config.set_profile_env(f"p{i:02d}", f"sandbox{i:03d}")
-
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for f in [pool.submit(add, i) for i in range(workers)]:
-            f.result()
-
-    # Every concurrent update is present with its own value — none clobbered.
-    assert config.list_profiles() == {f"p{i:02d}": f"sandbox{i:03d}" for i in range(workers)}
-
-
-def test_write_lock_targets_the_config_dir_lock_file(tmp_config):
-    # The lock guards config.toml via a sibling lock file in the same dir.
-    assert config_lock.write_lock().lock_file == str(tmp_config / "config.toml.lock")
-
-
-def test_write_lock_rebuilds_when_config_dir_changes(monkeypatch, tmp_path):
-    # The instance is cached per path, but a changed config dir (the suite repoints it per
-    # test) must yield a fresh lock pointed at the new dir — not the stale one.
-    first = config_lock.write_lock()
-    moved = tmp_path / "moved"
-    moved.mkdir()
-    monkeypatch.setattr(config, "config_dir", lambda: moved)
-    second = config_lock.write_lock()
-    assert second is not first
-    assert second.lock_file == str(moved / "config.toml.lock")
-
-
-def test_update_holds_the_write_lock_during_the_dump(tmp_config, monkeypatch):
-    # The mutate -> dump runs inside the lock: while _dump executes, the lock is held.
-    # (Drop the `with locked()` and is_locked would be False here.)
-    seen: dict[str, bool] = {}
-    real_dump = config._dump
-
-    def spy_dump(cfg):
-        seen["locked"] = config_lock.write_lock().is_locked
-        return real_dump(cfg)
-
-    monkeypatch.setattr(config, "_dump", spy_dump)
-    config.set_profile_env("default", "sandbox000")
-    assert seen["locked"] is True
 
 
 # --- streaming: on_turn serialization under _callback_lock -------------------------

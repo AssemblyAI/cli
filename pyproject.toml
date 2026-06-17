@@ -65,11 +65,6 @@ dependencies = [
     # lazily). Strips boilerplate down to the readable body; ships prebuilt wheels
     # (lxml included), so it adds no source-compile step to Homebrew bottling.
     "trafilatura>=2.1.0",
-    # Cross-process advisory lock around config.toml's read-modify-write (config.py),
-    # so two concurrent `assembly` processes can't lose each other's profile/telemetry
-    # updates (last-writer-wins). Pure-Python, no compiled deps; already arrived
-    # transitively via the dev toolchain, so the lock pins the same release.
-    "filelock>=3.16.0",
 ]
 
 [project.urls]
