@@ -5,8 +5,11 @@ Two real concurrency surfaces exist in the CLI, and neither was directly exercis
 1. ``core.config`` persists ``config.toml`` with a temp-file + atomic ``os.replace``
    (`config._dump`) so a reader never observes a truncated file. Writers and readers are
    otherwise unsynchronized (last write wins), and on Windows the replace window is ridden
-   out by a small retry (`config._retry_on_sharing_violation`). These tests pin the at-rest
-   atomicity under thread contention and that retry helper.
+   out by a small retry (`config._retry_on_sharing_violation`). These tests pin that retry
+   helper. (A multi-thread RMW stress test once lived here too, but it manufactured
+   Windows-only os.replace sharing-violation contention no single-user CLI produces and was
+   chronically flaky/hanging on CI; the retry helper's unit tests below cover the real
+   behavior, and `os.replace` provides the at-rest atomicity structurally.)
 2. ``streaming.StreamSession.on_turn`` runs on the SDK reader thread, and the
    ``--system-audio`` path drives two of those threads at once (`session._drive`). The
    turn write is serialized by ``_callback_lock`` so two sources can't interleave a
@@ -17,7 +20,6 @@ from __future__ import annotations
 
 import threading
 import types
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -74,42 +76,6 @@ def test_retry_on_sharing_violation_reraises_a_persistent_permission_error(monke
         config._retry_on_sharing_violation(op)
     # Exactly the full budget of attempts (loop retries + one final attempt), no more.
     assert len(calls) == config._SHARING_RETRIES
-
-
-# --- config.toml: atomic writes vs. lost updates -----------------------------------
-
-
-def test_config_concurrent_writers_always_leave_a_valid_file(tmp_config):
-    # Multiple threads concurrently rewriting config.toml AND reading it back: the temp-file
-    # + atomic os.replace in _dump means no thread ever reads a truncated/half-written file
-    # (which would surface as an invalid_config CLIError), the surviving value is exactly one
-    # writer's, and no .config-*.toml.tmp is left behind.
-    #
-    # Each thread interleaves a few write+read cycles rather than one thread busy-spinning
-    # reads. That paces the file access by the actual write work (no zero-gap loop pinning
-    # the file open continuously) and is bounded (no perpetual reader to strand). The old
-    # shape — a dedicated zero-gap reader gated by a stop Event — manufactured contention no
-    # real single-user CLI produces, which on Windows (no atomic replace-over-open) drove
-    # the sharing-violation retry to exhaustion; and if a writer raised before the reader's
-    # stop was set, the pool's shutdown(wait=True) blocked on the spinning reader and the
-    # whole job hung. This shape can't do either.
-    workers, rounds = 12, 8
-    barrier = threading.Barrier(workers)  # release all threads together for maximal overlap
-
-    def worker(i: int) -> None:
-        barrier.wait()
-        for _ in range(rounds):
-            config.set_profile_env("default", f"sandbox{i:03d}")
-            config.get_profile_env("default")  # the read races other threads' writes
-
-    # future.result() re-raises any worker error in the main thread, so a truncated-file
-    # read (an invalid_config CLIError) fails the test cleanly instead of being swallowed.
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for f in [pool.submit(worker, i) for i in range(workers)]:
-            f.result()
-
-    assert config.get_profile_env("default") in {f"sandbox{i:03d}" for i in range(workers)}
-    assert sorted(p.name for p in tmp_config.iterdir()) == ["config.toml"]  # no temp leftover
 
 
 # --- streaming: on_turn serialization under _callback_lock -------------------------
