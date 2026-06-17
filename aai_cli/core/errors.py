@@ -21,6 +21,12 @@ from __future__ import annotations
 
 from aai_cli.core import jsonshape
 
+# The conventional Unix "cancelled by Ctrl-C" code (128 + SIGINT). Not a CLIError
+# exit_code — a cancel isn't a failure with a machine-readable error type — but the
+# single source of truth scripts can rely on for "the user (or a supervisor's SIGTERM,
+# routed through the same clean-stop path) interrupted the command".
+CANCELLED_EXIT_CODE = 130
+
 
 class CLIError(Exception):
     """Base error carrying an exit code, a machine-readable type, and an optional

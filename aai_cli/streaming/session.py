@@ -9,13 +9,8 @@ from pathlib import Path
 
 import typer
 
-from aai_cli.core import choices, client, config_builder, llm
-from aai_cli.core.errors import (
-    APIError,
-    CLIError,
-    UsageError,
-    mutually_exclusive,
-)
+from aai_cli.core import client, config_builder, errors, llm
+from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import record, savedir
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 from aai_cli.streaming.transcript import TranscriptWriter
@@ -39,99 +34,6 @@ def _finalized_turn_line(event: object, source_label: str | None) -> str | None:
         return None
     prefix = speaker_prefix(source_label, getattr(event, "speaker_label", None))
     return f"{prefix[0]}: {text}" if prefix is not None else text
-
-
-@dataclass(frozen=True)
-class SourceOptions:
-    """Where the audio comes from, distilled from the CLI flags.
-
-    Centralizes the "which input?" predicates so the validation and dispatch helpers
-    in the command module read off one object instead of re-deriving the same booleans.
-    """
-
-    source: str | None
-    sample: bool
-    sample_rate: int | None
-    device: int | None
-    system_audio: bool
-    system_audio_only: bool
-
-    @property
-    def from_stdin(self) -> bool:
-        return self.source == "-"
-
-    @property
-    def from_file(self) -> bool:
-        return bool(self.source) or self.sample
-
-    @property
-    def from_system_audio(self) -> bool:
-        return self.system_audio or self.system_audio_only
-
-    @property
-    def has_capture_overrides(self) -> bool:
-        """Whether a microphone-only flag (--sample-rate or --device) was given."""
-        return self.sample_rate is not None or self.device is not None
-
-
-def validate_output_flags(*, json_mode: bool, output_field: choices.TextOrJson | None) -> None:
-    """Reject --json combined with -o text, shared by `stream` and `agent`.
-
-    Same precedent as --llm + -o text: contradictory output shapes are a clean
-    usage error, not a silent coin-flip between plain text and NDJSON.
-    """
-    mutually_exclusive(
-        ("--json", json_mode),
-        ("-o text", output_field is choices.TextOrJson.text),
-        suggestion="Pick one output format.",
-    )
-
-
-def resolve_output_modes(
-    output_field: choices.TextOrJson | None, *, json_mode: bool
-) -> tuple[bool, bool]:
-    """Validate the -o/--json combination, then fold it into (text_mode, json_mode).
-
-    The two steps always run together for the realtime commands (`stream`, `agent`),
-    so pairing them here keeps a caller from resolving the modes without first
-    rejecting a contradictory pair.
-    """
-    validate_output_flags(json_mode=json_mode, output_field=output_field)
-    return output.stream_output_modes(output_field, json_mode=json_mode)
-
-
-def validate_sources(opts: SourceOptions, *, has_llm: bool, text_mode: bool) -> None:
-    """Reject flag combinations that can't be honored, before any audio is opened."""
-    mutually_exclusive(
-        ("--system-audio", opts.system_audio),
-        ("--system-audio-only", opts.system_audio_only),
-    )
-    _validate_input_source(opts)
-    mutually_exclusive(
-        ("--llm", has_llm),
-        ("-o text", text_mode),
-        suggestion="--llm renders a live panel (or NDJSON when piped).",
-    )
-
-
-def _validate_input_source(opts: SourceOptions) -> None:
-    """Reject --sample-rate/--device/source combinations the chosen input can't accept."""
-    if opts.from_system_audio:
-        if opts.from_file:
-            raise UsageError("--system-audio cannot be combined with an audio source or --sample.")
-        if opts.system_audio_only and opts.has_capture_overrides:
-            raise UsageError(
-                "--sample-rate and --device require microphone input; use --system-audio."
-            )
-    elif opts.from_stdin:
-        if opts.sample:
-            # The stdin branch wins dispatch over --sample, so without this the
-            # hosted clip would be silently ignored in favor of the pipe.
-            raise UsageError("- (stdin) cannot be combined with --sample.")
-        if opts.device is not None:
-            raise UsageError("--device applies only to microphone input.")
-    elif opts.from_file and opts.has_capture_overrides:
-        raise UsageError("--sample-rate and --device apply only to microphone input.")
 
 
 @dataclass
@@ -357,8 +259,8 @@ class StreamSession:
 
     def _guarded(self, work: Callable[[], None], *, handle_interrupt: bool = True) -> None:
         """Run a streaming body with the shared lifecycle handling: enter the
-        FollowRenderer's live panel if present, treat Ctrl-C as a clean stop, exit 0 on
-        a closed downstream pipe, and always close the renderer.
+        FollowRenderer's live panel if present, treat Ctrl-C as a clean stop (exit 130),
+        exit 0 on a closed downstream pipe, and always close the renderer.
 
         ``handle_interrupt=False`` lets a Ctrl-C or a closed pipe propagate instead of
         being swallowed here — the batch driver owns those signals across the whole
@@ -382,10 +284,13 @@ class StreamSession:
         except KeyboardInterrupt:
             if not handle_interrupt:
                 raise
-            # Ctrl-C is a normal "user stopped" signal -> exit 0.
+            # Ctrl-C is a clean "user stopped" signal: flush the closing state, print
+            # "Stopped.", then exit 130 (the cancel code) so a `stream && next` chain
+            # doesn't treat the interrupt as success.
             if self.follow is None:
                 self.renderer.close()
                 self.renderer.stopped()
+            raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
         except BrokenPipeError:
             if not handle_interrupt:
                 raise
@@ -405,12 +310,27 @@ class StreamSession:
         source_label: str | None = None,
         handle_interrupt: bool = True,
     ) -> None:
-        self._guarded(
+        self._guarded_then_finalize(
             lambda: self.stream_one(audio, rate, source_label=source_label),
             handle_interrupt=handle_interrupt,
         )
-        # _guarded re-raises a stream error (skipping finalize) but returns normally on a
-        # clean stop or a Ctrl-C, so a stopped recording is still named + sidecared.
+
+    def _guarded_then_finalize(
+        self, work: Callable[[], None], *, handle_interrupt: bool = True
+    ) -> None:
+        """Run ``work`` under ``_guarded``, then finalize a ``--save-dir`` capture.
+
+        A user Ctrl-C (or SIGTERM) ends a recording via ``typer.Exit`` with the cancel
+        code, which is exactly when a stopped capture still wants its auto-name/note/
+        sidecar — so finalize before re-raising that exit. A stream error (``CLIError``)
+        or a quiet broken-pipe exit (code 0) propagates without finalizing.
+        """
+        try:
+            self._guarded(work, handle_interrupt=handle_interrupt)
+        except typer.Exit as stop:
+            if self.save_plan is not None and stop.exit_code == errors.CANCELLED_EXIT_CODE:
+                self._finalize_save_dir(self.save_plan)
+            raise
         if self.save_plan is not None:
             self._finalize_save_dir(self.save_plan)
 
@@ -450,11 +370,8 @@ class StreamSession:
         return []
 
     def run_parallel(self, streams: _ParallelStreams) -> None:
-        self._guarded(lambda: self._drive(streams))
-        # Same as run(): _guarded returns on a clean stop/Ctrl-C, so a --save-dir
-        # --system-audio capture is still named + sidecared once both channels end.
-        if self.save_plan is not None:
-            self._finalize_save_dir(self.save_plan)
+        # Same finalize-on-stop handling as run(), for the --save-dir --system-audio pair.
+        self._guarded_then_finalize(lambda: self._drive(streams))
 
     def _drive(self, streams: _ParallelStreams) -> None:
         """Stream every source concurrently, surfacing the first worker error."""

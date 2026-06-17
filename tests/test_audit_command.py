@@ -212,3 +212,18 @@ def test_audit_default_limit_is_20(mocker):
     result = runner.invoke(app, ["audit", "--json"])
     assert result.exit_code == 0
     list_logs.assert_called_once_with("jwt", limit=20, action_taken=None, resource_type=None)
+
+
+def test_audit_projects_fields(mocker):
+    _auth()
+    payload = {
+        "data": [
+            {"id": 1, "action_taken": "token.create", "actor_id": 7},
+            {"id": 2, "action_taken": "login.succeeded", "actor_id": 9},
+        ]
+    }
+    mocker.patch("aai_cli.commands.audit.ams.list_audit_logs", autospec=True, return_value=payload)
+    result = runner.invoke(app, ["audit", "-o", "action_taken,actor_id"])
+    assert result.exit_code == 0
+    # Projection emits every row (login filtering only applies to the human table).
+    assert result.output == "token.create\t7\nlogin.succeeded\t9\n"

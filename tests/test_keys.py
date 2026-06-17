@@ -238,3 +238,21 @@ def test_bare_keys_command_shows_subcommand_help():
     assert "create" in result.output
     assert "rename" in result.output
     assert "Missing command" not in result.output
+
+
+def test_keys_list_projects_field(mocker):
+    _auth()
+    projects = [
+        {
+            "project": {"id": 1, "name": "Default"},
+            "tokens": [
+                {"id": 10, "name": "ci", "api_key": "sk_abcdef1234", "is_disabled": False},
+                {"id": 11, "name": "prod", "api_key": "sk_zzzzzz9876", "is_disabled": True},
+            ],
+        }
+    ]
+    mocker.patch("aai_cli.commands.keys.ams.list_projects", autospec=True, return_value=projects)
+    result = runner.invoke(app, ["keys", "list", "-o", "id,disabled"])
+    assert result.exit_code == 0
+    # disabled renders as the lowercased JSON boolean, not Python's True/False.
+    assert result.output == "10\tfalse\n11\ttrue\n"

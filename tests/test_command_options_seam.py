@@ -94,6 +94,7 @@ AGENT_DEFAULTS = agent_exec.AgentOptions(
 
 SPEAK_DEFAULTS = speak_exec.SpeakOptions(
     text=None,
+    url=None,
     voice=[],
     language=speak_exec.DEFAULT_LANGUAGE,
     sample_rate=None,
@@ -171,8 +172,9 @@ class _FakeDuplex:
         self.player = object()
 
 
-def test_run_agent_ctrl_c_stops_cleanly(monkeypatch):
-    # Ctrl-C is the normal "user hung up" signal: the session ends without an error.
+def test_run_agent_ctrl_c_exits_with_cancel_code(monkeypatch):
+    # Ctrl-C is the "user hung up" signal: the session ends cleanly but exits 130
+    # (cancel), so a caller can tell an interrupt from a clean finish.
     config.set_api_key("default", "sk_live")
 
     def raise_interrupt(api_key, *, renderer, player, mic, config):
@@ -180,7 +182,9 @@ def test_run_agent_ctrl_c_stops_cleanly(monkeypatch):
 
     monkeypatch.setattr(agent_exec, "run_session", raise_interrupt)
     monkeypatch.setattr(agent_exec, "DuplexAudio", _FakeDuplex)
-    agent_exec.run_agent(AGENT_DEFAULTS, AppState(), json_mode=True)  # no exception
+    with pytest.raises(typer.Exit) as exc:
+        agent_exec.run_agent(AGENT_DEFAULTS, AppState(), json_mode=True)
+    assert exc.value.exit_code == 130
 
 
 def test_run_agent_broken_pipe_exits_zero(monkeypatch):

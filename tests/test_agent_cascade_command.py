@@ -260,7 +260,11 @@ def test_keyboard_interrupt_stops_cleanly(monkeypatch):
         raise KeyboardInterrupt
 
     rendered = _wire_run(monkeypatch, boom)
-    run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
+    # Ctrl-C ends the cascade cleanly (Stopped., renderer closed) but exits 130 (cancel),
+    # not success, so a caller can tell an interrupt from a normal finish.
+    with pytest.raises(typer.Exit) as exc:
+        run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
+    assert exc.value.exit_code == 130
     assert rendered["r"].stopped_called is True
     assert rendered["r"].closed is True
 

@@ -155,9 +155,9 @@ def test_llm_follow_empty_stdin_exits_2(monkeypatch):
     assert calls == []  # no API call was made
 
 
-def test_llm_follow_interrupt_before_first_turn_still_exits_0(monkeypatch):
-    # Ctrl-C before any turn arrives is the normal "stop watching" signal, not the
-    # empty-stdin usage error.
+def test_llm_follow_interrupt_before_first_turn_exits_cancel(monkeypatch):
+    # Ctrl-C before any turn arrives is a cancel (exit 130), not the empty-stdin usage
+    # error — the user stopped watching, they didn't misuse the flag.
     _auth()
 
     class _InterruptIter:
@@ -172,7 +172,7 @@ def test_llm_follow_interrupt_before_first_turn_still_exits_0(monkeypatch):
     )
     monkeypatch.setattr("aai_cli.commands.llm.gateway.complete", lambda *a, **k: _payload())
     result = runner.invoke(app, ["llm", "summarize", "--follow", "--json"], input="")
-    assert result.exit_code == 0
+    assert result.exit_code == 130
     assert "--follow needs transcript text piped on stdin" not in result.output
 
 
@@ -190,8 +190,8 @@ def test_llm_follow_stops_cleanly_on_interrupt(monkeypatch):
     result = runner.invoke(
         app, ["llm", "summarize", "--follow", "--json"], input="alpha\nbeta\ngamma\n"
     )
-    # Ctrl-C is a normal stop, not an error.
-    assert result.exit_code == 0
+    # Ctrl-C is a cancel (exit 130), not a clean finish.
+    assert result.exit_code == 130
     updates = [json.loads(line) for line in result.output.splitlines() if line.strip()]
     assert len(updates) == 1
     assert updates[0]["turns"] == 1

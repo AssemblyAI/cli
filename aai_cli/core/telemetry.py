@@ -26,7 +26,7 @@ from contextlib import contextmanager
 import typer
 
 from aai_cli import __version__
-from aai_cli.core import argscan, config, env, procs
+from aai_cli.core import argscan, config, env, errors, procs
 from aai_cli.core.errors import CLIError
 
 ENV_DISABLED = "AAI_TELEMETRY_DISABLED"
@@ -236,14 +236,25 @@ def _safe_dispatch(
         return
 
 
+def _exit_outcome(code: int) -> str:
+    """Map a ``typer.Exit`` code to a telemetry outcome: 0 succeeds, 130 is a cancel
+    (the Ctrl-C path that exits via ``typer.Exit``), anything else is an error."""
+    if code == 0:
+        return "success"
+    if code == errors.CANCELLED_EXIT_CODE:
+        return "cancelled"
+    return "error"
+
+
 @contextmanager
 def track(command: str) -> Generator[None]:
     """Record one command run, deriving the outcome from whatever escapes the body.
 
     CLIErrors keep their machine-readable ``error_type`` as the outcome; a
-    deliberate ``typer.Exit`` maps through its code; anything else is the
-    catch-all ``internal_error``. The body's exception always re-raises —
-    tracking observes control flow, never alters it.
+    deliberate ``typer.Exit`` maps through its code (a 130 reads as ``cancelled``);
+    a Ctrl-C is ``cancelled``; anything else is the catch-all ``internal_error``.
+    The body's exception always re-raises — tracking observes control flow, never
+    alters it.
     """
     if not is_enabled():
         yield
@@ -263,8 +274,13 @@ def track(command: str) -> Generator[None]:
         raise
     except typer.Exit as exc:
         code = exc.exit_code
-        outcome = "success" if code == 0 else "error"
-        _safe_dispatch(command, started, outcome=outcome, exit_code=code)
+        _safe_dispatch(command, started, outcome=_exit_outcome(code), exit_code=code)
+        raise
+    except KeyboardInterrupt:
+        # A Ctrl-C that reached here (a command with no interactive handler) is a
+        # cancel, not an internal_error — record it as such so it doesn't inflate the
+        # crash rate, then let run_command map it to exit 130.
+        _safe_dispatch(command, started, outcome="cancelled", exit_code=errors.CANCELLED_EXIT_CODE)
         raise
     except BaseException as exc:
         _safe_dispatch(

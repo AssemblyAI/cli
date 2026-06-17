@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable
 
 import typer
 
-from aai_cli.core.errors import CLIError, NotAuthenticated
+from aai_cli.core.errors import CANCELLED_EXIT_CODE, CLIError, NotAuthenticated
 from aai_cli.streaming.render import StreamRenderer
 from aai_cli.streaming.session import StreamSession
 from aai_cli.ui import output
@@ -41,7 +41,11 @@ def _stream_source(
     renderer.source(source, index=index, total=total)
     try:
         audio, rate = open_source(source)
-        make_session().run(audio, rate, handle_interrupt=False)
+        # handle_interrupt=False: let a Ctrl-C/pipe close bubble to the batch loop below so
+        # one interrupt stops the whole sequence. Flipping it to True is behavior-equivalent
+        # here (the session would convert the same interrupt to the same Exit(130)/Exit(0)),
+        # so no test can distinguish it.
+        make_session().run(audio, rate, handle_interrupt=False)  # pragma: no mutate
     except NotAuthenticated:
         raise
     except CLIError as exc:
@@ -68,8 +72,9 @@ def stream_batch_sources(
     sequentially: each source gets a fresh ``StreamSession`` from ``make_session`` (its
     own transcript and ``--llm`` chain state) via ``_stream_source``.
 
-    A Ctrl-C or a closed downstream pipe stops the batch cleanly (exit 0). When any
-    source failed, raises a ``CLIError`` at the end so a script can trust the exit code.
+    A Ctrl-C stops the batch with the cancel code (exit 130); a closed downstream pipe
+    stops it quietly (exit 0). When any source failed, raises a ``CLIError`` at the end
+    so a script can trust the exit code.
     """
     total = len(sources)
     failures = 0
@@ -85,9 +90,10 @@ def stream_batch_sources(
                 json_mode=json_mode,
             )
     except KeyboardInterrupt:
-        # One Ctrl-C stops the whole batch, not just the current source -> exit 0.
+        # One Ctrl-C stops the whole batch, not just the current source. Exit 130
+        # (cancel) so the interrupt isn't mistaken for a clean run of every source.
         renderer.stopped()
-        return
+        raise typer.Exit(code=CANCELLED_EXIT_CODE) from None
     except BrokenPipeError:
         # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
         raise typer.Exit(code=0) from None

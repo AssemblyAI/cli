@@ -135,7 +135,8 @@ def test_agent_ctrl_c_exits_cleanly(monkeypatch):
 
     monkeypatch.setattr("aai_cli.commands.agent._exec.run_session", raise_kbd)
     result = runner.invoke(app, ["agent"])
-    assert result.exit_code == 0
+    # Ctrl-C is a cancel, not success: exit 130.
+    assert result.exit_code == 130
 
 
 def test_agent_installs_sigterm_handler_around_session(monkeypatch):

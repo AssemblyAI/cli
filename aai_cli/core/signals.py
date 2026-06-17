@@ -2,8 +2,8 @@
 
 `stream` (and the other realtime commands) treat Ctrl-C as a clean "user stopped"
 signal: SIGINT arrives as a ``KeyboardInterrupt`` that the streaming lifecycle catches
-to flush its closing state and exit 0. This module lets an *external* stop reach that
-same path — see ``terminate_as_interrupt``.
+to flush its closing state and exit 130 (the cancel code). This module lets an
+*external* stop reach that same path — see ``terminate_as_interrupt``.
 """
 
 from __future__ import annotations

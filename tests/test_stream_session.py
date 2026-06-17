@@ -8,6 +8,8 @@ shared StreamSession plumbing (the "Listening…" latch, renderer teardown) and 
 import types
 from datetime import datetime
 
+import pytest
+
 
 def _turn(text, *, speaker_label=None):
     return types.SimpleNamespace(transcript=text, end_of_turn=True, speaker_label=speaker_label)
@@ -251,6 +253,91 @@ def test_save_dir_auto_name_failure_keeps_recording(monkeypatch, tmp_path):
     session.run([b"\x00\x00"], 16000)
 
     assert captured["title"] is None  # finalize still ran, just without a derived title
+
+
+def _finalize_probe_session(monkeypatch, *, stream_audio, save_plan=None):
+    """A StreamSession whose write_outputs is replaced with a call-recorder.
+
+    Returns ``(session, calls)`` where ``calls`` flips to ``[True]`` if finalize ran.
+    """
+    import io
+
+    from aai_cli.streaming import savedir as savedir_mod
+    from aai_cli.streaming import session as session_mod
+    from aai_cli.streaming.render import StreamRenderer
+
+    calls: list[bool] = []
+    monkeypatch.setattr(
+        savedir_mod, "write_outputs", lambda plan, **kw: calls.append(True) or plan.paths
+    )
+    monkeypatch.setattr(session_mod.client, "stream_audio", stream_audio)
+    session = session_mod.StreamSession(
+        api_key="sk",
+        base_flags={"speech_model": "u3-rt-pro"},
+        overrides=None,
+        config_file=None,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        follow=None,
+        llm_prompts=[],
+        model="m",
+        max_tokens=1,
+        save_plan=save_plan,
+    )
+    return session, calls
+
+
+def test_save_dir_finalizes_on_ctrl_c(monkeypatch, tmp_path):
+    # Ctrl-C ends a recording via typer.Exit(130); a --save-dir capture is still
+    # finalized (sidecar/auto-name/note) before that cancel exit propagates.
+    import typer
+
+    from aai_cli.core import errors
+
+    def interrupt(api_key, source, *, on_turn, **k):
+        on_turn(_turn("hi"))
+        raise KeyboardInterrupt
+
+    session, calls = _finalize_probe_session(
+        monkeypatch, stream_audio=interrupt, save_plan=_save_plan(tmp_path)
+    )
+    with pytest.raises(typer.Exit) as excinfo:
+        session.run([b"\x00\x00"], 16000)
+    assert excinfo.value.exit_code == errors.CANCELLED_EXIT_CODE
+    assert calls == [True]  # finalize ran despite the interrupt
+
+
+def test_save_dir_skips_finalize_on_broken_pipe(monkeypatch, tmp_path):
+    # A closed downstream pipe (exit 0, not a user stop) is not a recording the user
+    # chose to keep, so finalize is skipped — only the cancel exit triggers it.
+    import typer
+
+    def pipe_closed(api_key, source, *, on_turn, **k):
+        raise BrokenPipeError
+
+    session, calls = _finalize_probe_session(
+        monkeypatch, stream_audio=pipe_closed, save_plan=_save_plan(tmp_path)
+    )
+    with pytest.raises(typer.Exit) as excinfo:
+        session.run([b"\x00\x00"], 16000)
+    assert excinfo.value.exit_code == 0
+    assert calls == []  # no finalize on a broken pipe
+
+
+def test_ctrl_c_without_save_dir_does_not_finalize(monkeypatch):
+    # With no --save-dir plan, Ctrl-C just exits 130 — the finalize guard must not fire
+    # (pins the `save_plan is not None and …` short-circuit).
+    import typer
+
+    from aai_cli.core import errors
+
+    def interrupt(api_key, source, *, on_turn, **k):
+        raise KeyboardInterrupt
+
+    session, calls = _finalize_probe_session(monkeypatch, stream_audio=interrupt, save_plan=None)
+    with pytest.raises(typer.Exit) as excinfo:
+        session.run([b"\x00\x00"], 16000)
+    assert excinfo.value.exit_code == errors.CANCELLED_EXIT_CODE
+    assert calls == []  # no plan -> no finalize, and no crash
 
 
 def test_stream_session_listening_notice_latches(monkeypatch):

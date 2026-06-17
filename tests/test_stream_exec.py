@@ -107,6 +107,24 @@ def test_stream_options_are_immutable():
         setattr(DEFAULTS, field_name, True)
 
 
+def test_source_options_are_immutable():
+    # The input carrier is frozen too, so a validation/dispatch step can't mutate which
+    # source a run reads from after the flags are resolved.
+    from aai_cli.streaming.validate import SourceOptions
+
+    opts = SourceOptions(
+        source=None,
+        sample=False,
+        sample_rate=None,
+        device=None,
+        system_audio=False,
+        system_audio_only=False,
+    )
+    field_name = "system_audio"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(opts, field_name, True)
+
+
 def test_save_targets_are_immutable():
     # The resolved save destinations are a frozen carrier (like StreamOptions), so a
     # later step can't quietly retarget a file mid-run.

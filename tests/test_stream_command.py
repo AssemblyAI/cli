@@ -179,7 +179,7 @@ def test_stream_url_source_uses_filesource(monkeypatch):
     assert seen["source"].source == "https://example.com/clip.mp3"
 
 
-def test_stream_ctrl_c_exits_cleanly(monkeypatch):
+def test_stream_ctrl_c_exits_with_cancel_code(monkeypatch):
     config.set_api_key("default", "sk_live")
 
     def raise_kbd(*a, **k):
@@ -187,7 +187,8 @@ def test_stream_ctrl_c_exits_cleanly(monkeypatch):
 
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", raise_kbd)
     result = runner.invoke(app, ["stream"])
-    assert result.exit_code == 0
+    # Ctrl-C is a cancel, not success: exit 130 so `stream && next` doesn't run `next`.
+    assert result.exit_code == 130
 
 
 def test_stream_ctrl_c_human_mode_prints_stopped(monkeypatch):
@@ -198,7 +199,7 @@ def test_stream_ctrl_c_human_mode_prints_stopped(monkeypatch):
 
     monkeypatch.setattr("aai_cli.commands.stream._exec.client.stream_audio", raise_kbd)
     result = runner.invoke(app, ["stream"])
-    assert result.exit_code == 0
+    assert result.exit_code == 130
     assert "Stopped." in result.output
 
 

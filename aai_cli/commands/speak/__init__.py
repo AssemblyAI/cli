@@ -38,6 +38,10 @@ SPEC = command_registry.CommandModuleSpec(
                 "… | assembly --sandbox speak --voice A=vera --voice B=paul",
             ),
             (
+                "Read a web page aloud (boilerplate stripped)",
+                "assembly --sandbox speak --url https://example.com/post",
+            ),
+            (
                 "Save to a WAV instead of playing",
                 'assembly --sandbox speak "Hello" --out /tmp/hello.wav',
             ),
@@ -47,6 +51,12 @@ SPEC = command_registry.CommandModuleSpec(
 def speak(
     ctx: typer.Context,
     text: str | None = typer.Argument(None, help="Text to speak. Omit to read from stdin."),
+    url: str | None = typer.Option(
+        None,
+        "--url",
+        help="Read a web page aloud: fetch the URL and narrate its main text "
+        "(boilerplate stripped). Mutually exclusive with the text argument",
+    ),
     voice: list[str] = typer.Option(
         [],
         "--voice",
@@ -72,16 +82,18 @@ def speak(
 ) -> None:
     r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS
 
-    Plays the audio through your speakers by default, or writes a WAV with
-    --out. Speaker-labeled input (from 'assembly transcribe
-    --speaker-labels') is detected automatically: the labels are stripped
-    and each speaker gets a different voice. This feature only exists in
-    the sandbox today — run it as 'assembly --sandbox speak' (--sandbox
-    goes before the subcommand).
+    Reads text from the argument, piped stdin, or a web page with --url
+    (its main content is extracted and the boilerplate stripped). Plays the
+    audio through your speakers by default, or writes a WAV with --out.
+    Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
+    detected automatically: the labels are stripped and each speaker gets a
+    different voice. This feature only exists in the sandbox today — run it
+    as 'assembly --sandbox speak' (--sandbox goes before the subcommand).
     """
 
     opts = speak_exec.SpeakOptions(
         text=text,
+        url=url,
         voice=voice,
         language=language,
         sample_rate=sample_rate,

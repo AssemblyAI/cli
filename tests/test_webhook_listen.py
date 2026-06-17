@@ -328,7 +328,8 @@ def test_listen_public_prints_tunnel_url_and_cleans_up(tmp_path, monkeypatch):
         monkeypatch, tmp_path, url="https://hook-slug.trycloudflare.com"
     )
     result = runner.invoke(app, ["webhooks", "listen"])
-    assert result.exit_code == 0, result.output
+    # Ctrl-C stops the foreground listener: exit 130 (cancel), still cleaning up below.
+    assert result.exit_code == 130, result.output
     assert seen["preferred"] == 8989  # the documented default port
     assert "Listening for webhooks https://hook-slug.trycloudflare.com" in result.output
     # Rich wraps the long hint line mid-token; compare with whitespace removed.
@@ -356,7 +357,7 @@ def test_listen_accepts_explicit_max_events_zero(monkeypatch):
         "aai_cli.commands.webhooks._listen.ThreadingHTTPServer.serve_forever", _raise_interrupt
     )
     result = runner.invoke(app, ["webhooks", "listen", "--no-tunnel", "--max-events", "0"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 130, result.output  # Ctrl-C cancel
     assert "Listening for webhooks" in result.output
 
 

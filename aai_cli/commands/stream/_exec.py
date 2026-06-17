@@ -27,14 +27,10 @@ from aai_cli.streaming import naming, record, savedir, transcript, turn_presets
 from aai_cli.streaming.batch import stream_batch_sources
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
-from aai_cli.streaming.session import (
-    SourceOptions,
-    StreamSession,
-    resolve_output_modes,
-    validate_sources,
-)
+from aai_cli.streaming.session import StreamSession
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 from aai_cli.streaming.turn_presets import TurnDetectionPreset
+from aai_cli.streaming.validate import SourceOptions, resolve_output_modes, validate_sources
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
 

@@ -61,6 +61,10 @@ dependencies = [
     # deps. We hand it already-fetched bytes (never a URL) so our bounded, safe
     # httpx fetch stays the only network path.
     "feedparser>=6.0.11",
+    # Web-page article extraction for `assembly speak --url` (webpage.py, imported
+    # lazily). Strips boilerplate down to the readable body; ships prebuilt wheels
+    # (lxml included), so it adds no source-compile step to Homebrew bottling.
+    "trafilatura>=2.1.0",
 ]
 
 [project.urls]
