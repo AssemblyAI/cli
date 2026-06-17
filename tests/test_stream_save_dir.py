@@ -16,6 +16,7 @@ import pytest
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.stream import _exec as stream_exec
+from aai_cli.commands.stream import _save as stream_save
 from aai_cli.core import config
 from aai_cli.core.errors import UsageError
 from tests._stream_helpers import DEFAULTS, FakeTurn, FixedDatetime, RecordingMic, emit_turns
@@ -25,7 +26,7 @@ def test_save_dir_auto_names_transcript_and_matching_wav(monkeypatch, tmp_path):
     # --save-dir buckets by date and shares one timestamp+slug stem across the .txt and
     # the .wav, so both land together under DIR/YYYY-MM-DD/.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr(stream_exec, "datetime", FixedDatetime)
+    monkeypatch.setattr(stream_save, "datetime", FixedDatetime)
     monkeypatch.setattr(stream_exec.client, "stream_audio", emit_turns(FakeTurn("hi there")))
     monkeypatch.setattr(stream_exec, "MicrophoneSource", RecordingMic)
 
@@ -82,7 +83,7 @@ def test_save_flags_reject_show_code(overrides):
 def test_no_save_audio_writes_transcript_and_sidecar_but_no_wav(monkeypatch, tmp_path):
     # --save-dir --no-save-audio keeps the auto-named transcript + sidecar but writes no WAV.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr(stream_exec, "datetime", FixedDatetime)
+    monkeypatch.setattr(stream_save, "datetime", FixedDatetime)
     monkeypatch.setattr(stream_exec.client, "stream_audio", emit_turns(FakeTurn("hi there")))
     monkeypatch.setattr(stream_exec, "MicrophoneSource", RecordingMic)
 
@@ -103,7 +104,7 @@ def test_save_dir_auto_name_and_note_end_to_end(monkeypatch, tmp_path):
     # --save-dir --auto-name --llm: the files are renamed from the LLM-derived title, the
     # final answer lands as a .md note, and the sidecar records the title.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr(stream_exec, "datetime", FixedDatetime)
+    monkeypatch.setattr(stream_save, "datetime", FixedDatetime)
     monkeypatch.setattr(stream_exec.client, "stream_audio", emit_turns(FakeTurn("hi there")))
     monkeypatch.setattr(stream_exec, "MicrophoneSource", RecordingMic)
 

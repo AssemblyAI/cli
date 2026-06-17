@@ -420,7 +420,7 @@ def test_stream_system_audio_save_dir_writes_one_wav_per_channel(monkeypatch, tm
     # --save-dir + --system-audio can't tee two streams into one WAV, so each channel
     # gets its own <stem>-{you,system}.wav beside the single shared transcript.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.stream._exec.datetime", _FixedDatetime)
+    monkeypatch.setattr("aai_cli.commands.stream._save.datetime", _FixedDatetime)
 
     class FakeSystemAudio:
         def __init__(self, *, on_open=None):
@@ -463,7 +463,7 @@ def test_stream_system_audio_only_save_dir_writes_one_labeled_wav(monkeypatch, t
     # A lone --system-audio-only stream saves to a single channel-labeled WAV (never the
     # bare <stem>.wav a mic recording uses) and still never opens the microphone.
     config.set_api_key("default", "sk_live")
-    monkeypatch.setattr("aai_cli.commands.stream._exec.datetime", _FixedDatetime)
+    monkeypatch.setattr("aai_cli.commands.stream._save.datetime", _FixedDatetime)
 
     class FakeSystemAudio:
         def __init__(self, *, on_open=None):
