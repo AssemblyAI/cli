@@ -1,0 +1,37 @@
+# Meeting notes powered by `assembly stream` — record, browse, and search.
+#
+# Run `just` (or `just default`) to list recipes. Needs the AssemblyAI CLI;
+# `list` also needs fzf + glow, `record` uses an LLM for the live note.
+
+# Where notes land. The CLI buckets each note under <dir>/YYYY-MM-DD/.
+transcripts_dir := env_var_or_default("MEETING_NOTES_DIR", "~/meeting-notes")
+
+# The live-note instruction handed to `assembly stream --llm`.
+note_prompt := "Keep running meeting notes: a one-line summary, decisions, action items (with owners), and open questions. Update as we talk."
+
+# List available recipes.
+default:
+    @just --list
+
+# The CLI auto-names the file from its content, buckets it under
+# transcripts/YYYY-MM-DD/, and writes the .md note live via --llm (saved on
+# Ctrl-C); [no-exit-message] hides the exit-130 that SIGINT returns.
+# Record a meeting (system audio + mic, speaker labels) and its note in one pass.
+[no-exit-message]
+record:
+    assembly stream --system-audio --speaker-labels --auto-name --save-dir "{{transcripts_dir}}" --model claude-sonnet-4-6 --llm "{{note_prompt}}"
+
+# Browse notes newest-first and read the selected one rendered (needs fzf + glow).
+list:
+    #!/usr/bin/env zsh
+    setopt err_exit no_unset pipe_fail
+    notes=( {{transcripts_dir}}/**/*.md(.NOn) )
+    (( $#notes )) || { echo "No recordings yet — run 'just record'." >&2; exit 0; }
+    sel=$(print -l -- $notes | fzf --preview 'glow -s dark {}' --preview-window 'right,70%') || true
+    [[ -z "$sel" ]] || glow -s dark -p "$sel"
+
+# Ask a question across all notes via the LLM Gateway; it cites the notes it used.
+# `assembly llm` recurses the directory for .md/.txt files as context.
+# Usage: just search "what did we decide about pricing?"
+search query:
+    assembly llm --model claude-sonnet-4-6 "Answer using only the notes provided. Cite the relevant note name(s). Question: {{query}}" "{{transcripts_dir}}" -o text
