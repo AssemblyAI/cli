@@ -74,7 +74,7 @@ def run_chain(text: str) -> str:
             messages=[{{"role": "user", "content": prompt + "\\n\\nTranscript:\\n" + source}}],
             max_tokens={max_tokens},
         )
-        result = response.choices[0].message.content
+        result = response.choices[0].message.content or ""
     return result
 
 

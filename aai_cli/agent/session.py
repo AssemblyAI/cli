@@ -132,8 +132,13 @@ class VoiceAgentSession:
 
     def on_reply_audio(self, event: dict[str, Any]) -> None:
         data = event.get("data")
-        if data:
-            self.player.enqueue(base64.b64decode(data))
+        if not data:
+            return
+        try:
+            pcm = base64.b64decode(data)
+        except (ValueError, TypeError):
+            return  # a single corrupt frame is dropped, not fatal to the session
+        self.player.enqueue(pcm)
 
     def on_agent_transcript(self, event: dict[str, Any]) -> None:
         self.renderer.agent_transcript(

@@ -154,6 +154,14 @@ def test_reply_audio_without_data_is_ignored():
     assert s.player.enqueued == []
 
 
+def test_reply_audio_with_corrupt_base64_is_dropped_not_fatal():
+    # A single malformed audio frame must be skipped, not raise out of the receive
+    # loop and tear down the whole live conversation.
+    s = _session()
+    s.dispatch({"type": "reply.audio", "data": "a"})  # invalid base64 (bad padding)
+    assert s.player.enqueued == []
+
+
 def test_should_send_audio_only_when_ready_and_unmuted():
     s = _session()
     assert s.should_send_audio() is False  # not ready yet

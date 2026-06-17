@@ -276,6 +276,29 @@ def test_bare_aai_interactive_with_key_shows_help_no_offer(
     assert "Usage" in result.output or "Commands" in result.output
 
 
+def test_bare_aai_with_corrupt_config_shows_help_without_crashing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # A corrupt config.toml is deferred by the root callback. Bare `assembly` must still
+    # print help cleanly — without the deferral guard, _profile_has_key -> resolve_api_key
+    # re-raises invalid_config (which it doesn't catch) and the callback dumps a traceback.
+    from aai_cli.core import config
+
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    (tmp_path / "config.toml").write_text("this is not = valid = toml ][", encoding="utf-8")
+    monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
+    monkeypatch.delenv("AAI_ENV", raising=False)
+    monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
+    confirmed = {"v": False}
+    monkeypatch.setattr(
+        "aai_cli.main.typer.confirm", lambda *a, **k: confirmed.__setitem__("v", True)
+    )
+    result = CliRunner().invoke(app, [])
+    assert result.exit_code == 0, result.output
+    assert confirmed["v"] is False  # wizard never offered atop a broken config
+    assert "Usage" in result.output or "Commands" in result.output
+
+
 def test_bare_aai_declined_offer_shows_help(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("aai_cli.core.stdio.interactive_stdio", lambda: True)
     monkeypatch.setattr("aai_cli.main.typer.confirm", lambda *a, **k: False)

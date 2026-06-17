@@ -139,11 +139,19 @@ def create(
         account_id, jwt = state.resolve_session()
         pid = project_id if project_id is not None else _default_project_id(account_id, jwt)
         created = ams.create_token(account_id, pid, name, jwt)
+        # Validate before rendering: a 200 whose body omits api_key (proxy/version
+        # drift) must surface a clean APIError, not a KeyError traceback.
+        api_key = created.get("api_key")
+        if not isinstance(api_key, str) or not api_key:
+            raise APIError(
+                "AMS created the key but returned no api_key.",
+                suggestion="Run 'assembly keys list' to confirm it exists, then try again.",
+            )
         output.emit(
             created,
-            lambda d: (
+            lambda _d: (
                 output.success(f"Created API key '{escape(name)}'.")
-                + f"\n  {escape(str(d['api_key']))}\n"
+                + f"\n  {escape(api_key)}\n"
                 + output.warn("Shown once — copy it now.")
             ),
             json_mode=json_mode,

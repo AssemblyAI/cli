@@ -62,8 +62,25 @@ def test_is_newer(latest, current, expected):
     ],
 )
 def test_detect_upgrade_command(exe, expected, monkeypatch):
+    # These are macOS-style install paths; pin the platform so the /usr/local
+    # Intel-Homebrew heuristic applies (it is gated off on non-macOS).
+    monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(sys, "executable", exe)
     assert update_check.detect_upgrade_command() == expected
+
+
+def test_usr_local_bin_is_not_homebrew_off_macos(monkeypatch):
+    # On Linux, /usr/local/bin/python is a source/manual build, not Homebrew — so we
+    # must not tell the user to run `brew upgrade` (which they don't have).
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "executable", "/usr/local/bin/python")
+    assert update_check.detect_upgrade_command() == ""
+
+
+def test_usr_local_bin_is_homebrew_on_macos(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", "/usr/local/bin/python")
+    assert update_check.detect_upgrade_command() == "brew upgrade assembly"
 
 
 def _fake_response(payload: dict[str, object]) -> types.SimpleNamespace:

@@ -44,7 +44,9 @@ def is_newer(latest: str, current: str) -> bool:
 
 
 def _is_homebrew_executable(executable: str) -> bool:
-    if executable.startswith("/usr/local/"):
+    # /usr/local/ is Homebrew only on Intel macOS; on Linux it's the conventional
+    # prefix for source/manually-built interpreters, so don't claim brew there.
+    if sys.platform == "darwin" and executable.startswith("/usr/local/"):
         return True
     return any(marker in executable for marker in _HOMEBREW_PATH_MARKERS)
 
@@ -84,7 +86,7 @@ def fetch_and_cache() -> None:
         resp.raise_for_status()
         tag = resp.json().get("tag_name")
         if isinstance(tag, str) and tag:
-            latest = tag.lstrip("v")
+            latest = tag.removeprefix("v")
     except (httpx.HTTPError, ValueError, KeyError, OSError):
         latest = None
     try:
