@@ -55,15 +55,27 @@ def _stub(
 
 
 def _base_argv(cmd: object) -> list[str]:
-    """The launch argv with the trailing ``--read <conventions>`` pair stripped off."""
+    """The launch argv up to (excluding) the ``--read <conventions>`` pair and beyond."""
     assert isinstance(cmd, list)
     return cmd[: cmd.index("--read")] if "--read" in cmd else cmd
+
+
+def _prefix(model: str) -> list[str]:
+    """The fixed flag prefix every launch carries: main model + cheap weak model + quiet."""
+    return [
+        "aider",
+        "--model",
+        f"openai/{model}",
+        "--weak-model",
+        f"openai/{code_exec.WEAK_MODEL}",
+        "--no-show-model-warnings",
+    ]
 
 
 def test_code_options_are_frozen() -> None:
     # CodeOptions is parsed argv handed to run_code; freezing guards against a body
     # mutating the request it was given.
-    opts = code_exec.CodeOptions(model="m", files=())
+    opts = code_exec.CodeOptions(model="m", files=(), message=None)
     field = "model"
     with pytest.raises(dataclasses.FrozenInstanceError):
         setattr(opts, field, "tampered")
@@ -75,7 +87,9 @@ def test_code_launches_aider_with_default_model(
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 0, result.output
-    assert _base_argv(calls["cmd"]) == ["aider", "--model", "openai/claude-opus-4-7"]
+    # Default launch: main model + cheap weak model (the gateway's default) + quiet warnings.
+    assert _base_argv(calls["cmd"]) == _prefix("claude-opus-4-7")
+    assert code_exec.WEAK_MODEL != "claude-opus-4-7"  # weak model is the cheaper one
     # check=False: aider's own non-zero exit is surfaced by us, not raised by subprocess.
     assert calls["check"] is False
 
@@ -91,6 +105,9 @@ def test_code_wires_gateway_and_key_into_child_env(
     # aider/litellm read these to reach an OpenAI-compatible endpoint.
     assert env["OPENAI_API_BASE"] == _GATEWAY
     assert env["OPENAI_API_KEY"] == "sk_test"
+    # aider's own analytics + update notifier are silenced (the CLI owns both).
+    assert env["AIDER_ANALYTICS"] == "false"
+    assert env["AIDER_CHECK_UPDATE"] == "false"
 
 
 def test_code_custom_model_is_prefixed_openai(
@@ -99,20 +116,34 @@ def test_code_custom_model_is_prefixed_openai(
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code", "--model", "gpt-5.1"])
     assert result.exit_code == 0, result.output
-    assert _base_argv(calls["cmd"]) == ["aider", "--model", "openai/gpt-5.1"]
+    assert _base_argv(calls["cmd"]) == _prefix("gpt-5.1")
 
 
 def test_code_passes_files_positionally(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code", "api/index.py", "README.md"])
     assert result.exit_code == 0, result.output
-    assert _base_argv(calls["cmd"]) == [
-        "aider",
-        "--model",
-        "openai/claude-opus-4-7",
-        "api/index.py",
-        "README.md",
-    ]
+    # Files come after the flag prefix and before the --read conventions pair.
+    assert _base_argv(calls["cmd"]) == [*_prefix("claude-opus-4-7"), "api/index.py", "README.md"]
+
+
+def test_code_message_runs_one_shot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _stub(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["code", "-m", "add a test"])
+    assert result.exit_code == 0, result.output
+    cmd = calls["cmd"]
+    assert isinstance(cmd, list)
+    # --message is appended last so aider runs the instruction non-interactively and exits.
+    assert cmd[-2:] == ["--message", "add a test"]
+
+
+def test_code_no_message_omits_the_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _stub(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["code"])
+    assert result.exit_code == 0, result.output
+    cmd = calls["cmd"]
+    assert isinstance(cmd, list)
+    assert "--message" not in cmd
 
 
 def test_code_injects_bundled_aai_cli_skill_as_conventions(

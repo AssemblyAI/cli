@@ -393,10 +393,11 @@
   │   files      [FILES]...  Files or directories to open in the agent           │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model          TEXT  Gateway model for the agent                           │
-  │                        [default: claude-opus-4-7]                            │
-  │ --json   -j            Output raw JSON                                       │
-  │ --help                 Show this message and exit.                           │
+  │ --model            TEXT  Gateway model for the agent                         │
+  │                          [default: claude-opus-4-7]                          │
+  │ --message  -m      TEXT  Run one instruction and exit (non-interactive)      │
+  │ --json     -j            Output raw JSON                                     │
+  │ --help                   Show this message and exit.                         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

@@ -35,6 +35,9 @@ def code(
     model: str = typer.Option(
         code_exec.DEFAULT_MODEL, "--model", help="Gateway model for the agent"
     ),
+    message: str | None = typer.Option(
+        None, "--message", "-m", help="Run one instruction and exit (non-interactive)"
+    ),
     json_out: bool = options.json_option(),
 ) -> None:
     """Launch an AI coding agent powered by the AssemblyAI LLM Gateway
@@ -44,5 +47,5 @@ def code(
     agent in your terminal. The AssemblyAI skills are injected as read-only context so
     the agent knows the API. Requires aider (`uv tool install aider-chat`).
     """
-    opts = code_exec.CodeOptions(model=model, files=tuple(files or ()))
+    opts = code_exec.CodeOptions(model=model, files=tuple(files or ()), message=message)
     run_with_options(ctx, code_exec.run_code, opts, json=json_out)

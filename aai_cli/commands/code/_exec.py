@@ -29,7 +29,7 @@ import typer
 
 from aai_cli.app import coding_agent
 from aai_cli.app.context import AppState
-from aai_cli.core import env, environments
+from aai_cli.core import env, environments, llm
 from aai_cli.core.errors import missing_dependency
 from aai_cli.ui import output
 
@@ -39,6 +39,9 @@ AIDER_BIN = "aider"
 # The strongest coding model on the gateway's roster (core.llm.KNOWN_MODELS). Override
 # with --model; the gateway is the source of truth for what's actually accepted.
 DEFAULT_MODEL = "claude-opus-4-7"
+# The cheap model aider uses for side tasks (commit messages, summaries, repo-map). Point
+# it at the gateway's cheap default so those never bill the expensive main model.
+WEAK_MODEL = llm.DEFAULT_MODEL
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class CodeOptions:
 
     model: str
     files: tuple[str, ...]
+    message: str | None
 
 
 def _require_aider() -> None:
@@ -107,7 +111,15 @@ def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
         _render_launching,
         json_mode=json_mode,
     )
-    child = env.child_env(OPENAI_API_BASE=gateway, OPENAI_API_KEY=api_key)
+    child = env.child_env(
+        OPENAI_API_BASE=gateway,
+        OPENAI_API_KEY=api_key,
+        # aider has its own analytics + update notifier; the CLI owns both, so silence
+        # aider's (every aider flag mirrors to AIDER_<FLAG>). Set as env defaults so a
+        # user who really wants them can still re-enable via their own aider config.
+        AIDER_ANALYTICS="false",
+        AIDER_CHECK_UPDATE="false",
+    )
     # The conventions file only needs to outlive the aider process (which we block on),
     # so a temp dir keeps it out of the user's project and cleans up on exit.
     with tempfile.TemporaryDirectory() as tmp:
@@ -116,10 +128,18 @@ def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
             AIDER_BIN,
             "--model",
             f"openai/{opts.model}",
+            # Route side tasks to the cheap model and silence the "unknown model" warning
+            # litellm raises for our gateway model ids (we don't ship fabricated metadata).
+            "--weak-model",
+            f"openai/{WEAK_MODEL}",
+            "--no-show-model-warnings",
             *opts.files,
             "--read",
             str(conventions),
         ]
+        if opts.message is not None:
+            # One-shot, non-interactive: run the instruction and exit (scripting/headless).
+            argv += ["--message", opts.message]
         result = subprocess.run(argv, env=child, check=False)
     if result.returncode:
         raise typer.Exit(code=result.returncode)
