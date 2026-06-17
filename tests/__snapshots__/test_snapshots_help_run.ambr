@@ -375,6 +375,69 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[code]
+  '''
+  
+   Usage: assembly code [OPTIONS] [PROMPT]
+  
+   Run a terminal coding agent backed by the AssemblyAI LLM Gateway
+  
+   An autonomous coding agent (built on the deepagents SDK) that reads, writes,
+   and edits files, runs shell commands, searches the AssemblyAI docs, and can
+   invoke the 'assembly' CLI itself — all in the working directory. It talks
+   only to the AssemblyAI LLM Gateway. Mutating actions ask for approval unless
+   you pass --auto.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   prompt      [PROMPT]  Initial task for the agent. Omit to just open the    │
+  │                         session                                              │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --model                       TEXT       LLM Gateway model                   │
+  │                                          [default: claude-sonnet-4-6]        │
+  │ --dir      -C                 DIRECTORY  Working directory the agent's file  │
+  │                                          and shell tools operate in          │
+  │                                          [default: .]                        │
+  │ --auto     -y                            Skip approval prompts and run every │
+  │                                          tool automatically                  │
+  │ --docs         --no-docs                 Connect to the AssemblyAI docs MCP  │
+  │                                          server for reference                │
+  │                                          [default: docs]                     │
+  │ --skills       --no-skills               Load installed agent skills (e.g.   │
+  │                                          the assemblyai skill)               │
+  │                                          [default: skills]                   │
+  │ --web          --no-web                  Enable Tavily web search when       │
+  │                                          TAVILY_API_KEY is set               │
+  │                                          [default: web]                      │
+  │ --memory       --no-memory               Load and persist the agent's        │
+  │                                          long-term memory                    │
+  │                                          [default: memory]                   │
+  │ --session                     TEXT       Conversation session name (reuse to │
+  │                                          resume it)                          │
+  │                                          [default: default]                  │
+  │ --persist      --fresh                   Persist the session to disk         │
+  │                                          (--fresh: ephemeral)                │
+  │                                          [default: persist]                  │
+  │ --tui          --no-tui                  Use the full-screen TUI (off: a     │
+  │                                          plain read-eval loop)               │
+  │                                          [default: tui]                      │
+  │ --help                                   Show this message and exit.         │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Start a coding session in the current directory
+   $ assembly code
+   Kick off with an initial task
+   $ assembly code "add a --verbose flag"
+   Run without approval prompts
+   $ assembly code --auto "fix the failing test"
+   Point at another project
+   $ assembly code --dir ../service
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[dictate]
   '''
   

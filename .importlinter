@@ -13,7 +13,7 @@ type = layers
 ; assembles the command layer — main, command_registry, help_panels, options —
 ; stays at the package root, above `commands`, and is intentionally unlisted
 ; (it legitimately imports the command modules to discover/register them).
-; Feature slices (agent, tts, streaming, code_gen, init, auth, onboard) are
+; Feature slices (agent, tts, streaming, code_agent, code_gen, init, auth, onboard) are
 ; likewise unlisted vertical slices governed by contract 2.
 layers =
     commands
@@ -34,6 +34,7 @@ source_modules =
     aai_cli.agent
     aai_cli.agent_cascade
     aai_cli.auth
+    aai_cli.code_agent
     aai_cli.code_gen
     aai_cli.init
     aai_cli.onboard

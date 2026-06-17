@@ -150,6 +150,8 @@ def test_help_lists_commands_in_workflow_order():
     assert names == [
         # Quick Start
         "onboard",
+        # Coding Agent
+        "code",
         # Build an App
         "init",
         "dev",
