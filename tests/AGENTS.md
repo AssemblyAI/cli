@@ -54,18 +54,19 @@ Lessons that cost iterations getting the patch-coverage and mutation tail gates 
   cost a PR three CI rounds. Don't fight it: a local green is now a CI green for output tests.
   A test that genuinely needs a different width passes it on the call
   (`runner.invoke(app, argv, env={"COLUMNS": "300"})`), which overrides the default.
-- **Output is colorless suite-wide, so `"--flag" in result.output` is reliable — and so is
-  its negation.** `conftest.py` strips `FORCE_COLOR` (at *import*, before the app's
-  module-level consoles are built, plus per-test in `isolate_env`). CliRunner captures to a
-  non-tty, so locally output is already plain — but CI exports `FORCE_COLOR`, and Rich then
-  splits a flag's leading dash into its own ANSI span (`\x1b[..m-\x1b[..m-profile`), so a raw
-  `"--profile" in output` check that's green locally fails in CI. The *worse* trap is the
-  negative form: `"--sandbox" not in output` passes **vacuously** against colored text, so a
-  regression that re-exposes a flag sails through. Both are gone now — assert on the plain flag
-  string directly. A test that needs colored output builds its own console
-  (`theme.make_console(force_terminal=True, _environ={})`), never the ambient env (see
-  `test_color_mode.py` / `test_output.py`); the snapshot suite still ANSI-strips via
-  `_snapshot_surface.normalize` as defense in depth.
+- **Never `"--flag" in result.output` on Rich/help output — CI colorizes it and you cannot
+  turn that off from the test process.** Locally CliRunner captures to a non-tty so output is
+  plain and the check passes; in CI the render carries ANSI and Rich splits a flag's leading
+  dash into its own SGR span (`\x1b[..m-\x1b[..m-profile`), so `"--profile" in output` fails —
+  green locally, red in CI. The *worse* trap is the negative form: `"--sandbox" not in output`
+  passes **vacuously** against colored text, so a regression that re-exposes a flag sails
+  through CI undetected. This has bitten many PRs. Trying to disable color in `conftest`
+  (popping `FORCE_COLOR`, etc.) does **not** work — CI re-colors anyway, and the attempt only
+  masks the bug locally. The fix is to strip ANSI in the assertion: pass the output through
+  `tests._snapshot_surface.normalize` (what every `--help` snapshot test already does), then do
+  the `in` / `not in` checks against the plain text. A test that genuinely needs *colored*
+  output builds its own console (`theme.make_console(force_terminal=True, _environ={})`), never
+  the ambient env (see `test_color_mode.py` / `test_output.py`).
 - **Typer's `CliRunner` merges stderr into `result.output`, and not in call order**, so don't
   assume `splitlines()[-1]` is the command payload. In `--json` mode the env-mismatch warning
   is its own `{"warning": …}` line, so filter parsed lines by a key the payload carries

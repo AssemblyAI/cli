@@ -19,6 +19,7 @@ from aai_cli.auth.flow import LoginResult
 from aai_cli.auth.loopback import CallbackResult
 from aai_cli.core import access, config
 from aai_cli.main import _is_sandbox_command, app
+from tests._snapshot_surface import normalize
 
 runner = CliRunner()
 
@@ -198,6 +199,9 @@ def test_production_is_never_gated_for_external_accounts():
 def test_login_is_exempt_so_an_employee_can_bootstrap_the_sandbox(monkeypatch):
     # A first-time employee has no stored email yet, so the gate would otherwise block
     # the very `login --sandbox` that records it. login is exempt; the email then lands.
+    # Stub the post-success update-check so it can't spawn a detached refresh subprocess
+    # (which leaks a Popen → ResourceWarning when the captured console reports a tty).
+    monkeypatch.setattr("aai_cli.ui.update_check.spawn_refresh", lambda: None)
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow",
         lambda *, json_mode=False: LoginResult(
@@ -228,8 +232,11 @@ def test_internal_account_may_select_the_sandbox():
 
 
 def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(monkeypatch):
-    # Output is colorless suite-wide (see conftest), so raw substring checks are reliable.
-    external = runner.invoke(app, ["--help"]).output
+    # Strip ANSI before asserting: CI colorizes help output, and Rich splits a flag's
+    # leading dash into its own SGR span (so "--sandbox" isn't a raw substring) — which
+    # would make the positive checks fail *and* the negative ones pass vacuously. This
+    # is the same normalization the help-snapshot suite uses. See tests/AGENTS.md.
+    external = normalize(runner.invoke(app, ["--help"]).output)
     # Both the flags and the [sandbox]-tagged commands are gone for an external account.
     assert "--sandbox" not in external
     assert "--env" not in external
@@ -244,7 +251,7 @@ def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(m
     # external one *restored* the hidden flags/commands rather than leaking hidden=True
     # onto the process-global Typer tree (which would hide them here too).
     monkeypatch.setattr("aai_cli.core.access.profile_is_internal", lambda *a, **k: True)
-    internal = runner.invoke(app, ["--help"]).output
+    internal = normalize(runner.invoke(app, ["--help"]).output)
     assert "--sandbox" in internal
     assert "--env" in internal
     assert "[sandbox]" in internal
