@@ -1,4 +1,4 @@
-# WisprFlow clone with Hammerspoon + `assembly dictate`
+# Push-to-talk dictation with Hammerspoon + `assembly dictate`
 
 A ~100-line [Hammerspoon](https://www.hammerspoon.org) script that turns the
 AssemblyAI CLI into a [WisprFlow](https://wisprflow.ai)-style dictation tool:
@@ -40,11 +40,11 @@ hotkey up    ->  task:terminate()  (SIGTERM)  ->  dictate prints the transcript
    brew install --cask hammerspoon
    ```
 
-3. **Drop the script in place.** Copy `wisprflow.lua` to `~/.hammerspoon/` and
+3. **Drop the script in place.** Copy `dictation.lua` to `~/.hammerspoon/` and
    load it from your `~/.hammerspoon/init.lua`:
 
    ```lua
-   require("wisprflow")
+   require("dictation")
    ```
 
    Then reload the config (Hammerspoon menubar → *Reload Config*).
@@ -57,7 +57,7 @@ prompt once for microphone access.
 
 ## Customize
 
-Edit the config block at the top of `wisprflow.lua`:
+Edit the config block at the top of `dictation.lua`:
 
 | Setting | What it does |
 | --- | --- |

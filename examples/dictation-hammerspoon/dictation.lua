@@ -1,5 +1,5 @@
--- WisprFlow clone for macOS: push-to-talk dictation anywhere, powered by
--- Hammerspoon (https://www.hammerspoon.org) and `assembly dictate`.
+-- Push-to-talk dictation anywhere on macOS (a WisprFlow-style clone), powered
+-- by Hammerspoon (https://www.hammerspoon.org) and `assembly dictate`.
 --
 -- Hold the hotkey to record, release to transcribe. The text is inserted at the
 -- cursor in whatever app has focus — a chat box, your editor, a search field.
@@ -11,7 +11,7 @@
 --
 -- Load it from your ~/.hammerspoon/init.lua with:
 --
---   require("wisprflow")            -- if this file is at ~/.hammerspoon/wisprflow.lua
+--   require("dictation")            -- if this file is at ~/.hammerspoon/dictation.lua
 --
 -- then reload the Hammerspoon config (menubar -> Reload Config).
 
@@ -51,7 +51,7 @@ local function resolveAssembly()
   if path == "" then
     hs.notify
       .new({
-        title = "WisprFlow (Hammerspoon)",
+        title = "Dictation (Hammerspoon)",
         informativeText = "`assembly` not found on PATH. Install the AssemblyAI CLI first.",
       })
       :send()
@@ -120,7 +120,7 @@ local function startDictation()
     if stdOut and stdOut ~= "" then
       insert(stdOut)
     elseif stdErr and stdErr ~= "" then
-      hs.notify.new({ title = "WisprFlow (Hammerspoon)", informativeText = stdErr }):send()
+      hs.notify.new({ title = "Dictation (Hammerspoon)", informativeText = stdErr }):send()
     end
   end, args)
   if task:start() then

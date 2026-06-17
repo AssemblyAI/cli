@@ -127,7 +127,14 @@ assembly stream -o text | assembly llm -f "summarize my to-dos as I talk"
 assembly stream --system-audio --speaker-labels -o text
 ```
 
-**Build a WisprFlow clone** — `assembly dictate` records on launch and prints the transcript on SIGTERM, so a hotkey tool can drive push-to-talk dictation that types into any app. The [`examples/wisprflow-hammerspoon`](examples/wisprflow-hammerspoon) recipe wires it up with [Hammerspoon](https://www.hammerspoon.org): hold a hotkey, speak, release, and the text lands at your cursor.
+**Record meeting notes from one hotkey** — capture system audio + mic with speaker labels and have an LLM write a live, auto-named Markdown note. The [`examples/meeting-notes-hammerspoon`](examples/meeting-notes-hammerspoon) recipe pairs a [Hammerspoon](https://www.hammerspoon.org) toggle with a `just record`/`list`/`search` workflow:
+
+```sh
+assembly stream --system-audio --speaker-labels --auto-name \
+  --save-dir ~/meeting-notes --llm "summary, decisions, action items, open questions"
+```
+
+**Build a WisprFlow clone** — `assembly dictate` records on launch and prints the transcript on SIGTERM, so a hotkey tool can drive push-to-talk dictation that types into any app. The [`examples/dictation-hammerspoon`](examples/dictation-hammerspoon) recipe wires it up with [Hammerspoon](https://www.hammerspoon.org): hold a hotkey, speak, release, and the text lands at your cursor.
 
 **Get pinged when your name comes up** in a live meeting:
 
