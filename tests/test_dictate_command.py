@@ -1,5 +1,5 @@
-"""The `assembly dictate` Typer surface: argv -> DictateOptions mapping and the
-non-terminal failure mode. Session behavior lives in test_dictate_exec.py."""
+"""The `assembly dictate` Typer surface: argv -> DictateOptions mapping. Session
+behavior lives in test_dictate_exec.py."""
 
 from typer.testing import CliRunner
 
@@ -73,16 +73,3 @@ def test_max_seconds_is_capped_at_the_api_limit():
     result = runner.invoke(app, ["dictate", "--max-seconds", "200"])
     assert result.exit_code == 2
     assert "120" in result.output
-
-
-def test_outside_a_terminal_is_a_usage_error_not_a_login():
-    # CliRunner's stdin is not a terminal and no credentials are configured: the
-    # whole stack (command -> run_dictate -> TerminalKeys) must surface the
-    # terminal requirement, not start an authentication flow.
-    result = runner.invoke(app, ["dictate"])
-    assert result.exit_code == 2
-    # POSIX surfaces the not-a-tty requirement; Windows (no termios) surfaces the
-    # unsupported-platform message first. Either is the point: a usage error, not a login.
-    assert (
-        "interactive terminal" in result.output or "not supported on this platform" in result.output
-    )

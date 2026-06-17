@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import os
 import re
 import tempfile
+import time
 import tomllib
 import uuid
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aai_cli.core import config_lock, debuglog, env, keyring_store
+from aai_cli.core import debuglog, env, keyring_store
 from aai_cli.core.errors import CLIError, NotAuthenticated
 
 ENV_API_KEY = "ASSEMBLYAI_API_KEY"
@@ -115,6 +118,26 @@ def _validation_summary(exc: ValidationError) -> str:
 # snapshots one for rollback), so hand out deep copies, never the cached object.
 _load_cache: dict[Path, tuple[int, int, Config]] = {}
 
+# Windows has no atomic replace-over-open like POSIX: while _dump swaps the temp
+# file in (os.replace), a racing open on the same path transiently fails with
+# PermissionError. Since readers are lock-free, both a lock-free reader's open and
+# the writer's replace can lose that race, so each retries a few short backoffs to
+# ride out the (sub-millisecond) rename window. POSIX replaces atomically and never
+# raises here, so this only ever loops on Windows.
+_SHARING_RETRIES = 5  # pragma: no mutate -- a ±1 change in the retry budget is equivalent
+_SHARING_BACKOFF = 0.02  # pragma: no mutate -- a timing constant; any small value works
+
+
+def _retry_on_sharing_violation[T](op: Callable[[], T]) -> T:
+    """Run a file op, retrying the transient PermissionError Windows raises when an
+    open and an os.replace race on the same path (see _SHARING_RETRIES)."""
+    for _ in range(_SHARING_RETRIES - 1):
+        try:
+            return op()
+        except PermissionError:
+            time.sleep(_SHARING_BACKOFF)
+    return op()  # the last attempt's error (a genuine permission problem) propagates
+
 
 def _load() -> Config:
     path = _config_file()
@@ -125,15 +148,15 @@ def _load() -> Config:
     cached = _load_cache.get(path)
     if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
         return cached[2].model_copy(deep=True)
-    with path.open("rb") as fh:
-        try:
-            data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
-            raise CLIError(
-                f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
-                error_type="invalid_config",
-                exit_code=2,
-            ) from exc
+    raw = _retry_on_sharing_violation(path.read_bytes)
+    try:
+        data = tomllib.load(io.BytesIO(raw))
+    except tomllib.TOMLDecodeError as exc:
+        raise CLIError(
+            f"Config file at {path} is not valid TOML ({exc}). Fix or delete it.",
+            error_type="invalid_config",
+            exit_code=2,
+        ) from exc
     try:
         cfg = Config.model_validate(data)
     except ValidationError as exc:
@@ -159,7 +182,7 @@ def _dump(cfg: Config) -> None:
     try:
         with os.fdopen(fd, "wb") as fh:
             tomli_w.dump(cfg.model_dump(exclude_none=True), fh)
-        tmp.replace(path)
+        _retry_on_sharing_violation(lambda: tmp.replace(path))
         # The mtime/size key usually invalidates on its own, but drop the entry
         # explicitly so a same-size rewrite on a coarse-mtime filesystem can't
         # serve the pre-write parse.
@@ -168,6 +191,17 @@ def _dump(cfg: Config) -> None:
         with contextlib.suppress(OSError):
             tmp.unlink()
         raise
+
+
+@contextlib.contextmanager
+def _update() -> Generator[Config]:
+    """Run a config.toml read-modify-write: ``_load`` -> mutate the yielded config ->
+    ``_dump``. The dump runs on clean exit; an exception in the block propagates and
+    skips it. The atomic os.replace in ``_dump`` keeps a reader from ever seeing a torn
+    file (writers and readers are otherwise unsynchronized: last write wins)."""
+    cfg = _load()
+    yield cfg
+    _dump(cfg)
 
 
 def get_active_profile() -> str:
@@ -187,7 +221,7 @@ def set_active_profile(name: str) -> None:
     with no hint why, so the typo is rejected here with the known names listed.
     """
     validate_profile(name)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         if name not in cfg.profiles:
             known = ", ".join(sorted(cfg.profiles)) or "none yet"
             raise CLIError(
@@ -202,7 +236,7 @@ def set_active_profile(name: str) -> None:
 def set_api_key(profile: str, api_key: str) -> None:
     validate_profile(profile)
     keyring_store.set_secret(profile, api_key)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile())
         if cfg.active_profile is None:
             cfg.active_profile = profile
@@ -232,7 +266,7 @@ def get_profile_env(profile: str) -> str | None:
 def set_profile_env(profile: str, env: str) -> None:
     """Bind a backend environment to a profile so its key and hosts stay matched."""
     validate_profile(profile)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).env = env
 
 
@@ -245,7 +279,7 @@ def get_profile_email(profile: str) -> str | None:
 def set_profile_email(profile: str, email: str) -> None:
     """Persist the login email for a profile (gates internal-environment access)."""
     validate_profile(profile)
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).email = email
 
 
@@ -271,7 +305,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
         _session_username(profile),
         StoredSession(jwt=session_jwt, token=session_token).model_dump_json(),
     )
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.profiles.setdefault(profile, Profile()).account_id = account_id
 
 
@@ -295,12 +329,11 @@ def get_account_id(profile: str) -> int | None:
 
 def clear_session(profile: str) -> None:
     keyring_store.delete_secret(_session_username(profile))
-    with config_lock.locked():
-        cfg = _load()
-        prof = cfg.profiles.get(profile)
-        if prof and prof.account_id is not None:
-            prof.account_id = None
-            _dump(cfg)
+    cfg = _load()
+    prof = cfg.profiles.get(profile)
+    if prof and prof.account_id is not None:
+        prof.account_id = None
+        _dump(cfg)
 
 
 def persist_login(
@@ -323,32 +356,29 @@ def persist_login(
     restored best-effort.
     """
     validate_profile(profile)
-    # Hold the write lock across the whole snapshot -> writes -> rollback so a concurrent
-    # writer can't slip a change between the snapshot and a rollback dump. The set_*
-    # helpers re-take the same (reentrant) lock, so the nesting is safe.
-    with config_lock.locked():
-        prior_api_key = keyring_store.get_secret(profile)
-        prior_session = keyring_store.get_secret(_session_username(profile))
-        prior_cfg = _load()
-        done = False
-        try:
-            set_api_key(profile, api_key)
-            set_profile_env(profile, env)
-            set_session(
-                profile,
-                session_jwt=session_jwt,
-                session_token=session_token,
-                account_id=account_id,
-            )
-            # Within the same atomic rollback so the sandbox gate can't read stale identity.
-            if email is not None:
-                set_profile_email(profile, email)
-            done = True
-        finally:
-            if not done:
-                keyring_store.restore_secret(profile, prior_api_key)
-                keyring_store.restore_secret(_session_username(profile), prior_session)
-                _dump(prior_cfg)
+    # Snapshot the prior state so a mid-sequence failure rolls back cleanly to it.
+    prior_api_key = keyring_store.get_secret(profile)
+    prior_session = keyring_store.get_secret(_session_username(profile))
+    prior_cfg = _load()
+    done = False
+    try:
+        set_api_key(profile, api_key)
+        set_profile_env(profile, env)
+        set_session(
+            profile,
+            session_jwt=session_jwt,
+            session_token=session_token,
+            account_id=account_id,
+        )
+        # Within the same atomic rollback so the sandbox gate can't read stale identity.
+        if email is not None:
+            set_profile_email(profile, email)
+        done = True
+    finally:
+        if not done:
+            keyring_store.restore_secret(profile, prior_api_key)
+            keyring_store.restore_secret(_session_username(profile), prior_session)
+            _dump(prior_cfg)
 
 
 def has_device_id() -> bool:
@@ -362,12 +392,11 @@ def get_device_id() -> str:
     """A stable anonymous install id for telemetry: a random UUID minted locally on
     first use and persisted in config.toml. Carries nothing derivable from the
     machine or account."""
-    with config_lock.locked():
-        cfg = _load()
-        if cfg.device_id is None:
-            cfg.device_id = str(uuid.uuid4())
-            _dump(cfg)
-        return cfg.device_id
+    cfg = _load()
+    if cfg.device_id is None:
+        cfg.device_id = str(uuid.uuid4())
+        _dump(cfg)
+    return cfg.device_id
 
 
 def get_telemetry_enabled() -> bool | None:
@@ -377,7 +406,7 @@ def get_telemetry_enabled() -> bool | None:
 
 
 def set_telemetry_enabled(*, enabled: bool) -> None:
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.telemetry_enabled = enabled
 
 
@@ -390,7 +419,7 @@ def get_update_cache() -> tuple[float | None, str | None]:
 def set_update_cache(*, last_check: float, latest_version: str | None) -> None:
     """Persist the update-notifier cache. ``latest_version`` is None when the last
     fetch failed — the timestamp is still recorded so we don't re-spawn every run."""
-    with config_lock.update(_load, _dump) as cfg:
+    with _update() as cfg:
         cfg.update_last_check = last_check
         cfg.update_latest_version = latest_version
 

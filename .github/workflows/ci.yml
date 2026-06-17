@@ -132,19 +132,25 @@ jobs:
       # (require_ffmpeg) before doing their work, so without it those tests fail at the
       # probe rather than exercising the mocked run. PortAudio needs no install — the
       # sounddevice wheel bundles it on Windows. choco ships on the runner but its download
-      # occasionally flakes (one matrix cell got ffmpeg, the other didn't), so retry and
-      # verify ffmpeg is callable here — a real miss fails this step instead of surfacing as
-      # confusing "ffmpeg not on PATH" test failures. The shim lands in choco's bin dir,
-      # already on the runner PATH, so later steps pick it up.
+      # from community.chocolatey.org doesn't just flake — it sometimes *hangs* for the whole
+      # job timeout, and a plain retry loop never gets to retry because the stuck attempt
+      # never returns. So bound each attempt with a hard timeout (Start-Job + Wait-Job): a
+      # hung download is killed and the next attempt retries, instead of wedging the cell
+      # until it's cancelled. The shim lands in choco's bin dir (machine-wide, already on the
+      # runner PATH), so the parent shell and later steps pick it up.
       - name: System deps (ffmpeg)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
           for ($i = 1; $i -le 3; $i++) {
-            choco install ffmpeg --no-progress -y
+            $job = Start-Job { choco install ffmpeg --no-progress -y }
+            if (Wait-Job $job -Timeout 240) { Receive-Job $job } else {
+              Stop-Job $job
+              Write-Host "choco install ffmpeg hung (attempt $i); killing and retrying…"
+            }
+            Remove-Job $job -Force
             if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
-            Write-Host "ffmpeg not yet on PATH (attempt $i); retrying…"
             Start-Sleep -Seconds 5
           }
           ffmpeg -version

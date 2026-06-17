@@ -109,8 +109,8 @@ on macOS — so OS-specific failures you never see on Linux still land on `main`
 These have each cost a session a follow-up PR; bake the fix in up front:
 
 - **POSIX-only imports at module scope crash collection on Windows.** A top-level
-  `import termios` / `fcntl` / `os.openpty` (e.g. `tests/test_hotkey.py`'s pty driver)
-  aborts collection before any skip can apply. Guard it with
+  `import termios` / `fcntl` / `os.openpty` (e.g. a pty-driving test for a termios
+  backend) aborts collection before any skip can apply. Guard it with
   `pytest.importorskip("termios")` at the top of the module — that skips the whole file
   on Windows and, unlike a skip/xfail marker, is **not** counted by the Linux
   escape-hatch gate (which greps for the marker/call forms — so don't paste those literal
