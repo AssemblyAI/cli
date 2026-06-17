@@ -34,6 +34,9 @@ DEFAULTS = ClipOptions(
     snap=True,
     out_dir=None,
     video=False,
+    from_stdin=False,
+    concurrency=4,
+    force=False,
 )
 
 

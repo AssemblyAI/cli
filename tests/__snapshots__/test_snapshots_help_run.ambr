@@ -181,7 +181,7 @@
 # name: test_command_help_matches_snapshot[caption]
   '''
   
-   Usage: assembly caption [OPTIONS] MEDIA
+   Usage: assembly caption [OPTIONS] [MEDIA]
   
    Burn always-visible captions into a video
   
@@ -192,11 +192,15 @@
    downloaded first (always the full video); its output lands in --out or
    the current directory.
   
+   Batch mode: pipe one path/URL per line with --from-stdin to caption many
+   sources concurrently (--concurrency). Each writes its own
+   <name>.captioned<ext>;
+   a re-run skips sources whose output already exists (--force re-does them).
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    media      TEXT  Video to caption: a local file, or a                   │
+  │   media      [MEDIA]  Video to caption: a local file, or a                   │
   │                       YouTube/media-page URL (the full video is downloaded   │
-  │                       via yt-dlp)                                            │
-  │                       [required]                                             │
+  │                       via yt-dlp). Omit with --from-stdin                    │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --transcript-id      -t      TEXT                  Reuse an existing         │
@@ -217,6 +221,16 @@
   │ --help                                             Show this message and     │
   │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Batch ──────────────────────────────────────────────────────────────────────╮
+  │ --from-stdin                               Batch mode: read video paths/URLs │
+  │                                            from stdin, one per line          │
+  │                                            (composes with find/ls output)    │
+  │ --concurrency        INTEGER RANGE [x>=1]  How many sources to caption at    │
+  │                                            once in batch mode                │
+  │                                            [default: 4]                      │
+  │ --force                                    Batch mode: re-caption sources    │
+  │                                            whose output file already exists  │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Burn captions into a video
@@ -229,6 +243,8 @@
    $ assembly caption talk.mp4 --chars-per-caption 32 --font-size 28
    Choose the output file
    $ assembly caption talk.mp4 --out talk-captioned.mp4
+   Caption a whole folder of videos
+   $ find clips -name "*.mp4" | assembly caption --from-stdin
   
   
   
@@ -237,7 +253,7 @@
 # name: test_command_help_matches_snapshot[clip]
   '''
   
-   Usage: assembly clip [OPTIONS] MEDIA
+   Usage: assembly clip [OPTIONS] [MEDIA]
   
    Cut clips from media by speaker, text match, LLM pick, or time range
   
@@ -250,10 +266,14 @@
    downloaded first (audio only, or the full video with --video); its clips
    land in --out-dir or the current directory.
   
+   Batch mode: pipe one path/URL per line with --from-stdin to clip many sources
+   concurrently (--concurrency), reusing the same selectors for each. A re-run
+   skips sources that already have clip files (--force re-cuts them).
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    media      TEXT  Audio/video to cut clips from: a local file, or a      │
-  │                       YouTube/media-page URL (audio downloaded via yt-dlp)   │
-  │                       [required]                                             │
+  │   media      [MEDIA]  Audio/video to cut clips from: a local file, or a      │
+  │                       YouTube/media-page URL (audio downloaded via yt-dlp).  │
+  │                       Omit with --from-stdin                                 │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --transcript-id  -t               TEXT                  Reuse an existing    │
@@ -306,6 +326,16 @@
   │ --help                                                  Show this message    │
   │                                                         and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Batch ──────────────────────────────────────────────────────────────────────╮
+  │ --from-stdin                               Batch mode: read media paths/URLs │
+  │                                            from stdin, one per line          │
+  │                                            (composes with find/ls output)    │
+  │ --concurrency        INTEGER RANGE [x>=1]  How many sources to clip at once  │
+  │                                            in batch mode                     │
+  │                                            [default: 4]                      │
+  │ --force                                    Batch mode: re-clip sources that  │
+  │                                            already have clip files           │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --llm               TEXT     Let an LLM Gateway model pick the windows to    │
   │                              clip from the timestamped transcript (e.g.      │
@@ -338,6 +368,8 @@
    meeting.mp4 -t - --llm "the funniest exchange"
    Pad each clip and collect them in a directory
    $ assembly clip meeting.mp4 --speaker A --padding 0.5 --out-dir clips
+   Clip a whole folder by speaker
+   $ find calls -name "*.mp4" | assembly clip --from-stdin --speaker A
   
   
   
@@ -401,7 +433,7 @@
 # name: test_command_help_matches_snapshot[dub]
   '''
   
-   Usage: assembly dub [OPTIONS] MEDIA
+   Usage: assembly dub [OPTIONS] [MEDIA]
   
    [sandbox] Dub a video or audio file into another language
   
@@ -415,11 +447,14 @@
    today — run it as 'assembly --sandbox dub' (--sandbox goes before the
    subcommand). Requires ffmpeg.
   
+   Batch mode: pipe one path/URL per line with --from-stdin to dub many sources
+   concurrently (--concurrency). Each writes its own <name>.dub.<lang><ext>; a
+   re-run skips sources whose output already exists (--force re-does them).
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │ *    media      TEXT  Audio/video to dub: a local file (the video stream is  │
+  │   media      [MEDIA]  Audio/video to dub: a local file (the video stream is  │
   │                       copied untouched), or a YouTube/media-page URL         │
-  │                       (downloaded via yt-dlp)                                │
-  │                       [required]                                             │
+  │                       (downloaded via yt-dlp). Omit with --from-stdin        │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ *  --lang               -l      TEXT  Target language: an ISO code (de, fr,  │
@@ -451,6 +486,16 @@
   │    --json               -j            Emit JSON describing the dubbed file   │
   │    --help                             Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Batch ──────────────────────────────────────────────────────────────────────╮
+  │ --from-stdin                               Batch mode: read media paths/URLs │
+  │                                            from stdin, one per line          │
+  │                                            (composes with find/ls output)    │
+  │ --concurrency        INTEGER RANGE [x>=1]  How many sources to dub at once   │
+  │                                            in batch mode                     │
+  │                                            [default: 4]                      │
+  │ --force                                    Batch mode: re-dub sources whose  │
+  │                                            output file already exists        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
   │ --model             TEXT     LLM Gateway model that translates the           │
   │                              utterances                                      │
@@ -477,6 +522,8 @@
    $ assembly --sandbox dub talk.mp4 -l de -t TRANSCRIPT_ID
    Choose the output file
    $ assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4
+   Dub a whole folder into German
+   $ find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de
   
   
   

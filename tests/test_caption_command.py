@@ -60,6 +60,9 @@ def test_caption_parses_every_flag_into_options(monkeypatch):
         chars_per_caption=32,
         font_size=28,
         out=Path("captioned.mp4"),
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )
     assert captured["json_mode"] is True
 
@@ -74,6 +77,9 @@ def test_caption_defaults_when_only_media_is_given(monkeypatch):
         chars_per_caption=None,
         font_size=None,
         out=None,
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )
     assert captured["json_mode"] is False
 

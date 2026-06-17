@@ -18,6 +18,7 @@ like `assembly speak` — the command is sandbox-only.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import tempfile
 from dataclasses import dataclass
@@ -25,11 +26,11 @@ from pathlib import Path
 
 from rich.markup import escape
 
-from aai_cli.app import mediafile
+from aai_cli.app import batch, mediafile
 from aai_cli.app.context import AppState
 from aai_cli.commands.dub import _pipeline as pipeline
 from aai_cli.core import youtube
-from aai_cli.core.errors import UsageError
+from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.tts import audio, dialogue, session
 from aai_cli.ui import output
 
@@ -62,6 +63,7 @@ class DubOptions:
     """Every `assembly dub` flag as plain data (``--json`` excluded: run_command
     resolves it into the ``json_mode`` argument)."""
 
+    # Empty in batch mode, where the sources arrive on stdin (--from-stdin).
     media: str
     language: str
     source_language: str | None
@@ -72,6 +74,9 @@ class DubOptions:
     out: Path | None
     video: bool
     download_sections: list[str]
+    from_stdin: bool
+    concurrency: int
+    force: bool
 
 
 def resolve_language(value: str) -> str:
@@ -100,19 +105,109 @@ def default_out_path(media: Path, language: str) -> Path:
 
 
 def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
-    """Execute one `assembly dub` invocation from already-parsed flags."""
+    """Execute `assembly dub`: one source, or a stdin batch (`--from-stdin`)."""
     language = resolve_language(opts.language)
     session.require_available("dub")
     # Parse --voice now: a malformed mapping must fail before the billed pipeline.
     voice_plan = pipeline.VoicePlan(*dialogue.parse_voice_overrides(opts.voice))
+    sources = batch.stdin_sources(opts.media, from_stdin=opts.from_stdin)
+    if sources is not None:
+        _reject_batch_conflicts(opts)
+        batch.run_batch(
+            sources,
+            worker=_dub_worker(
+                opts, state, language, voice_plan, force=opts.force, json_mode=json_mode
+            ),
+            concurrency=opts.concurrency,
+            summary_verb="Dubbed",
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        return
+    if not opts.media:
+        raise UsageError(
+            "Pass a video/audio file or URL to dub, or --from-stdin to read a list from stdin.",
+            suggestion="e.g. assembly --sandbox dub talk.mp4 -l de",
+        )
+    result = _dub_one(opts, state, language, voice_plan, json_mode=json_mode)
+    output.emit(
+        result.payload, lambda _: output.success(escape(result.summary)), json_mode=json_mode
+    )
+
+
+def _reject_batch_conflicts(opts: DubOptions) -> None:
+    """Single-result flags that can't span a many-source batch."""
+    mutually_exclusive(
+        ("--out", opts.out),
+        ("--from-stdin", True),
+        suggestion="In batch mode each source gets its own <name>.dub.<lang><ext>; drop --out.",
+    )
+    mutually_exclusive(
+        ("--transcript-id/-t", opts.transcript_id),
+        ("--from-stdin", True),
+        suggestion="A transcript id can't apply to many sources; drop -t in batch mode.",
+    )
+
+
+def _dub_worker(
+    opts: DubOptions,
+    state: AppState,
+    language: str,
+    voice_plan: pipeline.VoicePlan,
+    *,
+    force: bool,
+    json_mode: bool,
+) -> batch.Worker:
+    """A per-source worker for the batch runner: skip a source whose default output
+    already exists (unless ``--force``), else dub it with spinners silenced."""
+    quiet_state = dataclasses.replace(state, quiet=True)
+
+    def worker(source: str) -> batch.SourceResult:
+        if not force and (existing := _existing_output(source, language)) is not None:
+            return batch.SourceResult(
+                payload={"source": source, "out": str(existing)},
+                summary=f"{existing} exists",
+                status="skipped",
+            )
+        return _dub_one(
+            dataclasses.replace(opts, media=source),
+            quiet_state,
+            language,
+            voice_plan,
+            json_mode=json_mode,
+        )
+
+    return worker
+
+
+def _existing_output(source: str, language: str) -> Path | None:
+    """The default output for a local ``source`` when it already exists (so batch mode
+    skips it), else ``None`` — a URL or a source with no prior output, both processed."""
+    if "://" in source:
+        return None
+    out = default_out_path(Path(source), language)
+    return out if out.exists() else None
+
+
+def _dub_one(
+    opts: DubOptions,
+    state: AppState,
+    language: str,
+    voice_plan: pipeline.VoicePlan,
+    *,
+    json_mode: bool,
+) -> batch.SourceResult:
+    """Resolve ``opts.media`` to a local file, dub it, and return the result.
+
+    A media-page URL is downloaded once — the audio track by default, the full
+    video with --video so the dub keeps the picture, only the --download-sections
+    slices when given — and dubbed locally.
+    """
     youtube.validate_video_flag(opts.media, video=opts.video)
     youtube.validate_sections_flag(opts.media, opts.download_sections)
     # ffmpeg is checked before any (billed) download/transcription so a missing
     # dependency fails before any fetch.
     ffmpeg = mediafile.require_ffmpeg("write the dubbed file")
-    # A media-page URL is downloaded once — the audio track by default, the full
-    # video with --video so the dub keeps the picture, only the
-    # --download-sections slices when given — and dubbed locally.
     with mediafile.resolve_media_source(
         opts.media,
         "dub",
@@ -129,10 +224,12 @@ def run_dub(opts: DubOptions, state: AppState, *, json_mode: bool) -> None:
             opts.out, media, downloaded=downloaded, namer=lambda m: default_out_path(m, language)
         )
         mediafile.validate_out(out, media)
-        _dub_and_emit(opts, media, out, language, ffmpeg, voice_plan, state, json_mode=json_mode)
+        return _dub_build(
+            opts, media, out, language, ffmpeg, voice_plan, state, json_mode=json_mode
+        )
 
 
-def _dub_and_emit(
+def _dub_build(
     opts: DubOptions,
     media: Path,
     out: Path,
@@ -142,8 +239,8 @@ def _dub_and_emit(
     state: AppState,
     *,
     json_mode: bool,
-) -> None:
-    """Dub an already-local media file into ``out`` and report the result."""
+) -> batch.SourceResult:
+    """Dub an already-local media file into ``out``; the result as plain data."""
     api_key = state.resolve_api_key()
     transcript = mediafile.resolve_diarized_transcript(
         api_key,
@@ -192,12 +289,7 @@ def _dub_and_emit(
         "sample_rate": sample_rate,
         "audio_duration_seconds": duration,
     }
-    output.emit(
-        payload,
-        # language and voices carry user-typed text, so they need escaping too.
-        lambda _: output.success(
-            f"{escape(str(out))}  dubbed to {escape(language)} "
-            f"({len(utterances)} utterances, {escape(voices_text)})"
-        ),
-        json_mode=json_mode,
+    return batch.SourceResult(
+        payload=payload,
+        summary=f"{out}  dubbed to {language} ({len(utterances)} utterances, {voices_text})",
     )

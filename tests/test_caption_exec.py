@@ -32,6 +32,9 @@ DEFAULTS = CaptionOptions(
     chars_per_caption=None,
     font_size=None,
     out=None,
+    from_stdin=False,
+    concurrency=4,
+    force=False,
 )
 
 SRT = "1\n00:00:00,500 --> 00:00:01,500\nHello.\n\n2\n00:00:02,000 --> 00:00:03,000\nWorld.\n"
