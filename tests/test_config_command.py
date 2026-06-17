@@ -9,6 +9,10 @@ from aai_cli.core import config
 from aai_cli.core.errors import CLIError
 from aai_cli.main import app
 
+# Some cases drive `--sandbox` / `--env sandbox000`, which the root callback restricts
+# to AssemblyAI logins — run the module as an employee so those paths reach the env.
+pytestmark = pytest.mark.usefixtures("internal_profile")
+
 runner = CliRunner()
 
 

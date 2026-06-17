@@ -125,6 +125,7 @@ def persist_browser_login(profile: str, env: str, *, json_mode: bool = False) ->
         session_jwt=result.session_jwt,
         session_token=result.session_token,
         account_id=result.account_id,
+        email=result.email,
     )
 
 

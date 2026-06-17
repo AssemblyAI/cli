@@ -22,12 +22,15 @@ class LoginResult:
     session_jwt: str
     session_token: str
     account_id: int
+    # The signed-in user's email, from AMS discovery. Persisted so the CLI can gate
+    # internal-only environments (the sandbox) on the org domain; None if AMS omits it.
+    email: str | None = None
 
 
 # Typed views of the AMS login responses. AMS only returns HTTP errors for outright
 # failures; a 200 with an unexpected shape would otherwise KeyError into an ugly
 # traceback, so each required field's absence becomes the same clean "run login
-# again" APIError via `_parse`. Extra fields (e.g. discover's `email`) are ignored.
+# again" APIError via `_parse`. Only the fields below are read; the rest are ignored.
 class _Organization(BaseModel):
     organization_id: str
     organization_name: str | None = None
@@ -36,6 +39,8 @@ class _Organization(BaseModel):
 class _Discovery(BaseModel):
     intermediate_session_token: str
     organizations: list[_Organization] = []
+    # Top-level email from the discover response; used only to gate sandbox access.
+    email: str | None = None
 
 
 class _Account(BaseModel):
@@ -240,4 +245,5 @@ def run_login_flow(*, json_mode: bool = False) -> LoginResult:
         session_jwt=signed_in.session_jwt,
         session_token=signed_in.session_token,
         account_id=signed_in.account.id,
+        email=disc.email,
     )

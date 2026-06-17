@@ -35,6 +35,8 @@ class Profile(BaseModel):
 
     env: str | None = None
     account_id: int | None = None
+    # Login email from AMS discovery; gates internal-environment access (see core.access).
+    email: str | None = None
 
 
 class Config(BaseModel):
@@ -291,6 +293,20 @@ def set_profile_env(profile: str, env: str) -> None:
     _dump(cfg)
 
 
+def get_profile_email(profile: str) -> str | None:
+    """The login email recorded for a profile at browser login, if any."""
+    prof = _load().profiles.get(profile)
+    return prof.email if prof else None
+
+
+def set_profile_email(profile: str, email: str) -> None:
+    """Persist the login email for a profile (gates internal-environment access)."""
+    validate_profile(profile)
+    cfg = _load()
+    cfg.profiles.setdefault(profile, Profile()).email = email
+    _dump(cfg)
+
+
 def clear_api_key(profile: str) -> None:
     # KeyringError, not just PasswordDeleteError: with no backend at all (headless
     # boxes) delete raises NoKeyringError, and "nothing stored" is already the goal.
@@ -357,6 +373,7 @@ def persist_login(
     session_jwt: str,
     session_token: str,
     account_id: int,
+    email: str | None = None,
 ) -> None:
     """Atomically persist a full browser-login result (API key + env + session).
 
@@ -381,6 +398,9 @@ def persist_login(
             session_token=session_token,
             account_id=account_id,
         )
+        # Within the same atomic rollback so the sandbox gate can't read stale identity.
+        if email is not None:
+            set_profile_email(profile, email)
         done = True
     finally:
         if not done:

@@ -8,11 +8,16 @@ rendering itself is covered by test_code_gen_agent_cascade.py.
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.core import config
 from aai_cli.main import app
+
+# The cascade is sandbox-only and its happy paths run under `--sandbox`, which the
+# root callback restricts to AssemblyAI logins — run the module as an employee.
+pytestmark = pytest.mark.usefixtures("internal_profile")
 
 runner = CliRunner()
 
