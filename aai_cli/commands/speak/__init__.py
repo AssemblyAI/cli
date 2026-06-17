@@ -54,7 +54,7 @@ def speak(
     url: str | None = typer.Option(
         None,
         "--url",
-        help="Read a web page aloud: fetch the URL and narrate its main text "
+        help="Read a web page or PDF aloud: fetch the URL and narrate its main text "
         "(boilerplate stripped). Mutually exclusive with the text argument",
     ),
     voice: list[str] = typer.Option(
@@ -82,7 +82,7 @@ def speak(
 ) -> None:
     r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS
 
-    Reads text from the argument, piped stdin, or a web page with --url
+    Reads text from the argument, piped stdin, or a web page or PDF with --url
     (its main content is extracted and the boilerplate stripped). Plays the
     audio through your speakers by default, or writes a WAV with --out.
     Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
