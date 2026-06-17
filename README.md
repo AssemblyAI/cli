@@ -14,13 +14,13 @@ Learn more about the platform in the [AssemblyAI docs](https://www.assemblyai.co
 
 ## ⚡ Quickstart
 
-Install on macOS or Linux with Homebrew:
+Install on macOS or Linux with one command:
 
 ```sh
-brew tap assemblyai/cli https://github.com/AssemblyAI/cli
-brew trust assemblyai/cli   # only needed when HOMEBREW_REQUIRE_TAP_TRUST is set; harmless otherwise
-brew install assembly
+curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
 ```
+
+This installs [uv](https://docs.astral.sh/uv/) if needed, then installs `assembly` as a uv tool.
 
 Sign in (stores your API key in the OS keyring) and run your first transcription:
 
@@ -29,7 +29,7 @@ assembly login
 assembly transcribe --sample
 ```
 
-That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-installation) for pipx/uv and other options.
+That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-installation) for Homebrew, pipx, and other options.
 
 ## 🚀 Why the AssemblyAI CLI?
 
@@ -218,7 +218,17 @@ Requires Python 3.12+ (Homebrew brings its own; for pipx/uv see the `--python` h
 > The `assemblyai-cli` package on PyPI is **not** this project — install with one of the
 > commands below, not `pip install assemblyai-cli`.
 
-### Homebrew (recommended — macOS / Linux)
+### Install script (recommended — macOS / Linux)
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+```
+
+The [`install.sh`](install.sh) script bootstraps [uv](https://docs.astral.sh/uv/) if it
+isn't already present, then runs `uv tool install` to put `assembly` on your `PATH`. Re-run
+it any time to update to the latest version.
+
+### Homebrew (macOS / Linux)
 
 ```sh
 brew tap assemblyai/cli https://github.com/AssemblyAI/cli
