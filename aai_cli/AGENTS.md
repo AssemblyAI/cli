@@ -31,9 +31,9 @@ between layers is enforced — higher may import lower, never the reverse:
 - **`ui/`** — Rich rendering: `output`, `render`, `theme`, `steps`, `follow`,
   `help_text`, `typer_patches`, `update_check`.
 - **`core/`** — the Rich-free library layer: `client`, `config`,
-  `config_builder`, `environments`, `env`, `errors`, `llm`, `telemetry`,
-  `debuglog`, `remotefs`, `sync_stt`, `hotkey`, `ws`, `youtube`, `wer`,
-  `argscan`, `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`,
+  `config_builder`, `keyring_store`, `environments`, `env`, `errors`, `llm`,
+  `telemetry`, `debuglog`, `remotefs`, `sync_stt`, `hotkey`, `ws`, `youtube`,
+  `wer`, `argscan`, `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`,
   `choices`. Contract 4 also forbids `rich` here, so "no Rich below the UI
   layer" is structural.
 
@@ -139,7 +139,7 @@ heavily-reworked commands with long bodies; small commands keep the inline
 ### Cross-cutting state (resolution order matters)
 
 - **`app/context.py`** — `AppState` (profile, env) is attached to the Typer context in the root `@app.callback()`. `run_command` is the standard command wrapper.
-- **`core/config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring** (`KEYRING_SERVICE = "assemblyai-cli"`), never in a dotfile. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history.
+- **`core/config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring**, never in a dotfile. The keyring access itself is factored into **`core/keyring_store.py`** (the single importer of `keyring`, holding `KEYRING_SERVICE = "assemblyai-cli"` + `set_secret`/`get_secret`/`restore_secret`/`delete_secret`/`usable`), so the "secrets never touch the dotfile" split is structural; `config` reads/writes secrets through it and only `config.keyring_usable` re-surfaces the probe on the auth facade. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history.
 - **`core/environments.py`** — a frozen `Environment` (api_base, streaming_host, llm_gateway_base, ams_base, stytch_*). `DEFAULT_ENV` is **`production`**; use `--sandbox` (or `--env sandbox000` / `AAI_ENV`) to target the sandbox. The active environment is a process-global set once at startup; precedence: `--env` → `AAI_ENV` → profile's stored env → default. A credential is only valid against the environment that minted it.
 - **`core/client.py`** — thin wrappers over the `assemblyai` SDK (`transcribe`, `list_transcripts`, `stream_audio`, etc.). It normalizes SDK exceptions: auth failures become a single clean `auth_failure()` `CLIError`; everything else becomes `APIError`. New SDK calls should follow this try/except shape.
 - **`core/errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `ui/output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` switches to machine-readable output; it is never auto-enabled — `output.resolve_json()` deliberately keeps human text the default even when piped or agent-run.
