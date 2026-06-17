@@ -12,6 +12,7 @@ from aai_cli.app import coding_agent
 from aai_cli.commands.code import _exec as code_exec
 from aai_cli.core import environments
 from aai_cli.main import app
+from aai_cli.ui import theme
 from tests._snapshot_surface import normalize
 
 runner = CliRunner()
@@ -23,7 +24,7 @@ def _stub(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     *,
-    has_opencode: bool = True,
+    has_aider: bool = True,
     returncode: int = 0,
     assemblyai_skill: str | None = None,
 ) -> dict[str, object]:
@@ -37,9 +38,7 @@ def _stub(
         skill_md.write_text(assemblyai_skill, encoding="utf-8")
     monkeypatch.setattr(
         "shutil.which",
-        lambda name: (
-            f"/usr/bin/{name}" if has_opencode and name == code_exec.OPENCODE_BIN else None
-        ),
+        lambda name: f"/usr/bin/{name}" if has_aider and name == code_exec.AIDER_BIN else None,
     )
     calls: dict[str, object] = {}
 
@@ -47,95 +46,67 @@ def _stub(
         calls["cmd"] = cmd
         calls["env"] = env
         calls["check"] = check
-        # Read the generated config + instructions while the temp dir still exists.
-        cfg_path = env.get("OPENCODE_CONFIG")
-        if cfg_path:
-            cfg = json_mod.loads(Path(cfg_path).read_text(encoding="utf-8"))
-            calls["config"] = cfg
-            instructions = cfg.get("instructions") or []
-            if instructions:
-                calls["instructions_text"] = Path(instructions[0]).read_text(encoding="utf-8")
+        if "--read" in cmd:
+            # Read the conventions file while the temp dir still exists (during the call).
+            calls["conventions"] = Path(cmd[cmd.index("--read") + 1]).read_text(encoding="utf-8")
         return types.SimpleNamespace(returncode=returncode)
 
     monkeypatch.setattr("aai_cli.commands.code._exec.subprocess.run", fake_run)
     return calls
 
 
-def _config(calls: dict[str, object]) -> dict[str, object]:
-    cfg = calls["config"]
-    assert isinstance(cfg, dict)
-    return cfg
+def _base_argv(cmd: object) -> list[str]:
+    """The launch argv up to (excluding) the ``--read <conventions>`` pair and beyond."""
+    assert isinstance(cmd, list)
+    return cmd[: cmd.index("--read")] if "--read" in cmd else cmd
 
 
-def _dict(value: object) -> dict[str, object]:
-    """Assert ``value`` is a dict and return it (narrows the object-typed parsed JSON)."""
-    assert isinstance(value, dict)
-    return value
-
-
-def _list(value: object) -> list[object]:
-    assert isinstance(value, list)
-    return value
+def _prefix(model: str) -> list[str]:
+    """The fixed flag prefix every launch carries: models, quiet warnings, brand theme."""
+    return [
+        "aider",
+        "--model",
+        f"openai/{model}",
+        "--weak-model",
+        f"openai/{code_exec.WEAK_MODEL}",
+        "--no-show-model-warnings",
+        # Brand theme mapped from ui/theme.py.
+        "--user-input-color",
+        theme.BRAND,
+        "--assistant-output-color",
+        theme.ACCENT,
+        "--tool-output-color",
+        theme.MUTED,
+        "--tool-error-color",
+        theme.ERROR,
+        "--code-theme",
+        "ansi_dark",
+    ]
 
 
 def test_code_options_are_frozen() -> None:
     # CodeOptions is parsed argv handed to run_code; freezing guards against a body
     # mutating the request it was given.
-    opts = code_exec.CodeOptions(model="m", message=None)
+    opts = code_exec.CodeOptions(model="m", files=(), message=None)
     field = "model"
     with pytest.raises(dataclasses.FrozenInstanceError):
         setattr(opts, field, "tampered")
 
 
-def test_code_launches_opencode_interactive(
+def test_code_launches_aider_with_default_model(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 0, result.output
-    # No --message: launch the interactive TUI (no `run` subcommand).
-    assert calls["cmd"] == ["opencode"]
-    # check=False: opencode's own non-zero exit is surfaced by us, not raised by subprocess.
+    # Default launch: main model + cheap weak model (the gateway's default) + quiet warnings.
+    assert _base_argv(calls["cmd"]) == _prefix("claude-opus-4-7")
+    assert code_exec.WEAK_MODEL != "claude-opus-4-7"  # weak model is the cheaper one
+    # check=False: aider's own non-zero exit is surfaced by us, not raised by subprocess.
     assert calls["check"] is False
 
 
-def test_code_config_wires_gateway_provider_and_model(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls = _stub(monkeypatch, tmp_path)
-    result = runner.invoke(app, ["code"])
-    assert result.exit_code == 0, result.output
-    cfg = _config(calls)
-    provider = _dict(_dict(cfg["provider"])["assemblyai"])
-    assert provider["npm"] == "@ai-sdk/openai-compatible"
-    options = _dict(provider["options"])
-    assert options["baseURL"] == _GATEWAY
-    # The key rides the env via {env:…}, never written into the config file.
-    assert options["apiKey"] == "{env:ASSEMBLYAI_API_KEY}"
-    assert provider["models"] == {"claude-opus-4-7": {"name": "claude-opus-4-7"}}
-    assert cfg["model"] == "assemblyai/claude-opus-4-7"
-
-
-def test_code_config_registers_docs_mcp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls = _stub(monkeypatch, tmp_path)
-    result = runner.invoke(app, ["code"])
-    assert result.exit_code == 0, result.output
-    mcp = _dict(_config(calls)["mcp"])["assemblyai-docs"]
-    assert mcp == {"type": "remote", "url": "https://mcp.assemblyai.com/docs", "enabled": True}
-
-
-def test_code_config_disables_autoupdate_and_share(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls = _stub(monkeypatch, tmp_path)
-    result = runner.invoke(app, ["code"])
-    assert result.exit_code == 0, result.output
-    cfg = _config(calls)
-    assert cfg["autoupdate"] is False
-    assert cfg["share"] == "disabled"
-
-
-def test_code_passes_key_and_config_path_in_env(
+def test_code_wires_gateway_and_key_into_child_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = _stub(monkeypatch, tmp_path)
@@ -143,37 +114,66 @@ def test_code_passes_key_and_config_path_in_env(
     assert result.exit_code == 0, result.output
     env = calls["env"]
     assert isinstance(env, dict)
-    assert env["ASSEMBLYAI_API_KEY"] == "sk_test"
-    # OPENCODE_CONFIG points opencode at our generated config.
-    assert Path(env["OPENCODE_CONFIG"]).name == "opencode.json"
+    # aider/litellm read these to reach an OpenAI-compatible endpoint.
+    assert env["OPENAI_API_BASE"] == _GATEWAY
+    assert env["OPENAI_API_KEY"] == "sk_test"
+    # aider's own analytics + update notifier are silenced (the CLI owns both).
+    assert env["AIDER_ANALYTICS"] == "false"
+    assert env["AIDER_CHECK_UPDATE"] == "false"
 
 
-def test_code_custom_model_is_namespaced_to_provider(
+def test_code_custom_model_is_prefixed_openai(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code", "--model", "gpt-5.1"])
     assert result.exit_code == 0, result.output
-    cfg = _config(calls)
-    assert cfg["model"] == "assemblyai/gpt-5.1"
-    provider = _dict(_dict(cfg["provider"])["assemblyai"])
-    assert provider["models"] == {"gpt-5.1": {"name": "gpt-5.1"}}
+    assert _base_argv(calls["cmd"]) == _prefix("gpt-5.1")
 
 
-def test_code_injects_bundled_aai_cli_skill_as_instructions(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    # The aai-cli skill ships in the wheel, so it is always wired in, even with no skills
-    # installed on disk.
+def test_code_passes_files_positionally(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _stub(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["code", "api/index.py", "README.md"])
+    assert result.exit_code == 0, result.output
+    # Files come after the flag prefix and before the --read conventions pair.
+    assert _base_argv(calls["cmd"]) == [*_prefix("claude-opus-4-7"), "api/index.py", "README.md"]
+
+
+def test_code_message_runs_one_shot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _stub(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["code", "-m", "add a test"])
+    assert result.exit_code == 0, result.output
+    cmd = calls["cmd"]
+    assert isinstance(cmd, list)
+    # --message is appended last so aider runs the instruction non-interactively and exits.
+    assert cmd[-2:] == ["--message", "add a test"]
+
+
+def test_code_no_message_omits_the_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 0, result.output
-    assert len(_list(_config(calls)["instructions"])) == 1
-    text = calls["instructions_text"]
-    assert isinstance(text, str)
-    assert "## aai-cli" in text
-    assert "Use the AssemblyAI CLI" in text  # from the bundled SKILL.md
-    assert "## assemblyai" not in text  # not installed in this test
+    cmd = calls["cmd"]
+    assert isinstance(cmd, list)
+    assert "--message" not in cmd
+
+
+def test_code_injects_bundled_aai_cli_skill_as_conventions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The aai-cli skill ships in the wheel, so it is always read into aider as context,
+    # even with no skills installed on disk.
+    calls = _stub(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["code"])
+    assert result.exit_code == 0, result.output
+    cmd = calls["cmd"]
+    assert isinstance(cmd, list)
+    assert "--read" in cmd
+    conventions = calls["conventions"]
+    assert isinstance(conventions, str)
+    assert "## aai-cli" in conventions
+    assert "Use the AssemblyAI CLI" in conventions  # from the bundled SKILL.md
+    assert "## assemblyai" not in conventions  # not installed in this test
 
 
 def test_code_injects_installed_assemblyai_skill_too(
@@ -184,31 +184,24 @@ def test_code_injects_installed_assemblyai_skill_too(
     )
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 0, result.output
-    text = calls["instructions_text"]
-    assert isinstance(text, str)
-    assert "## aai-cli" in text
-    assert "## assemblyai" in text
-    assert "TRANSCRIBE-WITH-SDK" in text
+    conventions = calls["conventions"]
+    assert isinstance(conventions, str)
+    # Both skills land in the one conventions file when the assemblyai skill is present.
+    assert "## aai-cli" in conventions
+    assert "## assemblyai" in conventions
+    assert "TRANSCRIBE-WITH-SDK" in conventions
 
 
-def test_code_message_runs_one_shot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls = _stub(monkeypatch, tmp_path)
-    result = runner.invoke(app, ["code", "-m", "add a test"])
-    assert result.exit_code == 0, result.output
-    # `opencode run <message>` runs the instruction non-interactively and exits.
-    assert calls["cmd"] == ["opencode", "run", "add a test"]
-
-
-def test_code_missing_opencode_errors_without_launching(
+def test_code_missing_aider_errors_without_launching(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _stub(monkeypatch, tmp_path, has_opencode=False)
+    calls = _stub(monkeypatch, tmp_path, has_aider=False)
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 1
     # Console soft-wraps the hint, so normalize whitespace before matching.
     flat = " ".join(normalize(result.output).split())
-    assert "opencode is required" in flat
-    assert "npm i -g opencode-ai" in flat
+    assert "aider is required" in flat
+    assert "uv tool install aider-chat" in flat
     assert "for install options" in flat  # the suggestion line
     assert "cmd" not in calls  # never reached subprocess.run
 
@@ -225,7 +218,7 @@ def test_code_human_launch_note_is_plain_text(
     _stub(monkeypatch, tmp_path)
     result = runner.invoke(app, ["code"])
     assert result.exit_code == 0, result.output
-    assert "Launching opencode via the AssemblyAI LLM Gateway (model claude-opus-4-7)" in (
+    assert "Launching aider via the AssemblyAI LLM Gateway (model claude-opus-4-7)" in (
         result.stdout
     )
     assert '"status"' not in result.stdout  # human mode prints text, not the JSON record
@@ -239,7 +232,7 @@ def test_code_json_launch_record_is_machine_readable(
     assert result.exit_code == 0, result.output
     assert json_mod.loads(result.stdout) == {
         "status": "launching",
-        "tool": "opencode",
+        "tool": "aider",
         "model": "claude-opus-4-7",
         "gateway": _GATEWAY,
     }

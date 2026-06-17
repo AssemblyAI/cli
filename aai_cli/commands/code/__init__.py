@@ -22,13 +22,16 @@ SPEC = command_registry.CommandModuleSpec(
     epilog=examples_epilog(
         [
             ("Launch a coding agent in the current directory", "assembly code"),
-            ("Run one instruction and exit", 'assembly code -m "add a test for parse_url"'),
+            ("Open specific files", "assembly code api/index.py README.md"),
             ("Use a different gateway model", "assembly code --model gpt-5.1"),
         ]
     ),
 )
 def code(
     ctx: typer.Context,
+    files: list[str] | None = typer.Argument(
+        None, help="Files or directories to open in the agent", metavar="[FILES]..."
+    ),
     model: str = typer.Option(
         code_exec.DEFAULT_MODEL, "--model", help="Gateway model for the agent"
     ),
@@ -39,9 +42,10 @@ def code(
 ) -> None:
     """Launch an AI coding agent powered by the AssemblyAI LLM Gateway
 
-    Starts opencode pointed at the gateway via a generated config, so the same paid-plan
-    key that runs `assembly llm` powers a coding agent in your terminal. The AssemblyAI
-    docs MCP and skills are wired in as context. Requires opencode (`npm i -g opencode-ai`).
+    Starts aider pointed at the gateway (it edits your files over plain chat
+    completions), so the same paid-plan key that runs `assembly llm` powers a coding
+    agent in your terminal. The AssemblyAI skills are injected as read-only context so
+    the agent knows the API. Requires aider (`uv tool install aider-chat`).
     """
-    opts = code_exec.CodeOptions(model=model, message=message)
+    opts = code_exec.CodeOptions(model=model, files=tuple(files or ()), message=message)
     run_with_options(ctx, code_exec.run_code, opts, json=json_out)
