@@ -23,18 +23,14 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, signals, stdio, youtube
 from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.core.microphone import MicrophoneSource
-from aai_cli.streaming import naming, record, transcript, turn_presets
+from aai_cli.streaming import naming, record, savedir, transcript, turn_presets
+from aai_cli.streaming.batch import stream_batch_sources
 from aai_cli.streaming.macos import MacSystemAudioSource
 from aai_cli.streaming.render import StreamRenderer
-from aai_cli.streaming.session import (
-    SourceOptions,
-    StreamSession,
-    resolve_output_modes,
-    stream_batch_sources,
-    validate_sources,
-)
+from aai_cli.streaming.session import StreamSession
 from aai_cli.streaming.sources import TARGET_RATE, FileSource, StdinSource
 from aai_cli.streaming.turn_presets import TurnDetectionPreset
+from aai_cli.streaming.validate import SourceOptions, resolve_output_modes, validate_sources
 from aai_cli.ui import output
 from aai_cli.ui.follow import FollowRenderer
 
@@ -90,6 +86,8 @@ class StreamOptions:
     save_transcript: Path | None
     save_dir: Path | None
     name: str | None
+    auto_name: bool
+    no_save_audio: bool
 
     def source_options(self) -> SourceOptions:
         """The audio-input subset, in the shape the validation/dispatch helpers read."""
@@ -205,56 +203,96 @@ class SaveTargets:
     ``audio`` tees a single source to one WAV; ``audio_by_label`` instead maps each
     parallel ``--system-audio`` channel ("you", "system") to its own WAV when the two
     streams can't share a file. At most one of the two is set; ``transcript`` is the
-    single shared transcript either way.
+    single shared transcript either way. ``plan`` is set only under ``--save-dir`` and
+    carries the post-stream finalization (auto-name rename, ``--llm`` note, sidecar).
     """
 
     transcript: Path | None = None
     audio: Path | None = None
     audio_by_label: dict[str, Path] | None = None
+    plan: savedir.SaveDirPlan | None = None
+
+
+def _save_dir_targets(opts: StreamOptions, sources: SourceOptions, save_dir: Path) -> SaveTargets:
+    """Resolve ``--save-dir`` into auto-named targets plus the finalization plan.
+
+    ``--save-dir`` owns filename assembly, so it rejects the explicit
+    ``--save-audio``/``--save-transcript`` paths and the conflicting ``--name``/
+    ``--auto-name`` title pair. Two parallel ``--system-audio`` streams can't tee to one
+    WAV, so each channel gets its own ``<stem>-{you,system}.wav`` (one shared transcript);
+    ``--no-save-audio`` drops the WAV(s) entirely.
+    """
+    mutually_exclusive(
+        ("--save-dir", True),
+        ("--save-audio", opts.save_audio is not None),
+        ("--save-transcript", opts.save_transcript is not None),
+        suggestion="--save-dir names the files for you; drop the explicit path.",
+    )
+    mutually_exclusive(
+        ("--name", opts.name is not None),
+        ("--auto-name", opts.auto_name),
+        suggestion="Both set the title — pass --name for an explicit one or "
+        "--auto-name to derive it from the transcript.",
+    )
+    # Local wall-clock time (what a meeting filename wants); the explicit utc-then-
+    # astimezone keeps the now() call timezone-aware for the linter.
+    now = datetime.now(UTC).astimezone()
+    plan = savedir.SaveDirPlan(
+        save_dir=save_dir,
+        now=now,
+        name=opts.name,
+        auto_name=opts.auto_name,
+        write_note=bool(opts.llm_prompt),
+    )
+    paths = plan.paths
+    naming.ensure_dir(paths.directory)
+    if opts.no_save_audio:
+        # Transcript + sidecar (+ note) only; no WAV teed for any source.
+        return SaveTargets(transcript=paths.transcript, plan=plan)
+    if sources.system_audio:
+        # Parallel mic + system: one WAV per channel beside the shared transcript.
+        return SaveTargets(
+            transcript=paths.transcript,
+            audio_by_label={
+                "you": naming.channel_audio(paths.audio, "you"),
+                "system": naming.channel_audio(paths.audio, "system"),
+            },
+            plan=plan,
+        )
+    if sources.system_audio_only:
+        # A lone system-audio stream; label its single WAV so it reads like the pair.
+        return SaveTargets(
+            transcript=paths.transcript,
+            audio=naming.channel_audio(paths.audio, "system"),
+            plan=plan,
+        )
+    return SaveTargets(transcript=paths.transcript, audio=paths.audio, plan=plan)
 
 
 def _resolve_save_targets(opts: StreamOptions, sources: SourceOptions) -> SaveTargets:
     """Resolve the save flags into the destinations the session writes.
 
-    ``--save-dir`` owns filename assembly — it auto-names the transcript and a matching
-    WAV under ``DIR/YYYY-MM-DD/`` — so it can't be combined with the explicit
-    ``--save-audio``/``--save-transcript`` paths, and ``--name`` only feeds that assembly.
-    Two parallel ``--system-audio`` streams can't tee to one WAV, so under ``--save-dir``
-    each channel gets its own ``<stem>-{you,system}.wav`` (one shared transcript), and the
-    explicit single-path ``--save-audio`` is rejected outright.
+    ``--save-dir`` owns filename assembly (see ``_save_dir_targets``); the explicit
+    ``--save-audio``/``--save-transcript`` paths are the fallback, with the save-dir-only
+    ``--name``/``--auto-name``/``--no-save-audio`` flags rejected outside it.
     """
     if opts.save_dir is not None:
-        mutually_exclusive(
-            ("--save-dir", True),
-            ("--save-audio", opts.save_audio is not None),
-            ("--save-transcript", opts.save_transcript is not None),
-            suggestion="--save-dir names the files for you; drop the explicit path.",
-        )
-        # Local wall-clock time (what a meeting filename wants); the explicit utc-then-
-        # astimezone keeps the now() call timezone-aware for the linter.
-        now = datetime.now(UTC).astimezone()
-        paths = naming.resolve(opts.save_dir, opts.name, now=now)
-        naming.ensure_dir(paths.transcript.parent)
-        if sources.system_audio:
-            # Parallel mic + system: one WAV per channel beside the shared transcript.
-            return SaveTargets(
-                transcript=paths.transcript,
-                audio_by_label={
-                    "you": naming.channel_audio(paths.audio, "you"),
-                    "system": naming.channel_audio(paths.audio, "system"),
-                },
-            )
-        if sources.system_audio_only:
-            # A lone system-audio stream; label its single WAV so it reads like the pair.
-            return SaveTargets(
-                transcript=paths.transcript, audio=naming.channel_audio(paths.audio, "system")
-            )
-        return SaveTargets(transcript=paths.transcript, audio=paths.audio)
+        return _save_dir_targets(opts, sources, opts.save_dir)
     if opts.name is not None:
         raise UsageError(
             "--name applies only with --save-dir.",
             suggestion="Pass --save-dir DIR to auto-name the files, "
             "or --save-transcript PATH for an explicit path.",
+        )
+    if opts.auto_name:
+        raise UsageError(
+            "--auto-name applies only with --save-dir.",
+            suggestion="Pass --save-dir DIR so there's an auto-named file to title.",
+        )
+    if opts.no_save_audio:
+        raise UsageError(
+            "--no-save-audio applies only with --save-dir.",
+            suggestion="Omit --save-audio to skip the WAV, or pass --save-dir DIR.",
         )
     if opts.save_audio is not None:
         if sources.system_audio:
@@ -343,6 +381,8 @@ def _collect_batch_sources(opts: StreamOptions, *, text_mode: bool) -> list[str]
         ("--save-transcript", opts.save_transcript is not None),
         ("--save-dir", opts.save_dir is not None),
         ("--name", opts.name is not None),
+        ("--auto-name", opts.auto_name),
+        ("--no-save-audio", opts.no_save_audio),
         suggestion="--from-stdin streams many sources; saving applies to a single run.",
     )
     mutually_exclusive(
@@ -434,6 +474,7 @@ def run_stream(opts: StreamOptions, state: AppState, *, json_mode: bool) -> None
         save_audio=targets.audio,
         save_audio_by_label=targets.audio_by_label,
         save_transcript=targets.transcript,
+        save_plan=targets.plan,
         llm_interval=opts.llm_interval,
     )
     with signals.terminate_as_interrupt():

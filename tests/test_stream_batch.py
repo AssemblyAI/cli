@@ -159,3 +159,59 @@ def test_stream_from_stdin_empty_pipe_is_a_usage_error(monkeypatch):
     result = runner.invoke(app, ["stream", "--from-stdin"], input="")
     assert result.exit_code == 2
     assert "No sources received on stdin" in result.output
+
+
+def test_stream_batch_sources_reports_exact_failure_count():
+    # Every source failing raises a CLIError naming the exact count (pins the `failures +=`
+    # accumulator: a sign/operator slip would report a wrong total like "-2 of 2").
+    import io
+
+    import pytest
+
+    from aai_cli.core.errors import CLIError
+    from aai_cli.streaming.batch import stream_batch_sources
+    from aai_cli.streaming.render import StreamRenderer
+
+    def open_source(source):
+        raise CLIError(f"nope: {source}", error_type="file_not_found", exit_code=2)
+
+    def make_session():
+        raise AssertionError("a failed open must short-circuit before a session opens")
+
+    with pytest.raises(CLIError) as excinfo:
+        stream_batch_sources(
+            ["a.wav", "b.wav"],
+            make_session=make_session,
+            open_source=open_source,
+            renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+            json_mode=True,
+        )
+    assert excinfo.value.message == "2 of 2 sources failed."
+
+
+def test_stream_source_strips_newlines_from_failure_warning(capsys):
+    # A crafted source/error with embedded CR/LF must not inject extra log lines: the
+    # emitted warning is flattened to a single line (pins the newline sanitization).
+    import io
+    import json as _json
+
+    from aai_cli.core.errors import CLIError
+    from aai_cli.streaming import batch
+    from aai_cli.streaming.render import StreamRenderer
+
+    def open_source(source):
+        raise CLIError("bad\ninjected line")
+
+    failed = batch._stream_source(
+        "a\nb.wav",
+        index=1,
+        total=1,
+        make_session=lambda: (_ for _ in ()).throw(AssertionError("never")),
+        open_source=open_source,
+        renderer=StreamRenderer(json_mode=True, out=io.StringIO()),
+        json_mode=True,
+    )
+    assert failed is True
+    warning = _json.loads(capsys.readouterr().err.strip())["warning"]
+    assert warning == "a b.wav: bad injected line"
+    assert "\n" not in warning

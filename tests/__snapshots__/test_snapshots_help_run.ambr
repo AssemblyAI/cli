@@ -774,6 +774,10 @@
   │                                     one WAV per channel                      │
   │ --name                   TEXT       Title to slug into the --save-dir        │
   │                                     filename (e.g. a meeting title)          │
+  │ --auto-name                         With --save-dir, derive the filename     │
+  │                                     from the transcript via the LLM          │
+  │ --no-save-audio                     With --save-dir, skip the WAV and save   │
+  │                                     only the transcript                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
@@ -881,6 +885,9 @@
    $ assembly stream --save-transcript notes.txt
    Auto-name the transcript + WAV under a dir
    $ assembly stream --save-dir ~/recordings --name "Standup"
+   Name from content + save a summary note
+   $ assembly stream --save-dir ~/recordings --auto-name --llm "summarize as a
+   note"
    Boost domain terms with keyterm prompts
    $ assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"
    Summarize action items live as you talk

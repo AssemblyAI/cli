@@ -24,8 +24,8 @@ from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_pr
 from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, errors, signals
 from aai_cli.core.errors import UsageError
-from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
+from aai_cli.streaming.validate import resolve_output_modes
 from aai_cli.ui import output
 
 

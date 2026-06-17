@@ -9,15 +9,9 @@ from pathlib import Path
 
 import typer
 
-from aai_cli.core import choices, client, config_builder, errors, llm
-from aai_cli.core.errors import (
-    APIError,
-    CLIError,
-    NotAuthenticated,
-    UsageError,
-    mutually_exclusive,
-)
-from aai_cli.streaming import record
+from aai_cli.core import client, config_builder, errors, llm
+from aai_cli.core.errors import APIError, CLIError
+from aai_cli.streaming import record, savedir
 from aai_cli.streaming.render import StreamRenderer, speaker_prefix
 from aai_cli.streaming.transcript import TranscriptWriter
 from aai_cli.ui import output
@@ -40,99 +34,6 @@ def _finalized_turn_line(event: object, source_label: str | None) -> str | None:
         return None
     prefix = speaker_prefix(source_label, getattr(event, "speaker_label", None))
     return f"{prefix[0]}: {text}" if prefix is not None else text
-
-
-@dataclass(frozen=True)
-class SourceOptions:
-    """Where the audio comes from, distilled from the CLI flags.
-
-    Centralizes the "which input?" predicates so the validation and dispatch helpers
-    in the command module read off one object instead of re-deriving the same booleans.
-    """
-
-    source: str | None
-    sample: bool
-    sample_rate: int | None
-    device: int | None
-    system_audio: bool
-    system_audio_only: bool
-
-    @property
-    def from_stdin(self) -> bool:
-        return self.source == "-"
-
-    @property
-    def from_file(self) -> bool:
-        return bool(self.source) or self.sample
-
-    @property
-    def from_system_audio(self) -> bool:
-        return self.system_audio or self.system_audio_only
-
-    @property
-    def has_capture_overrides(self) -> bool:
-        """Whether a microphone-only flag (--sample-rate or --device) was given."""
-        return self.sample_rate is not None or self.device is not None
-
-
-def validate_output_flags(*, json_mode: bool, output_field: choices.TextOrJson | None) -> None:
-    """Reject --json combined with -o text, shared by `stream` and `agent`.
-
-    Same precedent as --llm + -o text: contradictory output shapes are a clean
-    usage error, not a silent coin-flip between plain text and NDJSON.
-    """
-    mutually_exclusive(
-        ("--json", json_mode),
-        ("-o text", output_field is choices.TextOrJson.text),
-        suggestion="Pick one output format.",
-    )
-
-
-def resolve_output_modes(
-    output_field: choices.TextOrJson | None, *, json_mode: bool
-) -> tuple[bool, bool]:
-    """Validate the -o/--json combination, then fold it into (text_mode, json_mode).
-
-    The two steps always run together for the realtime commands (`stream`, `agent`),
-    so pairing them here keeps a caller from resolving the modes without first
-    rejecting a contradictory pair.
-    """
-    validate_output_flags(json_mode=json_mode, output_field=output_field)
-    return output.stream_output_modes(output_field, json_mode=json_mode)
-
-
-def validate_sources(opts: SourceOptions, *, has_llm: bool, text_mode: bool) -> None:
-    """Reject flag combinations that can't be honored, before any audio is opened."""
-    mutually_exclusive(
-        ("--system-audio", opts.system_audio),
-        ("--system-audio-only", opts.system_audio_only),
-    )
-    _validate_input_source(opts)
-    mutually_exclusive(
-        ("--llm", has_llm),
-        ("-o text", text_mode),
-        suggestion="--llm renders a live panel (or NDJSON when piped).",
-    )
-
-
-def _validate_input_source(opts: SourceOptions) -> None:
-    """Reject --sample-rate/--device/source combinations the chosen input can't accept."""
-    if opts.from_system_audio:
-        if opts.from_file:
-            raise UsageError("--system-audio cannot be combined with an audio source or --sample.")
-        if opts.system_audio_only and opts.has_capture_overrides:
-            raise UsageError(
-                "--sample-rate and --device require microphone input; use --system-audio."
-            )
-    elif opts.from_stdin:
-        if opts.sample:
-            # The stdin branch wins dispatch over --sample, so without this the
-            # hosted clip would be silently ignored in favor of the pipe.
-            raise UsageError("- (stdin) cannot be combined with --sample.")
-        if opts.device is not None:
-            raise UsageError("--device applies only to microphone input.")
-    elif opts.from_file and opts.has_capture_overrides:
-        raise UsageError("--sample-rate and --device apply only to microphone input.")
 
 
 @dataclass
@@ -164,11 +65,22 @@ class StreamSession:
     # When set, write each finalized turn to this path as plain text (see TranscriptWriter).
     # One shared transcript even under --system-audio (both channels); batch rejects it.
     save_transcript: Path | None = None
+    # When set, run the --save-dir finalization (auto-name rename, --llm note, sidecar)
+    # once streaming ends. Only the single-source path sets it; batch rejects --save-dir.
+    save_plan: savedir.SaveDirPlan | None = None
     # Seconds between --llm summary refreshes; <=0 re-runs the chain on every turn.
     llm_interval: float = 0.0
     # Monotonic clock, injectable so the interval throttle is deterministic in tests.
     clock: Callable[[], float] = time.monotonic
     transcript: list[str] = field(default_factory=list[str])
+    # Finalized turn lines + diarized speakers, recorded for the --save-dir sidecar and
+    # --auto-name title regardless of --llm; only populated when save_plan is set.
+    _meta_lines: list[str] = field(default_factory=list[str])
+    _meta_speakers: dict[str, None] = field(default_factory=dict[str, None])
+    # Wall-clock capture window (via clock) → the sidecar's duration_seconds.
+    _capture_start: float | None = None
+    # The most recent --llm answer, written as the .md note at --save-dir finalization.
+    _last_answer: str | None = None
     # The open transcript-file writer for a single run; created/closed in _guarded so a
     # save target is opened once per session and a Ctrl-C still leaves a flushed file.
     _transcript_writer: TranscriptWriter | None = None
@@ -205,6 +117,7 @@ class StreamSession:
                 line = _finalized_turn_line(event, source_label)
                 if line is not None:
                     self._save_line(line)
+                    self._note_meta(event, line)
         else:
             # --llm mode locks only to record the turn; the chain re-runs (network) are
             # left unlocked so the other source's turns keep flowing during a refresh.
@@ -219,6 +132,19 @@ class StreamSession:
         if self._transcript_writer is not None:
             self._transcript_writer.write_turn(line)
 
+    def _note_meta(self, event: object, line: str) -> None:
+        """Record a finalized turn's text + speaker for the --save-dir sidecar/auto-name.
+
+        A no-op unless --save-dir is active, so a plain run accumulates nothing. Called
+        under ``_callback_lock`` (like ``_save_line``) so the lists/sets stay consistent.
+        """
+        if self.save_plan is None:
+            return
+        self._meta_lines.append(line)
+        speaker = getattr(event, "speaker_label", None)
+        if speaker is not None:
+            self._meta_speakers[str(speaker)] = None
+
     def _record_turn(self, event: object, source_label: str | None) -> None:
         """Append a finalized turn to the running transcript (and the saved file), then
         refresh the --llm answer if a refresh is due (every turn, or once per
@@ -229,6 +155,7 @@ class StreamSession:
         with self._callback_lock:
             self.transcript.append(line)
             self._save_line(line)
+            self._note_meta(event, line)
         self._maybe_summarize()
 
     def _maybe_summarize(self, *, final: bool = False) -> None:
@@ -277,6 +204,8 @@ class StreamSession:
                 f"[aai.muted]--llm refresh failed: {exc.message}[/aai.muted]"
             )
             return
+        # Hold the latest answer so --save-dir can write it as the .md note at the end.
+        self._last_answer = answer
         follow(answer, turns)
 
     def _audio_target(self, source_label: str | None) -> Path | None:
@@ -292,6 +221,9 @@ class StreamSession:
     def stream_one(
         self, audio: Iterable[bytes], rate: int, *, source_label: str | None = None
     ) -> None:
+        if self._capture_start is None:
+            # First source opened → start the wall-clock window for the sidecar duration.
+            self._capture_start = self.clock()
         target = self._audio_target(source_label)
         if target is not None:
             # Tee verbatim to disk at the source's true rate before it hits the wire.
@@ -378,13 +310,68 @@ class StreamSession:
         source_label: str | None = None,
         handle_interrupt: bool = True,
     ) -> None:
-        self._guarded(
+        self._guarded_then_finalize(
             lambda: self.stream_one(audio, rate, source_label=source_label),
             handle_interrupt=handle_interrupt,
         )
 
+    def _guarded_then_finalize(
+        self, work: Callable[[], None], *, handle_interrupt: bool = True
+    ) -> None:
+        """Run ``work`` under ``_guarded``, then finalize a ``--save-dir`` capture.
+
+        A user Ctrl-C (or SIGTERM) ends a recording via ``typer.Exit`` with the cancel
+        code, which is exactly when a stopped capture still wants its auto-name/note/
+        sidecar — so finalize before re-raising that exit. A stream error (``CLIError``)
+        or a quiet broken-pipe exit (code 0) propagates without finalizing.
+        """
+        try:
+            self._guarded(work, handle_interrupt=handle_interrupt)
+        except typer.Exit as stop:
+            if self.save_plan is not None and stop.exit_code == errors.CANCELLED_EXIT_CODE:
+                self._finalize_save_dir(self.save_plan)
+            raise
+        if self.save_plan is not None:
+            self._finalize_save_dir(self.save_plan)
+
+    def _finalize_save_dir(self, plan: savedir.SaveDirPlan) -> None:
+        """Auto-name, write the --llm note, and drop the sidecar for a --save-dir capture."""
+        transcript_text = " ".join(self._meta_lines)
+        title: str | None = None
+        if plan.auto_name and transcript_text:
+            try:
+                title = savedir.derive_title(
+                    self.api_key, transcript_text, model=self.model, max_tokens=self.max_tokens
+                )
+            except CLIError as exc:
+                # The recording is already saved under its timestamp stem; a failed title
+                # call shouldn't lose it, so warn and keep the timestamped name.
+                output.error_console.print(
+                    f"[aai.muted]--auto-name failed: {exc.message}[/aai.muted]"
+                )
+        duration = 0 if self._capture_start is None else round(self.clock() - self._capture_start)
+        savedir.write_outputs(
+            plan,
+            title=title,
+            note=self._last_answer if plan.write_note else None,
+            audio=self._audio_files(),
+            speakers=list(self._meta_speakers),
+            duration_seconds=duration,
+            turns=len(self._meta_lines),
+        )
+
+    def _audio_files(self) -> list[Path]:
+        """The WAV file(s) this run teed to: one per ``--system-audio`` channel, the lone
+        ``save_audio`` otherwise, or none under ``--no-save-audio``."""
+        if self.save_audio is not None:
+            return [self.save_audio]
+        if self.save_audio_by_label is not None:
+            return list(self.save_audio_by_label.values())
+        return []
+
     def run_parallel(self, streams: _ParallelStreams) -> None:
-        self._guarded(lambda: self._drive(streams))
+        # Same finalize-on-stop handling as run(), for the --save-dir --system-audio pair.
+        self._guarded_then_finalize(lambda: self._drive(streams))
 
     def _drive(self, streams: _ParallelStreams) -> None:
         """Stream every source concurrently, surfacing the first worker error."""
@@ -419,61 +406,3 @@ class StreamSession:
                 raise errors.get()
         if not errors.empty():
             raise errors.get()
-
-
-# A batch source string resolved to its real-time audio chunks and declared rate.
-_OpenedSource = tuple[Iterable[bytes], int]
-
-
-def stream_batch_sources(
-    sources: list[str],
-    *,
-    make_session: Callable[[], StreamSession],
-    open_source: Callable[[str], _OpenedSource],
-    renderer: StreamRenderer,
-    json_mode: bool,
-) -> None:
-    """Stream each source in ``sources`` in turn — the ``assembly stream --from-stdin``
-    batch mode.
-
-    The realtime API is one session at a time, so a list of files/URLs streams
-    sequentially: each source gets a fresh ``StreamSession`` from ``make_session`` (its
-    own transcript and ``--llm`` chain state) and is announced via ``renderer.source``
-    before its turns. ``open_source`` resolves a source string to ``(audio, rate)`` and
-    may raise ``CLIError`` (bad path, missing ffmpeg, decode failure), which is recorded
-    as a per-source failure so the batch carries on — except ``NotAuthenticated``, which
-    re-raises to abort the whole batch (one rejected key fails every source identically).
-
-    A Ctrl-C stops the batch with the cancel code (exit 130); a closed downstream pipe
-    stops it quietly (exit 0). When any source failed, raises a ``CLIError`` at the end
-    so a script can trust the exit code.
-    """
-    total = len(sources)
-    failures: list[str] = []
-    try:
-        for index, source in enumerate(sources, start=1):
-            renderer.source(source, index=index, total=total)
-            try:
-                audio, rate = open_source(source)
-                make_session().run(audio, rate, handle_interrupt=False)
-            except NotAuthenticated:
-                raise
-            except CLIError as exc:
-                failures.append(source)
-                output.emit_warning(f"{source}: {exc.message}", json_mode=json_mode)
-    except KeyboardInterrupt:
-        # One Ctrl-C stops the whole batch, not just the current source. Exit 130
-        # (cancel) so the interrupt isn't mistaken for a clean run of every source.
-        renderer.stopped()
-        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
-    except BrokenPipeError:
-        # Downstream consumer (e.g. `| head`) closed the pipe; stop quietly.
-        raise typer.Exit(code=0) from None
-    finally:
-        renderer.close()
-    if failures:
-        raise CLIError(
-            f"{len(failures)} of {total} sources failed.",
-            error_type="batch_failed",
-            suggestion="Check each failed path or URL, then re-run.",
-        )

@@ -39,6 +39,16 @@ def test_resolve_buckets_by_date_with_slugged_name():
     assert paths.audio == Path("rec/2026-06-16/2026-06-16-143005-my-meeting.wav")
 
 
+def test_resolve_derives_note_and_sidecar_from_the_same_stem():
+    # The .md note and .aai.json sidecar share the transcript's stem so a browse UI can
+    # match all four files of one recording by name (pins each suffix).
+    paths = naming.resolve(Path("rec"), "My Meeting", now=NOW)
+    bucket = Path("rec/2026-06-16")
+    assert paths.note == bucket / "2026-06-16-143005-my-meeting.md"
+    assert paths.sidecar == bucket / "2026-06-16-143005-my-meeting.aai.json"
+    assert paths.directory == bucket
+
+
 def test_resolve_without_name_is_just_the_timestamp():
     # No --name (or a name that slugs to nothing) -> the stem is the bare timestamp,
     # never a trailing-hyphen filename.

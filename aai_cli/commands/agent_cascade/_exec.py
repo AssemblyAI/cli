@@ -25,8 +25,8 @@ from aai_cli.app.context import AppState
 from aai_cli.core import choices, client, config_builder, errors, llm, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
-from aai_cli.streaming.session import resolve_output_modes
 from aai_cli.streaming.sources import FileSource
+from aai_cli.streaming.validate import resolve_output_modes
 from aai_cli.tts import session as tts_session
 from aai_cli.ui import output
 

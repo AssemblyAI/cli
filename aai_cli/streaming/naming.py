@@ -41,24 +41,49 @@ def _stem(now: datetime, name: str | None) -> str:
     return f"{stamp}-{slug}" if slug else stamp
 
 
+# The sidecar's extension, mirroring batch transcribe's ``<file>.aai.json`` so a
+# browse/list UI can recognize a stream recording's metadata file the same way.
+SIDECAR_SUFFIX = ".aai.json"
+
+
 @dataclass(frozen=True)
 class SavePaths:
-    """The auto-assembled transcript path and its matching audio path (same stem)."""
+    """The auto-assembled output paths for one recording, all sharing a stem.
 
-    transcript: Path
-    audio: Path
+    The transcript ``.txt`` and matching audio ``.wav`` plus the optional ``--llm``
+    note ``.md`` and the ``.aai.json`` metadata sidecar — each is derived from the
+    same ``directory``/``stem`` so they land together and stay matchable by name.
+    """
+
+    directory: Path
+    stem: str
+
+    @property
+    def transcript(self) -> Path:
+        return self.directory / f"{self.stem}.txt"
+
+    @property
+    def audio(self) -> Path:
+        return self.directory / f"{self.stem}.wav"
+
+    @property
+    def note(self) -> Path:
+        return self.directory / f"{self.stem}.md"
+
+    @property
+    def sidecar(self) -> Path:
+        return self.directory / f"{self.stem}{SIDECAR_SUFFIX}"
 
 
 def resolve(save_dir: Path, name: str | None, *, now: datetime) -> SavePaths:
-    """Build ``DIR/YYYY-MM-DD/<stem>.{txt,wav}`` for ``now`` and ``--name``.
+    """Build the ``DIR/YYYY-MM-DD/<stem>`` paths for ``now`` and ``--name``.
 
     The date bucket and the stem both carry the date so a transcript stays
     self-describing if it is later moved out of its bucket. Path assembly only —
     creating the directory is the caller's job (see ``ensure_dir``).
     """
     bucket = save_dir / now.strftime("%Y-%m-%d")
-    stem = _stem(now, name)
-    return SavePaths(transcript=bucket / f"{stem}.txt", audio=bucket / f"{stem}.wav")
+    return SavePaths(directory=bucket, stem=_stem(now, name))
 
 
 def channel_audio(audio: Path, channel: str) -> Path:

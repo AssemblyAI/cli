@@ -116,3 +116,26 @@ object per dataset (not NDJSON; a single dataset is therefore one object):
 the row's `llm` key (the WER score still uses the raw transcript), and
 `--llm-reduce` runs one prompt over every item's result and adds a top-level
 `reduce` (`{"model","prompts","output"}`) to the object.
+
+## Recording streams to disk
+
+`assembly stream --save-dir DIR` auto-names a capture under `DIR/YYYY-MM-DD/`
+with a timestamped stem (`YYYY-MM-DD-HHMMSS[-slug]`) shared across every file it
+writes:
+
+- `<stem>.txt` — the transcript, one finalized turn per line (flushed live).
+- `<stem>.wav` — the recorded audio, 16-bit mono PCM. Suppress it with
+  `--no-save-audio` to keep only the text. Under `--system-audio` the two channels
+  can't share a file, so each gets its own `<stem>-you.wav` / `<stem>-system.wav`.
+- `<stem>.md` — written when `--llm "…"` is also passed: the final answer of the
+  live prompt chain, captured as a note next to the transcript.
+- `<stem>.aai.json` — a metadata sidecar so a list/browse UI needs no transcript
+  parsing: `{"title", "date", "duration_seconds", "speakers", "turns",
+  "transcript", "audio", "note"}`. `audio` is the list of WAV file names (empty
+  under `--no-save-audio`, two entries under `--system-audio`); `note` is `null`
+  when no `--llm` note was written.
+
+`--name "Title"` slugs an explicit title into the stem; `--auto-name` instead
+derives that title from the transcript via the LLM Gateway once the stream ends,
+renaming the files to match (the timestamp stem is kept if the title is empty).
+The two are mutually exclusive.

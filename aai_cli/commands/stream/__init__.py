@@ -40,6 +40,10 @@ DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
                 'assembly stream --save-dir ~/recordings --name "Standup"',
             ),
             (
+                "Name from content + save a summary note",
+                'assembly stream --save-dir ~/recordings --auto-name --llm "summarize as a note"',
+            ),
+            (
                 "Boost domain terms with keyterm prompts",
                 'assembly stream --keyterms-prompt "AssemblyAI" --keyterms-prompt "Claude"',
             ),
@@ -119,6 +123,18 @@ def stream(
         None,
         "--name",
         help="Title to slug into the --save-dir filename (e.g. a meeting title)",
+        rich_help_panel=help_panels.OPT_SAVING,
+    ),
+    auto_name: bool = typer.Option(
+        False,
+        "--auto-name",
+        help="With --save-dir, derive the filename from the transcript via the LLM",
+        rich_help_panel=help_panels.OPT_SAVING,
+    ),
+    no_save_audio: bool = typer.Option(
+        False,
+        "--no-save-audio",
+        help="With --save-dir, skip the WAV and save only the transcript",
         rich_help_panel=help_panels.OPT_SAVING,
     ),
     # model & input
@@ -398,5 +414,7 @@ def stream(
         save_transcript=save_transcript,
         save_dir=save_dir,
         name=name,
+        auto_name=auto_name,
+        no_save_audio=no_save_audio,
     )
     run_with_options(ctx, stream_exec.run_stream, opts, json=json_out)
