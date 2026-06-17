@@ -253,12 +253,14 @@ If your default interpreter is older than Python 3.12, add `--python python3.12`
 <summary>System dependencies for the live-audio commands (pipx/uv installs only)</summary>
 
 Only the live-audio commands need anything extra: `stream`, `dictate`, and `agent` use PortAudio for
-microphone capture and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream non-WAV audio.
-Plain `transcribe` uploads your file directly and needs neither.
+microphone capture and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream non-WAV audio; `assembly share`
+uses [`cloudflared`](https://github.com/cloudflare/cloudflared) for its public tunnel.
+Plain `transcribe` uploads your file directly and needs none of them. The
+[`install.sh`](install.sh) script checks for these and prints the right install command when any are missing.
 
 - Debian/Ubuntu: `sudo apt-get install libportaudio2 ffmpeg`
 - Fedora: `sudo dnf install portaudio ffmpeg`
-- macOS (Homebrew): `brew install portaudio ffmpeg`
+- macOS (Homebrew): `brew install portaudio ffmpeg cloudflared`
 
 </details>
 
