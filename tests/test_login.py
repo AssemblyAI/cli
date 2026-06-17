@@ -234,6 +234,45 @@ def test_login_binds_env_to_profile(monkeypatch):
     assert config.get_profile_env("default") == "sandbox000"
 
 
+def test_login_defaults_to_production_ignoring_stored_sandbox_env(monkeypatch):
+    # A bare `assembly login` must default to production even when the profile was
+    # previously bound to the sandbox — re-signing-in shouldn't silently re-target it.
+    config.set_profile_env("default", "sandbox000")
+    seen = {}
+
+    def fake(*, json_mode=False):
+        from aai_cli.core import environments
+
+        # The browser OAuth/AMS flow reads environments.active(); capture what it sees.
+        seen["active"] = environments.active().name
+        return _login_result()
+
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fake)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    assert seen["active"] == "production"  # the flow ran against prod, not the stored sandbox
+    assert config.get_profile_env("default") == "production"  # and re-bound the profile to prod
+
+
+def test_login_explicit_sandbox_still_overrides_production_default(monkeypatch):
+    # The production default is only the fallback: an explicit --sandbox still wins, and
+    # the flow runs against (and the profile binds to) the sandbox.
+    config.set_profile_env("default", "production")
+    seen = {}
+
+    def fake(*, json_mode=False):
+        from aai_cli.core import environments
+
+        seen["active"] = environments.active().name
+        return _login_result()
+
+    monkeypatch.setattr("aai_cli.auth.run_login_flow", fake)
+    result = runner.invoke(app, ["--sandbox", "login"])
+    assert result.exit_code == 0
+    assert seen["active"] == "sandbox000"
+    assert config.get_profile_env("default") == "sandbox000"
+
+
 def test_sandbox_flag_is_shortcut_for_env(monkeypatch):
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow", lambda *, json_mode=False: _login_result("sk_x")
