@@ -14,6 +14,7 @@ decorator would otherwise silently spawn a duplicate panel.
 from __future__ import annotations
 
 QUICK_START = "Quick Start"  # zero-to-running onboarding: onboard
+CODE = "Coding Agent"  # the terminal coding agent: code
 BUILD = "Build an App"  # scaffold a new project: init
 TRANSCRIPTION = "Run AssemblyAI"  # use AssemblyAI directly: transcribe, stream, agent, llm
 HISTORY = "History"  # browse past work: transcripts, sessions
@@ -24,7 +25,7 @@ SETUP = "Setup & Tools"  # get set up & maintain: doctor, setup
 # panel it belongs to (`SPEC` in aai_cli/commands/*.py — see aai_cli.command_registry),
 # and ordering within a panel comes from that module's sparse `order` rank, so adding
 # a command never edits a shared ordering list; only a brand-new panel touches this.
-PANEL_ORDER = (QUICK_START, BUILD, TRANSCRIPTION, SETUP, HISTORY, ACCOUNT)
+PANEL_ORDER = (QUICK_START, CODE, BUILD, TRANSCRIPTION, SETUP, HISTORY, ACCOUNT)
 
 # Option panels group a single command's flags within its own ``--help``. The
 # `transcribe` command exposes 40+ options; without panels they render as one
