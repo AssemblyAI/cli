@@ -51,6 +51,12 @@ _SEND_TIMEOUT_SECONDS = 5.0
 # error line, while bounding the payload if an upstream message embeds a body.
 _ERROR_MESSAGE_MAX_CHARS = 500
 
+# Outcomes that are a normal part of CLI use, not failures: a clean exit and a
+# user/SIGTERM cancellation (Ctrl-C, e.g. stopping a long `llm` or
+# `transcripts get`). Both ship as ``status: info`` with no ``error`` block, so a
+# cancel never lands in Datadog Error Tracking or inflates the crash rate.
+_NON_ERROR_OUTCOMES = frozenset({"success", "cancelled"})
+
 
 def client_token() -> str:
     """The write-only intake token: env override first, then the shipped one."""
@@ -143,20 +149,22 @@ def build_event(
     device id is a random UUID minted locally — no account id, email, or
     hostname ever rides along.
 
-    A failure additionally sets ``status: error`` and the reserved
+    A genuine failure additionally sets ``status: error`` and the reserved
     ``error.kind``/``error.message`` so the event feeds Datadog **Error
     Tracking** (issue grouping), not just log search. ``error.kind`` reuses the
     anonymous ``outcome`` (the ``CLIError.error_type``); ``error.message`` is
     the one-line message the user saw (capped at ``_ERROR_MESSAGE_MAX_CHARS``).
-    Stack traces are still deliberately omitted.
+    Stack traces are still deliberately omitted. A ``cancelled`` outcome is *not*
+    a failure (see ``_NON_ERROR_OUTCOMES``) — it stays an ``info`` log with no
+    ``error`` block, since stopping a command is normal CLI use, not a crash.
     """
-    succeeded = outcome == "success"
+    is_failure = outcome not in _NON_ERROR_OUTCOMES
     event: dict[str, object] = {
         "ddsource": "aai-cli",
         "service": "aai-cli",
         "ddtags": f"version:{__version__}",
         "message": f"{command} {outcome}",
-        "status": "info" if succeeded else "error",
+        "status": "error" if is_failure else "info",
         "command": command,
         "outcome": outcome,
         "exit_code": exit_code,
@@ -167,7 +175,7 @@ def build_event(
         "ci": bool(env.get("CI")),
         "device_id": config.get_device_id(),
     }
-    if not succeeded:
+    if is_failure:
         error: dict[str, object] = {"kind": outcome}
         if error_message:
             error["message"] = error_message[:_ERROR_MESSAGE_MAX_CHARS]
