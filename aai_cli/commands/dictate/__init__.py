@@ -22,7 +22,11 @@ SPEC = command_registry.CommandModuleSpec(
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Dictate one utterance: recording starts, Enter transcribes it", "assembly dictate"),
+            ("Record until SIGTERM, then print the transcript", "assembly dictate"),
+            (
+                "Stop the recording and transcribe (e.g. from a hotkey tool)",
+                "kill -TERM $(pgrep -f 'assembly dictate')",
+            ),
             (
                 "Pipe the utterance into another command",
                 'assembly dictate | assembly llm "write a conventional commit"',
@@ -75,13 +79,15 @@ def dictate(
         help="Output mode: text (the bare transcript per utterance, pipe-friendly) or json",
     ),
 ) -> None:
-    """Push-to-talk dictation: record the mic, get the transcript back
+    """Signal-driven dictation: record the mic, get the transcript back
 
-    Recording starts immediately; press Enter (or Space) to stop and the
-    utterance is sent to the AssemblyAI Sync API — the transcript prints right
-    away (no polling) and dictate exits, so it flows straight to the next
-    command in a pipe. The recording can be up to 120 seconds long. Press
-    Ctrl-C to cancel without transcribing.
+    Recording starts immediately and runs headless — no terminal needed — so a
+    hotkey tool like Hammerspoon can launch it as a background task and send
+    SIGTERM (kill -TERM, task:terminate()) to stop. On SIGTERM the utterance is
+    sent to the AssemblyAI Sync API, the transcript prints right away (no
+    polling), and dictate exits, so it flows straight to the next command in a
+    pipe. The recording can be up to 120 seconds long. Ctrl-C (SIGINT) cancels
+    without transcribing.
     """
     opts = dictate_exec.DictateOptions(
         language=language,

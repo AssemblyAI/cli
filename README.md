@@ -46,7 +46,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | :--- | :--- |
 | `assembly transcribe` | Transcribe files, URLs, YouTube/podcast pages, podcast RSS feeds, directories, globs, or bucket storage (`s3://`, `gs://`, `az://`) — with speaker labels, PII redaction, summarization, SRT/VTT captions, and resumable batch runs |
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
-| `assembly dictate` | Push-to-talk dictation: recording starts immediately, press Enter for instant text (Sync STT API, up to 120 s per utterance) |
+| `assembly dictate` | Signal-driven dictation: records immediately, send SIGTERM for instant text — scriptable from hotkey tools like Hammerspoon (Sync STT API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
 | `assembly agent-cascade` | Same live conversation, but wired client-side from Streaming STT + the LLM Gateway + streaming TTS, like the `agent-cascade` starter (sandbox-only) |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |

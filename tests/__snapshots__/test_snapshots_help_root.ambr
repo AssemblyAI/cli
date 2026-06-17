@@ -45,7 +45,7 @@
   │                batch                                                         │
   │ stream         Transcribe live audio in real time from a mic, file, URL, or  │
   │                pipe                                                          │
-  │ dictate        Push-to-talk dictation: record the mic, get the transcript    │
+  │ dictate        Signal-driven dictation: record the mic, get the transcript   │
   │                back                                                          │
   │ agent          Hold a live two-way voice conversation with a voice agent     │
   │ agent-cascade  [sandbox] Hold a live voice conversation through a self-wired │
