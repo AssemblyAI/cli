@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 import webbrowser
 from dataclasses import dataclass
@@ -9,6 +8,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from rich.markup import escape
 
 from aai_cli.auth import ams, discovery, endpoints, loopback
+from aai_cli.core import jsonshape
 from aai_cli.core.errors import STDIN_KEY_RECIPE, APIError, NotAuthenticated
 from aai_cli.ui import output
 
@@ -96,7 +96,7 @@ def _note(*, json_mode: bool, human: str, hint: str, url: str | None = None) -> 
         payload: dict[str, object] = {"hint": hint}
         if url is not None:
             payload["url"] = url
-        sys.stderr.write(json.dumps(payload) + "\n")
+        sys.stderr.write(jsonshape.dumps(payload) + "\n")
     else:
         output.error_console.print(human)
 

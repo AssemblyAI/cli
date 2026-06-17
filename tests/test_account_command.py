@@ -53,7 +53,7 @@ def test_usage_defaults_date_range_and_renders(mocker):
     captured = {}
 
     def fake_usage(jwt, start, end, window):
-        captured["start"], captured["end"] = start, end
+        captured["start"], captured["end"], captured["window"] = start, end, window
         return {
             "usage_items": [
                 {
@@ -68,6 +68,8 @@ def test_usage_defaults_date_range_and_renders(mocker):
     mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True, side_effect=fake_usage)
     result = runner.invoke(app, ["usage", "--json"])
     assert result.exit_code == 0
+    # --window defaults to None when omitted, so AMS aggregates over the whole range.
+    assert captured["window"] is None
     # both bounds are tz-aware UTC ISO-8601 timestamps, defaulted when not passed
     # (AMS rejects naive datetimes with a 400).
     for bound in (captured["start"], captured["end"]):
@@ -415,8 +417,8 @@ def test_usage_allows_equal_start_and_end(mocker):
 
 
 def test_usage_rejects_unknown_window(monkeypatch, mocker):
-    # --window was free text silently misinterpreted server-side; now it's validated
-    # client-side, before session resolution or any AMS call.
+    # --window is a closed choice set (choices.UsageWindow), so Typer rejects an
+    # unknown value at parse time — before session resolution or any AMS call.
     monkeypatch.setattr("aai_cli.app.context._interactive_session", lambda: True)
     monkeypatch.setattr(
         "aai_cli.auth.run_login_flow",
@@ -425,8 +427,8 @@ def test_usage_rejects_unknown_window(monkeypatch, mocker):
     get_usage = mocker.patch("aai_cli.commands.account.ams.get_usage", autospec=True)
     result = runner.invoke(app, ["usage", "--window", "fortnight"])
     assert result.exit_code == 2
-    assert "Invalid --window" in result.output
-    assert "day, week, month" in result.output
+    assert "'fortnight' is not one of" in result.output
+    assert "'day'" in result.output  # the valid choices are listed for the user
     get_usage.assert_not_called()
 
 

@@ -11,7 +11,7 @@ from rich.text import Text
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import AppState, run_command
 from aai_cli.auth import ams
-from aai_cli.core import jsonshape, timeparse
+from aai_cli.core import choices, jsonshape, timeparse
 from aai_cli.core.errors import UsageError
 from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
@@ -32,11 +32,6 @@ def _utc_day_start(day: date) -> str:
     so the wire value always carries an explicit ``+00:00`` offset.
     """
     return datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat()
-
-
-# The AMS usage endpoint's recognized window sizes; anything else is silently
-# misinterpreted server-side, so reject it client-side as a usage error.
-_USAGE_WINDOWS = ("day", "week", "month")
 
 
 def _format_usage_number(value: object) -> str:
@@ -186,8 +181,8 @@ def usage(
         None, "--start", help="Start date (YYYY-MM-DD). Default: 30d ago."
     ),
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD). Default: today."),
-    window: str | None = typer.Option(
-        None, "--window", help="Window size: 'day', 'week', or 'month'"
+    window: choices.UsageWindow | None = typer.Option(
+        None, "--window", help="Aggregate usage by this window size"
     ),
     include_zero: bool = typer.Option(
         False,
@@ -210,11 +205,6 @@ def usage(
             raise UsageError(
                 f"--end {end_day.isoformat()} is before --start {start_day.isoformat()}.",
                 suggestion="Pick an end date on or after the start date.",
-            )
-        if window is not None and window not in _USAGE_WINDOWS:
-            raise UsageError(
-                f"Invalid --window {window!r}.",
-                suggestion=f"Use one of: {', '.join(_USAGE_WINDOWS)}.",
             )
         start_date = _utc_day_start(start_day)
         end_date = _utc_day_start(end_day)

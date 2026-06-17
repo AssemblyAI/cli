@@ -12,6 +12,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
+from aai_cli.app import transform
 from aai_cli.app.transcribe import batch as transcribe_batch
 from aai_cli.app.transcribe import run as transcribe_run
 from aai_cli.core import config
@@ -101,6 +102,22 @@ _DEFAULT_OPTS = transcribe_run.TranscribeOptions(
 )
 
 
+def test_emit_transform_defaults_to_single_source_render_not_batch_ndjson(mocker, capsys) -> None:
+    # `transcribe` calls emit_transform without `batch`, relying on the default False:
+    # a single source's --llm result renders via output.emit (the transcript payload
+    # under a "transform" key), NOT the batch-only `{"type": "transcript", …}` NDJSON
+    # stream record. Pins the batch=False default (flipping it would tag the output).
+    mocker.patch(
+        "aai_cli.app.transform.client.transcript_summary", return_value={"id": "t1", "text": "hi"}
+    )
+    transform.emit_transform(
+        object(), model="m", steps=[{"prompt": "p", "output": "o"}], json_mode=True
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert "type" not in payload  # not the batch NDJSON record
+    assert payload["transform"]["steps"][0]["output"] == "o"
+
+
 def test_transform_options_carries_reduce_prompts() -> None:
     opts = dataclasses.replace(
         _DEFAULT_OPTS, llm_prompt=["judge"], llm_reduce=["rank", "summarize"]
@@ -144,10 +161,11 @@ def test_gather_reduce_inputs_skips_non_completed_items() -> None:
         transcribe_batch.sidecar_path("https://b"),
         {"status": "completed", "transcript": {"text": "beta text"}},
     )
-    combined = transcribe_batch._gather_reduce_inputs([done, failed])
-    assert "### Source: https://a" in combined
-    assert "alpha text" in combined
-    assert "beta text" not in combined
+    contributions = transcribe_batch._gather_reduce_inputs([done, failed])
+    # Only the completed source contributes; the failed one is dropped despite its
+    # valid sidecar (so "beta text" can't leak into the reduce). The "### Source:"
+    # header is now added by `emit_reduce`, asserted in test_batch_reduce_feeds_map_outputs.
+    assert contributions == [("https://a", "alpha text")]
 
 
 def test_single_source_runs_reduce_as_chain_step(mocker):

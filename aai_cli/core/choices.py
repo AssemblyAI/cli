@@ -51,6 +51,14 @@ class ConfigKey(enum.StrEnum):
     telemetry_enabled = "telemetry_enabled"
 
 
+class UsageWindow(enum.StrEnum):
+    """Window sizes the AMS usage endpoint aggregates by (`account usage --window`)."""
+
+    day = "day"
+    week = "week"
+    month = "month"
+
+
 class ColorMode(enum.StrEnum):
     """The conventional tri-state for ANSI color (`--color`), matching git/gh/cargo."""
 

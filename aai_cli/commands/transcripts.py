@@ -5,7 +5,7 @@ from rich.markup import escape
 
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import AppState, run_command
-from aai_cli.app.transcribe.run import render_transform_steps
+from aai_cli.app.transform import emit_reduce, emit_transform
 from aai_cli.core import choices, client, llm, stdio, timeparse
 from aai_cli.core.errors import APIError, UsageError
 from aai_cli.ui import output, theme
@@ -119,22 +119,6 @@ def _text_of(transcript: object) -> str:
     return str(getattr(transcript, "text", "") or "")
 
 
-def _emit_transform(
-    transcript: object,
-    model: str,
-    steps: list[dict[str, str]],
-    *,
-    json_mode: bool,
-    batch: bool,
-) -> None:
-    """Emit a transcript's ``--llm`` chain result: NDJSON per id in batch, else like `transcribe`."""
-    record = client.transcript_summary(transcript) | {"transform": {"model": model, "steps": steps}}
-    if json_mode and batch:
-        output.emit_ndjson({"type": "transcript", **record})
-    else:
-        output.emit(record, render_transform_steps, json_mode=json_mode)
-
-
 def _deliver_transcript(
     transcript: object,
     api_key: str,
@@ -165,41 +149,11 @@ def _deliver_transcript(
             api_key, chain, transcript_id=_id_of(transcript), model=model, max_tokens=max_tokens
         )
         if not suppress:
-            _emit_transform(transcript, model, steps, json_mode=json_mode, batch=batch)
+            emit_transform(transcript, model=model, steps=steps, json_mode=json_mode, batch=batch)
         return steps[-1]["output"] if steps else ""
     if not suppress:
         _emit_transcript(transcript, json_mode=json_mode, batch=batch)
     return _text_of(transcript)
-
-
-def _run_reduce(
-    api_key: str,
-    contributions: list[tuple[str, str]],
-    *,
-    prompts: list[str],
-    model: str,
-    max_tokens: int,
-    json_mode: bool,
-) -> None:
-    """Run the ``--llm-reduce`` chain once over every fetched transcript; print to stdout.
-
-    Mirrors `transcribe`'s reduce: concatenate each id's contribution under a header,
-    skip the billable call when there's nothing to reduce, and emit the same additive
-    ``{"type": "reduce", …}`` NDJSON record under --json.
-    """
-    combined = "\n\n".join(f"### Transcript: {tid}\n{text}" for tid, text in contributions if text)
-    if not combined:
-        output.emit_warning(
-            "Nothing to reduce: no transcript text across ids.", json_mode=json_mode
-        )
-        return
-    result = llm.run_chain(
-        api_key, prompts, transcript_text=combined, model=model, max_tokens=max_tokens
-    )
-    if json_mode:
-        output.emit_ndjson({"type": "reduce", "model": model, "prompts": prompts, "output": result})
-    else:
-        output.emit_text(result)
 
 
 @app.command(
@@ -312,12 +266,14 @@ def get(
             )
             contributions.append((tid, contribution))
         if do_reduce:
-            _run_reduce(
+            emit_reduce(
                 api_key,
                 contributions,
                 prompts=reduce_prompts,
                 model=model,
                 max_tokens=max_tokens,
+                block_label="Transcript",
+                empty_noun="ids",
                 json_mode=json_mode,
             )
 

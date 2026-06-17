@@ -216,16 +216,20 @@
    Show usage over a date range (default: last 30 days)
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --start                       TEXT    Start date (YYYY-MM-DD). Default: 30d  │
-  │                                       ago.                                   │
-  │ --end                         TEXT    End date (YYYY-MM-DD). Default: today. │
-  │ --window                      TEXT    Window size: 'day', 'week', or 'month' │
-  │ --include-zero,--all                  Include zero-usage windows (matches    │
-  │                                       --include-logins on `assembly audit`)  │
-  │ --json                -j              Output raw JSON                        │
-  │ --output              -o      FIELDS  Project fields from the JSON result    │
-  │                                       (comma-separated, e.g. id,status)      │
-  │ --help                                Show this message and exit.            │
+  │ --start                       TEXT              Start date (YYYY-MM-DD).     │
+  │                                                 Default: 30d ago.            │
+  │ --end                         TEXT              End date (YYYY-MM-DD).       │
+  │                                                 Default: today.              │
+  │ --window                      [day|week|month]  Aggregate usage by this      │
+  │                                                 window size                  │
+  │ --include-zero,--all                            Include zero-usage windows   │
+  │                                                 (matches --include-logins on │
+  │                                                 `assembly audit`)            │
+  │ --json                -j                        Output raw JSON              │
+  │ --output              -o      FIELDS            Project fields from the JSON │
+  │                                                 result (comma-separated,     │
+  │                                                 e.g. id,status)              │
+  │ --help                                          Show this message and exit.  │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

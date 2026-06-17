@@ -63,8 +63,6 @@ def _is_login(entry: Mapping[str, object]) -> bool:
 def _actor_label(entry: Mapping[str, object]) -> str:
     actor_type = str(entry.get("actor_type") or "system")
     actor_id = entry.get("actor_id")
-    if actor_type == "system":
-        return "system" if actor_id is None else f"system #{actor_id}"
     return actor_type if actor_id is None else f"{actor_type} #{actor_id}"
 
 
