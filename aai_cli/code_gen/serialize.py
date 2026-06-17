@@ -1,6 +1,22 @@
 from __future__ import annotations
 
+from typing import NotRequired, TypedDict
+
 from assemblyai.streaming.v3 import SpeechModel
+
+
+class GatewayOptions(TypedDict):
+    """The LLM-Gateway prompt-chain options threaded into generated transcribe/stream code.
+
+    Built once by ``code_gen.gateway_options`` and consumed by the renderers, so the
+    fields stay typed end-to-end instead of forcing a ``cast`` at every subscript.
+    ``interval`` (streaming-only refresh cadence) is optional — ``transcribe`` omits it.
+    """
+
+    prompts: list[str]
+    model: str
+    max_tokens: int
+    interval: NotRequired[float]
 
 
 def py_literal(value: object) -> str:

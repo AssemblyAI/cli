@@ -52,36 +52,46 @@ def chars_per_caption_option() -> int | None:
 # this module owns the FBT003 carve-out for Typer's boolean positional defaults.
 
 
-def batch_from_stdin_option() -> bool:
-    """The ``--from-stdin`` flag: batch mode fed one path/URL per stdin line."""
+def batch_from_stdin_option(
+    help_text: str = "Batch mode: read audio paths/URLs from stdin, one per line "
+    "(composes with find/ls/yt-dlp output)",
+) -> bool:
+    """The ``--from-stdin`` flag: batch mode fed one path/URL per stdin line.
+
+    ``help_text`` lets the media commands (clip/dub/caption) reword "audio" for
+    their own source kind; the default carries ``transcribe``'s wording.
+    """
     flag: bool = typer.Option(
         False,
         "--from-stdin",
-        help="Batch mode: read audio paths/URLs from stdin, one per line "
-        "(composes with find/ls/yt-dlp output)",
+        help=help_text,
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return flag
 
 
-def batch_concurrency_option() -> int:
-    """The ``--concurrency`` option: how many sources transcribe at once in batch mode."""
+def batch_concurrency_option(
+    help_text: str = "How many sources to transcribe at once in batch mode",
+) -> int:
+    """The ``--concurrency`` option: how many sources run at once in batch mode."""
     value: int = typer.Option(
         DEFAULT_BATCH_CONCURRENCY,
         "--concurrency",
         min=1,
-        help="How many sources to transcribe at once in batch mode",
+        help=help_text,
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return value
 
 
-def batch_force_option() -> bool:
-    """The ``--force`` flag: re-transcribe even when a completed sidecar exists."""
+def batch_force_option(
+    help_text: str = "Batch mode: re-transcribe sources whose sidecar already records a completed run",
+) -> bool:
+    """The ``--force`` flag: reprocess a source even when its output already exists."""
     flag: bool = typer.Option(
         False,
         "--force",
-        help="Batch mode: re-transcribe sources whose sidecar already records a completed run",
+        help=help_text,
         rich_help_panel=help_panels.OPT_BATCH,
     )
     return flag

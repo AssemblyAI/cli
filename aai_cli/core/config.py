@@ -8,16 +8,13 @@ import tomllib
 import uuid
 from pathlib import Path
 
-import keyring
-import keyring.errors  # keyring.errors is not re-exported by keyring/__init__
 import platformdirs
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aai_cli.core import config_lock, debuglog, env
+from aai_cli.core import config_lock, debuglog, env, keyring_store
 from aai_cli.core.errors import CLIError, NotAuthenticated
 
-KEYRING_SERVICE = "assemblyai-cli"
 ENV_API_KEY = "ASSEMBLYAI_API_KEY"
 DEFAULT_PROFILE = "default"
 
@@ -202,79 +199,28 @@ def set_active_profile(name: str) -> None:
         cfg.active_profile = name
 
 
-def _keyring_set(username: str, secret: str) -> None:
-    """Write a secret to the OS keyring, turning backend failures into a clean error.
-
-    A locked keychain, or an existing entry whose ACL is bound to another app, makes
-    keyring raise a KeyringError (e.g. macOS errSecInvalidOwnerEdit, -25244). Surface
-    it as a CLIError so the command prints a fixable message instead of a traceback.
-    """
-    try:
-        keyring.set_password(KEYRING_SERVICE, username, secret)
-    except keyring.errors.KeyringError as exc:
-        raise CLIError(
-            f"Your OS keyring rejected the write ({exc}).",
-            error_type="keyring_error",
-            suggestion=(
-                "Unlock your keyring, or remove the stale 'assemblyai-cli' entry and "
-                "retry (macOS: security delete-generic-password -s assemblyai-cli). "
-                "On a headless machine without a keyring, set ASSEMBLYAI_API_KEY instead."
-            ),
-        ) from exc
-
-
-def _keyring_restore(username: str, prior: str | None) -> None:
-    """Best-effort restore of a keyring entry to a snapshot value, for login rollback.
-
-    Suppresses keyring errors (including a delete of an absent entry) so a failed
-    rollback never masks the original write error that triggered it.
-    """
-    with contextlib.suppress(keyring.errors.KeyringError):
-        if prior is None:
-            keyring.delete_password(KEYRING_SERVICE, username)
-        else:
-            keyring.set_password(KEYRING_SERVICE, username, prior)
-
-
 def set_api_key(profile: str, api_key: str) -> None:
     validate_profile(profile)
-    _keyring_set(profile, api_key)
+    keyring_store.set_secret(profile, api_key)
     with config_lock.update(_load, _dump) as cfg:
         cfg.profiles.setdefault(profile, Profile())
         if cfg.active_profile is None:
             cfg.active_profile = profile
 
 
-def _keyring_get(username: str) -> str | None:
-    """Read a secret, treating an unusable keyring backend as "nothing stored".
-
-    Headless machines (containers, CI, servers) routinely have no keyring backend at
-    all, so keyring raises NoKeyringError on every read. That state must read as "not
-    signed in" — ASSEMBLYAI_API_KEY still works there — never as a crash.
-    """
-    try:
-        return keyring.get_password(KEYRING_SERVICE, username)
-    except keyring.errors.KeyringError:
-        return None
-
-
 def get_api_key(profile: str) -> str | None:
-    return _keyring_get(profile)
+    return keyring_store.get_secret(profile)
 
 
 def keyring_usable() -> bool:
-    """True when the OS keyring backend can be read.
+    """True when the OS keyring backend can be read (delegates to ``keyring_store``).
 
-    Headless boxes (containers, CI, bare SSH) often have no keyring backend, so
-    ``keyring`` raises on every access. ``assembly doctor`` uses this to tell a user with
-    no key that the *backend* is the problem — and to recommend ASSEMBLYAI_API_KEY —
-    rather than pointing at `assembly login`, whose browser flow also can't persist there.
+    Kept on ``config`` as part of the auth-state facade: ``assembly doctor``/`login`
+    call it to tell a user with no key that the *backend* is the problem — and to
+    recommend ASSEMBLYAI_API_KEY — rather than pointing at the browser flow, which
+    also can't persist on a keyring-less box.
     """
-    try:
-        keyring.get_password(KEYRING_SERVICE, "__probe__")
-    except keyring.errors.KeyringError:
-        return False
-    return True
+    return keyring_store.usable()
 
 
 def get_profile_env(profile: str) -> str | None:
@@ -304,10 +250,7 @@ def set_profile_email(profile: str, email: str) -> None:
 
 
 def clear_api_key(profile: str) -> None:
-    # KeyringError, not just PasswordDeleteError: with no backend at all (headless
-    # boxes) delete raises NoKeyringError, and "nothing stored" is already the goal.
-    with contextlib.suppress(keyring.errors.KeyringError):
-        keyring.delete_password(KEYRING_SERVICE, profile)
+    keyring_store.delete_secret(profile)
 
 
 SESSION_KEYRING_PREFIX = "session"  # keyring username: f"{prefix}:{profile}"
@@ -324,7 +267,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
     key. The JWT is short-lived; an expired session surfaces as NotAuthenticated.
     """
     validate_profile(profile)
-    _keyring_set(
+    keyring_store.set_secret(
         _session_username(profile),
         StoredSession(jwt=session_jwt, token=session_token).model_dump_json(),
     )
@@ -334,7 +277,7 @@ def set_session(profile: str, *, session_jwt: str, session_token: str, account_i
 
 def get_session(profile: str) -> dict[str, str] | None:
     """The stored {'jwt', 'token'} for a profile, or None if absent/corrupt."""
-    raw = _keyring_get(_session_username(profile))
+    raw = keyring_store.get_secret(_session_username(profile))
     if not raw:
         return None
     try:
@@ -351,8 +294,7 @@ def get_account_id(profile: str) -> int | None:
 
 
 def clear_session(profile: str) -> None:
-    with contextlib.suppress(keyring.errors.KeyringError):
-        keyring.delete_password(KEYRING_SERVICE, _session_username(profile))
+    keyring_store.delete_secret(_session_username(profile))
     with config_lock.locked():
         cfg = _load()
         prof = cfg.profiles.get(profile)
@@ -385,8 +327,8 @@ def persist_login(
     # writer can't slip a change between the snapshot and a rollback dump. The set_*
     # helpers re-take the same (reentrant) lock, so the nesting is safe.
     with config_lock.locked():
-        prior_api_key = _keyring_get(profile)
-        prior_session = _keyring_get(_session_username(profile))
+        prior_api_key = keyring_store.get_secret(profile)
+        prior_session = keyring_store.get_secret(_session_username(profile))
         prior_cfg = _load()
         done = False
         try:
@@ -404,8 +346,8 @@ def persist_login(
             done = True
         finally:
             if not done:
-                _keyring_restore(profile, prior_api_key)
-                _keyring_restore(_session_username(profile), prior_session)
+                keyring_store.restore_secret(profile, prior_api_key)
+                keyring_store.restore_secret(_session_username(profile), prior_session)
                 _dump(prior_cfg)
 
 

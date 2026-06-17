@@ -33,6 +33,9 @@ DEFAULTS = DubOptions(
     out=None,
     video=False,
     download_sections=[],
+    from_stdin=False,
+    concurrency=4,
+    force=False,
 )
 
 SAMPLE_RATE = 100  # tiny rate keeps the timeline byte math exact and readable

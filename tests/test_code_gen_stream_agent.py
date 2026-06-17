@@ -112,7 +112,7 @@ def test_gateway_options_defaults_interval_to_per_turn():
     # per-turn (0.0); pins the default so it can't drift.
     opts = code_gen.gateway_options(["summarize"], "m", 100)
     assert opts is not None
-    assert opts["interval"] == 0.0
+    assert opts.get("interval") == 0.0
 
 
 def test_stream_show_code_defaults_interval_when_absent():

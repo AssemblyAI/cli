@@ -51,15 +51,28 @@ SPEC = command_registry.CommandModuleSpec(
                 "Choose the output file",
                 "assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4",
             ),
+            (
+                "Dub a whole folder into German",
+                'find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de',
+            ),
         ]
     ),
 )
 def dub(
     ctx: typer.Context,
-    media: str = typer.Argument(
-        ...,
+    media: str | None = typer.Argument(
+        None,
         help="Audio/video to dub: a local file (the video stream is copied untouched), "
-        "or a YouTube/media-page URL (downloaded via yt-dlp)",
+        "or a YouTube/media-page URL (downloaded via yt-dlp). Omit with --from-stdin",
+    ),
+    from_stdin: bool = options.batch_from_stdin_option(
+        "Batch mode: read media paths/URLs from stdin, one per line (composes with find/ls output)"
+    ),
+    concurrency: int = options.batch_concurrency_option(
+        "How many sources to dub at once in batch mode"
+    ),
+    force: bool = options.batch_force_option(
+        "Batch mode: re-dub sources whose output file already exists"
     ),
     lang: str = typer.Option(
         ...,
@@ -127,9 +140,13 @@ def dub(
     time slice of it). Streaming TTS only exists in the sandbox
     today — run it as 'assembly --sandbox dub' (--sandbox goes before the
     subcommand). Requires ffmpeg.
+
+    Batch mode: pipe one path/URL per line with --from-stdin to dub many sources
+    concurrently (--concurrency). Each writes its own <name>.dub.<lang><ext>; a
+    re-run skips sources whose output already exists (--force re-does them).
     """
     opts = dub_exec.DubOptions(
-        media=media,
+        media=media or "",
         language=lang,
         source_language=source_lang,
         transcript_id=transcript_id,
@@ -139,5 +156,8 @@ def dub(
         out=out,
         video=video,
         download_sections=download_sections,
+        from_stdin=from_stdin,
+        concurrency=concurrency,
+        force=force,
     )
     run_with_options(ctx, dub_exec.run_dub, opts, json=json_out)

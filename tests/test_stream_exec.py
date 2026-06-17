@@ -17,6 +17,7 @@ import pytest
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.stream import _exec as stream_exec
+from aai_cli.commands.stream import _save as stream_save
 from aai_cli.core import config
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.streaming.turn_presets import TurnDetectionPreset
@@ -130,7 +131,7 @@ def test_save_targets_are_immutable():
     # later step can't quietly retarget a file mid-run.
     field_name = "audio"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        setattr(stream_exec.SaveTargets(), field_name, Path("x.wav"))
+        setattr(stream_save.SaveTargets(), field_name, Path("x.wav"))
 
 
 # --- batch streaming (--from-stdin) validation -----------------------------

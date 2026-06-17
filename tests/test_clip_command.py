@@ -83,6 +83,9 @@ def test_clip_parses_every_flag_into_options(monkeypatch, tmp_path):
         snap=False,
         out_dir=tmp_path,
         video=True,
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )
     assert captured["json_mode"] is True
 
@@ -104,6 +107,9 @@ def test_clip_defaults_when_only_media_is_given(monkeypatch):
         snap=True,
         out_dir=None,
         video=False,
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )
     assert captured["json_mode"] is False
 

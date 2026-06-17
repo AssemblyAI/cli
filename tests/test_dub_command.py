@@ -62,6 +62,9 @@ def test_defaults_map_to_options(captured_run):
         out=None,
         video=False,
         download_sections=[],
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )
 
 
@@ -108,4 +111,7 @@ def test_every_flag_maps_to_options(captured_run):
         out=Path("dubbed.mp4"),
         video=True,
         download_sections=["*0:00-15:00", "intro"],
+        from_stdin=False,
+        concurrency=4,
+        force=False,
     )

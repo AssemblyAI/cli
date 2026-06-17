@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from aai_cli.core import config
+from aai_cli.core import config, keyring_store
 from aai_cli.core.errors import CLIError, NotAuthenticated
 
 
@@ -29,8 +29,8 @@ def test_resolve_falls_back_to_keyring():
 
 
 def test_get_session_rejects_non_string_jwt():
-    config.keyring.set_password(
-        config.KEYRING_SERVICE,
+    keyring_store.keyring.set_password(
+        keyring_store.KEYRING_SERVICE,
         config._session_username("default"),
         json.dumps({"jwt": 123, "token": "tok"}),
     )
@@ -66,7 +66,7 @@ def test_set_api_key_keyring_failure_raises_clean_error(monkeypatch):
     def boom(*_a, **_k):
         raise keyring.errors.PasswordSetError("denied by keychain")
 
-    monkeypatch.setattr(config.keyring, "set_password", boom)
+    monkeypatch.setattr(keyring_store.keyring, "set_password", boom)
     with pytest.raises(CLIError) as exc:
         config.set_api_key("default", "sk_abc")
     assert "keyring" in exc.value.message.lower()
@@ -84,7 +84,7 @@ def test_keyring_usable_false_when_backend_raises(monkeypatch):
     def boom(*_a, **_k):
         raise keyring.errors.NoKeyringError("no backend on this headless box")
 
-    monkeypatch.setattr(config.keyring, "get_password", boom)
+    monkeypatch.setattr(keyring_store.keyring, "get_password", boom)
     assert config.keyring_usable() is False
 
 
@@ -94,7 +94,7 @@ def test_set_session_keyring_failure_raises_clean_error(monkeypatch):
     def boom(*_a, **_k):
         raise keyring.errors.PasswordSetError("denied by keychain")
 
-    monkeypatch.setattr(config.keyring, "set_password", boom)
+    monkeypatch.setattr(keyring_store.keyring, "set_password", boom)
     with pytest.raises(CLIError) as exc:
         config.set_session("default", session_jwt="j", session_token="t", account_id=1)
     assert "keyring" in exc.value.message.lower()
@@ -123,14 +123,14 @@ def _fail_on_session_write(monkeypatch):
     """
     import keyring.errors
 
-    real_set = config.keyring.set_password
+    real_set = keyring_store.keyring.set_password
 
     def selective(service, username, secret):
         if username.startswith(config.SESSION_KEYRING_PREFIX + ":"):
             raise keyring.errors.PasswordSetError("denied by keychain")
         return real_set(service, username, secret)
 
-    monkeypatch.setattr(config.keyring, "set_password", selective)
+    monkeypatch.setattr(keyring_store.keyring, "set_password", selective)
 
 
 def test_persist_login_rolls_back_to_empty_when_session_write_fails(monkeypatch):
