@@ -109,6 +109,12 @@ assembly clip "https://www.youtube.com/watch?v=UF8uR6Z6KLc" --video \
 assembly caption video.mp4 --chars-per-caption 24 --font-size 28
 ```
 
+`clip`, `dub`, and `caption` each batch a piped list too: `--from-stdin` reads one path/URL per line and processes them concurrently (`--concurrency`), skipping sources whose output already exists so a re-run only does what's left (`--force` redoes them):
+
+```sh
+find talks -name "*.mp4" | assembly caption --from-stdin --concurrency 3
+```
+
 **Keep a live to-do list from your mic** — `llm -f` re-runs the prompt over the growing transcript, updating in place:
 
 ```sh

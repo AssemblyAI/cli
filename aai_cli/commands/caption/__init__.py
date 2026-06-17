@@ -36,15 +36,28 @@ SPEC = command_registry.CommandModuleSpec(
                 "assembly caption talk.mp4 --chars-per-caption 32 --font-size 28",
             ),
             ("Choose the output file", "assembly caption talk.mp4 --out talk-captioned.mp4"),
+            (
+                "Caption a whole folder of videos",
+                'find clips -name "*.mp4" | assembly caption --from-stdin',
+            ),
         ]
     ),
 )
 def caption(
     ctx: typer.Context,
-    media: str = typer.Argument(
-        ...,
+    media: str | None = typer.Argument(
+        None,
         help="Video to caption: a local file, or a YouTube/media-page URL "
-        "(the full video is downloaded via yt-dlp)",
+        "(the full video is downloaded via yt-dlp). Omit with --from-stdin",
+    ),
+    from_stdin: bool = options.batch_from_stdin_option(
+        "Batch mode: read video paths/URLs from stdin, one per line (composes with find/ls output)"
+    ),
+    concurrency: int = options.batch_concurrency_option(
+        "How many sources to caption at once in batch mode"
+    ),
+    force: bool = options.batch_force_option(
+        "Batch mode: re-caption sources whose output file already exists"
     ),
     transcript_id: str | None = typer.Option(
         None,
@@ -77,12 +90,19 @@ def caption(
     the audio stream is copied untouched. A YouTube/media-page URL is
     downloaded first (always the full video); its output lands in --out or
     the current directory.
+
+    Batch mode: pipe one path/URL per line with --from-stdin to caption many
+    sources concurrently (--concurrency). Each writes its own <name>.captioned<ext>;
+    a re-run skips sources whose output already exists (--force re-does them).
     """
     opts = caption_exec.CaptionOptions(
-        media=media,
+        media=media or "",
         transcript_id=transcript_id,
         chars_per_caption=chars_per_caption,
         font_size=font_size,
         out=out,
+        from_stdin=from_stdin,
+        concurrency=concurrency,
+        force=force,
     )
     run_with_options(ctx, caption_exec.run_caption, opts, json=json_out)

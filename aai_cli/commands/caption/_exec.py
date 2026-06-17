@@ -15,6 +15,7 @@ captions are burned into it.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import tempfile
 from dataclasses import dataclass
@@ -23,10 +24,10 @@ from pathlib import Path
 import assemblyai as aai
 from rich.markup import escape
 
-from aai_cli.app import mediafile
+from aai_cli.app import batch, mediafile
 from aai_cli.app.context import AppState
 from aai_cli.core import client
-from aai_cli.core.errors import CLIError
+from aai_cli.core.errors import CLIError, UsageError, mutually_exclusive
 from aai_cli.ui import output
 
 
@@ -36,12 +37,16 @@ class CaptionOptions:
     run_command resolves it into the ``json_mode`` argument)."""
 
     # The raw source as typed: a local path, or a downloadable media-page URL
-    # (a pathlib.Path would collapse the "//" in "https://").
+    # (a pathlib.Path would collapse the "//" in "https://"). Empty in batch mode,
+    # where the sources arrive on stdin (--from-stdin) instead of as the argument.
     media: str
     transcript_id: str | None
     chars_per_caption: int | None
     font_size: int | None
     out: Path | None
+    from_stdin: bool
+    concurrency: int
+    force: bool
 
 
 def default_out_path(media: Path) -> Path:
@@ -128,10 +133,82 @@ def _fetch_srt(transcript: object, opts: CaptionOptions, *, json_mode: bool, qui
 
 
 def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> None:
-    """Execute one `assembly caption` invocation from already-parsed flags."""
+    """Execute `assembly caption`: one source, or a stdin batch (`--from-stdin`)."""
+    sources = batch.stdin_sources(opts.media, from_stdin=opts.from_stdin)
+    if sources is not None:
+        _reject_batch_conflicts(opts)
+        batch.run_batch(
+            sources,
+            worker=_caption_worker(opts, state, force=opts.force, json_mode=json_mode),
+            concurrency=opts.concurrency,
+            summary_verb="Captioned",
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        return
+    if not opts.media:
+        raise UsageError(
+            "Pass a video file or URL to caption, or --from-stdin to read a list from stdin.",
+            suggestion="e.g. assembly caption talk.mp4",
+        )
+    result = _caption_one(opts, state, json_mode=json_mode)
+    output.emit(
+        result.payload, lambda _: output.success(escape(result.summary)), json_mode=json_mode
+    )
+
+
+def _reject_batch_conflicts(opts: CaptionOptions) -> None:
+    """Single-result flags that can't span a many-source batch."""
+    mutually_exclusive(
+        ("--out", opts.out),
+        ("--from-stdin", True),
+        suggestion="In batch mode each source gets its own <name>.captioned<ext>; drop --out.",
+    )
+    mutually_exclusive(
+        ("--transcript-id/-t", opts.transcript_id),
+        ("--from-stdin", True),
+        suggestion="A transcript id can't apply to many sources; drop -t in batch mode.",
+    )
+
+
+def _caption_worker(
+    opts: CaptionOptions, state: AppState, *, force: bool, json_mode: bool
+) -> batch.Worker:
+    """A per-source worker for the batch runner: skip a source whose default output
+    already exists (unless ``--force``), else caption it with spinners silenced."""
+    quiet_state = dataclasses.replace(state, quiet=True)
+
+    def worker(source: str) -> batch.SourceResult:
+        if not force and (existing := _existing_output(source)) is not None:
+            return batch.SourceResult(
+                payload={"source": source, "out": str(existing)},
+                summary=f"{existing} exists",
+                status="skipped",
+            )
+        return _caption_one(
+            dataclasses.replace(opts, media=source), quiet_state, json_mode=json_mode
+        )
+
+    return worker
+
+
+def _existing_output(source: str) -> Path | None:
+    """The default output for a local ``source`` when it already exists (so batch mode
+    skips it), else ``None`` — a URL (output name isn't known until download) or a
+    source with no prior output, both of which are processed."""
+    if "://" in source:
+        return None
+    out = default_out_path(Path(source))
+    return out if out.exists() else None
+
+
+def _caption_one(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> batch.SourceResult:
+    """Resolve ``opts.media`` to a local video, caption it, and return the result.
+
+    A media-page URL is downloaded once — always the full video, since the
+    captions are burned into it.
+    """
     ffmpeg = mediafile.require_ffmpeg("burn captions into video")
-    # A media-page URL is downloaded once — always the full video, since the
-    # captions are burned into it.
     with mediafile.resolve_media_source(
         opts.media,
         "caption",
@@ -148,10 +225,10 @@ def run_caption(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> No
             opts.out, media, downloaded=downloaded, namer=default_out_path
         )
         mediafile.validate_out(out, media)
-        _caption_and_emit(opts, media, out, ffmpeg, state, json_mode=json_mode)
+        return _caption_build(opts, media, out, ffmpeg, state, json_mode=json_mode)
 
 
-def _caption_and_emit(
+def _caption_build(
     opts: CaptionOptions,
     media: Path,
     out: Path,
@@ -159,8 +236,8 @@ def _caption_and_emit(
     state: AppState,
     *,
     json_mode: bool,
-) -> None:
-    """Caption an already-local video file into ``out`` and report the result."""
+) -> batch.SourceResult:
+    """Caption an already-local video file into ``out``; the result as plain data."""
     transcript = mediafile.resolve_transcript(
         state.resolve_api_key(),
         opts.transcript_id,
@@ -184,8 +261,4 @@ def _caption_and_emit(
         "transcript_id": transcript_id,
         "captions": captions,
     }
-    output.emit(
-        payload,
-        lambda _: output.success(f"{escape(str(out))}  {captions} caption(s) burned in"),
-        json_mode=json_mode,
-    )
+    return batch.SourceResult(payload=payload, summary=f"{out}  {captions} caption(s) burned in")

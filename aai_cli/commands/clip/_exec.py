@@ -19,6 +19,7 @@ is re-encoded into its own file with ffmpeg.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,12 +27,12 @@ from types import SimpleNamespace
 
 from rich.markup import escape
 
-from aai_cli.app import mediafile
+from aai_cli.app import batch, mediafile
 from aai_cli.app.context import AppState
 from aai_cli.commands.clip import _select as clip_select
 from aai_cli.commands.clip._select import Segment
 from aai_cli.core import jsonshape, llm, stdio, youtube
-from aai_cli.core.errors import CLIError, UsageError
+from aai_cli.core.errors import CLIError, UsageError, mutually_exclusive
 from aai_cli.ui import output
 
 
@@ -41,7 +42,8 @@ class ClipOptions:
     resolves it into the ``json_mode`` argument)."""
 
     # The raw source as typed: a local path, or a downloadable media-page URL
-    # (a pathlib.Path would collapse the "//" in "https://").
+    # (a pathlib.Path would collapse the "//" in "https://"). Empty in batch mode,
+    # where the sources arrive on stdin (--from-stdin) instead of as the argument.
     media: str
     transcript_id: str | None
     speakers: list[str]
@@ -54,6 +56,9 @@ class ClipOptions:
     snap: bool
     out_dir: Path | None
     video: bool
+    from_stdin: bool
+    concurrency: int
+    force: bool
 
 
 def _llm_segments(
@@ -311,14 +316,104 @@ class WrittenClip:
 
 
 def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
-    """Execute one `assembly clip` invocation from already-parsed flags."""
+    """Execute `assembly clip`: one source, or a stdin batch (`--from-stdin`)."""
     _validate_out_dir(opts.out_dir)
     _validate_selection(opts)
-    youtube.validate_video_flag(opts.media, video=opts.video)
     explicit = [clip_select.parse_range(value) for value in opts.ranges]
     ffmpeg = mediafile.require_ffmpeg("cut media")
-    # A media-page URL is downloaded once — the audio track by default, the full
-    # video with --video so the clips carry video too — and clipped locally.
+    sources = batch.stdin_sources(opts.media, from_stdin=opts.from_stdin)
+    if sources is not None:
+        _reject_batch_conflicts(opts)
+        batch.run_batch(
+            sources,
+            worker=_clip_worker(
+                opts, explicit, ffmpeg, state, force=opts.force, json_mode=json_mode
+            ),
+            concurrency=opts.concurrency,
+            summary_verb="Clipped",
+            json_mode=json_mode,
+            quiet=state.quiet,
+        )
+        return
+    if not opts.media:
+        raise UsageError(
+            "Pass a media file or URL to clip, or --from-stdin to read a list from stdin.",
+            suggestion="e.g. assembly clip meeting.mp4 --speaker A",
+        )
+    payload, written = _clip_one(opts, explicit, ffmpeg, state, json_mode=json_mode)
+    output.emit(
+        payload,
+        lambda _: "\n".join(clip.human_line() for clip in written),
+        json_mode=json_mode,
+    )
+
+
+def _reject_batch_conflicts(opts: ClipOptions) -> None:
+    """Flags that can't span a many-source batch (a single transcript id can't)."""
+    mutually_exclusive(
+        ("--transcript-id/-t", opts.transcript_id),
+        ("--from-stdin", True),
+        suggestion="A transcript id can't apply to many sources; drop -t in batch mode.",
+    )
+
+
+def _clip_worker(
+    opts: ClipOptions,
+    explicit: list[Segment],
+    ffmpeg: str,
+    state: AppState,
+    *,
+    force: bool,
+    json_mode: bool,
+) -> batch.Worker:
+    """A per-source worker for the batch runner: skip a source whose clips already
+    exist (unless ``--force``), else cut it with spinners silenced."""
+    quiet_state = dataclasses.replace(state, quiet=True)
+
+    def worker(source: str) -> batch.SourceResult:
+        if not force and _clips_exist(source, opts.out_dir):
+            return batch.SourceResult(
+                payload={"source": source}, summary="clips exist", status="skipped"
+            )
+        payload, written = _clip_one(
+            dataclasses.replace(opts, media=source),
+            explicit,
+            ffmpeg,
+            quiet_state,
+            json_mode=json_mode,
+        )
+        return batch.SourceResult(payload=payload, summary=f"{len(written)} clip(s)")
+
+    return worker
+
+
+def _clips_exist(source: str, out_dir: Path | None) -> bool:
+    """Whether a local ``source`` already has clip files (so batch mode skips it).
+
+    URLs never match (the clipped stem isn't known until download), so they're
+    always processed.
+    """
+    if "://" in source:
+        return False
+    src = Path(source)
+    directory = out_dir if out_dir is not None else src.parent
+    return any(directory.glob(f"{src.stem}.clip*{src.suffix}"))
+
+
+def _clip_one(
+    opts: ClipOptions,
+    explicit: list[Segment],
+    ffmpeg: str,
+    state: AppState,
+    *,
+    json_mode: bool,
+) -> tuple[dict[str, object], list[WrittenClip]]:
+    """Resolve ``opts.media`` to a local file and cut its clips; the payload + clips.
+
+    A media-page URL is downloaded once — the audio track by default, the full
+    video with --video so the clips carry video too — and clipped locally.
+    """
+    youtube.validate_video_flag(opts.media, video=opts.video)
     with mediafile.resolve_media_source(
         opts.media,
         "clip",
@@ -336,10 +431,10 @@ def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
         out_dir: Path | None = opts.out_dir
         if downloaded and out_dir is None:
             out_dir = Path.cwd()
-        _cut_and_emit(opts, media, out_dir, explicit, ffmpeg, state, json_mode=json_mode)
+        return _cut(opts, media, out_dir, explicit, ffmpeg, state, json_mode=json_mode)
 
 
-def _cut_and_emit(
+def _cut(
     opts: ClipOptions,
     media: Path,
     out_dir: Path | None,
@@ -348,8 +443,8 @@ def _cut_and_emit(
     state: AppState,
     *,
     json_mode: bool,
-) -> None:
-    """Select, cut, and report the clips for an already-local media file."""
+) -> tuple[dict[str, object], list[WrittenClip]]:
+    """Select and cut the clips for an already-local media file; the payload + clips."""
     matched, transcript_id = _transcript_segments(opts, media, state, json_mode=json_mode)
     segments = clip_select.merge_segments([*matched, *explicit], opts.padding)
     if opts.snap:
@@ -368,8 +463,4 @@ def _cut_and_emit(
         "transcript_id": transcript_id,
         "clips": [clip.payload() for clip in written],
     }
-    output.emit(
-        payload,
-        lambda _: "\n".join(clip.human_line() for clip in written),
-        json_mode=json_mode,
-    )
+    return payload, written

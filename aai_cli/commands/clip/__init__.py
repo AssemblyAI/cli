@@ -54,15 +54,28 @@ SPEC = command_registry.CommandModuleSpec(
                 "Pad each clip and collect them in a directory",
                 "assembly clip meeting.mp4 --speaker A --padding 0.5 --out-dir clips",
             ),
+            (
+                "Clip a whole folder by speaker",
+                'find calls -name "*.mp4" | assembly clip --from-stdin --speaker A',
+            ),
         ]
     ),
 )
 def clip(
     ctx: typer.Context,
-    media: str = typer.Argument(
-        ...,
+    media: str | None = typer.Argument(
+        None,
         help="Audio/video to cut clips from: a local file, or a YouTube/media-page "
-        "URL (audio downloaded via yt-dlp)",
+        "URL (audio downloaded via yt-dlp). Omit with --from-stdin",
+    ),
+    from_stdin: bool = options.batch_from_stdin_option(
+        "Batch mode: read media paths/URLs from stdin, one per line (composes with find/ls output)"
+    ),
+    concurrency: int = options.batch_concurrency_option(
+        "How many sources to clip at once in batch mode"
+    ),
+    force: bool = options.batch_force_option(
+        "Batch mode: re-clip sources that already have clip files"
     ),
     transcript_id: str | None = typer.Option(
         None,
@@ -134,9 +147,13 @@ def clip(
     using ffmpeg (which must be installed). A YouTube/media-page source is
     downloaded first (audio only, or the full video with --video); its clips
     land in --out-dir or the current directory.
+
+    Batch mode: pipe one path/URL per line with --from-stdin to clip many sources
+    concurrently (--concurrency), reusing the same selectors for each. A re-run
+    skips sources that already have clip files (--force re-cuts them).
     """
     opts = clip_exec.ClipOptions(
-        media=media,
+        media=media or "",
         transcript_id=transcript_id,
         speakers=speaker,
         search=search,
@@ -148,5 +165,8 @@ def clip(
         snap=snap,
         out_dir=out_dir,
         video=video,
+        from_stdin=from_stdin,
+        concurrency=concurrency,
+        force=force,
     )
     run_with_options(ctx, clip_exec.run_clip, opts, json=json_out)
