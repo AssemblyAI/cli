@@ -67,6 +67,20 @@ def cli_skill_installed() -> bool:
     return (cli_skill_dir() / "SKILL.md").exists()
 
 
+def bundled_cli_skill_doc() -> str:
+    """SKILL.md text for the aai-cli skill bundled in the wheel.
+
+    Force-included in the wheel (see ``[tool.hatch.build.targets.wheel]`` artifacts), so
+    it is always present in an installed package — a missing file is a packaging bug and
+    surfaces as the generic internal error. Lets a command inject the skill as agent
+    context without first running `assembly setup` (it ships with the CLI).
+    """
+    from importlib import resources
+
+    skill = resources.files("aai_cli") / "skills" / CLI_SKILL_NAME / "SKILL.md"
+    return skill.read_text(encoding="utf-8")
+
+
 def missing_components() -> list[str]:
     """Names of the `assembly setup install` artifacts that are not yet installed.
 

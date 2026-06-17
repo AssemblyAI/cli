@@ -10,16 +10,24 @@ the gateway is three things: ``OPENAI_API_BASE`` = the active env's gateway base
 ``OPENAI_API_KEY`` = the resolved key, and an ``openai/<model>`` model name. aider
 applies edits by parsing its own text edit-formats out of plain chat completions, so
 it needs nothing from the gateway beyond what `assembly llm` already uses.
+
+aider has no MCP/skills system, so the AssemblyAI coding-agent skills are injected the
+aider-native way instead: their SKILL.md text is written into one read-only conventions
+file passed via ``--read`` (the aai-cli skill ships in the wheel; the assemblyai skill is
+included when `assembly setup` has installed it on disk).
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import typer
 
+from aai_cli.app import coding_agent
 from aai_cli.app.context import AppState
 from aai_cli.core import env, environments
 from aai_cli.core.errors import missing_dependency
@@ -61,6 +69,34 @@ def _render_launching(data: dict[str, str]) -> str:
     return f"Launching aider via the AssemblyAI LLM Gateway (model {data['model']})."
 
 
+def _gather_skill_docs() -> list[tuple[str, str]]:
+    """``(skill name, SKILL.md text)`` for each AssemblyAI skill to feed aider as context.
+
+    The aai-cli skill ships in the wheel, so it is always injected; the assemblyai skill
+    is injected only when `assembly setup` has installed it on disk (it isn't bundled).
+    Only each skill's SKILL.md is included — auxiliary reference files are left out.
+    """
+    docs: list[tuple[str, str]] = [("aai-cli", coding_agent.bundled_cli_skill_doc())]
+    assemblyai = coding_agent.skill_dir() / "SKILL.md"
+    if assemblyai.is_file():
+        docs.append(("assemblyai", assemblyai.read_text(encoding="utf-8")))
+    return docs
+
+
+def _write_conventions(docs: list[tuple[str, str]], dest_dir: Path) -> Path:
+    """Write the gathered skills into one aider read-only conventions file."""
+    parts = [
+        "# AssemblyAI conventions (auto-injected by `assembly code`)",
+        "",
+        "Read-only reference for working with AssemblyAI in this project.",
+    ]
+    for name, text in docs:
+        parts += ["", f"## {name}", "", text]
+    path = dest_dir / "assemblyai-conventions.md"
+    path.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    return path
+
+
 def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
     """Wire aider to the gateway and hand it the terminal in the current directory."""
     _require_aider()
@@ -72,7 +108,18 @@ def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
         json_mode=json_mode,
     )
     child = env.child_env(OPENAI_API_BASE=gateway, OPENAI_API_KEY=api_key)
-    argv = [AIDER_BIN, "--model", f"openai/{opts.model}", *opts.files]
-    result = subprocess.run(argv, env=child, check=False)
+    # The conventions file only needs to outlive the aider process (which we block on),
+    # so a temp dir keeps it out of the user's project and cleans up on exit.
+    with tempfile.TemporaryDirectory() as tmp:
+        conventions = _write_conventions(_gather_skill_docs(), Path(tmp))
+        argv = [
+            AIDER_BIN,
+            "--model",
+            f"openai/{opts.model}",
+            *opts.files,
+            "--read",
+            str(conventions),
+        ]
+        result = subprocess.run(argv, env=child, check=False)
     if result.returncode:
         raise typer.Exit(code=result.returncode)

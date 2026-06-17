@@ -385,8 +385,9 @@
    Starts aider pointed at the gateway (it edits your files over plain chat
    completions), so the same paid-plan key that runs `assembly llm` powers a
    coding
-   agent in your terminal. Requires aider to be installed (`uv tool install
-   aider-chat`).
+   agent in your terminal. The AssemblyAI skills are injected as read-only
+   context so
+   the agent knows the API. Requires aider (`uv tool install aider-chat`).
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   files      [FILES]...  Files or directories to open in the agent           │

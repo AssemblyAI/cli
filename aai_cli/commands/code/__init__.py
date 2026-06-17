@@ -41,7 +41,8 @@ def code(
 
     Starts aider pointed at the gateway (it edits your files over plain chat
     completions), so the same paid-plan key that runs `assembly llm` powers a coding
-    agent in your terminal. Requires aider to be installed (`uv tool install aider-chat`).
+    agent in your terminal. The AssemblyAI skills are injected as read-only context so
+    the agent knows the API. Requires aider (`uv tool install aider-chat`).
     """
     opts = code_exec.CodeOptions(model=model, files=tuple(files or ()))
     run_with_options(ctx, code_exec.run_code, opts, json=json_out)
