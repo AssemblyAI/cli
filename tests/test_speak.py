@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import signal
+from typing import Literal
 
 import pytest
 from typer.testing import CliRunner
@@ -23,11 +24,28 @@ def _fake_key(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "test-key")
 
 
+class _FakePlayer:
+    """A no-op stand-in for audio.PcmPlayer: records the chunks fed to it instead
+    of opening a real output device (none exists on a headless CI box)."""
+
+    def __init__(self) -> None:
+        self.fed: list[tuple[bytes, int]] = []
+
+    def __enter__(self) -> _FakePlayer:
+        return self
+
+    def __exit__(self, *_exc: object) -> Literal[False]:
+        return False
+
+    def feed(self, pcm: bytes, sample_rate: int) -> None:
+        self.fed.append((pcm, sample_rate))
+
+
 @pytest.fixture
 def fake_synthesize(monkeypatch: pytest.MonkeyPatch):
     calls: dict[str, object] = {}
 
-    def _fake(api_key, cfg, *, connect=None, on_warning=None):
+    def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
         calls["api_key"] = api_key
         calls["cfg"] = cfg
         return session.SpeakResult(
@@ -49,21 +67,49 @@ def test_production_env_is_rejected_with_sandbox_hint():
     assert "before the command" in " ".join(result.output.split())
 
 
-def test_plays_audio_by_default(monkeypatch, fake_synthesize):
-    played: dict = {}
-    monkeypatch.setattr(
-        "aai_cli.commands.speak._exec.audio.play_pcm",
-        lambda pcm, rate, **_: played.update(pcm=pcm, rate=rate),
-    )
+def test_plays_audio_by_default(monkeypatch):
+    # Default (no --out): each audio frame is streamed to the speaker as it arrives,
+    # via PcmPlayer.feed, rather than buffered and played at the end. The fake
+    # synthesize plays one frame back through the wired on_audio callback.
+    player = _FakePlayer()
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.PcmPlayer", lambda **_: player)
+    captured: list[session.SpeakConfig] = []
+
+    def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
+        captured.append(cfg)
+        assert on_audio is not None
+        on_audio(b"\x01\x02\x03\x04", 24000)  # the server emitting one Audio frame
+        return session.SpeakResult(
+            pcm=b"\x01\x02\x03\x04", sample_rate=24000, audio_duration_seconds=0.1
+        )
+
+    monkeypatch.setattr(session, "synthesize", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "Hello there"])
     assert result.exit_code == 0
-    assert played == {"pcm": b"\x01\x02\x03\x04", "rate": 24000}
-    assert fake_synthesize["cfg"].text == "Hello there"
+    # The frame reached the speaker (chunk + the server's reported rate), proving the
+    # on_audio=player.feed wiring — not a buffered play_pcm at the end.
+    assert player.fed == [(b"\x01\x02\x03\x04", 24000)]
+    assert captured[0].text == "Hello there"
     # No --voice given -> single-voice path falls back to the default "jane".
-    assert fake_synthesize["cfg"].voice == "jane"
+    assert captured[0].voice == "jane"
     # Human summary (stderr) reports the default "played" disposition.
     assert "played" in result.stderr
     assert "saved to" not in result.stderr
+
+
+def test_single_voice_server_warning_is_surfaced(monkeypatch):
+    # A Warning frame during single-voice synthesis is surfaced through the wired
+    # on_warning callback; in --json mode it ships as its own {"warning": …} object.
+    def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
+        assert on_warning is not None
+        on_warning("slow synthesis")
+        return session.SpeakResult(pcm=b"", sample_rate=24000, audio_duration_seconds=0.0)
+
+    monkeypatch.setattr(session, "synthesize", _fake)
+    result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--json"])
+    assert result.exit_code == 0
+    warning = next(json.loads(line) for line in result.stderr.splitlines() if line.startswith("{"))
+    assert warning["warning"] == "slow synthesis"
 
 
 def test_out_writes_wav_and_does_not_play(monkeypatch, tmp_path, fake_synthesize):

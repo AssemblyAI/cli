@@ -145,11 +145,22 @@ def _speak_single(
     cfg = session.SpeakConfig(
         text=text, voice=voice, language=opts.language, sample_rate=opts.sample_rate
     )
-    with output.status("Synthesizing speech…", json_mode=json_mode, quiet=quiet):
-        result = session.synthesize(
-            api_key, cfg, on_warning=lambda m: output.emit_warning(m, json_mode=json_mode)
-        )
-    _output_audio(result, opts.out)
+
+    def on_warning(message: str) -> None:
+        output.emit_warning(message, json_mode=json_mode)
+
+    if opts.out is None:
+        # Play each audio frame as it arrives so speech starts on the first frame
+        # rather than after the whole text is synthesized (the long --url page case).
+        with (
+            audio.PcmPlayer() as player,
+            output.status("Synthesizing speech…", json_mode=json_mode, quiet=quiet),
+        ):
+            result = session.synthesize(api_key, cfg, on_audio=player.feed, on_warning=on_warning)
+    else:
+        with output.status("Synthesizing speech…", json_mode=json_mode, quiet=quiet):
+            result = session.synthesize(api_key, cfg, on_warning=on_warning)
+        audio.write_wav(opts.out, result.pcm, result.sample_rate)
     _emit_single(result, cfg, opts.out, json_mode=json_mode)
 
 
