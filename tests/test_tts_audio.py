@@ -118,6 +118,80 @@ def test_play_pcm_reraises_cli_error_unchanged(monkeypatch: pytest.MonkeyPatch):
     assert "Could not play audio" not in excinfo.value.message
 
 
+def test_pcm_player_opens_device_once_and_drains_on_exit():
+    # Streaming playback: the device is opened lazily on the FIRST feed and reused
+    # for every later chunk (one "start", not one per chunk), then drained (stop)
+    # and closed on a normal exit. The factory is called exactly once.
+    streams: list[FakeStream] = []
+
+    def _factory(rate: int) -> FakeStream:
+        streams.append(FakeStream())
+        return streams[-1]
+
+    with audio.PcmPlayer(stream_factory=_factory) as player:
+        player.feed(b"\x01\x02", 24000)
+        player.feed(b"\x03\x04", 24000)
+    assert len(streams) == 1  # opened once, not re-opened per chunk
+    stream = streams[0]
+    assert stream.events == ["start", "write", "write", "stop", "close"]
+    assert stream.written == b"\x01\x02\x03\x04"
+
+
+def test_pcm_player_uses_the_first_feeds_sample_rate():
+    captured: dict[str, int] = {}
+
+    def _factory(rate: int) -> FakeStream:
+        captured["rate"] = rate
+        return FakeStream()
+
+    with audio.PcmPlayer(stream_factory=_factory) as player:
+        player.feed(b"\x01\x02", 16000)
+    assert captured["rate"] == 16000  # the device is opened at the reported rate
+
+
+def test_pcm_player_feed_writes_in_bounded_chunks():
+    stream = FakeStream()
+    pcm = bytes(range(256)) * 40  # 10240 bytes > 2 * chunk
+    with audio.PcmPlayer(stream_factory=lambda rate: stream) as player:
+        player.feed(pcm, 24000)
+    assert [len(c) for c in stream.writes] == [4096, 4096, 2048]
+    assert b"".join(stream.writes) == pcm
+
+
+def test_pcm_player_aborts_and_propagates_when_a_chunk_fails():
+    # An error while playing a chunk maps to a clean CLIError; the device is aborted
+    # (not drained) and still closed.
+    stream = FakeStream(raise_on_write=RuntimeError("device fell over"))
+    with pytest.raises(CLIError, match="Could not play audio"):
+        with audio.PcmPlayer(stream_factory=lambda rate: stream) as player:
+            player.feed(b"\x01\x02", 24000)
+    assert "abort" in stream.events
+    assert "stop" not in stream.events
+    assert stream.events[-1] == "close"
+
+
+def test_pcm_player_without_any_feed_is_a_clean_noop():
+    # No audio ever arrived (e.g. an empty synthesis): the device was never opened,
+    # so a clean exit touches nothing and does not crash.
+    opened: list[int] = []
+
+    def _factory(rate: int) -> FakeStream:
+        opened.append(rate)
+        return FakeStream()
+
+    with audio.PcmPlayer(stream_factory=_factory):
+        pass
+    assert opened == []  # the factory was never called
+
+
+def test_pcm_player_propagates_a_body_error_when_never_opened():
+    # An error before the first feed (device never opened) still propagates — the
+    # context manager never swallows it.
+    with pytest.raises(ValueError, match="boom"):
+        with audio.PcmPlayer(stream_factory=lambda rate: FakeStream()):
+            raise ValueError("boom")
+
+
 def test_default_output_stream_opens_raw_int16_mono_stream(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 
