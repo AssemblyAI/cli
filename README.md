@@ -321,10 +321,11 @@ ffmpeg -i talk.mp4 -f wav - | assembly transcribe -
 git log --oneline -30 | assembly llm "write release notes grouped by feature/fix"
 ```
 
-Pass files straight to `llm` instead of building the pipeline yourself — each is read, prefixed with a `===== name =====` header, and concatenated as the prompt's context (so the answer can cite which note it came from):
+Pass files — or a whole directory — straight to `llm` instead of building the pipeline yourself — each is read, prefixed with a `===== name =====` header, and concatenated as the prompt's context (so the answer can cite which note it came from). A directory argument recurses for its `.md`/`.txt` files:
 
 ```sh
 assembly llm "answer using only these notes: who owns the deploy?" notes/*.md
+assembly llm "summarize the key decisions" transcripts/
 ```
 
 ## 📚 Documentation
