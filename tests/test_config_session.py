@@ -1,4 +1,4 @@
-from aai_cli.core import config
+from aai_cli.core import config, keyring_store
 
 
 def test_set_and_get_session_roundtrips():
@@ -26,5 +26,5 @@ def test_clear_session_is_safe_when_absent():
 def test_get_session_returns_none_for_corrupt_blob():
     import keyring
 
-    keyring.set_password(config.KEYRING_SERVICE, "session:default", "not-json")
+    keyring.set_password(keyring_store.KEYRING_SERVICE, "session:default", "not-json")
     assert config.get_session("default") is None
