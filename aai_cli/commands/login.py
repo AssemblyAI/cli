@@ -75,7 +75,15 @@ def login(
 
     def body(state: AppState, json_mode: bool) -> None:
         profile = state.resolve_profile()
-        env = environments.active().name
+        # A bare `assembly login` defaults to production rather than inheriting the
+        # profile's previously-stored env: signing in again must not silently re-target
+        # a sandbox the profile happened to be bound to. An explicit --env/--sandbox (or
+        # AAI_ENV) still selects the environment — and becomes the one this login binds
+        # the profile to. The browser OAuth + AMS flow reads environments.active(), so
+        # re-set the process global here, not just the stored/reported name.
+        env_obj = environments.resolve(state.env, None)
+        environments.set_active(env_obj)
+        env = env_obj.name
         # `api_key is not None` (not truthiness): --api-key "" combined with
         # --with-api-key must report the conflict, not fall through to stdin.
         mutually_exclusive(

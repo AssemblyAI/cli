@@ -7,8 +7,11 @@ All commands accept `--json`.
 ## `assembly login` — authenticate
 
 Opens a browser OAuth flow and stores the resulting CLI API key in the OS
-keyring, bound to the active `--env`; pass `--api-key` to authenticate
-non-interactively (CI).
+keyring. Login defaults to **production** — unlike other commands it does not
+inherit the profile's previously-stored env, so a bare re-login never silently
+re-targets a sandbox; pass `--sandbox`/`--env` (or set `AAI_ENV`) to sign in
+elsewhere, and that becomes the env the profile is bound to. Pass `--api-key`
+to authenticate non-interactively (CI).
 
 Key options:
 
