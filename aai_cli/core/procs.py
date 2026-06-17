@@ -28,3 +28,13 @@ def spawn_detached(cli_args: list[str], *, disable_env_var: str) -> None:
         start_new_session=True,
         env={**os.environ, disable_env_var: "1"},
     )
+
+
+def run_foreground(argv: list[str]) -> int:
+    """Run ``argv`` to completion in the foreground and return its exit status.
+
+    The opposite of ``spawn_detached``: stdio is *inherited*, so the child's output
+    streams straight to the terminal. Backs the interactive update prompt, where the
+    user watches the brew/uv/curl installer run. S603 is ignored project-wide.
+    """
+    return subprocess.run(argv, check=False).returncode
