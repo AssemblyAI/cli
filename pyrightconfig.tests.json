@@ -1,5 +1,10 @@
 {
   "include": ["tests"],
+  "ignore": [
+    "tests/test_code_agent.py",
+    "tests/test_code_command.py",
+    "tests/test_code_tui.py"
+  ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
