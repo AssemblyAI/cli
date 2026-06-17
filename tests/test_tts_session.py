@@ -180,6 +180,38 @@ def test_synthesize_stops_on_flush_done_when_audio_omits_is_final():
     assert ws.closed is True
 
 
+def test_synthesize_streams_each_chunk_to_on_audio_as_it_arrives():
+    # The whole point of streaming playback: every decoded Audio chunk is handed to
+    # on_audio(chunk, sample_rate) the moment it arrives — one call per frame, in
+    # order, with the server's reported rate — while the full PCM is still returned.
+    ws = FakeWS(
+        [
+            _begin_frame(sample_rate=16000),
+            _audio_chunk(b"\x01\x02"),
+            _audio_chunk(b"\x03\x04"),
+            _flush_done_frame(),
+        ]
+    )
+    streamed: list[tuple[bytes, int]] = []
+    result = session.synthesize(
+        "k",
+        session.SpeakConfig(text="hi"),
+        connect=lambda *a, **k: ws,
+        on_audio=lambda chunk, rate: streamed.append((chunk, rate)),
+    )
+    # One call per Audio frame, in arrival order, each carrying the Begin sample rate.
+    assert streamed == [(b"\x01\x02", 16000), (b"\x03\x04", 16000)]
+    # The buffered result is unchanged — streaming is additive, not a replacement.
+    assert result.pcm == b"\x01\x02\x03\x04"
+
+
+def test_synthesize_without_on_audio_still_returns_full_pcm():
+    # The callback is optional: omitting it must not change the buffered result.
+    ws = FakeWS([_begin_frame(), _audio_frame(b"\x01\x02", final=True)])
+    result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
+    assert result.pcm == b"\x01\x02"
+
+
 def test_synthesize_reads_sample_rate_from_begin_configuration():
     # A non-default rate in the Begin frame flows into the result and its duration,
     # proving the rate is read from Begin.configuration rather than hardcoded.
