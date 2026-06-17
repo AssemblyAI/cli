@@ -59,9 +59,10 @@ structured so independent changes stay in disjoint files. Keep it that way:
   declaration (see `aai_cli/AGENTS.md`). If you find yourself editing a shared
   list to add a command, you're fighting the convention.
 - **Dependency changes are not part of feature PRs.** `uv.lock` is the one file
-  two branches can never merge cleanly; add or bump dependencies in a
+  two branches can never merge cleanly; add, bump, or remove dependencies in a
   dedicated, single-purpose PR so feature branches don't collide in the
-  lockfile.
+  lockfile. Dropping a dependency still rewrites `uv.lock`, so a removal gets
+  its own PR too — even when it rides along with deleting the code that used it.
 - **Land through the merge queue.** The diff-scoped gates compare against
   `origin/main`, which moves constantly; two individually-green PRs can be
   jointly red. PRs should merge via GitHub's merge queue (a repository setting)
