@@ -3,10 +3,11 @@
 Two real concurrency surfaces exist in the CLI, and neither was directly exercised:
 
 1. ``core.config`` persists ``config.toml`` with a temp-file + atomic ``os.replace``
-   (`config._dump`), the guard that lets concurrent CLI invocations and readers never
-   observe a truncated file. These tests pin that atomicity guarantee under real thread
-   contention, and document the flip side it deliberately does *not* solve (lost updates,
-   since there is no cross-process lock).
+   (`config._dump`) so a reader never observes a truncated file, and serializes its
+   read-modify-write under a cross-process ``filelock`` (`config._write_lock`) so two
+   concurrent ``assembly`` processes can't lose each other's updates. These tests pin
+   both: the at-rest atomicity under thread contention, and that distinct concurrent
+   updates all survive (no last-writer-wins clobber).
 2. ``streaming.StreamSession.on_turn`` runs on the SDK reader thread, and the
    ``--system-audio`` path drives two of those threads at once (`session._drive`). The
    turn write is serialized by ``_callback_lock`` so two sources can't interleave a
@@ -19,7 +20,7 @@ import threading
 import types
 from concurrent.futures import ThreadPoolExecutor
 
-from aai_cli.core import config
+from aai_cli.core import config, config_lock
 
 # --- config.toml: atomic writes vs. lost updates -----------------------------------
 
@@ -56,26 +57,56 @@ def test_config_concurrent_writers_always_leave_a_valid_file(tmp_config):
     assert sorted(p.name for p in tmp_config.iterdir()) == ["config.toml"]  # no temp leftover
 
 
-def test_concurrent_read_modify_write_drops_an_interleaved_update(tmp_config):
-    # Documents a known limitation, not a bug fixed here: config.py has no cross-process
-    # write lock (a filelock would add a dependency; fcntl is POSIX-only), so two
-    # `assembly` processes that each load -> mutate -> dump concurrently lose one update —
-    # last writer wins. Atomic os.replace prevents *corruption*, never *lost updates*.
-    # If config.py ever grows a write lock, this assertion is the one that should flip.
-    config.set_profile_env("seed", "sandbox000")
-    proc_a = config._load()  # both "processes" observe the same starting config
-    proc_b = config._load()
+def test_concurrent_writers_do_not_lose_distinct_updates(tmp_config):
+    # The cross-process write lock makes the read-modify-write atomic, so many threads
+    # each adding a DISTINCT profile through the public API all survive. Without the lock
+    # the interleaved RMW would drop some (two writers _load the same config; the second
+    # _dump clobbers the first's new profile) — this is the lost-update race the lock closes.
+    workers = 16
+    barrier = threading.Barrier(workers)  # release all writers at once for max contention
 
-    proc_a.profiles["alpha"] = config.Profile(env="sandbox111")
-    config._dump(proc_a)  # process A commits its new profile
+    def add(i: int) -> None:
+        barrier.wait()
+        config.set_profile_env(f"p{i:02d}", f"sandbox{i:03d}")
 
-    proc_b.profiles["beta"] = config.Profile(env="sandbox222")
-    config._dump(proc_b)  # process B, unaware of A's write, clobbers it
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for f in [pool.submit(add, i) for i in range(workers)]:
+            f.result()
 
-    names = set(config.list_profiles())
-    assert "beta" in names  # the last writer's update survives
-    assert "alpha" not in names  # A's interleaved update was silently lost
-    assert "seed" in names  # present in both snapshots, so it persists either way
+    # Every concurrent update is present with its own value — none clobbered.
+    assert config.list_profiles() == {f"p{i:02d}": f"sandbox{i:03d}" for i in range(workers)}
+
+
+def test_write_lock_targets_the_config_dir_lock_file(tmp_config):
+    # The lock guards config.toml via a sibling lock file in the same dir.
+    assert config_lock.write_lock().lock_file == str(tmp_config / "config.toml.lock")
+
+
+def test_write_lock_rebuilds_when_config_dir_changes(monkeypatch, tmp_path):
+    # The instance is cached per path, but a changed config dir (the suite repoints it per
+    # test) must yield a fresh lock pointed at the new dir — not the stale one.
+    first = config_lock.write_lock()
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    monkeypatch.setattr(config, "config_dir", lambda: moved)
+    second = config_lock.write_lock()
+    assert second is not first
+    assert second.lock_file == str(moved / "config.toml.lock")
+
+
+def test_update_holds_the_write_lock_during_the_dump(tmp_config, monkeypatch):
+    # The mutate -> dump runs inside the lock: while _dump executes, the lock is held.
+    # (Drop the `with locked()` and is_locked would be False here.)
+    seen: dict[str, bool] = {}
+    real_dump = config._dump
+
+    def spy_dump(cfg):
+        seen["locked"] = config_lock.write_lock().is_locked
+        return real_dump(cfg)
+
+    monkeypatch.setattr(config, "_dump", spy_dump)
+    config.set_profile_env("default", "sandbox000")
+    assert seen["locked"] is True
 
 
 # --- streaming: on_turn serialization under _callback_lock -------------------------

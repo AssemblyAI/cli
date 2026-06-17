@@ -34,8 +34,8 @@ between layers is enforced — higher may import lower, never the reverse:
   `config_builder`, `environments`, `env`, `errors`, `llm`, `telemetry`,
   `debuglog`, `remotefs`, `sync_stt`, `hotkey`, `ws`, `youtube`, `wer`,
   `argscan`, `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`,
-  `choices`. Contract 4 also forbids `rich` here, so "no Rich below the UI
-  layer" is structural.
+  `choices`, `locking`, `config_lock`. Contract 4 also forbids `rich` here, so
+  "no Rich below the UI layer" is structural.
 
 Three things sit *beside* the stack, intentionally unlisted in the layers
 contract:
@@ -139,7 +139,7 @@ heavily-reworked commands with long bodies; small commands keep the inline
 ### Cross-cutting state (resolution order matters)
 
 - **`app/context.py`** — `AppState` (profile, env) is attached to the Typer context in the root `@app.callback()`. `run_command` is the standard command wrapper.
-- **`core/config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring** (`KEYRING_SERVICE = "assemblyai-cli"`), never in a dotfile. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history.
+- **`core/config.py`** — profiles persisted in `config.toml` (via `platformdirs`); the **API key lives only in the OS keyring** (`KEYRING_SERVICE = "assemblyai-cli"`), never in a dotfile. Key resolution order: `--api-key` flag (validation paths only) → `ASSEMBLYAI_API_KEY` env → keyring. **Run commands deliberately expose no `--api-key` flag** so keys can't leak into `ps`/shell history. Every `config.toml` write is a read-modify-write (`_load` → mutate → `_dump`): `_dump` is a temp-file + atomic `os.replace` (a reader never sees a torn file), and the whole RMW runs under a cross-process `filelock` (`config_lock.update`/`.locked`, built on `core/locking.py`) so two concurrent `assembly` processes can't lose each other's updates. Readers stay lock-free. The lock helpers live in `config_lock.py` (not `config.py`) only to keep the latter under the file-length gate; reuse one cached `FileLock` per path so nested writers (`persist_login`) stay reentrant.
 - **`core/environments.py`** — a frozen `Environment` (api_base, streaming_host, llm_gateway_base, ams_base, stytch_*). `DEFAULT_ENV` is **`production`**; use `--sandbox` (or `--env sandbox000` / `AAI_ENV`) to target the sandbox. The active environment is a process-global set once at startup; precedence: `--env` → `AAI_ENV` → profile's stored env → default. A credential is only valid against the environment that minted it.
 - **`core/client.py`** — thin wrappers over the `assemblyai` SDK (`transcribe`, `list_transcripts`, `stream_audio`, etc.). It normalizes SDK exceptions: auth failures become a single clean `auth_failure()` `CLIError`; everything else becomes `APIError`. New SDK calls should follow this try/except shape.
 - **`core/errors.py`** — the `CLIError` hierarchy (each with `error_type` + `exit_code`). `ui/output.py` emits errors to **stderr**; stdout stays clean for pipelines. `--json` switches to machine-readable output; it is never auto-enabled — `output.resolve_json()` deliberately keeps human text the default even when piped or agent-run.
