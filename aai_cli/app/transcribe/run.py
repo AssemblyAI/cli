@@ -10,12 +10,13 @@ from __future__ import annotations
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import assemblyai as aai
 from rich.markup import escape
 
 from aai_cli import code_gen
+from aai_cli.app import transform as transform_delivery
 from aai_cli.app.context import AppState
 from aai_cli.app.transcribe import render as transcribe_render
 from aai_cli.app.transcribe import sources as transcribe_sources
@@ -24,14 +25,6 @@ from aai_cli.code_gen.transcribe import render as render_transcribe_code
 from aai_cli.core import choices, client, config_builder, jsonshape, llm, remotefs, stdio, youtube
 from aai_cli.core.errors import UsageError
 from aai_cli.ui import output
-
-
-def render_transform_steps(d: dict[str, Any]) -> str:
-    """Human view of chained LLM-Gateway steps: the lone output, or each step labeled."""
-    steps = d["transform"]["steps"]
-    if len(steps) == 1:
-        return str(steps[0]["output"])
-    return "\n\n".join(f"Step {i} — {s['prompt']}:\n{s['output']}" for i, s in enumerate(steps, 1))
 
 
 def out_payload(
@@ -163,11 +156,8 @@ def deliver_result(
             model=transform.model,
             max_tokens=transform.max_tokens,
         )
-        output.emit(
-            client.transcript_summary(transcript)
-            | {"transform": {"model": transform.model, "steps": steps}},
-            render_transform_steps,
-            json_mode=json_mode,
+        transform_delivery.emit_transform(
+            transcript, model=transform.model, steps=steps, json_mode=json_mode
         )
         return
 

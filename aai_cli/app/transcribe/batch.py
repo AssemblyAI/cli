@@ -34,6 +34,7 @@ from rich.markup import escape
 
 from aai_cli.app.transcribe import run as transcribe_exec
 from aai_cli.app.transcribe.sources import SIDECAR_SUFFIX, URL_PREFIXES
+from aai_cli.app.transform import emit_reduce
 from aai_cli.core import client, jsonshape, llm, remotefs
 from aai_cli.core.errors import CLIError, NotAuthenticated
 from aai_cli.ui import output, theme
@@ -317,17 +318,19 @@ def _reduce_input(record: dict[str, object]) -> str:
     return ""
 
 
-def _gather_reduce_inputs(items: list[_Item]) -> str:
-    """Concatenate each completed/skipped source's reduce input under a header."""
-    blocks: list[str] = []
+def _gather_reduce_inputs(items: list[_Item]) -> list[tuple[str, str]]:
+    """Each completed/skipped source's ``(source, reduce-input-text)`` contribution.
+
+    Failed/queued sources are dropped; empty-text contributions are kept and filtered
+    by `emit_reduce`, which owns the "nothing to reduce" policy.
+    """
+    contributions: list[tuple[str, str]] = []
     for item in items:
         if item.status not in ("completed", "skipped"):
             continue
         record = resumable_record(sidecar_path(item.source), digest=None)
-        text = _reduce_input(record) if record is not None else ""
-        if text:
-            blocks.append(f"### Source: {item.source}\n{text}")
-    return "\n\n".join(blocks)
+        contributions.append((item.source, _reduce_input(record) if record is not None else ""))
+    return contributions
 
 
 def _run_reduce(
@@ -338,34 +341,16 @@ def _run_reduce(
     json_mode: bool,
 ) -> None:
     """Run the --llm-reduce chain once over every source's result; print to stdout."""
-    combined = _gather_reduce_inputs(items)
-    if not combined:
-        # Every source had empty transcript text and no --llm output, so there is
-        # nothing to aggregate — skip the (billable) Gateway call rather than prompt
-        # it over an empty transcript and print a meaningless answer to stdout.
-        output.emit_warning(
-            "Nothing to reduce: no transcript text across sources.", json_mode=json_mode
-        )
-        return
-    result = llm.run_chain(
+    emit_reduce(
         api_key,
-        transform.reduce_prompts,
-        transcript_text=combined,
+        _gather_reduce_inputs(items),
+        prompts=transform.reduce_prompts,
         model=transform.model,
         max_tokens=transform.max_tokens,
+        block_label="Source",
+        empty_noun="sources",
+        json_mode=json_mode,
     )
-    if json_mode:
-        # Additive NDJSON event after the per-source {"type":"result"} records.
-        output.emit_ndjson(
-            {
-                "type": "reduce",
-                "model": transform.model,
-                "prompts": transform.reduce_prompts,
-                "output": result,
-            }
-        )
-    else:
-        output.emit_text(result)
 
 
 def run_batch(
