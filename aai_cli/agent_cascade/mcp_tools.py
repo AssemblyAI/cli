@@ -8,11 +8,11 @@ conversation reach real tools (clock, weather, memory, a notes folder, …), bri
 
 Two entry points feed the brain:
 
+- :func:`default_servers` returns a curated, zero/low-auth set (time, fetch, memory,
+  filesystem, weather) that every live session loads out of the box.
 - :func:`parse_mcp_config` reads one or more standard ``mcpServers`` JSON files — the
   exact shape Claude Desktop / Claude Code use — so an existing config drops in
-  unchanged.
-- :func:`demo_servers` returns a curated, zero/low-auth set (time, fetch, memory,
-  filesystem, weather) behind ``--demo-tools`` for a reliable on-stage demo.
+  unchanged and can extend or override the defaults.
 
 Launching a server is **best-effort per server**: a missing ``npx``/``uvx`` or an
 offline run skips that one server (the others still load) rather than aborting the
@@ -42,8 +42,8 @@ ServerSpec = Mapping[str, object]
 Loader = Callable[[str, "Connection"], "list[BaseTool]"]
 
 
-def demo_servers(filesystem_root: Path) -> dict[str, ServerSpec]:
-    """The curated ``--demo-tools`` server set: zero/low-auth, fast, speakable answers.
+def default_servers(filesystem_root: Path) -> dict[str, ServerSpec]:
+    """The curated server set every live session loads: zero/low-auth, fast, speakable.
 
     Every entry is a published reference server runnable with no API key:
     ``time``/``fetch`` over ``uvx`` (PyPI), ``memory``/``filesystem`` over ``npx`` (npm),
