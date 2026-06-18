@@ -6,6 +6,8 @@ import keyring
 import pytest
 from keyring.backend import KeyringBackend
 
+from aai_cli.ui import theme
+
 # Captured at import, before `isolate_env` strips ASSEMBLYAI_API_KEY from the
 # environment. The e2e suite uses this real key to drive the CLI as a subprocess;
 # unit tests still run fully isolated.
@@ -110,6 +112,24 @@ def pin_timezone(monkeypatch):
     monkeypatch.setenv("TZ", "America/New_York")
     if hasattr(time, "tzset"):
         time.tzset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_theme_style_cache():
+    # Rich caches each Style's rendered ANSI in Style._ansi on first render and does NOT
+    # key that cache on the color system (rich/style.py: `_make_ansi_codes` fills
+    # `self._ansi` once, and `render` returns it thereafter). The `theme.THEME` styles are
+    # module globals shared by every console make_console builds, so whichever console
+    # renders a given `aai.*` style *first* pins its color depth for the rest of the
+    # process: a test that renders e.g. aai.error through a no-color/standard console
+    # poisons the shared Style, and a later test asserting the *truecolor* ANSI
+    # (test_setup_render / test_transcripts color tests) gets the stale 16-color downgrade.
+    # That's an order-dependent flake pytest-randomly flips green/red by seed (and it bit
+    # both Linux and the Windows matrix). Reset the per-Style cache before each test so
+    # every test renders the theme from a pristine state. Same hermeticity rationale as the
+    # rendering fixtures above; `_environ={}` alone can't fix it (the cache isn't env-keyed).
+    for style in theme.THEME.styles.values():
+        style._ansi = None
 
 
 @pytest.fixture(autouse=True)
