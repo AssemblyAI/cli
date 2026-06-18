@@ -1,6 +1,7 @@
 import signal
 import sys
 import types
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
@@ -14,6 +15,8 @@ from aai_cli.core.microphone import (
     _device_default_rate,
     _ignore_interrupt_during_shutdown,
     _install_shutdown_interrupt_guard,
+    _max_input_channels,
+    _RawInputStream,
     _SoundDeviceMic,
     import_sounddevice,
     resample_pcm16,
@@ -39,6 +42,29 @@ class _FakeRawStream:
 
     def close(self):
         self.closed = True
+
+
+class _FakeSoundDevice(types.ModuleType):
+    """A typed `_SoundDeviceModule` double: scripted device info + a RawInputStream factory.
+
+    Subclasses `ModuleType` so it can be slotted into `sys.modules` via `monkeypatch.setitem`,
+    and conforms to the protocol so it needs no escape hatches at the call sites that pass it
+    to the real `_max_input_channels` / `_default_mic_stream` code under test.
+    """
+
+    def __init__(
+        self,
+        info: Mapping[str, object],
+        raw_input_stream: Callable[..., _RawInputStream] = _FakeRawStream,
+    ) -> None:
+        super().__init__("sounddevice")
+        self._info = info
+        self.RawInputStream = raw_input_stream
+
+    def query_devices(
+        self, device: int | None = None, kind: str | None = None
+    ) -> Mapping[str, object]:
+        return self._info
 
 
 def test_audio_missing_error_has_reinstall_suggestion():
@@ -307,19 +333,24 @@ def test_sounddevice_mic_downmixes_stereo_to_mono():
     assert next(iter(mic)) == b"\x00\x02"
 
 
-def _fake_sd_rejecting_mono(max_input_channels: int, opened: list[int]) -> Any:
+def _fake_sd_rejecting_mono(max_input_channels: int, opened: list[int]) -> _FakeSoundDevice:
     """A sounddevice whose mono open fails with -9998; query reports ``max_input_channels``."""
 
-    def raw_input_stream(**kwargs):
-        opened.append(kwargs["channels"])
-        if kwargs["channels"] == 1:
+    def raw_input_stream(*, channels: int, **kwargs: object) -> _RawInputStream:
+        opened.append(channels)
+        if channels == 1:
             raise OSError("Error opening RawInputStream: Invalid number of channels [-9998]")
-        return _FakeStereoStream(**kwargs)
+        return _FakeStereoStream(channels=channels, **kwargs)
 
-    fake_sd: Any = types.ModuleType("sounddevice")
-    fake_sd.RawInputStream = raw_input_stream
-    fake_sd.query_devices = lambda device, kind: {"max_input_channels": max_input_channels}
-    return fake_sd
+    return _FakeSoundDevice({"max_input_channels": max_input_channels}, raw_input_stream)
+
+
+def test_max_input_channels_defaults_to_zero_when_absent_or_non_int():
+    # A device dict missing the key, or carrying a non-int value, must read as 0 channels (so
+    # the caller raises the actionable no-input error) rather than a truthy bogus count.
+    assert _max_input_channels(_FakeSoundDevice({}), None) == 0  # key absent -> 0, not get()'s
+    assert _max_input_channels(_FakeSoundDevice({"max_input_channels": None}), None) == 0  # non-int
+    assert _max_input_channels(_FakeSoundDevice({"max_input_channels": 2}), None) == 2  # int passes
 
 
 def test_default_mic_stream_falls_back_to_stereo_downmix(monkeypatch):
@@ -341,6 +372,7 @@ def test_default_mic_stream_zero_input_channels_raises_permission_error(monkeypa
         _default_mic_stream(sample_rate=16000, device=None)
     assert opened == [1]  # only the mono attempt; no pointless stereo retry
     assert exc.value.error_type == "mic_error"
+    assert exc.value.exit_code == 1
     assert "no input channels" in exc.value.message.lower()
     assert exc.value.suggestion is not None
     assert "Microphone" in exc.value.suggestion

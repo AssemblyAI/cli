@@ -55,6 +55,13 @@ def test_summarize_result_shows_short_output_in_full() -> None:
     assert summarize_result("   ") == ""  # whitespace-only collapses to empty
 
 
+def test_summarize_result_counts_a_single_hidden_line() -> None:
+    # Boundary: exactly one line over the preview budget still gets a tail (guards the
+    # `hidden_lines > 0` threshold against a `> 1` slip that would silently drop it).
+    out = summarize_result("\n".join(f"line {i}" for i in range(5)))  # 4 shown, 1 hidden
+    assert out.endswith("(+1 more lines)")
+
+
 def test_summarize_result_clips_one_huge_line_with_char_count() -> None:
     out = summarize_result("z" * 500)  # a single line longer than the char budget
     assert "+200 more chars" in out  # exact: 500 minus the 300-char budget = 200 hidden
