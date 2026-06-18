@@ -44,21 +44,21 @@ class AssistantMessage(Static):
 
     def __init__(self) -> None:
         super().__init__()
-        self._text = ""
+        self._tokens: list[str] = []  # accumulate tokens, not str +=, to avoid quadratic growth
 
     @property
     def text(self) -> str:
         """The reply text streamed so far (used to finalize a cancelled generation)."""
-        return self._text
+        return "".join(self._tokens)
 
     def stream(self, delta: str) -> None:
         """Append a streamed token and repaint as plain text (cheap; no per-token markdown)."""
-        self._text += delta
-        self.update(Text(self._text))
+        self._tokens.append(delta)
+        self.update(Text(self.text))
 
     def finalize(self, text: str) -> None:
         """Replace the streamed text with the authoritative reply, rendered as Markdown."""
-        self._text = text
+        self._tokens = [text]
         self.update(Markdown(text))
 
 
