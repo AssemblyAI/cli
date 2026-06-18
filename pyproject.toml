@@ -84,6 +84,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=3.1.0",
     "pyperclip>=1.11.0",
     "langchain-text-splitters>=1.0.0",
+    "langchain-firecrawl>=0.1.0",
 ]
 
 [project.urls]
@@ -189,6 +190,10 @@ filterwarnings = [
     # PydanticDeprecatedSince20 errors under the `error` rule above. Ignore that specific
     # third-party deprecation so it doesn't fail unrelated tests.
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+    # firecrawl-py's pydantic models define fields named "json" (shadowing BaseModel.json),
+    # which pydantic flags with a UserWarning at import. It's third-party and harmless to us
+    # (we never touch those models), so ignore that one message under the `error` rule.
+    'ignore:Field name .* shadows an attribute in parent:UserWarning',
 ]
 markers = [
     "e2e: real-API end-to-end tests that drive the CLI (need ASSEMBLYAI_API_KEY; skip otherwise)",
@@ -442,6 +447,10 @@ max-statements = 40
 # BLE001: connecting to the docs MCP server is best-effort — any failure (blocked host,
 # offline, transport error) degrades to "no docs tools", so a broad except is the shape.
 "aai_cli/code_agent/docs_mcp.py" = ["BLE001"]
+# BLE001: launching each live-agent MCP server is best-effort — any failure (npx/uvx
+# missing, offline host, transport error) skips just that server so one broken tool
+# can't sink a live session, so a broad per-server except is the right shape.
+"aai_cli/agent_cascade/mcp_tools.py" = ["BLE001"]
 # BLE001: a turn must never crash the TUI/REPL — any agent/gateway failure is caught and
 # surfaced as an ErrorText event so the user can simply retry.
 "aai_cli/code_agent/session.py" = ["BLE001"]

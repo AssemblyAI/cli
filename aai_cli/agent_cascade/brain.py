@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
-from aai_cli.code_agent.web_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.core import debuglog
 
 if TYPE_CHECKING:
@@ -73,8 +73,8 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     """The spoken-capability phrases backed by an actually-present tool.
 
     Derived from the resolved tool names so the prompt never advertises a capability the
-    agent can't perform: web search is present only with a ``TAVILY_API_KEY``, and the docs
-    tools are best-effort (absent when the docs host is unreachable).
+    agent can't perform: web search is present only with a ``FIRECRAWL_API_KEY``, and the
+    docs tools are best-effort (absent when the docs host is unreachable).
     """
     names = {tool.name for tool in tools}
     capabilities: list[str] = []
@@ -87,15 +87,35 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     return capabilities
 
 
-def build_system_prompt(persona: str, *, tools: Sequence[BaseTool]) -> str:
+def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
+    """The spoken-capability phrase for user-configured MCP tools, listing them by name.
+
+    The deepagents graph already shows the model each tool's schema, so this only has to
+    name the tools so the guidance doesn't claim "no external tools" when MCP tools are
+    bound — and so the model knows to reach for them.
+    """
+    names = sorted(tool.name for tool in extra_tools)
+    if not names:
+        return None
+    return f"use your connected tools ({', '.join(names)})"
+
+
+def build_system_prompt(
+    persona: str, *, tools: Sequence[BaseTool], extra_tools: Sequence[BaseTool] = ()
+) -> str:
     """The live agent's system prompt: the user's persona plus tool guidance.
 
-    The guidance is tailored to ``tools`` so the model is only told about capabilities it
-    actually has — advertising a missing tool (web search without a ``TAVILY_API_KEY``) made
-    the agent announce an action it then couldn't take, leaving the turn hanging with no
-    answer. With no tools at all the model is told to answer from its own knowledge.
+    The guidance is tailored to the bound tools so the model is only told about
+    capabilities it actually has — advertising a missing tool (web search without a
+    ``FIRECRAWL_API_KEY``) made the agent announce an action it then couldn't take, leaving
+    the turn hanging with no answer. ``tools`` are the built-in legs (web search, URL
+    fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
+    generically by name. With no tools at all the model answers from its own knowledge.
     """
     capabilities = _tool_capabilities(tools)
+    extra = _extra_capability(extra_tools)
+    if extra is not None:
+        capabilities.append(extra)
     if not capabilities:
         return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
     guidance = (
@@ -113,12 +133,12 @@ def build_live_tools() -> list[BaseTool]:
     All three are reused from the coding agent's tool modules. Unlike there they are
     *not* approval-gated — a spoken turn can't wait for a keyboard confirmation, so the
     live agent only gets read-only tools and runs them automatically. Web search is
-    present only when ``TAVILY_API_KEY`` is set; the docs MCP is best-effort (an empty
+    present only when ``FIRECRAWL_API_KEY`` is set; the docs MCP is best-effort (an empty
     list when the host is unreachable), so neither blocks a session.
     """
     from aai_cli.code_agent.docs_mcp import load_docs_tools
     from aai_cli.code_agent.fetch_tool import build_fetch_tool
-    from aai_cli.code_agent.web_search import build_web_search_tool
+    from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
     tools: list[BaseTool] = [build_fetch_tool()]
     search = build_web_search_tool()
@@ -129,27 +149,36 @@ def build_live_tools() -> list[BaseTool]:
 
 
 def build_graph(
-    api_key: str, config: CascadeConfig, *, tools: Sequence[BaseTool] | None = None
+    api_key: str,
+    config: CascadeConfig,
+    *,
+    tools: Sequence[BaseTool] | None = None,
+    mcp_tools: Sequence[BaseTool] | None = None,
 ) -> CompiledAgent:
     """Compile the deepagents graph for one live session over the gateway model.
 
     Reuses the coding agent's gateway-bound ``ChatOpenAI`` (so the live agent can only
     ever reach AssemblyAI), threading the cascade's ``--max-tokens``/``--llm-config``
-    through it. ``tools`` defaults to :func:`build_live_tools`; tests pass an explicit
-    (possibly empty) list to skip the network-touching docs probe.
+    through it. ``tools`` defaults to :func:`build_live_tools`; ``mcp_tools`` defaults to
+    the tools of the servers in ``config.mcp_servers``. The two are kept apart so the
+    system prompt advertises the built-in legs and the MCP tools differently, but the
+    model is bound to both. Tests pass explicit (possibly empty) lists to skip the
+    network-touching docs/MCP probes.
     """
     from deepagents import create_deep_agent
 
+    from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
     from aai_cli.code_agent.model import build_model
 
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
     )
-    resolved = build_live_tools() if tools is None else list(tools)
+    builtin = build_live_tools() if tools is None else list(tools)
+    extra = load_mcp_tools(config.mcp_servers) if mcp_tools is None else list(mcp_tools)
     return create_deep_agent(
         model=model,
-        tools=resolved,
-        system_prompt=build_system_prompt(config.system_prompt, tools=resolved),
+        tools=builtin + extra,
+        system_prompt=build_system_prompt(config.system_prompt, tools=builtin, extra_tools=extra),
     )
 
 

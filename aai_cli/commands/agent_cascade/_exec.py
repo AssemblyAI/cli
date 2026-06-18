@@ -8,7 +8,7 @@ constructing options directly rather than round-tripping through ``CliRunner``.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,12 +18,13 @@ import typer
 from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import engine, voices
+from aai_cli.agent_cascade import engine, mcp_tools, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, errors, llm, signals
+from aai_cli.code_agent import firecrawl_search
+from aai_cli.core import choices, client, config_builder, env, errors, llm, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.sources import FileSource
@@ -73,6 +74,8 @@ class AgentCascadeOptions:
     # Text-to-speech: language named, any other query param via --tts-config.
     language: str | None
     tts_config: tuple[str, ...]
+    # Tools: extra standard mcpServers JSON config files, on top of the default set.
+    mcp_config: tuple[Path, ...]
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
 
@@ -115,6 +118,31 @@ def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
             raise UsageError(_RESERVED_TTS_KEYS[key])
         extra[key] = value
     return extra
+
+
+def _warn_without_web_search(*, json_mode: bool) -> None:
+    """Warn that web search is off unless a ``FIRECRAWL_API_KEY`` is set to enable it.
+
+    The other default tools (URL fetch, AssemblyAI docs, and the MCP servers) need no
+    key; only Firecrawl web search does, so its absence is the one worth flagging up front.
+    """
+    if not env.get(firecrawl_search.FIRECRAWL_API_KEY_ENV):
+        output.emit_warning(
+            "Web search is off — set FIRECRAWL_API_KEY to enable the agent's web search tool.",
+            json_mode=json_mode,
+        )
+
+
+def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
+    """The MCP servers for this run: the curated default set overlaid with any --mcp-config
+    files, so an explicit config can extend the defaults or override one by name.
+
+    The default filesystem server is rooted at the working directory, scoping its file
+    access to one folder.
+    """
+    servers: dict[str, Mapping[str, object]] = dict(mcp_tools.default_servers(Path.cwd()))
+    servers.update(mcp_tools.parse_mcp_config(mcp_config))
+    return servers
 
 
 def _open_audio(
@@ -178,6 +206,8 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         _print_show_code(opts, system_prompt_text)
         return
 
+    _warn_without_web_search(json_mode=json_mode)
+
     from_file = bool(opts.source) or opts.sample
     if from_file and opts.device is not None:
         raise UsageError("--device applies only to microphone input.")
@@ -189,6 +219,8 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     # fails fast instead of after the mic is live.
     llm_extra = llm.parse_gateway_overrides(opts.llm_config)
     tts_extra = _parse_tts_config(opts.tts_config)
+    # Resolve MCP servers before opening the device, so a malformed config fails fast.
+    mcp_servers = _resolve_mcp_servers(opts.mcp_config)
     api_key = state.resolve_api_key()
 
     config = CascadeConfig(
@@ -202,6 +234,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         format_turns=opts.format_turns,
         llm_extra=llm_extra,
         tts_extra=tts_extra,
+        mcp_servers=mcp_servers,
     )
     renderer = AgentRenderer(json_mode=json_mode, text_mode=text_mode, mic_input=not from_file)
     audio, player, sample_rate = _open_audio(
