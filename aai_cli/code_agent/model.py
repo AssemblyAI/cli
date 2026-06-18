@@ -8,6 +8,7 @@ never silently send the user's code to anything but AssemblyAI.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
@@ -37,7 +38,13 @@ def _flatten_content(messages: object) -> None:
             )
 
 
-def build_model(api_key: str, *, model: str) -> BaseChatModel:
+def build_model(
+    api_key: str,
+    *,
+    model: str,
+    max_tokens: int | None = None,
+    extra: Mapping[str, object] | None = None,
+) -> BaseChatModel:
     """A ChatOpenAI bound to the active environment's LLM Gateway.
 
     ``use_responses_api=False`` keeps it on the chat-completions endpoint the gateway
@@ -45,6 +52,12 @@ def build_model(api_key: str, *, model: str) -> BaseChatModel:
     Responses API that langchain would otherwise prefer for ``openai:`` models. The
     subclass also flattens content-parts arrays the gateway rejects (see
     :func:`_flatten_content`).
+
+    ``max_tokens`` caps the per-reply length (the live voice agent passes a small cap to
+    keep spoken replies short and fast); ``extra`` passes any additional gateway request
+    fields through as ``extra_body`` (so they reach the request body verbatim, like
+    `aai_cli.core.llm`'s ``extra``). Both default to off so the coding agent's call is
+    unchanged.
     """
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
@@ -64,4 +77,6 @@ def build_model(api_key: str, *, model: str) -> BaseChatModel:
         base_url=environments.active().llm_gateway_base,
         api_key=SecretStr(api_key),
         use_responses_api=False,
+        max_tokens=max_tokens,
+        extra_body=dict(extra) if extra else None,
     )

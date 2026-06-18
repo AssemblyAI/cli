@@ -1,4 +1,4 @@
-"""Command + wiring tests for `assembly agent-cascade`.
+"""Command + wiring tests for `assembly live`.
 
 Covers the argv -> options seam, the validation guards, _open_audio source
 selection, and CascadeDeps.real's three live legs (all driven against fakes).
@@ -60,14 +60,14 @@ def _opts(**overrides) -> AgentCascadeOptions:
 
 
 def test_list_voices_human_lists_catalog():
-    result = runner.invoke(app, ["agent-cascade", "--list-voices"])
+    result = runner.invoke(app, ["live", "--list-voices"])
     assert result.exit_code == 0
     assert "jane" in result.output
     assert "English:" in result.output
 
 
 def test_list_voices_json_emits_array():
-    result = runner.invoke(app, ["agent-cascade", "--list-voices", "--json"])
+    result = runner.invoke(app, ["live", "--list-voices", "--json"])
     assert result.exit_code == 0
     assert result.output.lstrip().startswith("[")
     assert '"jane"' in result.output
@@ -92,14 +92,14 @@ def test_missing_system_prompt_file_is_rejected_by_typer():
     # so the sandbox guard (the other exit-2 path) never runs. Asserting the guard's
     # message is absent kills the exists=True mutant without depending on the Rich error
     # text, which CI renders with ANSI + width ellipsis.
-    result = runner.invoke(app, ["agent-cascade", "--system-prompt-file", "/no/such/file"])
+    result = runner.invoke(app, ["live", "--system-prompt-file", "/no/such/file"])
     assert result.exit_code == 2
     assert "sandbox" not in result.output.lower()
 
 
 def test_production_env_is_rejected_with_sandbox_hint():
     # Default env is production, which has no streaming-TTS host.
-    result = runner.invoke(app, ["agent-cascade", "--voice", "jane"])
+    result = runner.invoke(app, ["live", "--voice", "jane"])
     assert result.exit_code == 2
     assert "only available in the sandbox" in result.output
 
@@ -126,7 +126,7 @@ def test_format_turns_flag_resolves_into_options(monkeypatch, argv, expected):
         captured["opts"] = opts
 
     monkeypatch.setattr(_exec, "run_agent_cascade", fake_run)
-    result = runner.invoke(app, ["agent-cascade", *argv])
+    result = runner.invoke(app, ["live", *argv])
     assert result.exit_code == 0
     assert captured["opts"].format_turns is expected
 
@@ -137,7 +137,7 @@ def test_stt_config_file_must_exist():
     # terminal so the "does not exist" message isn't wrapped by the 80-col error box.
     result = runner.invoke(
         app,
-        ["agent-cascade", "--stt-config-file", "/no/such/file.json"],
+        ["live", "--stt-config-file", "/no/such/file.json"],
         env={"COLUMNS": "300"},
     )
     assert result.exit_code == 2
@@ -418,36 +418,23 @@ def test_deps_real_run_stt_passes_prebuilt_params_through(monkeypatch):
     assert captured["params"] is params
 
 
-def test_deps_real_complete_reply_threads_model_tokens_and_extra(monkeypatch):
+def test_deps_real_complete_reply_is_built_by_the_deepagents_brain(monkeypatch):
+    # The LLM leg is now a deepagents graph: .real delegates to brain.build_completer,
+    # passing the api key + config, and uses whatever completer it returns. We assert the
+    # exact wiring so the brain swap (not a plain llm.complete) can't silently regress.
     captured = {}
 
-    def fake_complete(api_key, **kwargs):
-        captured.update(kwargs)
-        return "raw-response"
+    def fake_build_completer(api_key, config):
+        captured["api_key"] = api_key
+        captured["config"] = config
+        return lambda messages: f"reply to {messages[-1]['content']}"
 
-    monkeypatch.setattr(engine.llm, "complete", fake_complete)
-    monkeypatch.setattr(engine.llm, "content_of", lambda response: response.upper())
+    monkeypatch.setattr(engine.brain, "build_completer", fake_build_completer)
     cfg = CascadeConfig(model="m", max_tokens=222, llm_extra={"temperature": 0.5})
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
-    assert deps.complete_reply([{"role": "user", "content": "hi"}]) == "RAW-RESPONSE"
-    assert captured["model"] == "m"
-    assert captured["max_tokens"] == 222
-    assert captured["extra"] == {"temperature": 0.5}
-
-
-def test_deps_real_complete_reply_sends_no_extra_when_unset(monkeypatch):
-    captured = {}
-
-    def fake_complete(api_key, **kwargs):
-        captured.update(kwargs)
-        return "x"
-
-    monkeypatch.setattr(engine.llm, "complete", fake_complete)
-    monkeypatch.setattr(engine.llm, "content_of", lambda response: response)
-    deps = CascadeDeps.real("k", CascadeConfig(), audio=[], stt_params=_stt_params())
-    deps.complete_reply([{"role": "user", "content": "hi"}])
-    # Empty overrides collapse to None, not an empty dict, so the gateway sees no extra body.
-    assert captured["extra"] is None
+    assert deps.complete_reply([{"role": "user", "content": "hi"}]) == "reply to hi"
+    assert captured["api_key"] == "k"
+    assert captured["config"] is cfg
 
 
 def test_deps_real_synthesize_threads_voice_language_and_extra(monkeypatch):

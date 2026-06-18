@@ -1,121 +1,10 @@
 # serializer version: 1
-# name: test_command_help_matches_snapshot[agent-cascade]
-  '''
-  
-   Usage: assembly agent-cascade [OPTIONS] [SOURCE]
-  
-   [sandbox] Hold a live voice conversation through a self-wired cascade
-  
-   Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
-   wires the three primitives together itself — Streaming STT, the LLM Gateway,
-   and streaming TTS — exactly like the 'agent-cascade' init template does
-   server-side. Because it uses streaming TTS it only runs in the sandbox: run
-   it as 'assembly --sandbox agent-cascade' (--sandbox goes before the
-   subcommand).
-  
-   Use headphones: the mic stays open while the agent speaks, so on speakers it
-   would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
-   recorded clip instead of the microphone; the session then ends after the
-   agent's reply.
-  
-   This only runs a conversation in the terminal — it writes no code. To build
-   an agent-cascade app, run 'assembly init agent-cascade' instead.
-  
-  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
-  │                         to use the microphone.                               │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --sample                                   Speak the hosted wildfires.mp3    │
-  │                                            sample to the agent               │
-  │ --system-prompt               TEXT         System prompt (the agent's        │
-  │                                            persona)                          │
-  │                                            [default: You are a friendly,     │
-  │                                            concise voice assistant. Keep     │
-  │                                            replies short and conversational. │
-  │                                            Your reply is read aloud by a     │
-  │                                            text-to-speech engine, so write   │
-  │                                            plain spoken prose — no markdown, │
-  │                                            emoji, bullet lists, or code.]    │
-  │ --system-prompt-file          FILE         Read the system prompt from a     │
-  │                                            file (overrides --system-prompt)  │
-  │ --greeting                    TEXT         Spoken greeting                   │
-  │                                            [default: Hi! I'm your AssemblyAI │
-  │                                            voice agent. What can I help you  │
-  │                                            with?]                            │
-  │ --device                      INTEGER      Microphone device index           │
-  │ --list-voices                              Print known voices and exit       │
-  │ --json                -j                   Emit newline-delimited JSON       │
-  │                                            events                            │
-  │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
-  │                                            lines as plain stdout,            │
-  │                                            pipe-friendly) or json            │
-  │ --show-code                                Print the equivalent Python SDK   │
-  │                                            code and exit (does not start a   │
-  │                                            session)                          │
-  │ --help                                     Show this message and exit.       │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Text-to-speech ─────────────────────────────────────────────────────────────╮
-  │ --voice             TEXT  TTS voice. See --list-voices. [default: jane]      │
-  │ --language          TEXT  TTS language (defaults to the voice's language)    │
-  │ --tts-config        TEXT  Set any extra streaming-TTS query field as         │
-  │                           KEY=VALUE (repeatable)                             │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Language model ─────────────────────────────────────────────────────────────╮
-  │ --model             TEXT                  LLM Gateway model that powers the  │
-  │                                           agent's replies                    │
-  │                                           [default:                          │
-  │                                           claude-haiku-4-5-20251001]         │
-  │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
-  │                                           [default: 8192]                    │
-  │ --llm-config        TEXT                  Set any LLM Gateway request field  │
-  │                                           as KEY=VALUE (repeatable)          │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Speech-to-text ─────────────────────────────────────────────────────────────╮
-  │ --speech-model                            TEXT              Streaming speech │
-  │                                                             model            │
-  │                                                             [default:        │
-  │                                                             u3-rt-pro]       │
-  │ --format-turns       --no-format-turns                      Format           │
-  │                                                             (punctuate)      │
-  │                                                             finalized turns  │
-  │                                                             before replying  │
-  │                                                             [default:        │
-  │                                                             format-turns]    │
-  │ --turn-detection                          [aggressive|bala  Turn-detection   │
-  │                                           nced|conservativ  sensitivity      │
-  │                                           e]                preset           │
-  │ --stt-config                              TEXT              Set any          │
-  │                                                             StreamingParame… │
-  │                                                             field as         │
-  │                                                             KEY=VALUE        │
-  │                                                             (repeatable)     │
-  │ --stt-config-file                         FILE              JSON file of     │
-  │                                                             streaming fields │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Start a live cascade conversation
-   $ assembly --sandbox agent-cascade
-   Pick a voice and opening line
-   $ assembly --sandbox agent-cascade --voice michael --greeting "Hi there"
-   Give the agent a persona
-   $ assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."
-   See available voices
-   $ assembly --sandbox agent-cascade --list-voices
-   Print equivalent Python instead of running
-   $ assembly --sandbox agent-cascade --show-code
-  
-  
-  
-  '''
-# ---
 # name: test_command_help_matches_snapshot[agent]
   '''
   
    Usage: assembly agent [OPTIONS] [SOURCE]
   
-   Hold a live two-way voice conversation with a voice agent
+   Hold a live two-way voice conversation with the Voice Agent API
   
    Use headphones: the mic stays open while the agent speaks, so on
    speakers it would hear itself and loop. Pass an audio file/URL (or
@@ -696,6 +585,126 @@
    $ assembly eval commonvoice --subset fr --language-code fr
    Summarize error patterns across the set
    $ assembly eval tedlium --llm-reduce "Summarize the common error patterns"
+  
+  
+  
+  '''
+# ---
+# name: test_command_help_matches_snapshot[live]
+  '''
+  
+   Usage: assembly live [OPTIONS] [SOURCE]
+  
+   [sandbox] Talk live to a tool-using voice agent
+  
+   A real-time spoken conversation, wired client-side from three primitives —
+   Streaming STT, a deepagents brain on the LLM Gateway, and streaming TTS.
+   Unlike
+   'assembly agent' (the Voice Agent API), the brain here is an agent that can
+   use
+   tools mid-conversation — web search, URL fetch, and the AssemblyAI docs — so
+   it
+   answers like a live multimodal assistant. Because it uses streaming TTS it
+   only
+   runs in the sandbox: run it as 'assembly --sandbox live' (--sandbox goes
+   before
+   the subcommand).
+  
+   Use headphones: the mic stays open while the agent speaks, so on speakers it
+   would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
+   recorded clip instead of the microphone; the session then ends after the
+   agent's reply.
+  
+   This only runs a conversation in the terminal — it writes no code. To build
+   an agent-cascade app, run 'assembly init agent-cascade' instead.
+  
+   Web search needs a TAVILY_API_KEY in the environment; without it the agent
+   keeps its URL-fetch and docs tools.
+  
+  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+  │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
+  │                         to use the microphone.                               │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --sample                                   Speak the hosted wildfires.mp3    │
+  │                                            sample to the agent               │
+  │ --system-prompt               TEXT         System prompt (the agent's        │
+  │                                            persona)                          │
+  │                                            [default: You are a friendly,     │
+  │                                            concise voice assistant. Keep     │
+  │                                            replies short and conversational. │
+  │                                            Your reply is read aloud by a     │
+  │                                            text-to-speech engine, so write   │
+  │                                            plain spoken prose — no markdown, │
+  │                                            emoji, bullet lists, or code.]    │
+  │ --system-prompt-file          FILE         Read the system prompt from a     │
+  │                                            file (overrides --system-prompt)  │
+  │ --greeting                    TEXT         Spoken greeting                   │
+  │                                            [default: Hi! I'm your AssemblyAI │
+  │                                            voice agent. What can I help you  │
+  │                                            with?]                            │
+  │ --device                      INTEGER      Microphone device index           │
+  │ --list-voices                              Print known voices and exit       │
+  │ --json                -j                   Emit newline-delimited JSON       │
+  │                                            events                            │
+  │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
+  │                                            lines as plain stdout,            │
+  │                                            pipe-friendly) or json            │
+  │ --show-code                                Print the equivalent Python SDK   │
+  │                                            code and exit (does not start a   │
+  │                                            session)                          │
+  │ --help                                     Show this message and exit.       │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Text-to-speech ─────────────────────────────────────────────────────────────╮
+  │ --voice             TEXT  TTS voice. See --list-voices. [default: jane]      │
+  │ --language          TEXT  TTS language (defaults to the voice's language)    │
+  │ --tts-config        TEXT  Set any extra streaming-TTS query field as         │
+  │                           KEY=VALUE (repeatable)                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Language model ─────────────────────────────────────────────────────────────╮
+  │ --model             TEXT                  LLM Gateway model that powers the  │
+  │                                           agent's replies                    │
+  │                                           [default:                          │
+  │                                           claude-haiku-4-5-20251001]         │
+  │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
+  │                                           [default: 8192]                    │
+  │ --llm-config        TEXT                  Set any LLM Gateway request field  │
+  │                                           as KEY=VALUE (repeatable)          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Speech-to-text ─────────────────────────────────────────────────────────────╮
+  │ --speech-model                            TEXT              Streaming speech │
+  │                                                             model            │
+  │                                                             [default:        │
+  │                                                             u3-rt-pro]       │
+  │ --format-turns       --no-format-turns                      Format           │
+  │                                                             (punctuate)      │
+  │                                                             finalized turns  │
+  │                                                             before replying  │
+  │                                                             [default:        │
+  │                                                             format-turns]    │
+  │ --turn-detection                          [aggressive|bala  Turn-detection   │
+  │                                           nced|conservativ  sensitivity      │
+  │                                           e]                preset           │
+  │ --stt-config                              TEXT              Set any          │
+  │                                                             StreamingParame… │
+  │                                                             field as         │
+  │                                                             KEY=VALUE        │
+  │                                                             (repeatable)     │
+  │ --stt-config-file                         FILE              JSON file of     │
+  │                                                             streaming fields │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Start a live voice conversation
+   $ assembly --sandbox live
+   Pick a voice and opening line
+   $ assembly --sandbox live --voice michael --greeting "Hi there"
+   Give the agent a persona
+   $ assembly --sandbox live --system-prompt "You are a terse pirate."
+   See available voices
+   $ assembly --sandbox live --list-voices
+   Print equivalent Python instead of running
+   $ assembly --sandbox live --show-code
   
   
   
