@@ -30,6 +30,9 @@ class _VoiceIO(Protocol):
     def speak(self, text: str) -> None:
         """Read ``text`` back aloud (a no-op when readback is unavailable)."""
 
+    def cancel(self) -> None:
+        """Stop an in-flight listen/readback so the current voice activity ends promptly."""
+
 
 class _VoiceLegs(App[None]):
     """Mixin holding the off-thread voice capture/readback legs for ``CodeAgentApp``.

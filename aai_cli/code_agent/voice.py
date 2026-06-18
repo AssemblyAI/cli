@@ -14,10 +14,10 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, NoReturn, Protocol
 
-from aai_cli.core import client, config_builder
+from aai_cli.core import client, config_builder, errors
 from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.tts import session as tts_session
 from aai_cli.tts.audio import PcmPlayer
@@ -44,6 +44,24 @@ _FENCED_CODE = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE = re.compile(r"`[^`]+`")
 _MAX_SPOKEN_CHARS = 600  # pragma: no mutate — a cosmetic cap on how much prose is read aloud
 _ALL_CODE_READBACK = "I've updated the code — see the transcript for the details."
+
+
+class _ReadbackInterrupted(errors.CLIError):
+    """Internal sentinel: raised inside the readback feed when ``cancel()`` fires mid-playback.
+
+    Subclasses ``CLIError`` so streaming TTS re-raises it unchanged (``synthesize`` passes
+    ``CLIError`` straight through), letting ``speak`` abort the player and stop promptly instead
+    of draining the rest of the clip. It never reaches the user — ``speak`` always catches it.
+    """
+
+    def __init__(self) -> None:
+        # No exit_code: speak() always catches this, so the inherited default never surfaces.
+        super().__init__("readback interrupted", error_type="readback_interrupted")
+
+
+def _abort_readback() -> NoReturn:
+    """Raise the readback sentinel — the cancel signal ``speak``'s feed acts on mid-playback."""
+    raise _ReadbackInterrupted
 
 
 def spoken_summary(text: str) -> str:
@@ -138,15 +156,31 @@ class VoiceSession:
     stream_fn: StreamFn = client.stream_audio
     synth_fn: SynthFn = tts_session.synthesize
     player_factory: Callable[[], Player] = PcmPlayer
+    _cancel: threading.Event = field(
+        default_factory=threading.Event,
+        init=False,  # pragma: no mutate
+    )
+
+    def cancel(self) -> None:
+        """Stop an in-flight ``listen``/``speak`` so the current voice activity ends promptly.
+
+        Set from another thread (the TUI's Ctrl-C / Escape, since the legs block on a daemon
+        thread): the mic gate in :meth:`listen` and the readback feed in :meth:`speak` both
+        check it between chunks, so listening or playback stops within a chunk rather than
+        running to completion. Each leg clears it on entry, so a stale cancel never preempts
+        the next turn.
+        """
+        self._cancel.set()
 
     def listen(self) -> str | None:
         """Capture one spoken turn and return its finalized transcript.
 
         Returns the text of the first end-of-turn the server finalizes, or ``None`` when
-        the microphone stream ends without one (EOF — e.g. a finite source in tests). The
-        microphone is gated shut the moment a turn finalizes, so exactly one utterance is
-        captured per call; a real mic blocks until you speak (Ctrl-C to quit).
+        the microphone stream ends without one (EOF — e.g. a finite source in tests, or a
+        :meth:`cancel` mid-capture). The microphone is gated shut the moment a turn finalizes,
+        so exactly one utterance is captured per call; a real mic blocks until you speak.
         """
+        self._cancel.clear()
         mic = self.mic_factory()
         done = threading.Event()
         captured: list[str] = []
@@ -159,7 +193,7 @@ class VoiceSession:
 
         def gated() -> Iterator[bytes]:
             for chunk in mic:
-                if done.is_set():
+                if done.is_set() or self._cancel.is_set():
                     return
                 yield chunk
 
@@ -171,13 +205,25 @@ class VoiceSession:
 
         A no-op when readback is off (production, where streaming TTS has no host) or the
         text is blank — so the caller can route every assistant reply here unconditionally.
+        A :meth:`cancel` from another thread stops playback promptly: the feed raises an
+        internal sentinel that aborts the player (discarding buffered audio) and ends synthesis.
         """
         text = text.strip()
         if not self.readback or not text:
             return
+        self._cancel.clear()
         config = SpeakConfig(text=text, sample_rate=_TTS_SAMPLE_RATE)
-        with self.player_factory() as player:
-            self.synth_fn(self.api_key, config, on_audio=player.feed)
+        try:
+            with self.player_factory() as player:
+
+                def feed(pcm: bytes, sample_rate: int) -> None:
+                    if self._cancel.is_set():
+                        _abort_readback()
+                    player.feed(pcm, sample_rate)
+
+                self.synth_fn(self.api_key, config, on_audio=feed)
+        except _ReadbackInterrupted:
+            pass  # cancel() asked us to stop; the player aborted on the way out
 
 
 def build_voice_session(api_key: str) -> VoiceSession:

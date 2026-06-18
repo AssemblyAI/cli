@@ -51,6 +51,47 @@ def test_listen_returns_final_turn_and_gates_mic_after_it():
     assert seen["params"].sample_rate == 16000
 
 
+def test_listen_stops_capturing_when_cancelled():
+    seen = {}
+    holder = {}
+
+    def fake_stream(api_key, source, *, params, on_turn):
+        it = iter(source)
+        seen["first"] = next(it)  # one chunk flows before the interrupt
+        holder["session"].cancel()  # the TUI's Ctrl-C, from another thread
+        seen["rest"] = list(it)  # gated() must stop the instant cancel() fires
+
+    session = VoiceSession(
+        api_key="k",
+        readback=False,
+        mic_factory=lambda: FakeMic([b"a", b"b", b"c"]),
+        stream_fn=fake_stream,
+    )
+    holder["session"] = session
+    assert session.listen() is None  # cancelled mid-capture -> no turn finalized
+    assert seen["first"] == b"a"
+    assert seen["rest"] == []  # the mic was gated shut by cancel(), not drained
+
+
+def test_listen_clears_a_stale_cancel_before_capturing():
+    # A cancel() that fired outside a capture must not preempt the next listen — listen()
+    # clears the flag on entry, so the gate is open and the turn is captured normally.
+    def fake_stream(api_key, source, *, params, on_turn):
+        it = iter(source)
+        next(it)  # if the stale cancel weren't cleared, gated() would yield nothing here
+        on_turn(_turn("hello", end_of_turn=True))
+        list(it)
+
+    session = VoiceSession(
+        api_key="k",
+        readback=False,
+        mic_factory=lambda: FakeMic([b"a", b"b"]),
+        stream_fn=fake_stream,
+    )
+    session.cancel()  # a stale cancel set before the capture begins
+    assert session.listen() == "hello"  # cleared on entry -> capture proceeds
+
+
 def test_listen_ignores_partials_and_returns_none_without_a_final_turn():
     def fake_stream(api_key, source, *, params, on_turn):
         on_turn(_turn("typing in progr", end_of_turn=False))  # interim only
@@ -69,11 +110,13 @@ def test_listen_ignores_partials_and_returns_none_without_a_final_turn():
 class FakePlayer:
     def __init__(self):
         self.fed = []
+        self.exit_exc_type = None
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, exc_type, *exc):
+        self.exit_exc_type = exc_type  # records the abort path (an exception on the way out)
         return False
 
     def feed(self, pcm, sample_rate):
@@ -97,6 +140,43 @@ def test_speak_synthesizes_and_plays_when_readback_on():
     assert captured["text"] == "hello there"  # stripped
     assert captured["rate"] == 24000
     assert player.fed == [(b"pcm", 24000)]
+
+
+def test_speak_stops_synthesis_and_aborts_player_when_cancelled():
+    player = FakePlayer()
+    holder = {}
+    reached_after_cancel = []
+
+    def fake_synth(api_key, config, *, on_audio):
+        on_audio(b"one", 24000)  # first chunk plays
+        holder["session"].cancel()  # the user interrupts the readback
+        on_audio(b"two", 24000)  # the feed must raise here, ending synthesis
+        reached_after_cancel.append(True)  # so this line is never reached
+
+    session = VoiceSession(
+        api_key="k", readback=True, synth_fn=fake_synth, player_factory=lambda: player
+    )
+    holder["session"] = session
+    session.speak("hello there")  # returns cleanly — the cancel sentinel is swallowed
+    assert player.fed == [(b"one", 24000)]  # only the pre-cancel chunk played
+    assert reached_after_cancel == []  # synthesis stopped at the cancelled feed
+    assert player.exit_exc_type is not None  # player saw the exception -> aborted, not drained
+
+
+def test_speak_clears_a_stale_cancel_before_playing():
+    # A cancel() left set from a prior interrupt must not abort the next readback before it
+    # starts — speak() clears the flag on entry, so the chunk plays normally.
+    player = FakePlayer()
+
+    def fake_synth(api_key, config, *, on_audio):
+        on_audio(b"pcm", 24000)
+
+    session = VoiceSession(
+        api_key="k", readback=True, synth_fn=fake_synth, player_factory=lambda: player
+    )
+    session.cancel()  # a stale cancel set before this readback
+    session.speak("hello")
+    assert player.fed == [(b"pcm", 24000)]  # cleared on entry -> the chunk still played
 
 
 def test_speak_is_a_noop_when_readback_off_or_text_blank():

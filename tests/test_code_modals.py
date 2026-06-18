@@ -38,6 +38,9 @@ class FakeVoice:
             raise self._error
         return self._transcript
 
+    def cancel(self) -> None:
+        """No-op: the modal voice path never interrupts an in-flight leg."""
+
 
 def _run(coro) -> None:
     asyncio.run(coro)
