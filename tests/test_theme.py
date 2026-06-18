@@ -55,6 +55,20 @@ def test_you_color_reserved_outside_speaker_palette():
     assert you_color not in speaker_colors
 
 
+def test_you_and_agent_stay_distinct_after_downsampling():
+    # "you" and "agent" used to be two near-identical cobolt purples that downsampled to
+    # the *same* 16-color ANSI slot, so a transcript looked single-colored on a basic
+    # terminal. Assert they're different hues and stay different once downgraded.
+    from rich.color import ColorSystem
+
+    console = theme.make_console()
+    you = console.get_style("aai.you").color
+    agent = console.get_style("aai.agent").color
+    assert you is not None and agent is not None
+    assert you != agent
+    assert you.downgrade(ColorSystem.STANDARD) != agent.downgrade(ColorSystem.STANDARD)
+
+
 def test_output_console_is_themed_and_error_is_styled(monkeypatch):
     from aai_cli.core.errors import CLIError
     from aai_cli.ui import output, theme

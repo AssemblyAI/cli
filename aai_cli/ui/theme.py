@@ -17,9 +17,17 @@ COBOLT_300 = "#887bdd"  # web dark-mode primary / hover; CLI secondary accent
 
 # Brand accent. Defined once so the whole CLI can be re-tinted here.
 BRAND = COBOLT_400
-# Secondary accent — the lighter Cobolt 300 used where a second hue is needed (agent
-# label, links), so it stays in the brand family yet reads distinct from BRAND.
+# Secondary accent — the lighter Cobolt 300 used where a second hue is needed (links),
+# so it stays in the brand family yet reads distinct from BRAND.
 ACCENT = COBOLT_300
+
+# The agent's voice in a live conversation. A cool teal chosen *outside* the cobolt
+# purple family on purpose: "you" keeps the brand purple, and the two were previously
+# both purples (Cobolt 400 vs 300) that collapsed to the same hue once a terminal
+# downsampled truecolor to its 16-color palette — so "you:" and "agent:" lines looked
+# identically colored. Teal downsamples to ANSI cyan, staying clearly distinct from the
+# purple/blue "you" on any terminal.
+AGENT = "#14B8A6"
 
 # Semantic error red, matching the design system's --color-error. Rich downsamples it
 # to plain red on terminals without truecolor.
@@ -55,11 +63,13 @@ THEME = Theme(
         "aai.brand": f"bold {BRAND}",
         "aai.heading": f"bold {BRAND}",
         "aai.label": BRAND,
-        # Conversation labels: the human keeps the brand accent (reserved — never reused
-        # for a diarized speaker, see SPEAKER_STYLES), the agent gets a distinct hue so
-        # "you:" and "agent:" are easy to tell apart at a glance.
+        # Conversation colors: a whole transcript turn is tinted in its speaker's hue
+        # (not just the "you:"/"agent:" prefix), so the two read as different colors top
+        # to bottom. The human keeps the brand purple (reserved — never reused for a
+        # diarized speaker, see SPEAKER_STYLES); the agent gets a contrasting teal so the
+        # two are unmistakable at a glance, even after downsampling (see AGENT).
         "aai.you": BRAND,
-        "aai.agent": ACCENT,
+        "aai.agent": AGENT,
         # Links/URLs in the lighter Cobolt secondary accent so a clickable target stands
         # out from prose without shouting (Vercel/Supabase use a cool accent for the same).
         "aai.url": ACCENT,

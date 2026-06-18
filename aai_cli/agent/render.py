@@ -9,8 +9,13 @@ from aai_cli.ui.render import BaseRenderer
 
 
 def _labeled(label: str, body: str, *, style: str = "aai.label") -> Text:
-    """A line whose `label` prefix is accented in `style` and whose body is default."""
-    return Text.assemble((label, style), body)
+    """A transcript line tinted entirely in `style` — both the `label` prefix and the body.
+
+    Coloring the whole turn (not just the prefix) is what makes a "you:" line and an
+    "agent:" line read as different colors top to bottom; the two styles resolve to
+    contrasting hues (see ``theme.aai.you`` / ``theme.aai.agent``).
+    """
+    return Text(f"{label}{body}", style=style)
 
 
 class AgentRenderer(BaseRenderer):
