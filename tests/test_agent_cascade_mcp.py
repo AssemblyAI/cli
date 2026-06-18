@@ -20,16 +20,18 @@ from aai_cli.core.errors import UsageError
 
 
 def test_default_servers_curated_set_and_filesystem_root():
-    servers = mcp_tools.default_servers(Path("/notes/dir"))
+    root = Path("/notes/dir")
+    servers = mcp_tools.default_servers(root)
     # The five curated, no-auth servers, each with a real launch command.
     assert set(servers) == {"time", "fetch", "memory", "filesystem", "weather"}
     assert servers["time"] == {"command": "uvx", "args": ["mcp-server-time"]}
     assert servers["memory"]["args"] == ["-y", "@modelcontextprotocol/server-memory"]
-    # The filesystem server is scoped to the passed-in root directory.
+    # The filesystem server is scoped to the passed-in root directory. Compare against
+    # str(root), not a hardcoded "/notes/dir", so it holds on Windows (backslash paths).
     assert servers["filesystem"]["args"] == [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/notes/dir",
+        str(root),
     ]
 
 

@@ -73,8 +73,8 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     """The spoken-capability phrases backed by an actually-present tool.
 
     Derived from the resolved tool names so the prompt never advertises a capability the
-    agent can't perform: web search is present only with a ``TAVILY_API_KEY``, and the docs
-    tools are best-effort (absent when the docs host is unreachable).
+    agent can't perform: web search is present only with a ``FIRECRAWL_API_KEY``, and the
+    docs tools are best-effort (absent when the docs host is unreachable).
     """
     names = {tool.name for tool in tools}
     capabilities: list[str] = []
@@ -107,7 +107,7 @@ def build_system_prompt(
 
     The guidance is tailored to the bound tools so the model is only told about
     capabilities it actually has — advertising a missing tool (web search without a
-    ``TAVILY_API_KEY``) made the agent announce an action it then couldn't take, leaving
+    ``FIRECRAWL_API_KEY``) made the agent announce an action it then couldn't take, leaving
     the turn hanging with no answer. ``tools`` are the built-in legs (web search, URL
     fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
     generically by name. With no tools at all the model answers from its own knowledge.

@@ -44,7 +44,8 @@ class CascadeConfig:
     # Extra streaming-TTS query params (the --tts-config escape hatch).
     tts_extra: Mapping[str, str] = field(default_factory=dict[str, str])
     # MCP servers (name -> launch spec) whose tools the deepagents brain can call. Empty
-    # by default; populated from --mcp-config files and/or the --demo-tools curated set.
+    # here by default; the live command populates it with the curated default set plus any
+    # --mcp-config files.
     mcp_servers: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict[str, Mapping[str, object]]
     )
