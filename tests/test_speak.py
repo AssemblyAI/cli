@@ -147,6 +147,24 @@ def test_url_reads_web_page_aloud(monkeypatch, fake_synthesize):
     assert fake_synthesize["cfg"].text == "The article body."
 
 
+def test_long_text_is_synthesized_one_chunk_per_connection(monkeypatch):
+    # _speak_single feeds PocketTTS one chunk at a time (one synthesize/connection each),
+    # never the whole document in a single Generate — the fix for the long --url/PDF case.
+    monkeypatch.setattr("aai_cli.tts.text.chunk_text", lambda _t: ["First.", "Second.", "Third."])
+    monkeypatch.setattr("aai_cli.commands.speak._exec.audio.PcmPlayer", lambda **_: _FakePlayer())
+    spoken: list[str] = []
+
+    def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
+        spoken.append(cfg.text)
+        return session.SpeakResult(pcm=b"\x01\x02", sample_rate=24000, audio_duration_seconds=0.0)
+
+    monkeypatch.setattr(session, "synthesize", _fake)
+    result = runner.invoke(app, ["--sandbox", "speak", "First. Second. Third."])
+    assert result.exit_code == 0
+    # One synthesize call per chunk, each carrying just that chunk's text.
+    assert spoken == ["First.", "Second.", "Third."]
+
+
 def test_url_and_text_argument_are_mutually_exclusive(monkeypatch):
     result = runner.invoke(
         app, ["--sandbox", "speak", "Hello", "--url", "https://example.com/post"]
@@ -229,16 +247,25 @@ def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize)
     assert fake_synthesize["cfg"].voice == "jane"
 
 
-def test_json_mode_emits_metadata_object_on_stdout(monkeypatch, fake_synthesize):
+def test_json_mode_emits_metadata_object_on_stdout(monkeypatch):
     monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
+    # 5926 bytes of 16-bit mono PCM at 24 kHz is 5926/2/24000 = 0.12345833…s — a value
+    # with >3 decimals so the round-to-3 in the summary is actually exercised. The fake
+    # reports the matching duration; synthesize_chunked recomputes it from the PCM anyway.
+    pcm = b"\x00" * 5926
+
+    def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
+        return session.SpeakResult(pcm=pcm, sample_rate=24000, audio_duration_seconds=0.12345833)
+
+    monkeypatch.setattr(session, "synthesize", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--voice", "jane", "--json"])
     assert result.exit_code == 0
     # The behavioral split: --json yields a parseable object, not human prose.
     payload = json.loads(result.stdout.strip())
     assert payload["voice"] == "jane"
     assert payload["sample_rate"] == 24000
-    assert payload["bytes"] == 4
-    # Duration is rounded to 3 decimals (0.123456 -> 0.123, not 0.1235).
+    assert payload["bytes"] == 5926
+    # Duration is rounded to 3 decimals (0.12345833… -> 0.123, not 0.1235).
     assert payload["audio_duration_seconds"] == 0.123
     # No --out -> the reported path is null, not the string "None".
     assert payload["out"] is None

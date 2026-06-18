@@ -1,31 +1,34 @@
 from __future__ import annotations
 
-import base64
 import json
 
 import pytest
 
-from aai_cli.core import environments
 from aai_cli.core.errors import APIError, CLIError, NotAuthenticated
 from aai_cli.tts import session
-
-
-def _use_env(name: str) -> None:
-    environments.set_active(environments.get(name))
+from tests._tts_session_helpers import (
+    FakeWS,
+    audio_chunk,
+    audio_frame,
+    begin_frame,
+    connect_returning,
+    flush_done_frame,
+    use_env,
+)
 
 
 def test_is_available_true_in_sandbox():
-    _use_env("sandbox000")
+    use_env("sandbox000")
     assert session.is_available() is True
 
 
 def test_is_available_false_in_production():
-    _use_env("production")
+    use_env("production")
     assert session.is_available() is False
 
 
 def test_ws_url_includes_set_params_only():
-    _use_env("sandbox000")
+    use_env("sandbox000")
     cfg = session.SpeakConfig(text="hi", voice="jane", language="English")
     url = session.ws_url(cfg.query_params())
     assert url.startswith("wss://streaming-tts.sandbox000.assemblyai-labs.com/v1/ws/?")
@@ -35,7 +38,7 @@ def test_ws_url_includes_set_params_only():
 
 
 def test_ws_url_no_params_has_no_query_string():
-    _use_env("sandbox000")
+    use_env("sandbox000")
     url = session.ws_url(session.SpeakConfig(text="hi").query_params())
     assert url == "wss://streaming-tts.sandbox000.assemblyai-labs.com/v1/ws/"
 
@@ -64,82 +67,17 @@ def test_speak_result_is_immutable():
         _set_attr(result, "sample_rate", 1)
 
 
-class FakeWS:
-    """A minimal stand-in for a websockets sync connection."""
-
-    def __init__(self, incoming: list[str]) -> None:
-        self._incoming = list(incoming)
-        self.sent: list[dict[str, object]] = []
-        self.closed = False
-        self.recv_timeouts: list[float | None] = []
-
-    def recv(self, timeout: float | None = None) -> str:
-        self.recv_timeouts.append(timeout)
-        return self._incoming.pop(0)
-
-    def send(self, data: str) -> None:
-        self.sent.append(json.loads(data))
-
-    def close(self) -> None:
-        self.closed = True
-
-
-def _audio_frame(pcm: bytes, *, final: bool) -> str:
-    # An Audio frame with an explicit is_final flag — the defensive end-of-stream path
-    # (the live server instead omits is_final and ends with FlushDone, see _audio_chunk).
-    # The sample rate is reported once, up front, in the Begin frame's configuration.
-    return json.dumps(
-        {
-            "type": "Audio",
-            "audio": base64.b64encode(pcm).decode("ascii"),
-            "is_final": final,
-        }
-    )
-
-
-def _audio_chunk(pcm: bytes) -> str:
-    # The real server's Audio frames carry the PCM payload and a flush_id, but NO
-    # is_final flag — completion is signalled by a separate FlushDone frame.
-    return json.dumps(
-        {"type": "Audio", "audio": base64.b64encode(pcm).decode("ascii"), "flush_id": 0}
-    )
-
-
-def _flush_done_frame() -> str:
-    return json.dumps({"type": "FlushDone", "flush_id": 0, "audio_duration_ms": 880})
-
-
-def _begin_frame(*, sample_rate: int = 24000) -> str:
-    return json.dumps(
-        {
-            "type": "Begin",
-            "id": "s1",
-            "expires_at": 1,
-            "configuration": {"voice": "jane", "language": "english", "sample_rate": sample_rate},
-        }
-    )
-
-
-def _connect_returning(ws: FakeWS, captured: dict[str, object]):
-    def _connect(url: str, **kwargs):
-        captured["url"] = url
-        captured["kwargs"] = kwargs
-        return ws
-
-    return _connect
-
-
 def test_synthesize_drives_the_full_protocol():
     captured: dict = {}
     ws = FakeWS(
         [
-            _begin_frame(sample_rate=24000),
-            _audio_frame(b"\x01\x02\x03\x04", final=False),
-            _audio_frame(b"\x05\x06", final=True),
+            begin_frame(sample_rate=24000),
+            audio_frame(b"\x01\x02\x03\x04", final=False),
+            audio_frame(b"\x05\x06", final=True),
         ]
     )
     cfg = session.SpeakConfig(text="hello", voice="jane")
-    result = session.synthesize("k", cfg, connect=_connect_returning(ws, captured))
+    result = session.synthesize("k", cfg, connect=connect_returning(ws, captured))
 
     # Sends Generate(text), then Flush, then Terminate — in that order. The flush tag
     # is "Flush" (the server's accepted tag, as the agent-cascade template sends),
@@ -159,6 +97,11 @@ def test_synthesize_drives_the_full_protocol():
     assert "Bearer" not in captured["kwargs"]["additional_headers"]["Authorization"]
     # The frame-size cap is lifted: Audio frames can exceed websockets' 1 MiB default.
     assert captured["kwargs"]["max_size"] is None
+    # The keepalive pong deadline is disabled: a long input (e.g. a --url PDF) can leave
+    # the server silent for >20s before the first Audio frame, and websockets' default
+    # ping_timeout would close the still-alive connection with code 1011. _RECV_TIMEOUT_SECONDS
+    # is the single liveness authority instead, so ping_timeout must be None.
+    assert captured["kwargs"]["ping_timeout"] is None
 
 
 def test_synthesize_stops_on_flush_done_when_audio_omits_is_final():
@@ -168,10 +111,10 @@ def test_synthesize_stops_on_flush_done_when_audio_omits_is_final():
     # every PCM byte gathered so far — then Terminate the session as usual.
     ws = FakeWS(
         [
-            _begin_frame(sample_rate=24000),
-            _audio_chunk(b"\x01\x02\x03\x04"),
-            _audio_chunk(b"\x05\x06"),
-            _flush_done_frame(),
+            begin_frame(sample_rate=24000),
+            audio_chunk(b"\x01\x02\x03\x04"),
+            audio_chunk(b"\x05\x06"),
+            flush_done_frame(),
         ]
     )
     result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
@@ -186,10 +129,10 @@ def test_synthesize_streams_each_chunk_to_on_audio_as_it_arrives():
     # order, with the server's reported rate — while the full PCM is still returned.
     ws = FakeWS(
         [
-            _begin_frame(sample_rate=16000),
-            _audio_chunk(b"\x01\x02"),
-            _audio_chunk(b"\x03\x04"),
-            _flush_done_frame(),
+            begin_frame(sample_rate=16000),
+            audio_chunk(b"\x01\x02"),
+            audio_chunk(b"\x03\x04"),
+            flush_done_frame(),
         ]
     )
     streamed: list[tuple[bytes, int]] = []
@@ -207,7 +150,7 @@ def test_synthesize_streams_each_chunk_to_on_audio_as_it_arrives():
 
 def test_synthesize_without_on_audio_still_returns_full_pcm():
     # The callback is optional: omitting it must not change the buffered result.
-    ws = FakeWS([_begin_frame(), _audio_frame(b"\x01\x02", final=True)])
+    ws = FakeWS([begin_frame(), audio_frame(b"\x01\x02", final=True)])
     result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
     assert result.pcm == b"\x01\x02"
 
@@ -215,7 +158,7 @@ def test_synthesize_without_on_audio_still_returns_full_pcm():
 def test_synthesize_reads_sample_rate_from_begin_configuration():
     # A non-default rate in the Begin frame flows into the result and its duration,
     # proving the rate is read from Begin.configuration rather than hardcoded.
-    ws = FakeWS([_begin_frame(sample_rate=16000), _audio_frame(b"\x01\x02\x03\x04", final=True)])
+    ws = FakeWS([begin_frame(sample_rate=16000), audio_frame(b"\x01\x02\x03\x04", final=True)])
     result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
     assert result.sample_rate == 16000
     assert result.audio_duration_seconds == pytest.approx(4 / 2 / 16000)
@@ -226,7 +169,7 @@ def test_synthesize_falls_back_to_default_rate_when_begin_omits_configuration():
     ws = FakeWS(
         [
             json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
-            _audio_frame(b"\x01\x02", final=True),
+            audio_frame(b"\x01\x02", final=True),
         ]
     )
     result = session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
@@ -286,7 +229,7 @@ def test_synthesize_maps_error_frame_to_api_error():
 def test_synthesize_bounds_every_recv_with_the_frame_timeout():
     # Each frame wait is bounded (60s): an unbounded recv() would hang the command
     # forever if the server went silent mid-session.
-    ws = FakeWS([_begin_frame(), _audio_frame(b"\x01\x02", final=True)])
+    ws = FakeWS([begin_frame(), audio_frame(b"\x01\x02", final=True)])
     session.synthesize("k", session.SpeakConfig(text="hi"), connect=lambda *a, **k: ws)
     assert ws.recv_timeouts == [60.0, 60.0]
 
@@ -321,7 +264,7 @@ def test_synthesize_invokes_on_warning_then_continues():
         [
             json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
             json.dumps({"type": "Warning", "warning_code": 1, "warning": "slow"}),
-            _audio_frame(b"\x01\x02", final=True),
+            audio_frame(b"\x01\x02", final=True),
         ]
     )
     result = session.synthesize(
@@ -339,7 +282,7 @@ def test_synthesize_ignores_warning_without_callback():
         [
             json.dumps({"type": "Begin", "id": "s", "expires_at": 1}),
             json.dumps({"type": "Warning", "warning_code": 1, "warning": "slow"}),
-            _audio_frame(b"\x01\x02", final=True),
+            audio_frame(b"\x01\x02", final=True),
         ]
     )
     # No on_warning: the warning is silently skipped, not an error.
@@ -359,7 +302,7 @@ def test_synthesize_maps_rejected_key_on_connect_to_not_authenticated():
 
 
 def test_synthesize_maps_forbidden_connect_to_api_error():
-    _use_env("sandbox000")
+    use_env("sandbox000")
 
     class Resp:
         status_code = 403
@@ -427,60 +370,88 @@ def test_synthesize_without_connect_uses_real_client_and_fails_cleanly():
     # never a raw socket error. disable_socket pins that blocked-at-creation behavior
     # on Windows too (the suite-wide conftest otherwise allows loopback there, which
     # would let the socket be created and then leak when the real connect is blocked).
-    _use_env("sandbox000")
+    use_env("sandbox000")
     with pytest.raises(CLIError):
         session.synthesize("k", session.SpeakConfig(text="hi"))
 
 
-def test_synthesize_dialogue_concatenates_segments_with_silence():
-    # One fresh fake socket per segment; record the voice each connection requested.
-    sockets = [
-        FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\xaa\xbb", final=True)]),
-        FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\xcc\xdd", final=True)]),
-    ]
-    urls: list[str] = []
+def test_default_connect_forwards_keepalive_and_frame_settings(monkeypatch):
+    # The real-client factory must forward the frame cap and the keepalive pong deadline
+    # verbatim to websockets — synthesize() passes ping_timeout=None to disable the deadline
+    # so a long --url synthesis can't die with a 1011 "keepalive ping timeout" the moment the
+    # server pauses >20s before the first frame. Sentinel (non-None) values are forwarded so a
+    # mutant that hardcodes either argument can't slip through.
+    captured: dict = {}
 
-    def _connect(url: str, **_kwargs):
-        urls.append(url)
-        return sockets.pop(0)
+    def _fake_connect(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return object()
 
-    result = session.synthesize_dialogue(
-        "k",
-        [("jane", "Hello."), ("michael", "Hi.")],
-        language="English",
-        connect=_connect,
+    monkeypatch.setattr("websockets.sync.client.connect", _fake_connect)
+    session._default_connect(
+        "wss://example/ws",
+        additional_headers={"Authorization": "k"},
+        max_size=4096,
+        ping_timeout=42.0,
     )
-    # Each segment connected with its own voice.
-    assert "voice=jane" in urls[0]
-    assert "voice=michael" in urls[1]
-    # 0.25 s of silence (24000 * 0.25 * 2 = 12000 zero bytes) sits BETWEEN the two
-    # segments' PCM, with none at the ends.
-    gap = b"\x00" * 12000
-    assert result.pcm == b"\xaa\xbb" + gap + b"\xcc\xdd"
-    assert result.sample_rate == 24000
-    # Pin the duration formula (len/2/rate) so its operators survive the mutation gate.
-    assert result.audio_duration_seconds == pytest.approx(len(result.pcm) / 2 / 24000)
+    assert captured["url"] == "wss://example/ws"
+    assert captured["kwargs"]["additional_headers"] == {"Authorization": "k"}
+    assert captured["kwargs"]["max_size"] == 4096
+    assert captured["kwargs"]["ping_timeout"] == 42.0
 
 
-def test_synthesize_dialogue_single_segment_has_no_silence():
-    ws = FakeWS([_begin_frame(sample_rate=24000), _audio_frame(b"\x01\x02", final=True)])
-    result = session.synthesize_dialogue("k", [("jane", "Hi.")], connect=lambda *a, **k: ws)
-    assert result.pcm == b"\x01\x02"  # no leading/trailing pad
+def test_synthesize_chunked_synthesizes_each_chunk_on_its_own_connection(monkeypatch):
+    # PocketTTS is fed one chunk per connection — never the whole document in one Generate.
+    monkeypatch.setattr("aai_cli.tts.text.chunk_text", lambda _t: ["First chunk.", "Second chunk."])
+    sockets = [
+        FakeWS([begin_frame(), audio_frame(b"\x01\x02", final=True)]),
+        FakeWS([begin_frame(), audio_frame(b"\x03\x04", final=True)]),
+    ]
+    pool = list(sockets)
+    result = session.synthesize_chunked(
+        "k", session.SpeakConfig(text="ignored"), connect=lambda *a, **k: pool.pop(0)
+    )
+    # One Generate per chunk, each on its own connection, in order.
+    assert [ws.sent[0]["text"] for ws in sockets] == ["First chunk.", "Second chunk."]
+    assert not pool  # both connections were opened
+    # PCM is concatenated across the chunk connections, and the duration recomputed from it.
+    assert result.pcm == b"\x01\x02\x03\x04"
+    assert result.audio_duration_seconds == pytest.approx(4 / 2 / 24000)
 
 
-def test_synthesize_dialogue_uses_server_sample_rate():
-    # A non-default server rate must flow into the result (proving the per-segment
-    # rate is read, not left at the default) and into the duration denominator.
-    ws = FakeWS([_begin_frame(sample_rate=16000), _audio_frame(b"\x01\x02", final=True)])
-    result = session.synthesize_dialogue("k", [("jane", "Hi.")], connect=lambda *a, **k: ws)
-    assert result.sample_rate == 16000
-    assert result.audio_duration_seconds == pytest.approx(2 / 2 / 16000)
+def test_synthesize_chunked_streams_each_chunk_to_on_audio(monkeypatch):
+    # on_audio fires per chunk as it arrives (incremental playback), carrying each
+    # connection's reported sample rate, across all chunks.
+    monkeypatch.setattr("aai_cli.tts.text.chunk_text", lambda _t: ["a.", "b."])
+    pool = [
+        FakeWS([begin_frame(sample_rate=16000), audio_frame(b"\x01\x02", final=True)]),
+        FakeWS([begin_frame(sample_rate=16000), audio_frame(b"\x03\x04", final=True)]),
+    ]
+    streamed: list[tuple[bytes, int]] = []
+    session.synthesize_chunked(
+        "k",
+        session.SpeakConfig(text="x"),
+        connect=lambda *a, **k: pool.pop(0),
+        on_audio=lambda chunk, rate: streamed.append((chunk, rate)),
+    )
+    assert streamed == [(b"\x01\x02", 16000), (b"\x03\x04", 16000)]
 
 
-def test_synthesize_dialogue_empty_segments_returns_silent_default():
-    # No segments -> no audio at the default rate, and no crash. connect is omitted
-    # entirely: the loop body never runs, so no connection is ever attempted.
-    result = session.synthesize_dialogue("k", [])
+def test_synthesize_chunked_single_chunk_passes_text_through():
+    # A short input is one chunk: the original text is synthesized unchanged.
+    captured: dict = {}
+    ws = FakeWS([begin_frame(), audio_frame(b"\x01\x02", final=True)])
+    session.synthesize_chunked(
+        "k", session.SpeakConfig(text="Just one sentence."), connect=connect_returning(ws, captured)
+    )
+    assert ws.sent[0]["text"] == "Just one sentence."
+
+
+def test_synthesize_chunked_empty_text_returns_silent_default():
+    # Whitespace-only text yields no chunks -> no audio at the default rate, and no crash.
+    # connect is omitted entirely: the loop never runs, so no connection is attempted.
+    result = session.synthesize_chunked("k", session.SpeakConfig(text="   "))
     assert result.pcm == b""
     assert result.sample_rate == 24000
     assert result.audio_duration_seconds == 0.0

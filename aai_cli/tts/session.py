@@ -6,7 +6,7 @@ import contextlib
 import json
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -14,7 +14,7 @@ from aai_cli.core import environments
 from aai_cli.core import ws as wsutil
 from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import diagnostics
-from aai_cli.tts import audio
+from aai_cli.tts import audio, text
 
 
 class _WebSocket(Protocol):
@@ -164,12 +164,21 @@ def _recv_raw(ws: _WebSocket) -> str | bytes:
 
 
 def _default_connect(
-    url: str, *, additional_headers: dict[str, str], max_size: int | None
+    url: str,
+    *,
+    additional_headers: dict[str, str],
+    max_size: int | None,
+    ping_timeout: float | None,
 ) -> _WebSocket:
     """The real websockets sync client, imported lazily so tests can inject a fake."""
     from websockets.sync.client import connect
 
-    return connect(url, additional_headers=additional_headers, max_size=max_size)
+    return connect(
+        url,
+        additional_headers=additional_headers,
+        max_size=max_size,
+        ping_timeout=ping_timeout,
+    )
 
 
 def _run_protocol(
@@ -252,6 +261,13 @@ def synthesize(
         # Bearer token upgrades fine but is rejected in-band as an Error frame.
         bearer=False,
         max_size=None,  # no frame cap: a synthesis's Audio frames can exceed the 1 MiB default
+        # Disable websockets' keepalive pong deadline. A long input (notably a --url page or
+        # PDF, sent as one Generate frame) can leave the server silent for longer than the
+        # default 20s ping_timeout before it streams the first Audio frame; websockets would
+        # then close the still-alive connection itself with code 1011 ("keepalive ping
+        # timeout"). _RECV_TIMEOUT_SECONDS already bounds server silence per frame, so it is
+        # the single liveness authority — pings still flow, but a slow pong no longer kills us.
+        ping_timeout=None,
     )
     try:
         return _run_protocol(ws, config, on_warning, on_audio)
@@ -262,6 +278,39 @@ def synthesize(
     finally:
         with contextlib.suppress(Exception):
             ws.close()
+
+
+def synthesize_chunked(
+    api_key: str,
+    config: SpeakConfig,
+    *,
+    connect: _Connect | None = None,
+    on_warning: Callable[[str], None] | None = None,
+    on_audio: Callable[[bytes, int], None] | None = None,
+) -> SpeakResult:
+    """Synthesize ``config.text`` as a sequence of sentence-packed chunks, one
+    streaming-TTS connection each, concatenating the PCM.
+
+    PocketTTS is a streaming model meant to be fed incrementally; a whole document in a
+    single Generate frame stalls the server (it then misses the keepalive ping and the
+    socket closes with a 1011). Chunking keeps every Generate small and starts playback
+    on the first chunk. ``on_audio`` still receives each PCM chunk as it arrives and the
+    full PCM is returned for the summary, exactly like ``synthesize`` — this is the same
+    one-connection-per-sentence pattern the agent-cascade path uses.
+    """
+    pcm = bytearray()
+    sample_rate = _DEFAULT_SAMPLE_RATE
+    for chunk in text.chunk_text(config.text):
+        result = synthesize(
+            api_key,
+            replace(config, text=chunk),
+            connect=connect,
+            on_warning=on_warning,
+            on_audio=on_audio,
+        )
+        pcm.extend(result.pcm)
+        sample_rate = result.sample_rate
+    return SpeakResult(bytes(pcm), sample_rate, _pcm_duration_seconds(pcm, sample_rate))
 
 
 def synthesize_dialogue(
@@ -281,8 +330,10 @@ def synthesize_dialogue(
     """
     pcm = bytearray()
     sample_rate_out = _DEFAULT_SAMPLE_RATE
-    for index, (voice, text) in enumerate(segments):
-        config = SpeakConfig(text=text, voice=voice, language=language, sample_rate=sample_rate)
+    for index, (voice, turn_text) in enumerate(segments):
+        config = SpeakConfig(
+            text=turn_text, voice=voice, language=language, sample_rate=sample_rate
+        )
         result = synthesize(api_key, config, connect=connect, on_warning=on_warning)
         if index:
             pcm.extend(audio.silence(result.sample_rate, _INTER_TURN_SILENCE_SECONDS))
