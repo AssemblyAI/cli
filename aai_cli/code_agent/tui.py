@@ -19,7 +19,7 @@ from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, RichLog, Static
+from textual.widgets import Input, Label, RichLog, Static
 from textual.worker import Worker
 
 from aai_cli.code_agent import banner
@@ -60,11 +60,6 @@ def _spinner_text(elapsed_s: int, frame: str) -> str:
     return f"{frame} Working… ({elapsed_s}s)"
 
 
-def _approval_decision(button_id: str | None) -> str:
-    """Map a pressed approval button's id to a decision, defaulting to reject if unset."""
-    return button_id or "reject"
-
-
 def _abbrev_home(path: Path) -> str:
     """Render ``path`` with the home directory collapsed to ``~``."""
     try:
@@ -97,8 +92,10 @@ def _status_text(cwd: Path, *, auto_approve: bool) -> str:
 class ApprovalScreen(ModalScreen[str]):
     """A compact, bottom-docked prompt to approve/auto-approve/reject one tool call.
 
-    The transparent screen background leaves the transcript visible above (no full-screen
-    takeover); the decision is one of ``"approve"``, ``"auto"``, or ``"reject"``.
+    Keyboard-only — a plain one-line ``y / a / n`` hint instead of clickable buttons, so it
+    reads like a CLI prompt rather than a chrome-heavy dialog. The transparent screen
+    background leaves the transcript visible above (no full-screen takeover); the decision is
+    one of ``"approve"``, ``"auto"``, or ``"reject"``.
     """
 
     DEFAULT_CSS = """
@@ -108,8 +105,6 @@ class ApprovalScreen(ModalScreen[str]):
         border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     ApprovalScreen #approvalbox Label { height: auto; }
-    ApprovalScreen #approvalbox Horizontal { height: auto; }
-    ApprovalScreen #approvalbox Button { margin: 0 1 0 0; }
     """
     BINDINGS: ClassVar = [
         ("y", "approve", "Approve"),
@@ -128,13 +123,10 @@ class ApprovalScreen(ModalScreen[str]):
                 f"Run tool [b]{escape(self._tool_name)}[/b]?  "
                 f"[dim]{escape(_format_args(self._args))}[/dim]"
             )
-            with Horizontal():
-                yield Button("Approve (y)", id="approve", variant="success")
-                yield Button("Auto-approve (a)", id="auto", variant="primary")
-                yield Button("Reject (n)", id="reject", variant="error")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(_approval_decision(event.button.id))
+            yield Label(
+                f"[b #22c55e]y[/] approve   [b {banner.BRAND_HEX}]a[/] auto-approve   "
+                "[b #f04438]n[/] reject"
+            )
 
     def action_approve(self) -> None:
         self.dismiss("approve")
@@ -270,7 +262,11 @@ class CodeAgentApp(App[None]):
         if self._initial:
             self._submit(self._initial)
         else:
-            self._begin_listening()  # in voice mode, capture the first spoken turn
+            # Defer the first mic open until *after* the splash has painted. Opening PortAudio
+            # is a GIL-holding C call; run inline on mount it races Textual's initial render and
+            # the banner never flushes — it stays blank until a resize/focus forces a full
+            # repaint. call_after_refresh runs once the screen is on-screen, so the splash wins.
+            self.call_after_refresh(self._begin_listening)  # in voice mode, capture first turn
 
     # --- event rendering (always called on the UI thread) ---------------------
 

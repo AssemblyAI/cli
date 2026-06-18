@@ -8,6 +8,7 @@ an in-memory saver gives a single ephemeral session.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,20 @@ if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
 
 _APP = "assemblyai"
+
+# Length of a generated session id — short enough to read off the splash and retype as
+# ``--session <id>`` to resume, with ample uniqueness for one user's sessions.
+_SESSION_ID_LEN = 12
+
+
+def new_session_id() -> str:
+    """A fresh, unique session id so each run starts a clean conversation by default.
+
+    `assembly code` no longer reuses a fixed ``"default"`` thread (which silently resumed the
+    previous conversation); each run gets its own id unless ``--session NAME`` names one to
+    resume. Shown on the splash as ``Thread: <id>`` so it can be resumed later.
+    """
+    return uuid.uuid4().hex[:_SESSION_ID_LEN]
 
 
 def sessions_db_path() -> Path:

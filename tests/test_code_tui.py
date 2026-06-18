@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input, RichLog, Static
+from textual.widgets import Input, Label, RichLog, Static
 
 from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
@@ -49,14 +49,6 @@ def test_format_args_and_abbrev_home() -> None:
     # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
     outside = Path("/etc/hosts")
     assert tui._abbrev_home(outside) == str(outside)
-
-
-def test_approval_decision_defaults_to_reject() -> None:
-    assert tui._approval_decision("approve") == "approve"
-    assert tui._approval_decision("auto") == "auto"
-    # A button with no id (Textual allows None) is treated as a rejection, not approval.
-    assert tui._approval_decision(None) == "reject"
-    assert tui._approval_decision("") == "reject"
 
 
 def test_git_branch_and_status(tmp_path: Path) -> None:
@@ -206,23 +198,22 @@ def test_full_turn_with_approval_interrupt() -> None:
     _run(go())
 
 
-def test_approval_button_press_dismisses() -> None:
-    # Covers ApprovalScreen.on_button_pressed (the click path; key paths are covered
-    # by the approve/reject modal tests above). The bracketed name/args also guard the
-    # compose() escape() — without it, Label markup parsing would raise on mount.
-    results: list[str | None] = []
-
+def test_approval_prompt_renders_keyboard_hint() -> None:
+    # The prompt is a plain y/a/n keyboard hint, not clickable buttons — assert each
+    # option's copy renders so dropping one is caught. The bracketed name/args also guard
+    # the compose() escape(): without it, Label markup parsing would raise on mount.
     async def go() -> None:
         app = CodeAgentApp(agent=FakeAgent([]))
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.push_screen(ApprovalScreen("exec[", {"cmd": "[ls"}), results.append)
+            app.push_screen(ApprovalScreen("exec[", {"cmd": "[ls"}))
             await pilot.pause()
-            await pilot.click("#reject")
-            await pilot.pause()
+            rendered = " ".join(str(label.render()) for label in app.screen.query(Label))
+            assert "approve" in rendered
+            assert "auto-approve" in rendered
+            assert "reject" in rendered
 
     _run(go())
-    assert results == ["reject"]
 
 
 def test_approval_box_is_compact_and_bottom_docked() -> None:

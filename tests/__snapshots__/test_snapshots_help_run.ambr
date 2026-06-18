@@ -416,9 +416,8 @@
   │ --memory       --no-memory               Load and persist the agent's        │
   │                                          long-term memory                    │
   │                                          [default: memory]                   │
-  │ --session                     TEXT       Conversation session name (reuse to │
-  │                                          resume it)                          │
-  │                                          [default: default]                  │
+  │ --session                     TEXT       Resume a named session. Default: a  │
+  │                                          new unique session each run         │
   │ --persist      --fresh                   Persist the session to disk         │
   │                                          (--fresh: ephemeral)                │
   │                                          [default: persist]                  │

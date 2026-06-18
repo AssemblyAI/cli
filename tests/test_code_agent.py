@@ -166,6 +166,13 @@ def test_checkpointer_in_memory_vs_sqlite(tmp_path, monkeypatch):  # untyped: to
     saver.conn.close()
 
 
+def test_new_session_id_is_unique_and_short() -> None:
+    a = store.new_session_id()
+    b = store.new_session_id()
+    assert a != b  # each run gets its own thread id (no silent resume of a shared default)
+    assert len(a) == 12 and a.isalnum()  # short hex, readable off the splash to resume later
+
+
 def test_cli_tool_invokes_runner_with_args() -> None:
     captured: list[list[str]] = []
 

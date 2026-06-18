@@ -286,3 +286,82 @@ def test_default_mic_stream_missing_sounddevice_raises_mic_missing(monkeypatch):
         _default_mic_stream(sample_rate=16000, device=None)
     assert exc.value.error_type == "mic_missing"
     assert exc.value.exit_code == 2
+
+
+class _FakeStereoStream(_FakeRawStream):
+    """A 2-channel input stream: one interleaved stereo frame (L=256, R=768)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # int16 LE: L=256 (b"\x00\x01"), R=768 (b"\x00\x03"), interleaved one frame.
+        self._chunks = [(b"\x00\x01\x00\x03", False)]
+
+
+def test_sounddevice_mic_downmixes_stereo_to_mono():
+    # channels=2 averages L/R per frame: (256 + 768) / 2 == 512 (b"\x00\x02").
+    mic = _SoundDeviceMic(_FakeStereoStream(), blocksize=1, channels=2)
+    assert next(iter(mic)) == b"\x00\x02"
+
+
+def _fake_sd_rejecting_mono(max_input_channels: int, opened: list[int]) -> Any:
+    """A sounddevice whose mono open fails with -9998; query reports ``max_input_channels``."""
+
+    def raw_input_stream(**kwargs):
+        opened.append(kwargs["channels"])
+        if kwargs["channels"] == 1:
+            raise OSError("Error opening RawInputStream: Invalid number of channels [-9998]")
+        return _FakeStereoStream(**kwargs)
+
+    fake_sd: Any = types.ModuleType("sounddevice")
+    fake_sd.RawInputStream = raw_input_stream
+    fake_sd.query_devices = lambda device, kind: {"max_input_channels": max_input_channels}
+    return fake_sd
+
+
+def test_default_mic_stream_falls_back_to_stereo_downmix(monkeypatch):
+    # A multichannel-only input (mono rejected, but >=2 channels available) is reopened at
+    # stereo and downmixed to mono — so voice works on devices that won't open as mono.
+    opened: list[int] = []
+    monkeypatch.setitem(sys.modules, "sounddevice", _fake_sd_rejecting_mono(2, opened))
+    stream = _default_mic_stream(sample_rate=16000, device=None)
+    assert opened == [1, 2]  # tried mono, then reopened stereo
+    assert next(iter(stream)) == b"\x00\x02"  # yields downmixed mono
+
+
+def test_default_mic_stream_zero_input_channels_raises_permission_error(monkeypatch):
+    # 0 input channels can't be salvaged (no mic permission / wrong default device): raise an
+    # actionable error pointing at the macOS Microphone privacy setting, not the cryptic code.
+    opened: list[int] = []
+    monkeypatch.setitem(sys.modules, "sounddevice", _fake_sd_rejecting_mono(0, opened))
+    with pytest.raises(CLIError) as exc:
+        _default_mic_stream(sample_rate=16000, device=None)
+    assert opened == [1]  # only the mono attempt; no pointless stereo retry
+    assert exc.value.error_type == "mic_error"
+    assert "no input channels" in exc.value.message.lower()
+    assert exc.value.suggestion is not None
+    assert "Microphone" in exc.value.suggestion
+
+
+def test_default_mic_stream_single_channel_failure_reraises_original(monkeypatch):
+    # A genuine 1-channel device should accept mono; if it still failed, the channel fallback
+    # can't help, so surface the real PortAudio error rather than masking it.
+    opened: list[int] = []
+    monkeypatch.setitem(sys.modules, "sounddevice", _fake_sd_rejecting_mono(1, opened))
+    with pytest.raises(OSError, match="Invalid number of channels"):
+        _default_mic_stream(sample_rate=16000, device=None)
+    assert opened == [1]  # no stereo retry on a 1-channel device
+
+
+def test_microphone_source_passes_through_factory_clierror():
+    # An actionable CLIError from the factory (e.g. the zero-channel case) must propagate
+    # intact, not get re-wrapped into the generic "Could not open" message.
+    err = CLIError("no input channels", error_type="mic_error", exit_code=1, suggestion="grant it")
+
+    def boom(**_kwargs):
+        raise err
+
+    mic = MicrophoneSource(capture_rate=16000, stream_factory=boom)
+    with pytest.raises(CLIError) as exc:
+        list(mic)
+    assert exc.value is err  # passed through unchanged
+    assert exc.value.suggestion == "grant it"
