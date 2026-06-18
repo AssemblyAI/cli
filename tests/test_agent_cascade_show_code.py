@@ -1,4 +1,4 @@
-"""`assembly agent-cascade --show-code` tests.
+"""`assembly live --show-code` tests.
 
 Split from test_agent_cascade_command.py (which holds the run-path wiring) so the
 print-only path's many invocations live in their own file. The cascade is
@@ -33,7 +33,7 @@ def test_show_code_prints_sandbox_script_without_running(monkeypatch):
     )
     result = runner.invoke(
         app,
-        ["--sandbox", "agent-cascade", "--voice", "jane", "--greeting", "Hi there", "--show-code"],
+        ["--sandbox", "live", "--voice", "jane", "--greeting", "Hi there", "--show-code"],
     )
     assert result.exit_code == 0
     # Targets the sandbox the key was minted for — all three legs.
@@ -54,25 +54,23 @@ def test_show_code_defaults_off_at_the_argv_seam(monkeypatch):
         captured["opts"] = opts
 
     monkeypatch.setattr(_exec, "run_agent_cascade", fake_run)
-    assert runner.invoke(app, ["agent-cascade"]).exit_code == 0
+    assert runner.invoke(app, ["live"]).exit_code == 0
     assert captured["opts"].show_code is False
-    assert runner.invoke(app, ["agent-cascade", "--show-code"]).exit_code == 0
+    assert runner.invoke(app, ["live", "--show-code"]).exit_code == 0
     assert captured["opts"].show_code is True
 
 
 def test_show_code_injects_speech_model(monkeypatch):
     monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
-    result = runner.invoke(
-        app, ["--sandbox", "agent-cascade", "--speech-model", "u3-rt-pro", "--show-code"]
-    )
+    result = runner.invoke(app, ["--sandbox", "live", "--speech-model", "u3-rt-pro", "--show-code"])
     assert result.exit_code == 0
     assert "speech_model=u3-rt-pro" in result.stdout
 
 
 def test_show_code_reflects_no_format_turns(monkeypatch):
     monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
-    formatted = runner.invoke(app, ["--sandbox", "agent-cascade", "--show-code"])
-    bare = runner.invoke(app, ["--sandbox", "agent-cascade", "--no-format-turns", "--show-code"])
+    formatted = runner.invoke(app, ["--sandbox", "live", "--show-code"])
+    bare = runner.invoke(app, ["--sandbox", "live", "--no-format-turns", "--show-code"])
     # With formatting on the cue waits for the punctuated turn; off, a bare end-of-turn fires.
     assert "turn_is_formatted" in formatted.stdout
     assert "turn_is_formatted" not in bare.stdout
@@ -83,7 +81,7 @@ def test_show_code_threads_model_and_max_tokens(monkeypatch):
     monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
     result = runner.invoke(
         app,
-        ["--sandbox", "agent-cascade", "--model", "claude-x", "--max-tokens", "321", "--show-code"],
+        ["--sandbox", "live", "--model", "claude-x", "--max-tokens", "321", "--show-code"],
     )
     assert result.exit_code == 0
     assert "claude-x" in result.stdout
@@ -95,7 +93,7 @@ def test_show_code_file_source_warns_on_stderr(monkeypatch):
     monkeypatch.setattr(
         _exec.engine, "run_cascade", lambda **kw: (_ for _ in ()).throw(AssertionError("no run"))
     )
-    result = runner.invoke(app, ["--sandbox", "agent-cascade", "clip.wav", "--show-code"])
+    result = runner.invoke(app, ["--sandbox", "live", "clip.wav", "--show-code"])
     assert result.exit_code == 0
     assert "uses the microphone" in result.stderr
     assert "uses the microphone" not in result.stdout  # stdout stays a clean script
@@ -104,13 +102,13 @@ def test_show_code_file_source_warns_on_stderr(monkeypatch):
 
 def test_show_code_mic_emits_no_warning(monkeypatch):
     monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
-    result = runner.invoke(app, ["--sandbox", "agent-cascade", "--show-code"])
+    result = runner.invoke(app, ["--sandbox", "live", "--show-code"])
     assert result.exit_code == 0
     assert "uses the microphone" not in result.stderr  # mic script matches the run, nothing to warn
 
 
 def test_show_code_in_production_is_rejected_with_sandbox_hint():
     # --show-code still honors the sandbox-only guard, so the generated URLs are valid.
-    result = runner.invoke(app, ["agent-cascade", "--show-code"])
+    result = runner.invoke(app, ["live", "--show-code"])
     assert result.exit_code == 2
     assert "only available in the sandbox" in result.output

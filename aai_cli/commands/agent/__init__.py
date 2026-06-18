@@ -84,7 +84,7 @@ def agent(
         help="Print the equivalent Python SDK code and exit (does not start a session)",
     ),
 ) -> None:
-    """Hold a live two-way voice conversation with a voice agent
+    """Hold a live two-way voice conversation with the Voice Agent API
 
     Use headphones: the mic stays open while the agent speaks, so on
     speakers it would hear itself and loop. Pass an audio file/URL (or
