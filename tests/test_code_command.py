@@ -167,13 +167,12 @@ def test_assemble_tools_includes_cli_fetch_ask_and_optional_extras(monkeypatch):
     assert [t.name for t in tools] == ["assembly", "fetch_url", "ask_user"]
 
 
-def test_assemble_middlewares_skills_and_memory(monkeypatch):
-    monkeypatch.setattr(_exec, "build_skills_middleware", lambda: "SKILLS")
+def test_assemble_middlewares_memory_only(monkeypatch):
+    # Skills are wired in _build_agent now (they pair a middleware with a tool); this
+    # assembler only handles the optional memory middleware.
     monkeypatch.setattr(_exec, "build_memory_middleware", lambda: "MEM")
-    assert _exec._assemble_middlewares(_opts(skills=True, memory=True)) == ["SKILLS", "MEM"]
-
-    monkeypatch.setattr(_exec, "build_skills_middleware", lambda: None)
-    assert _exec._assemble_middlewares(_opts(skills=True, memory=False)) == []
+    assert _exec._assemble_middlewares(_opts(memory=True)) == ["MEM"]
+    assert _exec._assemble_middlewares(_opts(memory=False)) == []
 
 
 def test_build_agent_wires_model_tools_and_checkpointer(monkeypatch):
@@ -181,14 +180,30 @@ def test_build_agent_wires_model_tools_and_checkpointer(monkeypatch):
     monkeypatch.setattr(_exec, "build_model", lambda key, *, model: f"model:{model}")
     monkeypatch.setattr(_exec, "_assemble_tools", lambda key, opts, bridge: ["t"])
     monkeypatch.setattr(_exec, "_assemble_middlewares", lambda opts: ["m"])
+    # --no-skills: build_skills must not be consulted, so the sentinel never lands.
+    monkeypatch.setattr(_exec, "build_skills", lambda: ("X_MW", "X_TOOL"))
     monkeypatch.setattr(_exec, "build_checkpointer", lambda *, persist: f"ckpt:{persist}")
     monkeypatch.setattr(_exec, "build_agent", lambda **kw: seen.update(kw) or "AGENT")
 
-    agent = _exec._build_agent("k", _opts(model="gpt-5", persist=False), AskBridge())
+    agent = _exec._build_agent("k", _opts(model="gpt-5", persist=False, skills=False), AskBridge())
     assert agent == "AGENT"
     assert seen["model"] == "model:gpt-5"
-    assert seen["tools"] == ["t"] and seen["middlewares"] == ["m"]
+    assert seen["tools"] == ["t"] and seen["middlewares"] == ["m"]  # no skills sentinel added
     assert seen["checkpointer"] == "ckpt:False"
+
+
+def test_build_agent_inserts_skills_middleware_and_read_tool(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(_exec, "build_model", lambda key, *, model: "model")
+    monkeypatch.setattr(_exec, "_assemble_tools", lambda key, opts, bridge: ["base"])
+    monkeypatch.setattr(_exec, "_assemble_middlewares", lambda opts: ["mem"])
+    monkeypatch.setattr(_exec, "build_skills", lambda: ("skills_mw", "read_skill_tool"))
+    monkeypatch.setattr(_exec, "build_checkpointer", lambda *, persist: "ckpt")
+    monkeypatch.setattr(_exec, "build_agent", lambda **kw: seen.update(kw) or "AGENT")
+
+    _exec._build_agent("k", _opts(skills=True), AskBridge())
+    assert seen["middlewares"] == ["skills_mw", "mem"]  # skills loaded ahead of memory
+    assert seen["tools"] == ["base", "read_skill_tool"]  # read_skill tool appended
 
 
 def test_web_note_only_without_key(monkeypatch):

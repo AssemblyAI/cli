@@ -8,10 +8,16 @@ never silently send the user's code to anything but AssemblyAI.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
+
+# The gateway omits Anthropic's required ``tool_use.input`` when an OpenAI tool call's
+# ``arguments`` is empty (``""`` / ``"{}"``); substitute a minimal non-empty object so the
+# field is emitted. See :func:`_ensure_tool_call_arguments`.
+_PLACEHOLDER_ARGUMENTS = '{"_": ""}'
 
 if TYPE_CHECKING:
     from langchain_core.language_models.chat_models import BaseChatModel
@@ -86,6 +92,52 @@ def _hoist_call_list(tool_calls: list[object]) -> None:
             tool_call["id"] = function.pop("id")
 
 
+def _ensure_tool_call_arguments(messages: object) -> None:
+    """Give every empty tool-call ``arguments`` a non-empty placeholder object, in place.
+
+    The AssemblyAI LLM Gateway maps each OpenAI tool call's ``arguments`` (a JSON string)
+    onto Anthropic's ``tool_use.input`` object, but drops ``input`` entirely when the
+    arguments are empty (``""`` or ``"{}"``). Anthropic *requires* ``input`` to be present,
+    so replaying any argument-less tool call is rejected (400, surfaced as a 500 while
+    streaming) — and because the failing call sits in the conversation history, every later
+    turn fails too, wedging the session. We swap in a minimal non-empty object so the gateway
+    emits a valid ``input``. This only rewrites the request we send: the tool already ran
+    locally with its real (empty) arguments, and the gateway accepts the placeholder even for
+    tools that declare ``additionalProperties: false``. (Drop this once the gateway maps empty
+    arguments to ``input: {}`` itself.)
+    """
+    if not isinstance(messages, list):
+        return
+    for message in messages:
+        tool_calls = message.get("tool_calls") if isinstance(message, dict) else None
+        if isinstance(tool_calls, list):
+            _fill_empty_arguments(tool_calls)
+
+
+def _fill_empty_arguments(tool_calls: list[object]) -> None:
+    """Replace each empty ``function.arguments`` with the placeholder (helper for the above)."""
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        function = tool_call.get("function")
+        if isinstance(function, dict) and _is_empty_arguments(function.get("arguments")):
+            function["arguments"] = _PLACEHOLDER_ARGUMENTS
+
+
+def _is_empty_arguments(arguments: object) -> bool:
+    """True when ``arguments`` is an OpenAI args string carrying no fields (``""``/``"{}"``)."""
+    if not isinstance(arguments, str):
+        return False
+    stripped = arguments.strip()
+    if not stripped:
+        return True
+    try:
+        parsed = json.loads(stripped)
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and not parsed
+
+
 def build_model(
     api_key: str,
     *,
@@ -114,18 +166,21 @@ def build_model(
     class _GatewayChatOpenAI(ChatOpenAI):
         """ChatOpenAI that adapts the gateway's OpenAI-incompatible quirks for langchain.
 
-        Two fix-ups, each working around a gateway response/request bug the upstream client
-        doesn't expect: flatten list-content messages the gateway 500s on (request side, see
-        :func:`_flatten_content`), and hoist each streamed tool-call ``id`` back to the
-        tool-call top level where langchain reads it (response side, see
-        :func:`_hoist_tool_call_ids`).
+        Three fix-ups, each working around a gateway request/response bug the upstream client
+        doesn't expect: flatten list-content messages the gateway 500s on and give empty
+        tool-call arguments a placeholder the gateway can map to ``tool_use.input`` (request
+        side, see :func:`_flatten_content` / :func:`_ensure_tool_call_arguments`), and hoist
+        each streamed tool-call ``id`` back to the tool-call top level where langchain reads it
+        (response side, see :func:`_hoist_tool_call_ids`).
         """
 
         def _get_request_payload(
             self, input_: object, *, stop: list[str] | None = None, **kwargs: object
         ) -> dict:
             payload = super()._get_request_payload(input_, stop=stop, **kwargs)
-            _flatten_content(payload.get("messages"))
+            messages = payload.get("messages")
+            _flatten_content(messages)
+            _ensure_tool_call_arguments(messages)
             return payload
 
         def _convert_chunk_to_generation_chunk(

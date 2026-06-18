@@ -215,13 +215,32 @@ def test_docs_mcp_load_failure_returns_empty(monkeypatch: pytest.MonkeyPatch) ->
     assert docs_mcp.load_docs_tools("https://example.invalid") == []
 
 
-def test_skills_middleware_present_and_absent(tmp_path: Path) -> None:
-    assert skills.build_skills_middleware(tmp_path) is None  # empty dir -> no skills
+def test_build_skills_present_and_absent(tmp_path: Path) -> None:
+    assert skills.build_skills(tmp_path) is None  # empty dir -> no skills, no tool
 
     skill_dir = tmp_path / "assemblyai"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("---\nname: assemblyai\ndescription: x\n---\nbody")
-    assert skills.build_skills_middleware(tmp_path) is not None
+    bundle = skills.build_skills(tmp_path)
+    assert bundle is not None  # constructing the middleware also validates the custom prompt
+    _middleware, reader = bundle
+    assert reader.name == skills.READ_SKILL_TOOL_NAME
+
+
+def test_read_skill_tool_reads_under_root_and_blocks_escape(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "assemblyai"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("the skill body")
+    (tmp_path.parent / "secret.md").write_text("top secret")
+
+    reader = skills.build_skill_reader(tmp_path)
+    # The path is the prompt's backend-virtual form (leading slash, relative to root).
+    assert reader.invoke({"path": "/assemblyai/SKILL.md"}) == "the skill body"
+    # A traversal out of the skills dir is refused (not the neighbouring file's contents).
+    escaped = reader.invoke({"path": "/../secret.md"})
+    assert "outside the skills directory" in escaped and "top secret" not in escaped
+    # A missing skill file reports an error rather than raising.
+    assert "not found" in reader.invoke({"path": "/assemblyai/MISSING.md"})
 
 
 def test_web_search_tool_gated_on_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -315,6 +334,58 @@ def test_hoist_tool_call_ids_moves_id_out_of_function_only_when_missing() -> Non
 def test_hoist_tool_call_ids_guards() -> None:
     model_mod._hoist_tool_call_ids(None)  # not a dict -> early return, no error
     model_mod._hoist_tool_call_ids({"choices": 99})  # choices not a list -> early return
+
+
+def test_is_empty_arguments() -> None:
+    assert model_mod._is_empty_arguments("")  # empty string
+    assert model_mod._is_empty_arguments("   ")  # whitespace only
+    assert model_mod._is_empty_arguments("{}")  # empty object
+    assert model_mod._is_empty_arguments("{ }")  # empty object with whitespace
+    assert not model_mod._is_empty_arguments('{"path": "/"}')  # real arguments
+    assert not model_mod._is_empty_arguments("[]")  # non-dict JSON is not "empty args"
+    assert not model_mod._is_empty_arguments("{bad json")  # unparseable -> leave alone
+    assert not model_mod._is_empty_arguments(None)  # non-string -> leave alone
+    assert not model_mod._is_empty_arguments({"already": "parsed"})  # non-string -> leave alone
+
+
+def test_ensure_tool_call_arguments_fills_only_empty_calls() -> None:
+    empty_fn: dict[str, object] = {"name": "ls", "arguments": "{}"}
+    blank_fn: dict[str, object] = {"name": "ls", "arguments": "  "}
+    full_fn: dict[str, object] = {"name": "ls", "arguments": '{"path": "/"}'}
+    tool_calls: list[object] = [
+        None,  # tool_call not a dict -> skipped
+        {"id": "0", "function": 7},  # function not a dict -> skipped
+        {"id": "1", "function": empty_fn},  # empty object -> filled
+        {"id": "2", "function": blank_fn},  # whitespace -> filled
+        {"id": "3", "function": full_fn},  # real args -> untouched
+    ]
+    messages: list[object] = [
+        None,  # message not a dict -> skipped
+        {"role": "user", "content": "hi"},  # no tool_calls -> skipped
+        {"tool_calls": 99},  # tool_calls not a list -> skipped
+        {"tool_calls": tool_calls},
+    ]
+    model_mod._ensure_tool_call_arguments(messages)
+    assert empty_fn["arguments"] == model_mod._PLACEHOLDER_ARGUMENTS
+    assert blank_fn["arguments"] == model_mod._PLACEHOLDER_ARGUMENTS
+    assert full_fn["arguments"] == '{"path": "/"}'  # left untouched
+
+
+def test_ensure_tool_call_arguments_guards() -> None:
+    model_mod._ensure_tool_call_arguments(None)  # not a list -> early return, no error
+    model_mod._ensure_tool_call_arguments([{"tool_calls": 99}])  # tool_calls not a list
+
+
+def test_get_request_payload_fills_empty_tool_call_arguments() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
+    # An assistant tool call with no arguments serializes to arguments="{}", which the gateway
+    # rejects (missing tool_use.input); the payload must carry the placeholder instead.
+    ai = AIMessage(content="", tool_calls=[{"name": "ls", "args": {}, "id": "t1"}])
+    payload = m._get_request_payload([HumanMessage(content="hi"), ai])
+    calls = payload["messages"][1]["tool_calls"]
+    assert calls[0]["function"]["arguments"] == model_mod._PLACEHOLDER_ARGUMENTS
 
 
 def test_convert_chunk_hoists_streamed_tool_call_id() -> None:
