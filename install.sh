@@ -104,7 +104,11 @@ if ! command -v uv &>/dev/null; then
 		exit 0
 	fi
 else
-	uv self update
+	# `uv self update` errors out when uv was installed via an external package
+	# manager (Homebrew, apt, …) — it can't replace a binary it doesn't own. That
+	# is not fatal to us: a managed uv is already kept current by its manager, so
+	# swallow the failure and proceed straight to installing the CLI.
+	uv self update 2>/dev/null || true
 	uv tool install -U "$PACKAGE" --python "$PYTHON_VERSION"
 fi
 
