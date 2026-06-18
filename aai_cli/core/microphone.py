@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import atexit
+import contextlib
+import signal
 import warnings
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -57,6 +60,42 @@ def audio_missing_error() -> CLIError:
     )
 
 
+# Process-global once-latch. The default is only observable on the very first install
+# in a fresh process; the suite mutates this flag across tests, so the load-time value
+# can't be asserted in isolation — the check/set in _install_… are what the tests pin.
+_shutdown_interrupt_guard_installed = False  # pragma: no mutate
+
+
+def _ignore_interrupt_during_shutdown() -> None:
+    """Drop SIGINT for the remainder of interpreter shutdown.
+
+    sounddevice registers its own atexit handler that calls ``Pa_Terminate`` to tear
+    down PortAudio. A second Ctrl-C while that runs raises ``KeyboardInterrupt``
+    *inside* the atexit callback, which Python reports as a noisy "Exception ignored in
+    atexit callback" traceback — even though the first Ctrl-C already stopped the
+    session cleanly. There is nothing left to cancel once we're exiting, so ignore the
+    late interrupt.
+    """
+    # signal.signal only works on the main thread; atexit runs there, but a ValueError
+    # is still possible in odd embeddings, so guard it rather than crash the teardown.
+    with contextlib.suppress(ValueError):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def _install_shutdown_interrupt_guard() -> None:
+    """Register ``_ignore_interrupt_during_shutdown`` with atexit exactly once.
+
+    Registered *after* sounddevice imports so atexit's LIFO order runs our guard
+    before sounddevice's PortAudio teardown, neutralizing a second Ctrl-C that would
+    otherwise raise inside that atexit callback.
+    """
+    global _shutdown_interrupt_guard_installed
+    if _shutdown_interrupt_guard_installed:
+        return
+    atexit.register(_ignore_interrupt_during_shutdown)
+    _shutdown_interrupt_guard_installed = True
+
+
 def import_sounddevice() -> ModuleType:
     """Import sounddevice lazily, mapping an ImportError to ``audio_missing_error``.
 
@@ -68,6 +107,7 @@ def import_sounddevice() -> ModuleType:
         import sounddevice
     except ImportError as exc:
         raise audio_missing_error() from exc
+    _install_shutdown_interrupt_guard()
     module: ModuleType = sounddevice
     return module
 

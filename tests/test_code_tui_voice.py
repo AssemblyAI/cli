@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from aai_cli.code_agent.tui import CodeAgentApp
 from aai_cli.core.errors import CLIError
@@ -161,5 +161,169 @@ def test_voice_followup_is_a_noop_without_voice() -> None:
             await pilot.pause()
             app._voice_followup()  # returns immediately without speaking or listening
             assert app._voice is None
+
+    _run(go())
+
+
+def test_toggle_voice_pauses_and_resumes_capture() -> None:
+    # Ctrl-V flips voice off (no capture, no readback) and back on; the state badge tracks it.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Assert via the methods, not the `_voice_paused` attribute: mypy narrows the
+            # attribute and can't see action_toggle_voice() flip it back, flagging the second
+            # check unreachable. The method calls reflect the same state without that trap.
+            assert app._voice_active()
+            assert app._voice_state() == "on"
+            app.action_toggle_voice()  # pause
+            assert not app._voice_active()
+            assert app._voice_state() == "off"
+            app.action_toggle_voice()  # resume
+            assert app._voice_active()
+            assert app._voice_state() == "on"
+
+    _run(go())
+
+
+def test_paused_voice_skips_followup_readback() -> None:
+    # While paused, the post-turn followup neither speaks a summary nor listens.
+    async def go() -> None:
+        voice = FakeVoice(transcripts=["ignored"])
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_paused = True  # set before mount so on_mount never auto-listens
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._last_reply = "a reply"
+            app._voice_followup()
+            await pilot.pause()
+            assert voice.spoken == []  # paused: no readback
+            assert voice.listens == 0  # paused: no capture
+
+    _run(go())
+
+
+def test_voice_mode_swaps_text_input_for_listening_affordance() -> None:
+    # While voice capture is on, the text prompt is hidden and a "listening" bar shows;
+    # toggling voice off (Ctrl-V) brings the text box back. (Re-query each check so mypy
+    # doesn't narrow a stored display bool across the toggles.)
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # start paused so on_mount doesn't race a capture thread
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # paused -> text box visible
+            assert app.query_one("#voicebar").display is False
+            app.action_toggle_voice()  # voice on
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is False  # text box hidden
+            assert app.query_one("#voicebar").display is True  # listening affordance shown
+            app.action_toggle_voice()  # voice off
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # text box back
+            assert app.query_one("#voicebar").display is False
+
+    _run(go())
+
+
+def test_voice_capture_failure_restores_the_text_input() -> None:
+    # When the mic is ruled out mid-session, the listening bar is replaced by the text box.
+    async def go() -> None:
+        voice = FakeVoice(error=CLIError("no mic", error_type="mic_missing", exit_code=2))
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert await _wait_until(pilot, lambda: app._voice_typed)
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # text box restored on failure
+            assert app.query_one("#voicebar").display is False
+
+    _run(go())
+
+
+def test_voice_bar_distinguishes_phases() -> None:
+    # The bar shows a distinct label per phase; only the listening phase carries the type hint.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # quiet the auto-listen; drive phases directly
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._set_voice_phase("listening")
+            bar = str(app.query_one("#voicebar", Static).render())
+            assert "Listening" in bar and "Ctrl-V to type" in bar
+            app._set_voice_phase("thinking")
+            bar = str(app.query_one("#voicebar", Static).render())
+            assert "Thinking" in bar and "Ctrl-V to type" not in bar  # hint is listening-only
+            app._set_voice_phase("speaking")
+            assert "Speaking" in str(app.query_one("#voicebar", Static).render())
+
+    _run(go())
+
+
+def test_spinner_suppressed_in_voice_mode() -> None:
+    # In voice mode the bar carries the "thinking" state, so the separate spinner stays hidden;
+    # pausing voice brings the spinner back.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._start_spinner()
+            assert app.query_one("#spinner", Static).display is False  # voice active -> no spinner
+            app._voice_paused = True
+            app._start_spinner()
+            assert app.query_one("#spinner", Static).display is True  # paused -> spinner shows
+
+    _run(go())
+
+
+def test_voice_bar_animation_timer_runs_and_advances() -> None:
+    # The meter animation timer runs only while the bar is shown, and a tick changes the frame.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Read into fresh locals each time: asserting `is None`/`is not None` on the same
+            # attribute across the opaque toggle would make mypy flag the later check unreachable.
+            paused_timer = app._voice_timer
+            assert paused_timer is None  # paused -> no animation
+            app.action_toggle_voice()  # voice on -> bar shown, timer running
+            await pilot.pause()
+            running_timer = app._voice_timer
+            assert running_timer is not None
+            before = str(app.query_one("#voicebar", Static).render())
+            app._tick_voice()
+            assert str(app.query_one("#voicebar", Static).render()) != before  # meter advanced
+            app.action_toggle_voice()  # voice off -> timer stopped
+            await pilot.pause()
+            stopped_timer = app._voice_timer
+            assert stopped_timer is None
+
+    _run(go())
+
+
+def test_submit_sets_thinking_phase() -> None:
+    async def go() -> None:
+        agent = FakeAgent([{"messages": [HumanMessage("go"), AIMessage("done")]}])
+        app = CodeAgentApp(agent=agent, voice=FakeVoice())
+        app._voice_paused = True  # keep the post-turn followup from flipping the phase
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._submit("go")
+            assert app._voice_phase == "thinking"  # set synchronously when the turn starts
+            await app.workers.wait_for_complete()
+
+    _run(go())
+
+
+def test_toggle_voice_without_session_notifies_and_stays_off() -> None:
+    # With no voice front-end the toggle is a no-op (notice only) and never marks a pause.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))  # no voice
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.action_toggle_voice()
+            assert app._voice_paused is False  # nothing to pause
+            assert app._voice_state() is None  # no badge without a session
 
     _run(go())

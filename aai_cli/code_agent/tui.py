@@ -13,169 +13,77 @@ import itertools
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar
 
 from rich.markup import escape
-from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.app import ComposeResult
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, RichLog, Static
+from textual.widgets import Input, Static
 from textual.worker import Worker
 
 from aai_cli.code_agent import banner
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.ask_tool import AskBridge
-from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
+from aai_cli.code_agent.events import (
+    AssistantDelta,
+    AssistantText,
+    ErrorText,
+    Event,
+    ToolCall,
+    ToolResult,
+)
+from aai_cli.code_agent.messages import (
+    AssistantMessage,
+    ErrorMessage,
+    Note,
+    ToolCallLine,
+    ToolOutput,
+    UserMessage,
+)
+from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
-from aai_cli.code_agent.voice import spoken_summary
-from aai_cli.core import errors
+from aai_cli.code_agent.tui_status import _spinner_text, _status_text
+from aai_cli.code_agent.voice_ui import _VoiceIO, _VoiceLegs
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
-
     from textual.timer import Timer
 
 # Glyphs cycled by the working indicator's animation (purely cosmetic).
 _SPIN_FRAMES = "✶✷✸✹✺"  # pragma: no mutate
 # Seconds the Ctrl-C "press again to quit" hint stays armed (deepagents-code uses 3s too).
 _QUIT_HINT_SECONDS = 3  # pragma: no mutate
+# Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
+_VOICE_FRAMES = ("▁▃▅", "▃▅▇", "▅▇▆", "▆▇▅", "▇▅▃", "▅▃▁")  # pragma: no mutate
+# The three voice phases the bar distinguishes, each (label, accent color).
+_VOICE_PHASES: dict[str, tuple[str, str]] = {
+    "listening": ("Listening — speak your request", banner.BRAND_HEX),
+    "thinking": ("Thinking…", "#f59e0b"),
+    "speaking": ("Speaking…", "#22c55e"),
+}
 
 
-class _VoiceIO(Protocol):
-    """The speak-to-it / read-back slice the TUI drives; :class:`VoiceSession` satisfies it."""
-
-    def listen(self) -> str | None:
-        """Capture one spoken turn and return its transcript (``None`` on no speech)."""
-
-    def speak(self, text: str) -> None:
-        """Read ``text`` back aloud (a no-op when readback is unavailable)."""
-
-
-def _format_args(args: Mapping[str, object]) -> str:
-    return ", ".join(f"{key}={value!r}" for key, value in args.items())
-
-
-def _spinner_text(elapsed_s: int, frame: str) -> str:
-    """The working-indicator line: a spinner glyph and the elapsed seconds."""
-    return f"{frame} Working… ({elapsed_s}s)"
-
-
-def _abbrev_home(path: Path) -> str:
-    """Render ``path`` with the home directory collapsed to ``~``."""
-    try:
-        return f"~/{path.relative_to(Path.home())}"
-    except ValueError:
-        return str(path)
-
-
-def _git_branch(start: Path) -> str | None:
-    """The current git branch for ``start`` (walking up to the repo root), or None."""
-    for directory in (start, *start.parents):
-        head = directory / ".git" / "HEAD"
-        if head.is_file():
-            ref = head.read_text(encoding="utf-8").strip()
-            return ref.removeprefix("ref: refs/heads/") if ref.startswith("ref: ") else ref[:8]
-    return None
-
-
-def _status_text(cwd: Path, *, auto_approve: bool) -> str:
-    """The bottom status line: a mode badge, the working directory, and the git branch."""
-    mode = "auto" if auto_approve else "manual"
-    badge = f"[black on #f59e0b] {mode} [/]"
-    parts = [badge, f"[dim]{_abbrev_home(cwd)}[/dim]"]
-    branch = _git_branch(cwd)
-    if branch:
-        parts.append(f"[dim]↗ {branch}[/dim]")
-    return " ".join(parts)
-
-
-class ApprovalScreen(ModalScreen[str]):
-    """A compact, bottom-docked prompt to approve/auto-approve/reject one tool call.
-
-    Keyboard-only — a plain one-line ``y / a / n`` hint instead of clickable buttons, so it
-    reads like a CLI prompt rather than a chrome-heavy dialog. The transparent screen
-    background leaves the transcript visible above (no full-screen takeover); the decision is
-    one of ``"approve"``, ``"auto"``, or ``"reject"``.
-    """
-
-    DEFAULT_CSS = """
-    ApprovalScreen { align: center bottom; background: transparent; }
-    ApprovalScreen #approvalbox {
-        dock: bottom; width: 1fr; height: auto;
-        border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
-    }
-    ApprovalScreen #approvalbox Label { height: auto; }
-    """
-    BINDINGS: ClassVar = [
-        ("y", "approve", "Approve"),
-        ("a", "auto", "Auto-approve"),
-        ("n", "reject", "Reject"),
-    ]
-
-    def __init__(self, name: str, args: Mapping[str, object]) -> None:
-        super().__init__()
-        self._tool_name = name  # not _name: that shadows Textual Widget's str|None attr
-        self._args = args
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="approvalbox"):
-            yield Label(
-                f"Run tool [b]{escape(self._tool_name)}[/b]?  "
-                f"[dim]{escape(_format_args(self._args))}[/dim]"
-            )
-            yield Label(
-                f"[b #22c55e]y[/] approve   [b {banner.BRAND_HEX}]a[/] auto-approve   "
-                "[b #f04438]n[/] reject"
-            )
-
-    def action_approve(self) -> None:
-        self.dismiss("approve")
-
-    def action_auto(self) -> None:
-        self.dismiss("auto")
-
-    def action_reject(self) -> None:
-        self.dismiss("reject")
-
-
-class AskScreen(ModalScreen[str]):
-    """A bottom-docked prompt that relays a question from the agent and returns the answer."""
-
-    DEFAULT_CSS = """
-    AskScreen { align: center bottom; background: transparent; }
-    AskScreen #askbox {
-        dock: bottom; width: 1fr; height: auto;
-        border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
-    }
-    """
-
-    def __init__(self, question: str) -> None:
-        super().__init__()
-        self._question = question
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="askbox"):
-            yield Label(f"[b]The agent asks:[/b] {escape(self._question)}")
-            yield Input(id="answer", placeholder="Type your answer and press Enter…")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self.dismiss(event.value)
-
-
-class CodeAgentApp(App[None]):
+class CodeAgentApp(_VoiceLegs):
     """The coding-agent TUI: conversation transcript + prompt + approval/ask modals."""
 
     # Flat pure-black canvas — no panel fills/gray, just the bordered prompt and a status
     # line, matching the deepagents-code look (wordmark in the AssemblyAI brand blue).
     CSS = f"""
     Screen {{ background: #000000; }}
-    #log {{
-        height: 1fr; border: none; background: #000000; padding: 1 2;
-        scrollbar-size-vertical: 0;
-    }}
+    /* The approval/ask modals must stay see-through so the transcript shows above their
+       docked prompt. Their own DEFAULT_CSS sets `background: transparent`, but app CSS beats
+       a widget's DEFAULT_CSS — without this rule the `Screen` canvas above paints the modal
+       opaque black (it matches every Screen subclass) and blanks the transcript behind it. */
+    ModalScreen {{ background: transparent; }}
+    /* The transcript is a scroll container of mounted message widgets (not a RichLog), so the
+       reply streams in place and tool output can expand/collapse. */
+    #log {{ height: 1fr; border: none; background: #000000; padding: 1 2; }}
     #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
+    /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */
+    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
+        margin: 1 1; content-align: center middle; display: none; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
     #spinner {{ height: 1; background: #000000; padding: 0 2;
         color: {banner.BRAND_HEX}; display: none; }}
@@ -191,6 +99,8 @@ class CodeAgentApp(App[None]):
         ("ctrl+c", "quit_or_interrupt", "Interrupt / Quit"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+y", "copy_last", "Copy last reply"),
+        ("ctrl+v", "toggle_voice", "Toggle voice"),
+        ("ctrl+o", "toggle_output", "Expand/collapse output"),
     ]
 
     def __init__(
@@ -212,6 +122,12 @@ class CodeAgentApp(App[None]):
         self._initial = initial
         self._voice = voice  # when set, spoken turns drive the prompt and replies are read back
         self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
+        self._voice_paused = False  # user-toggled off via Ctrl-V (distinct from a mic failure)
+        self._voice_phase = "listening"  # listening / thinking / speaking, shown in the voice bar
+        self._voice_frames = itertools.cycle(_VOICE_FRAMES)
+        self._voice_timer: Timer | None = None  # animates the voice-bar meter while it's shown
+        self._streaming_msg: AssistantMessage | None = None  # the reply widget tokens stream into
+        self._last_tool_output: ToolOutput | None = None  # the row Ctrl+O expands/collapses
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
         self._web_note = web_note
@@ -231,34 +147,55 @@ class CodeAgentApp(App[None]):
     def compose(self) -> ComposeResult:
         # No Header/Footer chrome — the splash is the title and the bottom status line
         # the only footer, so the screen stays a flat dark canvas.
-        yield RichLog(id="log", wrap=True, markup=True)
+        yield VerticalScroll(id="log")
         # Docked before the prompt bar, so the working indicator sits just above the input.
         yield Static("", id="spinner")
         with Horizontal(id="promptbar"):
             yield Static(">", id="promptmark")
             yield Input(id="prompt", placeholder="Ask the agent to build something…")
-        yield Static(_status_text(self._cwd, auto_approve=self._auto_approve), id="status")
+        yield Static("", id="voicebar")  # filled by _render_voicebar when voice mode is shown
+        yield Static(
+            _status_text(
+                self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
+            ),
+            id="status",
+        )
 
-    def _write_splash(self, log: RichLog) -> None:
-        for row in banner.wordmark():
-            log.write(f"[bold {banner.BRAND_HEX}]{row}[/]")
-        log.write(f"[dim]{banner.version()}[/dim]")
-        log.write("")
-        log.write(f"[dim]Thread: {self._session_name}[/dim]")
-        log.write("")
-        log.write(f"[{banner.BRAND_HEX}]{banner.READY_LINE}[/]")
-        log.write(f"[dim]{banner.TIP_LINE}[/dim]")
+    def _write_splash(self) -> None:
+        # The whole splash is fixed copy except the session name, so this markup is safe to
+        # parse (only the session name — a --session value — is escaped).
+        rows = [f"[bold {banner.BRAND_HEX}]{row}[/]" for row in banner.wordmark()]
+        rows += [
+            f"[dim]{banner.version()}[/dim]",
+            "",
+            f"[dim]Thread: {escape(self._session_name)}[/dim]",
+            "",
+            f"[{banner.BRAND_HEX}]{banner.READY_LINE}[/]",
+            f"[dim]{banner.TIP_LINE}[/dim]",
+        ]
+        self._mount("\n".join(rows))
+
+    def _mount(self, widget: Static | str) -> None:
+        """Append a transcript widget (or a markup string) and scroll it into view."""
+        log = self.query_one("#log", VerticalScroll)
+        log.mount(Static(widget) if isinstance(widget, str) else widget)
+        log.scroll_end(animate=False)  # pragma: no mutate — cosmetic; animate flag is unassertable
+
+    def _note(self, text: str) -> None:
+        """Append a dim transcript aside (cancelling / copied / voice-off)."""
+        self._mount(Note(text))
 
     def on_mount(self) -> None:
         # Route the agent's ask_user tool through a modal (the bridge is shared with
         # the tool built before this app existed).
         self._ask_bridge.handler = self._ask
-        self._write_splash(self.query_one("#log", RichLog))
+        self._write_splash()
         if self._web_note:
             self.notify(self._web_note, title="Web search disabled", severity="warning", timeout=10)
         # Put the cursor in the prompt so the user can type immediately (RichLog would
         # otherwise hold focus and swallow keystrokes).
         self.query_one("#prompt", Input).focus()
+        self._sync_input_mode()  # in voice mode, swap the prompt for the listening affordance
         if self._initial:
             self._submit(self._initial)
         else:
@@ -275,18 +212,34 @@ class CodeAgentApp(App[None]):
         self.call_from_thread(self._write_event, event)
 
     def _write_event(self, event: Event) -> None:
-        log = self.query_one("#log", RichLog)
-        # Escape dynamic content: a model/tool string containing "[" would otherwise be
-        # parsed as Rich markup and raise MarkupError (crashing the turn), or inject styling.
-        if isinstance(event, AssistantText):
-            self._last_reply = event.text
-            log.write(escape(event.text))
+        if isinstance(event, AssistantDelta):
+            # Stream the token into the live reply widget (mounting one on the first token),
+            # updated in place until the authoritative AssistantText finalizes it below.
+            if self._streaming_msg is None:
+                self._streaming_msg = AssistantMessage()
+                self._mount(self._streaming_msg)
+            self._streaming_msg.stream(event.text)
+            self.query_one("#log", VerticalScroll).scroll_end(animate=False)  # pragma: no mutate
+        elif isinstance(event, AssistantText):
+            self._last_reply = event.text  # keep the raw text for clipboard copy
+            self._finalize_reply(event.text)
         elif isinstance(event, ToolCall):
-            log.write(f"[dim]→ {escape(event.name)}({escape(_format_args(event.args))})[/dim]")
+            self._mount(ToolCallLine(event.name, event.args))
         elif isinstance(event, ToolResult):
-            log.write(f"[dim]  {escape(event.name)}: {escape(event.content.strip()[:2000])}[/dim]")
+            self._last_tool_output = ToolOutput(event.name, event.content)
+            self._mount(self._last_tool_output)
         elif isinstance(event, ErrorText):
-            log.write(f"[#F04438]✗ {escape(event.text)}[/#F04438]")
+            self._mount(ErrorMessage(event.text))
+
+    def _finalize_reply(self, text: str) -> None:
+        """Commit the reply: finalize the streamed widget in place, or mount a fresh one."""
+        if self._streaming_msg is not None:
+            self._streaming_msg.finalize(text)
+            self._streaming_msg = None
+        else:
+            msg = AssistantMessage()
+            self._mount(msg)
+            msg.finalize(text)
 
     def action_copy_last(self) -> None:
         """Copy the most recent assistant reply to the system clipboard."""
@@ -294,7 +247,12 @@ class CodeAgentApp(App[None]):
 
         if self._last_reply:
             pyperclip.copy(self._last_reply)
-            self.query_one("#log", RichLog).write("[dim](copied last reply to clipboard)[/dim]")
+            self._note("(copied last reply to clipboard)")
+
+    def action_toggle_output(self) -> None:
+        """Ctrl-O: expand/collapse the most recent tool output (a no-op if there's none)."""
+        if self._last_tool_output is not None:
+            self._last_tool_output.toggle()
 
     # --- approval / ask (called on the worker thread) -------------------------
 
@@ -320,7 +278,8 @@ class CodeAgentApp(App[None]):
         """
         if self._auto_approve:
             return True
-        decision = self._modal_result(ApprovalScreen(name, args), default="reject")
+        screen = ApprovalScreen(name, args, voice=self._modal_voice())
+        decision = self._modal_result(screen, default="reject")
         if decision == "auto":
             self._enable_auto_approve()
             return True
@@ -333,14 +292,80 @@ class CodeAgentApp(App[None]):
         self.call_from_thread(self._refresh_status)
 
     def _refresh_status(self) -> None:
-        """Re-render the bottom status line (e.g. after the mode flips to auto)."""
+        """Re-render the bottom status line (e.g. after the mode flips to auto or voice toggles)."""
         self.query_one("#status", Static).update(
-            _status_text(self._cwd, auto_approve=self._auto_approve)
+            _status_text(
+                self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
+            )
         )
+
+    def _voice_state(self) -> str | None:
+        """``"on"``/``"off"`` for the status badge, or ``None`` when voice isn't wired up."""
+        if self._voice is None:
+            return None
+        return "on" if self._voice_active() else "off"
+
+    def action_toggle_voice(self) -> None:
+        """Ctrl-V: turn spoken input/readback on or off for the session.
+
+        A no-op notice when no voice front-end exists (e.g. a piped/typed run). Re-enabling
+        kicks off listening again unless a turn is mid-flight (the post-turn followup will).
+        """
+        if self._voice is None:
+            self.notify("Voice isn't available in this session", severity="warning")
+            return
+        self._voice_paused = not self._voice_paused
+        self._refresh_status()
+        self._sync_input_mode()  # show/hide the text box vs. the listening affordance
+        if self._voice_paused:
+            self.notify("Voice off — type your request")
+        elif not self._turn_running():
+            self.notify("Voice on — listening")
+            self._begin_listening()
+
+    def _sync_input_mode(self) -> None:
+        """Swap the text prompt for the 'listening' affordance while voice capture is active.
+
+        The Input stays mounted either way (it still holds the spoken transcript and the
+        turn-running ``disabled`` flag); only the bars' visibility flips. The prompt regains
+        focus whenever it's the visible input.
+        """
+        listening = self._voice_active()
+        self.query_one("#promptbar", Horizontal).display = not listening
+        self.query_one("#voicebar", Static).display = listening
+        if listening:
+            self._render_voicebar()
+            if self._voice_timer is None:  # animate the meter only while the bar is shown
+                self._voice_timer = self.set_interval(0.3, self._tick_voice)  # pragma: no mutate
+        else:
+            if self._voice_timer is not None:
+                self._voice_timer.stop()
+                self._voice_timer = None
+            self.query_one("#prompt", Input).focus()
+
+    def _set_voice_phase(self, phase: str) -> None:
+        """Switch the voice bar between listening / thinking / speaking and repaint it."""
+        self._voice_phase = phase
+        self._render_voicebar()
+
+    def _render_voicebar(self) -> None:
+        """Paint the voice bar for the current phase: an animated meter, label, and accent."""
+        label, color = _VOICE_PHASES[self._voice_phase]
+        meter = next(self._voice_frames)
+        hint = "   [dim](Ctrl-V to type)[/dim]" if self._voice_phase == "listening" else ""
+        self.query_one("#voicebar", Static).update(f"[{color}]{meter}[/] {escape(label)}{hint}")
+
+    def _tick_voice(self) -> None:
+        """Advance the voice-bar meter one frame (the animation timer's callback)."""
+        self._render_voicebar()
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
-        return self._modal_result(AskScreen(question), default="")
+        return self._modal_result(AskScreen(question, voice=self._modal_voice()), default="")
+
+    def _modal_voice(self) -> _VoiceIO | None:
+        """The voice IO to drive a modal by speech, or ``None`` when voice isn't active."""
+        return self._voice if self._voice_active() else None
 
     # --- interrupt / quit -----------------------------------------------------
     # Mirrors deepagents-code: Escape interrupts a running turn; Ctrl-C interrupts a running
@@ -361,7 +386,7 @@ class CodeAgentApp(App[None]):
         if not self._turn_running():
             return False
         self._session.request_cancel()
-        self.query_one("#log", RichLog).write("[dim](cancelling…)[/dim]")
+        self._note("cancelling…")
         return True
 
     def action_interrupt(self) -> None:
@@ -396,9 +421,9 @@ class CodeAgentApp(App[None]):
             self._submit(text)
 
     def _submit(self, text: str) -> None:
-        log = self.query_one("#log", RichLog)
-        log.write(f"[b cyan]» {escape(text)}[/b cyan]")
+        self._mount(UserMessage(text))
         self.query_one("#prompt", Input).disabled = True
+        self._set_voice_phase("thinking")  # voice bar reflects the turn (no-op when bar hidden)
         self._start_spinner()
         self._run_turn(text)
 
@@ -410,8 +435,14 @@ class CodeAgentApp(App[None]):
     # --- working indicator (spinner + elapsed) --------------------------------
 
     def _start_spinner(self) -> None:
-        """Show the working indicator and animate it while the turn runs."""
+        """Show the working indicator and animate it while the turn runs.
+
+        Skipped in voice mode — the voice bar already shows a "Thinking…" state, so a second
+        spinner would just be redundant chrome.
+        """
         self._turn_started = time.monotonic()
+        if self._voice_active():
+            return
         self.query_one("#spinner", Static).display = True
         self._tick()
         self._spin_timer = self.set_interval(0.25, self._tick)  # pragma: no mutate
@@ -430,65 +461,16 @@ class CodeAgentApp(App[None]):
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         if event.worker.is_finished:
-            self._stop_spinner()
-            prompt = self.query_one("#prompt", Input)
-            prompt.disabled = False
-            prompt.focus()
-            self._voice_followup()  # read a spoken summary back, then listen for the next turn
+            self._finish_turn()
 
-    # --- voice (speak-to-it / read-summary-back; the legs run off the UI thread) ----
+    def _finish_turn(self) -> None:
+        """Wind down a completed turn: stop the spinner, re-enable input, resume voice."""
+        self._stop_spinner()
+        if self._streaming_msg is not None:  # a cancelled generation: keep what streamed in
+            self._finalize_reply(self._streaming_msg.text)
+        self.query_one("#prompt", Input).disabled = False
+        self._sync_input_mode()  # focus the prompt (text mode) or show the listening bar
+        self._voice_followup()  # read a spoken summary back, then listen for the next turn
 
-    def _voice_active(self) -> bool:
-        """Voice capture is on: a session exists and the mic hasn't been ruled out yet."""
-        return self._voice is not None and not self._voice_typed
-
-    def _spawn(self, target: Callable[[], None]) -> None:
-        """Run ``target`` on a daemon thread — voice legs block, so they stay off the UI thread."""
-        threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
-
-    def _begin_listening(self) -> None:
-        """Capture the next spoken turn on a background thread (no-op when voice is off)."""
-        if not self._voice_active():
-            return
-        self._spawn(self._capture_voice_turn)
-
-    def _voice_followup(self) -> None:
-        """After a turn finishes: read back a spoken summary, then listen for the next turn."""
-        voice = self._voice
-        if voice is None:
-            return
-        self._spawn(lambda: self._speak_then_listen(voice))
-
-    def _speak_then_listen(self, voice: _VoiceIO) -> None:
-        """Read a summary of the last reply aloud (no code), then capture the next spoken turn."""
-        voice.speak(spoken_summary(self._last_reply))
-        self._capture_voice_turn()
-
-    def _capture_voice_turn(self) -> None:
-        """Listen for one spoken turn; enter it into the prompt, or degrade to typing."""
-        voice = self._voice
-        if voice is None or self._voice_typed:
-            return
-        try:
-            transcript = voice.listen()
-        except errors.CLIError as exc:
-            # A capture failure (no mic, STT error) drops voice for the rest of the session
-            # rather than wedging it — the user just types instead.
-            self._voice_typed = True
-            self.call_from_thread(self._notice_voice_off, exc.message)
-            return
-        if transcript:
-            self.call_from_thread(self._enter_and_submit, transcript)
-
-    def _notice_voice_off(self, detail: str) -> None:
-        """Tell the user voice input stopped and that input is now typed (UI thread)."""
-        self.query_one("#log", RichLog).write(
-            f"[dim](voice input off: {escape(detail)}; type your request instead)[/dim]"
-        )
-
-    def _enter_and_submit(self, text: str) -> None:
-        """Show the spoken text in the prompt, then submit it as a turn (UI thread)."""
-        prompt = self.query_one("#prompt", Input)
-        prompt.value = text
-        self._submit(text)
-        prompt.value = ""
+    # The off-thread voice legs (_voice_active, _begin_listening, _capture_voice_turn, …) are
+    # inherited from _VoiceLegs; the render/toggle side stays above.

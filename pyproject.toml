@@ -258,9 +258,10 @@ module = [
     "aai_cli.code_agent.store",
     "aai_cli.code_agent.model",
     "aai_cli.commands.code._exec",
+    "aai_cli.agent_cascade.brain",
 ]
 disallow_any_generics = false
-disable_error_code = ["return-value", "arg-type", "type-arg"]
+disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of
@@ -279,7 +280,7 @@ exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 # Unknown*/invariance diagnostics our precise signatures can't satisfy. mypy still
 # type-checks these modules (with the targeted overrides above) as the safety net, so
 # we suppress pyright diagnostics here rather than littering per-line `# pyright: ignore`.
-ignore = ["aai_cli/code_agent", "aai_cli/commands/code"]
+ignore = ["aai_cli/code_agent", "aai_cli/commands/code", "aai_cli/agent_cascade/brain.py"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
@@ -419,6 +420,8 @@ max-statements = 40
 "aai_cli/core/environments.py" = ["PLW0603"]
 # Verbosity is process-global startup state by design (mirrors environments.py).
 "aai_cli/core/debuglog.py" = ["PLW0603"]
+# The "shutdown SIGINT guard installed" latch is process-global once-only state.
+"aai_cli/core/microphone.py" = ["PLW0603"]
 # BaseHTTPRequestHandler.log_message requires a parameter named `format`.
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
