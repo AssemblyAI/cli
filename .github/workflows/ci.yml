@@ -316,3 +316,40 @@ jobs:
           python -m pip install -e . pip-audit
           # Append `--ignore-vuln <ID>` to accept an unfixable transitive advisory.
           python -m pip_audit
+
+  # End-to-end check that install.sh actually installs a working `assembly`. Runs
+  # the script in dev mode (--install-method git) so it installs *this* checkout
+  # editable via uv — exercising both the installer and the PR's own code — then
+  # smoke-tests the resulting CLI. Catches install.sh regressions (arg parsing,
+  # the uv/pipx selection, the editable path) that shellcheck alone can't.
+  install-script:
+    name: install script smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false # no job pushes; don't leave the token in .git/config
+          fetch-depth: 0 # hatch-vcs derives the version from git history for the editable build
+      # Provide uv so install.sh takes its preferred (uv) path rather than
+      # bootstrapping it over the network.
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # PortAudio + ffmpeg so `assembly --help` (which imports the full command
+      # tree) loads cleanly; also lets install.sh's dep check find them present.
+      - name: System deps (PortAudio + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+
+      - name: Run install.sh (editable, from this checkout)
+        run: ./install.sh --install-method git
+
+      - name: Smoke-test the installed CLI
+        run: |
+          # uv tool installs land in ~/.local/bin; put it on PATH for this step.
+          export PATH="$HOME/.local/bin:$PATH"
+          assembly --version
+          help_out="$(assembly --help)"
+          echo "$help_out" | grep -q transcribe
