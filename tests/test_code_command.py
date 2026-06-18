@@ -17,6 +17,7 @@ from typer.testing import CliRunner
 
 from aai_cli.code_agent.ask_tool import AskBridge
 from aai_cli.commands.code import _exec
+from aai_cli.core.errors import CLIError
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -43,17 +44,48 @@ def test_command_parses_flags_into_options(monkeypatch):
     assert opts.session == "s1" and opts.persist is False
 
 
-def test_run_code_dispatches_to_tui_when_tty(monkeypatch):
+def test_run_code_dispatches_to_voice_by_default_when_tty(monkeypatch):
     calls = {}
     monkeypatch.setattr(_exec, "_build_agent", lambda key, opts, bridge: "AGENT")
-    monkeypatch.setattr(_exec, "_run_tui", lambda agent, opts, bridge: calls.update(tui=agent))
+    monkeypatch.setattr(
+        _exec, "_run_voice", lambda agent, opts, bridge, key: calls.update(voice=(agent, key))
+    )
+    monkeypatch.setattr(_exec, "_run_tui", lambda *a: calls.update(tui=True))
     monkeypatch.setattr(_exec, "_run_repl", lambda *a: calls.update(repl=True))
     monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
     monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
     state = SimpleNamespace(resolve_api_key=lambda: "k")
 
     _exec.run_code(_opts(), state, json_mode=False)
+    assert calls == {"voice": ("AGENT", "k")}
+
+
+def test_run_code_dispatches_to_tui_when_voice_off(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(_exec, "_build_agent", lambda key, opts, bridge: "AGENT")
+    monkeypatch.setattr(_exec, "_run_voice", lambda *a: calls.update(voice=True))
+    monkeypatch.setattr(_exec, "_run_tui", lambda agent, opts, bridge: calls.update(tui=agent))
+    monkeypatch.setattr(_exec, "_run_repl", lambda *a: calls.update(repl=True))
+    monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
+    state = SimpleNamespace(resolve_api_key=lambda: "k")
+
+    _exec.run_code(_opts(voice=False), state, json_mode=False)
     assert calls == {"tui": "AGENT"}
+
+
+def test_run_code_repl_when_voice_and_tui_off(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(_exec, "_build_agent", lambda key, opts, bridge: "AGENT")
+    monkeypatch.setattr(_exec, "_run_voice", lambda *a: calls.update(voice=True))
+    monkeypatch.setattr(_exec, "_run_tui", lambda *a: calls.update(tui=True))
+    monkeypatch.setattr(_exec, "_run_repl", lambda agent, opts, bridge: calls.update(repl=agent))
+    monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
+    state = SimpleNamespace(resolve_api_key=lambda: "k")
+
+    _exec.run_code(_opts(voice=False, tui=False), state, json_mode=False)
+    assert calls == {"repl": "AGENT"}
 
 
 def test_run_code_falls_back_to_repl_off_tty(monkeypatch):
@@ -81,7 +113,7 @@ def test_run_code_maps_keyboard_interrupt_to_exit_130(monkeypatch):
     def boom(*a):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(_exec, "_run_tui", boom)
+    monkeypatch.setattr(_exec, "_run_voice", boom)
     state = SimpleNamespace(resolve_api_key=lambda: "k")
 
     with pytest.raises(typer.Exit) as exc:
@@ -187,3 +219,91 @@ def test_run_tui_invokes_app_run(monkeypatch):
     _exec._run_tui("AGENT", _opts(prompt="hi", session="s", root_dir=Path()), AskBridge())
     assert seen["agent"] == "AGENT" and seen["thread_id"] == "s"
     assert seen["run_kw"] == {"mouse": False}
+
+
+def test_voice_sink_renders_all_events_and_speaks_only_assistant_text():
+    from aai_cli.code_agent.events import AssistantText, ToolCall
+
+    rendered, spoken = [], []
+    voice = SimpleNamespace(speak=spoken.append)
+
+    def renderer(event):
+        rendered.append(event)
+
+    sink = _exec._voice_sink(renderer, voice)
+    sink(AssistantText("here you go"))
+    sink(ToolCall(name="write_file", args={}))
+
+    assert [type(e).__name__ for e in rendered] == ["AssistantText", "ToolCall"]
+    assert spoken == ["here you go"]  # only the assistant's prose is read back
+
+
+def test_announce_voice_message_depends_on_readback():
+    notes = []
+    renderer = SimpleNamespace(notice=notes.append)
+
+    _exec._announce_voice(renderer, SimpleNamespace(readback=True))
+    assert "read back" in notes[-1]
+
+    _exec._announce_voice(renderer, SimpleNamespace(readback=False))
+    assert "sandbox" in notes[-1] and "text" in notes[-1]
+
+
+def test_voice_read_line_returns_spoken_line():
+    notes = []
+    renderer = SimpleNamespace(notice=notes.append)
+    voice = SimpleNamespace(listen=lambda: "add a flag")
+
+    read_line = _exec._voice_read_line(voice, renderer)
+    assert read_line() == "add a flag"
+    assert any("Heard: add a flag" in n for n in notes)
+
+
+def test_voice_read_line_passes_through_none_for_eof():
+    renderer = SimpleNamespace(notice=lambda *a: None)
+    voice = SimpleNamespace(listen=lambda: None)
+    assert _exec._voice_read_line(voice, renderer)() is None
+
+
+def test_voice_read_line_falls_back_to_typed_input_when_no_mic(monkeypatch):
+    notes = []
+    renderer = SimpleNamespace(notice=notes.append)
+    calls = {"listen": 0}
+
+    def flaky_mic():
+        calls["listen"] += 1
+        if calls["listen"] == 1:
+            raise CLIError("no device", error_type="mic_missing", exit_code=2)
+        return "SPOKEN AGAIN"  # would leak through only if the mic were retried
+
+    voice = SimpleNamespace(listen=flaky_mic)
+    monkeypatch.setattr(builtins, "input", lambda *a: "typed instead")
+
+    read_line = _exec._voice_read_line(voice, renderer)
+    assert read_line() == "typed instead"  # first call: mic fails -> typed input
+    assert read_line() == "typed instead"  # stays typed; the mic is not retried
+    assert calls["listen"] == 1  # the latch flipped, so listen() was attempted only once
+    assert any("switching to typed input" in n.lower() for n in notes)
+
+
+def test_voice_read_line_reraises_non_audio_errors():
+    renderer = SimpleNamespace(notice=lambda *a: None)
+
+    def boom():
+        raise CLIError("gateway down", error_type="api_error", exit_code=1)
+
+    voice = SimpleNamespace(listen=boom)
+    with pytest.raises(CLIError):
+        _exec._voice_read_line(voice, renderer)()
+
+
+def test_run_voice_wires_ask_handler_and_drives_repl(monkeypatch):
+    class Dummy:
+        def invoke(self, *a, **k):
+            return {"messages": []}
+
+    voice = SimpleNamespace(readback=False, listen=lambda: None, speak=lambda *a: None)
+    monkeypatch.setattr(_exec, "build_voice_session", lambda key: voice)
+    bridge = AskBridge()
+    _exec._run_voice(Dummy(), _opts(session="s3"), bridge, "k")
+    assert bridge.handler is _exec._ask_repl

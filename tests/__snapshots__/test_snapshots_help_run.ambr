@@ -388,6 +388,10 @@
    only to the AssemblyAI LLM Gateway. Mutating actions ask for approval unless
    you pass --auto.
   
+   In an interactive terminal it defaults to voice: speak your request (mic ->
+   streaming STT) and the agent's replies are read back aloud (sandbox only).
+   Pass --no-voice for the keyboard TUI, or pipe input for the headless loop.
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   prompt      [PROMPT]  Initial task for the agent. Omit to just open the    │
   │                         session                                              │
@@ -421,6 +425,10 @@
   │ --tui          --no-tui                  Use the full-screen TUI (off: a     │
   │                                          plain read-eval loop)               │
   │                                          [default: tui]                      │
+  │ --voice        --no-voice                Speak to the agent and hear replies │
+  │                                          read back (readback needs the       │
+  │                                          sandbox)                            │
+  │                                          [default: voice]                    │
   │ --help                                   Show this message and exit.         │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   

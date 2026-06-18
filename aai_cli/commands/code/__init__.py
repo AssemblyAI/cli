@@ -71,6 +71,11 @@ def code(
     tui: bool = typer.Option(
         True, "--tui/--no-tui", help="Use the full-screen TUI (off: a plain read-eval loop)"
     ),
+    voice: bool = typer.Option(
+        True,
+        "--voice/--no-voice",
+        help="Speak to the agent and hear replies read back (readback needs the sandbox)",
+    ),
 ) -> None:
     """Run a terminal coding agent backed by the AssemblyAI LLM Gateway
 
@@ -79,6 +84,10 @@ def code(
     invoke the 'assembly' CLI itself — all in the working directory. It talks
     only to the AssemblyAI LLM Gateway. Mutating actions ask for approval unless
     you pass --auto.
+
+    In an interactive terminal it defaults to voice: speak your request (mic ->
+    streaming STT) and the agent's replies are read back aloud (sandbox only).
+    Pass --no-voice for the keyboard TUI, or pipe input for the headless loop.
     """
     opts = code_exec.CodeOptions(
         prompt=prompt,
@@ -92,5 +101,6 @@ def code(
         session=session,
         persist=persist,
         tui=tui,
+        voice=voice,
     )
     run_with_options(ctx, code_exec.run_code, opts, json=False)
