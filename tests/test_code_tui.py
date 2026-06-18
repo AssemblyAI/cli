@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input, RichLog
+from textual.widgets import Input, RichLog, Static
 
 from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
@@ -48,6 +49,14 @@ def test_format_args_and_abbrev_home() -> None:
     # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
     outside = Path("/etc/hosts")
     assert tui._abbrev_home(outside) == str(outside)
+
+
+def test_approval_decision_defaults_to_reject() -> None:
+    assert tui._approval_decision("approve") == "approve"
+    assert tui._approval_decision("auto") == "auto"
+    # A button with no id (Textual allows None) is treated as a rejection, not approval.
+    assert tui._approval_decision(None) == "reject"
+    assert tui._approval_decision("") == "reject"
 
 
 def test_git_branch_and_status(tmp_path: Path) -> None:
@@ -201,7 +210,7 @@ def test_approval_button_press_dismisses() -> None:
     # Covers ApprovalScreen.on_button_pressed (the click path; key paths are covered
     # by the approve/reject modal tests above). The bracketed name/args also guard the
     # compose() escape() — without it, Label markup parsing would raise on mount.
-    results: list[bool | None] = []
+    results: list[str | None] = []
 
     async def go() -> None:
         app = CodeAgentApp(agent=FakeAgent([]))
@@ -213,7 +222,90 @@ def test_approval_button_press_dismisses() -> None:
             await pilot.pause()
 
     _run(go())
-    assert results == [False]
+    assert results == ["reject"]
+
+
+def test_approval_box_is_compact_and_bottom_docked() -> None:
+    # Regression guard: the approval prompt must not take over the whole screen — it
+    # docks a short box at the bottom so the transcript stays visible above it.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("write_file", {"file_path": "x.py"}))
+            await pilot.pause()
+            box = app.screen.query_one("#approvalbox")
+            assert box.region.height <= 8  # a handful of rows, not the full 30
+            assert box.region.bottom <= 30  # anchored within the bottom of the screen
+            assert box.region.y >= 15  # sits in the lower half, transcript visible above
+
+    _run(go())
+
+
+def test_approval_auto_approve_flips_mode_and_skips_later_prompts() -> None:
+    # Picking "Auto-approve (a)" approves this call, flips the badge manual→auto, and
+    # makes every later _approve return True without ever pushing a modal.
+    app = CodeAgentApp(agent=FakeAgent([]))
+    assert _drive_modal(app, lambda: app._approve("execute", {"cmd": "ls"}), ["a"]) is True
+    assert app._auto_approve is True
+    assert app._session.auto_approve is True
+    # A second decision short-circuits: it returns True even though no modal can be driven.
+    assert app._approve("write_file", {"file_path": "x"}) is True
+
+
+def test_refresh_status_rerenders_badge() -> None:
+    # _enable_auto_approve (worker thread) marshals a _refresh_status onto the UI thread;
+    # this drives that re-render directly, asserting the badge tracks the mode flip.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert "manual" in str(app.query_one("#status", Static).render())
+            app._auto_approve = True
+            app._refresh_status()
+            await pilot.pause()
+            assert "auto" in str(app.query_one("#status", Static).render())
+
+    _run(go())
+
+
+def test_spinner_text_formats_frame_and_elapsed() -> None:
+    assert tui._spinner_text(46, "✶") == "✶ Working… (46s)"
+    assert tui._spinner_text(0, "✷") == "✷ Working… (0s)"
+
+
+def test_spinner_starts_ticks_and_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Re-query for each display check: a stored `spinner.display` would let mypy
+            # narrow the bool across the start/stop calls and flag the next assert dead.
+            assert app.query_one("#spinner", Static).display is False  # hidden at rest
+            app._start_spinner()
+            await pilot.pause()
+            assert app.query_one("#spinner", Static).display is True
+            # _tick wires the elapsed seconds off the start time; pin "now" to assert it.
+            monkeypatch.setattr(time, "monotonic", lambda: app._turn_started + 7.0)
+            app._tick()
+            assert "Working… (7s)" in str(app.query_one("#spinner", Static).render())
+            app._stop_spinner()
+            assert app.query_one("#spinner", Static).display is False
+            assert app._spin_timer is None
+
+    _run(go())
+
+
+def test_stop_spinner_is_a_noop_when_not_started() -> None:
+    # The timer-None branch of _stop_spinner: stopping before any turn just hides.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._stop_spinner()
+            assert app.query_one("#spinner", Static).display is False
+
+    _run(go())
 
 
 def test_ask_screen_compose_escapes_markup() -> None:
