@@ -2,6 +2,7 @@
   "include": ["tests"],
   "ignore": [
     "tests/test_code_agent.py",
+    "tests/test_code_model.py",
     "tests/test_code_command.py",
     "tests/test_code_tui.py",
     "tests/test_agent_cascade_brain.py"

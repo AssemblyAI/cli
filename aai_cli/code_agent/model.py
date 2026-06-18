@@ -74,8 +74,12 @@ def _hoist_tool_call_ids(chunk: object) -> None:
 
 def _hoist_in_choice(choice: object) -> None:
     """Drop blank tool-call deltas, then hoist ids, within one streamed choice's delta."""
-    delta = choice.get("delta") if isinstance(choice, dict) else None
-    tool_calls = delta.get("tool_calls") if isinstance(delta, dict) else None
+    if not isinstance(choice, dict):
+        return
+    delta = choice.get("delta")
+    if not isinstance(delta, dict):
+        return
+    tool_calls = delta.get("tool_calls")
     if isinstance(tool_calls, list):
         delta["tool_calls"] = [tc for tc in tool_calls if not _is_blank_tool_call(tc)]
         _hoist_call_list(delta["tool_calls"])
