@@ -336,6 +336,63 @@ def test_hoist_tool_call_ids_guards() -> None:
     model_mod._hoist_tool_call_ids({"choices": 99})  # choices not a list -> early return
 
 
+def test_is_blank_tool_call() -> None:
+    assert model_mod._is_blank_tool_call({"function": {"id": "", "name": "", "arguments": ""}})
+    assert model_mod._is_blank_tool_call({"function": {}})  # all fields absent
+    assert not model_mod._is_blank_tool_call({"function": {"name": "x"}})  # has a name
+    assert not model_mod._is_blank_tool_call({"function": {"id": "i"}})  # has an id
+    assert not model_mod._is_blank_tool_call({"function": {"arguments": "a"}})  # has arguments
+    assert not model_mod._is_blank_tool_call({"function": 7})  # function not a dict
+    assert not model_mod._is_blank_tool_call(None)  # not a dict
+
+
+def test_hoist_tool_call_ids_drops_spurious_blank_delta() -> None:
+    # The gateway prefixes every streamed turn with an empty tool-call delta; it must be
+    # dropped (else a pure-text turn dispatches a tool call with name="").
+    real_fn: dict[str, object] = {"id": "toolu_X", "name": "get_weather", "arguments": ""}
+    real_call: dict[str, object] = {"index": 0, "function": real_fn}
+    delta: dict[str, object] = {
+        "tool_calls": [
+            {"index": 0, "function": {"id": "", "name": "", "arguments": ""}},  # spurious blank
+            real_call,
+        ]
+    }
+    chunk: dict[str, object] = {"choices": [{"delta": delta}]}
+    model_mod._hoist_tool_call_ids(chunk)
+    assert delta["tool_calls"] == [real_call]  # blank dropped, real call kept
+    assert real_call["id"] == "toolu_X"  # and its id hoisted out of function
+    assert "id" not in real_fn
+
+
+def test_convert_chunk_drops_spurious_blank_tool_call() -> None:
+    from langchain_core.messages import AIMessageChunk
+    from langchain_openai import ChatOpenAI
+
+    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
+    assert isinstance(m, ChatOpenAI)  # narrow to the subclass that overrides the converter
+    # A pure-text turn's leading delta carries only the gateway's blank tool call — the
+    # converted chunk must surface no tool call (else deepagents dispatches a nameless tool).
+    chunk = {
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {"index": 0, "function": {"id": "", "name": "", "arguments": ""}}
+                    ],
+                },
+                "finish_reason": None,
+            }
+        ]
+    }
+    gen = m._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, None)
+    assert gen is not None
+    msg = gen.message
+    assert isinstance(msg, AIMessageChunk)
+    assert msg.tool_call_chunks == []  # the phantom blank tool call is gone
+
+
 def test_is_empty_arguments() -> None:
     assert model_mod._is_empty_arguments("")  # empty string
     assert model_mod._is_empty_arguments("   ")  # whitespace only
