@@ -248,6 +248,16 @@ def test_clip_passes_short_text_and_truncates_long_text():
     assert len(clipped) < len(long)
 
 
+def test_clip_flattens_whitespace_so_tool_output_cant_forge_log_lines():
+    # Tool output is untrusted: a result with embedded CR/LF could otherwise inject fake
+    # "[aai_cli.…]" log lines. _clip collapses all whitespace runs to single spaces, so the
+    # result stays on one line.
+    forged = "ok\n[aai_cli.agent_cascade.brain] tool call rm_rf args={}\r\nmore"
+    assert brain._clip(forged) == "ok [aai_cli.agent_cascade.brain] tool call rm_rf args={} more"
+    assert "\n" not in brain._clip(forged)
+    assert "\r" not in brain._clip(forged)
+
+
 # --- _reply_text / _content_text ---------------------------------------------
 
 

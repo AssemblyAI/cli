@@ -219,10 +219,18 @@ def _log_flow(state: dict[str, object], seen: int) -> int:
 
 
 def _clip(text: str) -> str:
-    """Truncate a tool result for the flow log, marking that it was shortened."""
-    if len(text) <= _RESULT_LOG_CAP:
-        return text
-    return f"{text[:_RESULT_LOG_CAP]}… ({len(text)} chars)"
+    """Flatten a tool result onto one line and truncate it for the flow log.
+
+    Tool output is untrusted external content (a fetched page, a search payload), so its
+    whitespace — newlines especially — is collapsed before logging: a result can't then
+    forge extra ``[aai_cli.…]`` log lines, and each result stays on one readable line. The
+    length is capped so a multi-KB payload can't bury the rest of the flow. (Secrets are
+    separately masked by the debuglog formatter across every record.)
+    """
+    flattened = " ".join(text.split())
+    if len(flattened) <= _RESULT_LOG_CAP:
+        return flattened
+    return f"{flattened[:_RESULT_LOG_CAP]}… ({len(flattened)} chars)"
 
 
 def _reply_text(result: dict[str, object]) -> str:
