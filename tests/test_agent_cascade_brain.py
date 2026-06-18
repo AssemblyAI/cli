@@ -47,12 +47,61 @@ def _graph(model: BaseChatModel):
 # --- build_system_prompt -----------------------------------------------------
 
 
-def test_system_prompt_appends_tool_guidance():
-    prompt = brain.build_system_prompt("You are a pirate.")
-    # The persona is preserved, and the tool guidance is appended so the model knows it
-    # can search the web (the plain cascade persona never mentions tools).
+class _NamedTool:
+    """A stand-in tool exposing just the ``.name`` the prompt builder inspects."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+
+def test_system_prompt_appends_tool_guidance_for_present_tools():
+    prompt = brain.build_system_prompt(
+        "You are a pirate.",
+        tools=[_NamedTool("tavily_search"), _NamedTool("fetch_url"), _NamedTool("docs_search")],
+    )
+    # The persona is preserved, and the guidance advertises each capability that a present
+    # tool backs (the plain cascade persona never mentions tools).
     assert prompt.startswith("You are a pirate.")
     assert "search the web" in prompt
+    assert "fetch a specific URL" in prompt
+    assert "AssemblyAI documentation" in prompt
+
+
+def test_system_prompt_omits_web_search_when_no_search_tool():
+    # With no TAVILY_API_KEY the search tool is absent — the guidance must NOT promise web
+    # search, since announcing a missing tool makes the agent narrate "I'll search…" and
+    # then stall with no answer. The capabilities it *does* have still appear.
+    prompt = brain.build_system_prompt(
+        "persona", tools=[_NamedTool("fetch_url"), _NamedTool("docs_search")]
+    )
+    assert "search the web for current or unfamiliar facts" not in prompt
+    assert "fetch a specific URL" in prompt
+    assert "AssemblyAI documentation" in prompt
+
+
+def test_system_prompt_tells_model_not_to_promise_tools_when_none():
+    # No tools at all: the model must answer from its own knowledge and explicitly not
+    # promise to search or look anything up (the bug that left replies never coming back).
+    prompt = brain.build_system_prompt("persona", tools=[])
+    assert "search the web for current or unfamiliar facts" not in prompt
+    assert "your own knowledge" in prompt
+    assert "Never say" in prompt
+
+
+def test_join_clause_grammar():
+    # One/two/three capability phrases each render with natural conjunctions.
+    assert brain._join_clause(["a"]) == "a"
+    assert brain._join_clause(["a", "b"]) == "a and b"
+    assert brain._join_clause(["a", "b", "c"]) == "a, b, and c"
+
+
+def test_web_search_tool_name_matches_built_tool(monkeypatch):
+    # The prompt builder detects search by WEB_SEARCH_TOOL_NAME, so pin it against the real
+    # tool's registered name — if langchain_tavily renames it, detection would silently break.
+    from aai_cli.code_agent import web_search
+
+    monkeypatch.setenv(web_search.TAVILY_API_KEY_ENV, "tvly-x")
+    assert web_search.build_web_search_tool().name == web_search.WEB_SEARCH_TOOL_NAME
 
 
 # --- build_completer (driving the real graph with a fake model) --------------

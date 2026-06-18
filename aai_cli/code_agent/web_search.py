@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 # agent a tool that will fail on first use for lack of a key.
 TAVILY_API_KEY_ENV = "TAVILY_API_KEY"
 
+# The name ``TavilySearch`` registers itself under. Callers (e.g. the live agent's prompt
+# builder) detect web-search availability by this name, so a test pins it against the tool.
+WEB_SEARCH_TOOL_NAME = "tavily_search"
+
 # A small result cap keeps search responses inside the model's context budget.
 _DEFAULT_MAX_RESULTS = 5
 

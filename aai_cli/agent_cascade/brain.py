@@ -21,26 +21,77 @@ from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
+from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
+from aai_cli.code_agent.web_search import WEB_SEARCH_TOOL_NAME
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
 
-# Appended to the user's persona so the model knows it has tools and must keep replies
-# spoken. The cascade's plain-LLM persona (CascadeConfig.system_prompt) says nothing
-# about tools, so without this the agent would never reach for web search.
-_TOOL_GUIDANCE = (
-    "You can use tools to help answer: search the web for current or unfamiliar facts, "
-    "fetch a specific URL, and look up the AssemblyAI documentation. Reach for a tool "
-    "when a question needs fresh or external information; answer directly and instantly "
-    "when you already know. Your reply is read aloud, so keep it short and spoken — no "
-    "markdown, lists, code, or raw URLs."
+# Closes every guidance variant: the reply is spoken, so it must stay short and plain.
+_SPOKEN_TAIL = (
+    "Your reply is read aloud, so keep it short and spoken — no markdown, lists, code, or raw URLs."
+)
+
+# When the session has *no* tools wired (e.g. no web search and the docs host is
+# unreachable), the model must answer from its own knowledge — and crucially must not
+# promise an action it can't take. Without this, telling it "you can search the web" while
+# no search tool is bound makes it narrate "I'll search for that…" and then stop, so the
+# answer never comes (the tool it announced was never actually available to call).
+_NO_TOOLS_GUIDANCE = (
+    "You have no external tools available, so answer from your own knowledge. Never say "
+    "you will search the web, look something up, or fetch a page — you can't do any of "
+    "that, so don't promise it; if a question needs information you don't have, say so "
+    f"briefly instead. {_SPOKEN_TAIL}"
 )
 
 
-def build_system_prompt(persona: str) -> str:
-    """The live agent's system prompt: the user's persona plus the tool guidance."""
-    return f"{persona}\n\n{_TOOL_GUIDANCE}"
+def _join_clause(parts: list[str]) -> str:
+    """Join capability phrases into a readable clause: ``a``, ``a and b``, ``a, b, and c``."""
+    *initial, last = parts
+    if not initial:
+        return last
+    # Oxford comma only once there are three-or-more items (two or more lead the last).
+    joiner = ", and " if initial[1:] else " and "
+    return f"{', '.join(initial)}{joiner}{last}"
+
+
+def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
+    """The spoken-capability phrases backed by an actually-present tool.
+
+    Derived from the resolved tool names so the prompt never advertises a capability the
+    agent can't perform: web search is present only with a ``TAVILY_API_KEY``, and the docs
+    tools are best-effort (absent when the docs host is unreachable).
+    """
+    names = {tool.name for tool in tools}
+    capabilities: list[str] = []
+    if WEB_SEARCH_TOOL_NAME in names:
+        capabilities.append("search the web for current or unfamiliar facts")
+    if FETCH_TOOL_NAME in names:
+        capabilities.append("fetch a specific URL")
+    if names - {WEB_SEARCH_TOOL_NAME, FETCH_TOOL_NAME}:
+        capabilities.append("look up the AssemblyAI documentation")
+    return capabilities
+
+
+def build_system_prompt(persona: str, *, tools: Sequence[BaseTool]) -> str:
+    """The live agent's system prompt: the user's persona plus tool guidance.
+
+    The guidance is tailored to ``tools`` so the model is only told about capabilities it
+    actually has — advertising a missing tool (web search without a ``TAVILY_API_KEY``) made
+    the agent announce an action it then couldn't take, leaving the turn hanging with no
+    answer. With no tools at all the model is told to answer from its own knowledge.
+    """
+    capabilities = _tool_capabilities(tools)
+    if not capabilities:
+        return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
+    guidance = (
+        f"You can use tools to help answer: {_join_clause(capabilities)}. Reach for a "
+        "tool when a question needs fresh or external information; answer directly and "
+        "instantly when you already know. Only offer to do what these tools allow — don't "
+        f"say you'll search the web or look something up unless it's listed here. {_SPOKEN_TAIL}"
+    )
+    return f"{persona}\n\n{guidance}"
 
 
 def build_live_tools() -> list[BaseTool]:
@@ -83,7 +134,9 @@ def build_graph(
     )
     resolved = build_live_tools() if tools is None else list(tools)
     return create_deep_agent(
-        model=model, tools=resolved, system_prompt=build_system_prompt(config.system_prompt)
+        model=model,
+        tools=resolved,
+        system_prompt=build_system_prompt(config.system_prompt, tools=resolved),
     )
 
 
