@@ -25,6 +25,7 @@ from aai_cli.code_agent.cli_tool import build_cli_tool, run_assembly
 from aai_cli.code_agent.docs_mcp import load_docs_tools
 from aai_cli.code_agent.events import AssistantText, Event
 from aai_cli.code_agent.fetch_tool import build_fetch_tool
+from aai_cli.code_agent.firecrawl_search import FIRECRAWL_API_KEY_ENV, build_web_search_tool
 from aai_cli.code_agent.memory import build_memory_middleware
 from aai_cli.code_agent.model import build_model
 from aai_cli.code_agent.prompt import DEFAULT_MODEL
@@ -38,7 +39,6 @@ from aai_cli.code_agent.voice import (
     build_voice_session,
     spoken_summary,
 )
-from aai_cli.code_agent.web_search import TAVILY_API_KEY_ENV, build_web_search_tool
 from aai_cli.core import env, errors, stdio
 from aai_cli.ui import output
 
@@ -136,10 +136,11 @@ def _read_line() -> str | None:
 
 
 def _web_note(opts: CodeOptions) -> str | None:
-    """The "web search disabled" notice when --web is on but no Tavily key is set."""
-    if opts.web and not env.get(TAVILY_API_KEY_ENV):
+    """The "web search disabled" notice when --web is on but no Firecrawl key is set."""
+    if opts.web and not env.get(FIRECRAWL_API_KEY_ENV):
         return (
-            "TAVILY_API_KEY is not set, so web search is disabled. Get a key at https://tavily.com"
+            "FIRECRAWL_API_KEY is not set, so web search is disabled. "
+            "Get a key at https://firecrawl.dev"
         )
     return None
 

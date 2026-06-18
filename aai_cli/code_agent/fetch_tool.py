@@ -1,6 +1,6 @@
 """A URL-fetch tool for the coding agent (deepagents-code parity).
 
-Distinct from web *search* (Tavily): this fetches a specific URL the agent already
+Distinct from web *search* (Firecrawl): this fetches a specific URL the agent already
 knows and returns its text. It is approval-gated (see ``MUTATING_TOOLS``) because an
 arbitrary fetch can reach internal/SSRF targets, so the user confirms each one.
 """

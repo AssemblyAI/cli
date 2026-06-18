@@ -299,8 +299,8 @@
   │ --skills       --no-skills               Load installed agent skills (e.g.   │
   │                                          the assemblyai skill)               │
   │                                          [default: skills]                   │
-  │ --web          --no-web                  Enable Tavily web search when       │
-  │                                          TAVILY_API_KEY is set               │
+  │ --web          --no-web                  Enable Firecrawl web search when    │
+  │                                          FIRECRAWL_API_KEY is set            │
   │                                          [default: web]                      │
   │ --memory       --no-memory               Load and persist the agent's        │
   │                                          long-term memory                    │

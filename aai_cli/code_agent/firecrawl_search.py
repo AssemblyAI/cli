@@ -1,12 +1,12 @@
-"""Optional Firecrawl web search for the live voice agent.
+"""Optional Firecrawl web search for the coding and live voice agents.
 
 Firecrawl grounds the agent with live web search, enabled when a ``FIRECRAWL_API_KEY``
 is present in the environment. Search is read-only, so it is *not* gated behind the
 approval flow. With no key set we simply omit the tool (the agent still has its URL
 fetch and the AssemblyAI docs MCP), rather than erroring.
 
-This mirrors ``web_search.py`` (Tavily) but reuses Firecrawl's official LangChain
-integration; the live agent prefers it as its default search tool.
+Both ``assembly code`` (approval-gated, opt-out via ``--no-web``) and the live voice
+agent share this single search tool via Firecrawl's official LangChain integration.
 """
 
 from __future__ import annotations

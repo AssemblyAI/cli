@@ -192,10 +192,10 @@ def test_build_agent_wires_model_tools_and_checkpointer(monkeypatch):
 
 
 def test_web_note_only_without_key(monkeypatch):
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
     assert _exec._web_note(_opts(web=True)) is not None
     assert _exec._web_note(_opts(web=False)) is None
-    monkeypatch.setenv("TAVILY_API_KEY", "tvly")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-x")
     assert _exec._web_note(_opts(web=True)) is None
 
 
