@@ -58,7 +58,7 @@ def code(
         True, "--skills/--no-skills", help="Load installed agent skills (e.g. the assemblyai skill)"
     ),
     web: bool = typer.Option(
-        True, "--web/--no-web", help="Enable Tavily web search when TAVILY_API_KEY is set"
+        True, "--web/--no-web", help="Enable Firecrawl web search when FIRECRAWL_API_KEY is set"
     ),
     memory: bool = typer.Option(
         True, "--memory/--no-memory", help="Load and persist the agent's long-term memory"
