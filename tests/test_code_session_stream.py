@@ -8,9 +8,9 @@ per-token ``"messages"`` deltas, so a long generation can be interrupted promptl
 
 from __future__ import annotations
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from aai_cli.code_agent.events import AssistantText
+from aai_cli.code_agent.events import AssistantDelta, AssistantText, assistant_delta
 from aai_cli.code_agent.session import CodeSession
 
 
@@ -37,6 +37,45 @@ class StreamingAgent:
 
     def invoke(self, *a, **k):  # the streaming branch is taken, so invoke is never used
         raise AssertionError("a streaming agent must not be invoked")
+
+
+def test_assistant_delta_is_frozen_hashable() -> None:
+    # frozen=True makes it immutable+hashable; a non-frozen eq dataclass sets __hash__=None,
+    # so hash() would raise — this keeps the event safe to dedupe/compare and pins `frozen`.
+    assert hash(AssistantDelta("x")) == hash(AssistantDelta("x"))
+
+
+def test_assistant_delta_extracts_only_ai_text() -> None:
+    # messages-mode yields (message, metadata); only AI text becomes a delta.
+    assert assistant_delta((AIMessage("tok"), {"node": "agent"})) == AssistantDelta("tok")
+    assert assistant_delta(AIMessage("bare")) == AssistantDelta("bare")  # untupled is fine too
+    assert assistant_delta((AIMessage(""), {})) is None  # empty content (e.g. a tool-call turn)
+    assert assistant_delta((ToolMessage("result", tool_call_id="1"), {})) is None  # not assistant
+    assert assistant_delta(()) is None  # defensive: empty payload
+
+
+def test_send_emits_assistant_deltas_from_messages_stream() -> None:
+    # The per-token messages chunks are surfaced as AssistantDelta (live preview), and the
+    # values snapshot still yields the authoritative AssistantText.
+    seen: list[object] = []
+
+    class TokenAgent:
+        def stream(self, graph_input, config=None, *, stream_mode=("values", "messages")):
+            del graph_input, config, stream_mode
+            yield ("messages", (AIMessage("Hello, "), {}))
+            yield ("messages", (AIMessage("world"), {}))
+            yield ("values", {"messages": [AIMessage("Hello, world")]})
+
+        def invoke(self, *a, **k):
+            raise AssertionError("a streaming agent must not be invoked")
+
+    session = CodeSession(agent=TokenAgent(), sink=seen.append, approver=lambda n, a: True)
+    session.send("go")
+
+    deltas = [e.text for e in seen if isinstance(e, AssistantDelta)]
+    finals = [e.text for e in seen if isinstance(e, AssistantText)]
+    assert deltas == ["Hello, ", "world"]  # streamed tokens
+    assert finals == ["Hello, world"]  # authoritative full reply from the values snapshot
 
 
 def test_send_streams_each_step_and_cancel_stops_the_loop() -> None:

@@ -26,10 +26,18 @@ from textual.worker import Worker
 from aai_cli.code_agent import banner
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.ask_tool import AskBridge
-from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
+from aai_cli.code_agent.events import (
+    AssistantDelta,
+    AssistantText,
+    ErrorText,
+    Event,
+    ToolCall,
+    ToolResult,
+)
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
 from aai_cli.code_agent.summarize import summarize_call, summarize_result
+from aai_cli.code_agent.tui_status import _spinner_text, _status_text
 from aai_cli.code_agent.voice import spoken_summary
 from aai_cli.core import errors
 
@@ -54,48 +62,6 @@ class _VoiceIO(Protocol):
         """Read ``text`` back aloud (a no-op when readback is unavailable)."""
 
 
-def _spinner_text(elapsed_s: int, frame: str) -> str:
-    """The working-indicator line: a spinner glyph and the elapsed seconds."""
-    return f"{frame} Working… ({elapsed_s}s)"
-
-
-def _abbrev_home(path: Path) -> str:
-    """Render ``path`` with the home directory collapsed to ``~``."""
-    try:
-        return f"~/{path.relative_to(Path.home())}"
-    except ValueError:
-        return str(path)
-
-
-def _git_branch(start: Path) -> str | None:
-    """The current git branch for ``start`` (walking up to the repo root), or None."""
-    for directory in (start, *start.parents):
-        head = directory / ".git" / "HEAD"
-        if head.is_file():
-            ref = head.read_text(encoding="utf-8").strip()
-            return ref.removeprefix("ref: refs/heads/") if ref.startswith("ref: ") else ref[:8]
-    return None
-
-
-def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = None) -> str:
-    """The bottom status line: a mode badge, the working directory, git branch, and voice state.
-
-    ``voice_state`` is ``"on"``/``"off"`` when the session has a voice front-end (so the
-    Ctrl-V toggle shows its effect), or ``None`` when voice isn't wired up at all.
-    """
-    mode = "auto" if auto_approve else "manual"
-    badge = f"[black on #f59e0b] {mode} [/]"
-    parts = [badge, f"[dim]{_abbrev_home(cwd)}[/dim]"]
-    branch = _git_branch(cwd)
-    if branch:
-        parts.append(f"[dim]↗ {branch}[/dim]")
-    if voice_state is not None:
-        # A filled/hollow dot (BMP glyphs, like the rest of the UI — no double-width emoji).
-        glyph, color = ("●", "#22c55e") if voice_state == "on" else ("○", "#6b7280")
-        parts.append(f"[{color}]{glyph} voice {voice_state}[/]")
-    return " ".join(parts)
-
-
 class CodeAgentApp(App[None]):
     """The coding-agent TUI: conversation transcript + prompt + approval/ask modals."""
 
@@ -115,6 +81,9 @@ class CodeAgentApp(App[None]):
     #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
+    /* Live region: the assistant reply streaming in token-by-token (capped to its tail),
+       shown above the spinner while a turn runs and cleared once the full reply lands. */
+    #stream {{ height: auto; max-height: 10; background: #000000; padding: 0 2; display: none; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
     #spinner {{ height: 1; background: #000000; padding: 0 2;
         color: {banner.BRAND_HEX}; display: none; }}
@@ -153,6 +122,7 @@ class CodeAgentApp(App[None]):
         self._voice = voice  # when set, spoken turns drive the prompt and replies are read back
         self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
         self._voice_paused = False  # user-toggled off via Ctrl-V (distinct from a mic failure)
+        self._stream_buf = ""  # accumulates streamed reply tokens for the live region
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
         self._web_note = web_note
@@ -173,6 +143,8 @@ class CodeAgentApp(App[None]):
         # No Header/Footer chrome — the splash is the title and the bottom status line
         # the only footer, so the screen stays a flat dark canvas.
         yield RichLog(id="log", wrap=True, markup=True)
+        # Live streaming reply (above the spinner), shown while tokens arrive then cleared.
+        yield Static("", id="stream")
         # Docked before the prompt bar, so the working indicator sits just above the input.
         yield Static("", id="spinner")
         with Horizontal(id="promptbar"):
@@ -224,7 +196,14 @@ class CodeAgentApp(App[None]):
         log = self.query_one("#log", RichLog)
         # Escape dynamic content: a model/tool string containing "[" would otherwise be
         # parsed as Rich markup and raise MarkupError (crashing the turn), or inject styling.
+        if isinstance(event, AssistantDelta):
+            # A streamed token: accumulate and show the tail in the live region. Superseded
+            # by the AssistantText below once the reply lands, so this is purely live preview.
+            self._stream_buf += event.text
+            self._show_stream()
+            return
         if isinstance(event, AssistantText):
+            self._clear_stream()  # the full reply lands in the log; drop the live preview
             self._last_reply = event.text  # keep the raw text for clipboard copy
             # Render as Markdown so fenced code is syntax-highlighted (Markdown parses its own
             # syntax, not console markup, so the escape() the other branches need is moot here).
@@ -237,6 +216,23 @@ class CodeAgentApp(App[None]):
             )
         elif isinstance(event, ErrorText):
             log.write(f"[#F04438]✗ {escape(event.text)}[/#F04438]")
+
+    # The live-streaming reply region (tokens land here until the full reply commits).
+    _STREAM_TAIL_LINES = 8  # show only the last few streamed lines so it can't grow unbounded
+
+    def _show_stream(self) -> None:
+        """Render the streamed-so-far reply (its tail) in the live region as plain text."""
+        tail = "\n".join(self._stream_buf.splitlines()[-self._STREAM_TAIL_LINES :])
+        stream = self.query_one("#stream", Static)
+        stream.update(escape(tail))
+        stream.display = True
+
+    def _clear_stream(self) -> None:
+        """Reset the live region (the full reply now renders in the log)."""
+        self._stream_buf = ""
+        stream = self.query_one("#stream", Static)
+        stream.update("")
+        stream.display = False
 
     def action_copy_last(self) -> None:
         """Copy the most recent assistant reply to the system clipboard."""
@@ -406,6 +402,7 @@ class CodeAgentApp(App[None]):
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         if event.worker.is_finished:
             self._stop_spinner()
+            self._clear_stream()  # drop any live preview left over (e.g. a cancelled generation)
             prompt = self.query_one("#prompt", Input)
             prompt.disabled = False
             prompt.focus()

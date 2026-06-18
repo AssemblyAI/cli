@@ -10,13 +10,11 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from textual.widgets import Input, Label, RichLog, Static
 
-from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.tui import CodeAgentApp
@@ -38,42 +36,6 @@ class FakeAgent:
 class _Interrupt:
     def __init__(self, value: dict[str, object]) -> None:
         self.value = value
-
-
-# --- pure helpers -------------------------------------------------------------
-
-
-def test_abbrev_home() -> None:
-    assert tui._abbrev_home(Path.home() / "proj") == "~/proj"
-    # A path outside home renders as-is; compare to the platform-native string so this
-    # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
-    outside = Path("/etc/hosts")
-    assert tui._abbrev_home(outside) == str(outside)
-
-
-def test_git_branch_and_status(tmp_path: Path) -> None:
-    assert tui._git_branch(tmp_path) is None  # no .git
-    (tmp_path / ".git").mkdir()
-    (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/feature-x\n")
-    assert tui._git_branch(tmp_path) == "feature-x"
-    (tmp_path / ".git" / "HEAD").write_text("a1b2c3d4e5f6\n")  # detached
-    assert tui._git_branch(tmp_path) == "a1b2c3d4"
-
-    status = tui._status_text(tmp_path, auto_approve=True)
-    assert "auto" in status and "a1b2c3d4" in status
-    assert "manual" in tui._status_text(tmp_path, auto_approve=False)
-
-
-def test_status_text_renders_voice_badge(tmp_path: Path) -> None:
-    # No voice front-end -> no voice badge (the dot glyphs are absent); on/off render the
-    # state so the Ctrl-V toggle shows. (Asserts on the dots, not the word — the tmp_path name
-    # itself can contain "voice".)
-    none = tui._status_text(tmp_path, auto_approve=False)
-    assert "●" not in none and "○" not in none
-    on = tui._status_text(tmp_path, auto_approve=False, voice_state="on")
-    off = tui._status_text(tmp_path, auto_approve=False, voice_state="off")
-    assert "voice on" in on and "●" in on  # filled dot when on
-    assert "voice off" in off and "○" in off  # hollow dot when off
 
 
 # --- pilot tests --------------------------------------------------------------
@@ -160,6 +122,50 @@ def test_assistant_reply_renders_markdown_code_block() -> None:
             assert "```" not in rendered  # markdown consumed the fence markers
             assert "print('hi')" in rendered  # the code itself still renders
             assert app._last_reply == reply  # raw markdown kept for clipboard copy
+
+    _run(go())
+
+
+def test_assistant_deltas_stream_into_live_region_then_clear() -> None:
+    # Streamed tokens (AssistantDelta) show in the live #stream region; the final AssistantText
+    # commits the full reply to the log and clears the region.
+    async def go() -> None:
+        from aai_cli.code_agent.events import AssistantDelta
+
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._write_event(AssistantDelta("Hello, "))
+            app._write_event(AssistantDelta("world!"))
+            await pilot.pause()
+            # Re-query for each display check so mypy can't narrow a stored bool across writes.
+            assert app.query_one("#stream", Static).display is True
+            assert "Hello, world!" in str(app.query_one("#stream", Static).render())  # live
+            app._write_event(AssistantText("Hello, world!"))
+            await pilot.pause()
+            assert app.query_one("#stream", Static).display is False  # cleared once reply lands
+            assert app._stream_buf == ""
+            rendered = "\n".join(strip.text for strip in app.query_one("#log", RichLog).lines)
+            assert "Hello, world!" in rendered  # full reply committed to the transcript
+
+    _run(go())
+
+
+def test_stream_region_shows_only_the_tail() -> None:
+    # The live region is capped to its last few lines so a long reply can't make it grow
+    # unbounded; the full reply still commits to the log on completion.
+    async def go() -> None:
+        from aai_cli.code_agent.events import AssistantDelta
+
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._write_event(AssistantDelta("\n".join(f"line{i}" for i in range(10))))
+            await pilot.pause()
+            shown = str(app.query_one("#stream", Static).render())
+            assert "line9" in shown  # the latest lines are visible
+            assert "line2" in shown  # the 8-line tail reaches back to line2 (of lines 2..9)
+            assert "line1" not in shown  # but not line1 — older lines are dropped
 
     _run(go())
 
@@ -429,11 +435,6 @@ def test_clear_quit_pending_resets_the_flag() -> None:
             assert app._quit_pending is False
 
     _run(go())
-
-
-def test_spinner_text_formats_frame_and_elapsed() -> None:
-    assert tui._spinner_text(46, "✶") == "✶ Working… (46s)"
-    assert tui._spinner_text(0, "✷") == "✷ Working… (0s)"
 
 
 def test_spinner_starts_ticks_and_stops(monkeypatch: pytest.MonkeyPatch) -> None:

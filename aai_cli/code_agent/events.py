@@ -22,6 +22,19 @@ class AssistantText:
 
 
 @dataclass(frozen=True)
+class AssistantDelta:
+    """One streamed token of the in-progress reply, shown live then superseded by AssistantText.
+
+    Emitted from langgraph's per-token ``messages`` stream so the front-end can render the
+    reply as it's generated; the authoritative full text still arrives as an AssistantText
+    when the step lands, so a consumer that ignores deltas (the headless renderer) loses
+    nothing.
+    """
+
+    text: str
+
+
+@dataclass(frozen=True)
 class ToolCall:
     """The agent's request to run a tool (announced when not gated by approval)."""
 
@@ -44,7 +57,21 @@ class ErrorText:
     text: str
 
 
-Event = AssistantText | ToolCall | ToolResult | ErrorText
+Event = AssistantText | AssistantDelta | ToolCall | ToolResult | ErrorText
+
+
+def assistant_delta(payload: object) -> AssistantDelta | None:
+    """Extract a streaming assistant-text token from a ``messages``-mode stream payload.
+
+    langgraph's ``messages`` mode yields ``(message_chunk, metadata)``; we surface only the
+    AI message's text tokens (tool-call requests and tool results carry no prose, and other
+    message kinds aren't the assistant talking), so the live region streams just the reply.
+    """
+    chunk = payload[0] if isinstance(payload, tuple) and payload else payload
+    if type(chunk).__name__ not in ("AIMessage", "AIMessageChunk"):
+        return None
+    text = _text_of(getattr(chunk, "content", ""))
+    return AssistantDelta(text) if text else None
 
 
 def _text_of(content: object) -> str:

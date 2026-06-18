@@ -18,6 +18,7 @@ from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.events import (
     ErrorText,
     Event,
+    assistant_delta,
     interrupt_request,
     message_events,
     new_messages,
@@ -106,12 +107,13 @@ class CodeSession:
     def _run(self, graph_input: object, config: dict[str, object]) -> dict[str, object]:
         """Drive one graph segment, emitting events as each step completes; return the end state.
 
-        We render from the per-super-step ``"values"`` snapshots, but stream ``"messages"``
-        (per-token) deltas alongside them purely so :meth:`request_cancel` is observed
-        *within* a long step: a single model generation is one super-step, so a values-only
-        loop can't break until the whole reply has been produced — checking the flag on the
-        frequent token deltas lets a Ctrl-C stop it promptly. A double that only implements
-        ``invoke`` (the TUI/REPL test fakes) emits once at the end instead.
+        We render the finished messages from the per-super-step ``"values"`` snapshots, and
+        stream the ``"messages"`` (per-token) deltas alongside them for two reasons: a live
+        front-end shows the reply as it's generated (emitted as ``AssistantDelta``), and the
+        frequent deltas give :meth:`request_cancel` a checkpoint *within* a long step — a
+        single model generation is one super-step, so a values-only loop couldn't break until
+        the whole reply landed. A double that only implements ``invoke`` (the TUI/REPL test
+        fakes) emits once at the end instead.
         """
         if isinstance(self.agent, _SupportsStream):
             last: dict[str, object] = {}
@@ -123,6 +125,10 @@ class CodeSession:
                 if mode == "values" and isinstance(payload, dict):
                     self._emit_new(payload)
                     last = payload
+                elif mode == "messages":
+                    delta = assistant_delta(payload)
+                    if delta is not None:
+                        self.sink(delta)
             return last
         result = self.agent.invoke(graph_input, config)
         self._emit_new(result)
