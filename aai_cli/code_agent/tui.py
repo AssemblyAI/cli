@@ -81,6 +81,9 @@ class CodeAgentApp(App[None]):
     #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
+    /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */
+    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
+        margin: 1 1; content-align: center middle; display: none; }}
     /* Live region: the assistant reply streaming in token-by-token (capped to its tail),
        shown above the spinner while a turn runs and cleared once the full reply lands. */
     #stream {{ height: auto; max-height: 10; background: #000000; padding: 0 2; display: none; }}
@@ -151,6 +154,10 @@ class CodeAgentApp(App[None]):
             yield Static(">", id="promptmark")
             yield Input(id="prompt", placeholder="Ask the agent to build something…")
         yield Static(
+            f"[{banner.BRAND_HEX}]◉[/] Listening — speak your request   [dim](Ctrl-V to type)[/dim]",
+            id="voicebar",
+        )
+        yield Static(
             _status_text(
                 self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
             ),
@@ -177,6 +184,7 @@ class CodeAgentApp(App[None]):
         # Put the cursor in the prompt so the user can type immediately (RichLog would
         # otherwise hold focus and swallow keystrokes).
         self.query_one("#prompt", Input).focus()
+        self._sync_input_mode()  # in voice mode, swap the prompt for the listening affordance
         if self._initial:
             self._submit(self._initial)
         else:
@@ -303,11 +311,25 @@ class CodeAgentApp(App[None]):
             return
         self._voice_paused = not self._voice_paused
         self._refresh_status()
+        self._sync_input_mode()  # show/hide the text box vs. the listening affordance
         if self._voice_paused:
             self.notify("Voice off — type your request")
         elif not self._turn_running():
             self.notify("Voice on — listening")
             self._begin_listening()
+
+    def _sync_input_mode(self) -> None:
+        """Swap the text prompt for the 'listening' affordance while voice capture is active.
+
+        The Input stays mounted either way (it still holds the spoken transcript and the
+        turn-running ``disabled`` flag); only the bars' visibility flips. The prompt regains
+        focus whenever it's the visible input.
+        """
+        listening = self._voice_active()
+        self.query_one("#promptbar", Horizontal).display = not listening
+        self.query_one("#voicebar", Static).display = listening
+        if not listening:
+            self.query_one("#prompt", Input).focus()
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
@@ -403,9 +425,8 @@ class CodeAgentApp(App[None]):
         if event.worker.is_finished:
             self._stop_spinner()
             self._clear_stream()  # drop any live preview left over (e.g. a cancelled generation)
-            prompt = self.query_one("#prompt", Input)
-            prompt.disabled = False
-            prompt.focus()
+            self.query_one("#prompt", Input).disabled = False
+            self._sync_input_mode()  # focus the prompt (text mode) or show the listening bar
             self._voice_followup()  # read a spoken summary back, then listen for the next turn
 
     # --- voice (speak-to-it / read-summary-back; the legs run off the UI thread) ----
@@ -457,6 +478,7 @@ class CodeAgentApp(App[None]):
         self.query_one("#log", RichLog).write(
             f"[dim](voice input off: {escape(detail)}; type your request instead)[/dim]"
         )
+        self._sync_input_mode()  # mic ruled out -> bring the text box back
 
     def _enter_and_submit(self, text: str) -> None:
         """Show the spoken text in the prompt, then submit it as a turn (UI thread)."""

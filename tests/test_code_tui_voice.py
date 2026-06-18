@@ -203,6 +203,44 @@ def test_paused_voice_skips_followup_readback() -> None:
     _run(go())
 
 
+def test_voice_mode_swaps_text_input_for_listening_affordance() -> None:
+    # While voice capture is on, the text prompt is hidden and a "listening" bar shows;
+    # toggling voice off (Ctrl-V) brings the text box back. (Re-query each check so mypy
+    # doesn't narrow a stored display bool across the toggles.)
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # start paused so on_mount doesn't race a capture thread
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # paused -> text box visible
+            assert app.query_one("#voicebar").display is False
+            app.action_toggle_voice()  # voice on
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is False  # text box hidden
+            assert app.query_one("#voicebar").display is True  # listening affordance shown
+            app.action_toggle_voice()  # voice off
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # text box back
+            assert app.query_one("#voicebar").display is False
+
+    _run(go())
+
+
+def test_voice_capture_failure_restores_the_text_input() -> None:
+    # When the mic is ruled out mid-session, the listening bar is replaced by the text box.
+    async def go() -> None:
+        voice = FakeVoice(error=CLIError("no mic", error_type="mic_missing", exit_code=2))
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert await _wait_until(pilot, lambda: app._voice_typed)
+            await pilot.pause()
+            assert app.query_one("#promptbar").display is True  # text box restored on failure
+            assert app.query_one("#voicebar").display is False
+
+    _run(go())
+
+
 def test_toggle_voice_without_session_notifies_and_stays_off() -> None:
     # With no voice front-end the toggle is a no-op (notice only) and never marks a pause.
     async def go() -> None:
