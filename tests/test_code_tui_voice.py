@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from aai_cli.code_agent.tui import CodeAgentApp
 from aai_cli.core.errors import CLIError
@@ -237,6 +237,81 @@ def test_voice_capture_failure_restores_the_text_input() -> None:
             await pilot.pause()
             assert app.query_one("#promptbar").display is True  # text box restored on failure
             assert app.query_one("#voicebar").display is False
+
+    _run(go())
+
+
+def test_voice_bar_distinguishes_phases() -> None:
+    # The bar shows a distinct label per phase; only the listening phase carries the type hint.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # quiet the auto-listen; drive phases directly
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._set_voice_phase("listening")
+            bar = str(app.query_one("#voicebar", Static).render())
+            assert "Listening" in bar and "Ctrl-V to type" in bar
+            app._set_voice_phase("thinking")
+            bar = str(app.query_one("#voicebar", Static).render())
+            assert "Thinking" in bar and "Ctrl-V to type" not in bar  # hint is listening-only
+            app._set_voice_phase("speaking")
+            assert "Speaking" in str(app.query_one("#voicebar", Static).render())
+
+    _run(go())
+
+
+def test_spinner_suppressed_in_voice_mode() -> None:
+    # In voice mode the bar carries the "thinking" state, so the separate spinner stays hidden;
+    # pausing voice brings the spinner back.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._start_spinner()
+            assert app.query_one("#spinner", Static).display is False  # voice active -> no spinner
+            app._voice_paused = True
+            app._start_spinner()
+            assert app.query_one("#spinner", Static).display is True  # paused -> spinner shows
+
+    _run(go())
+
+
+def test_voice_bar_animation_timer_runs_and_advances() -> None:
+    # The meter animation timer runs only while the bar is shown, and a tick changes the frame.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Read into fresh locals each time: asserting `is None`/`is not None` on the same
+            # attribute across the opaque toggle would make mypy flag the later check unreachable.
+            paused_timer = app._voice_timer
+            assert paused_timer is None  # paused -> no animation
+            app.action_toggle_voice()  # voice on -> bar shown, timer running
+            await pilot.pause()
+            running_timer = app._voice_timer
+            assert running_timer is not None
+            before = str(app.query_one("#voicebar", Static).render())
+            app._tick_voice()
+            assert str(app.query_one("#voicebar", Static).render()) != before  # meter advanced
+            app.action_toggle_voice()  # voice off -> timer stopped
+            await pilot.pause()
+            stopped_timer = app._voice_timer
+            assert stopped_timer is None
+
+    _run(go())
+
+
+def test_submit_sets_thinking_phase() -> None:
+    async def go() -> None:
+        agent = FakeAgent([{"messages": [HumanMessage("go"), AIMessage("done")]}])
+        app = CodeAgentApp(agent=agent, voice=FakeVoice())
+        app._voice_paused = True  # keep the post-turn followup from flipping the phase
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._submit("go")
+            assert app._voice_phase == "thinking"  # set synchronously when the turn starts
+            await app.workers.wait_for_complete()
 
     _run(go())
 

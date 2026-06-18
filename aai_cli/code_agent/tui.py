@@ -13,11 +13,11 @@ import itertools
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar
 
 from rich.markdown import Markdown
 from rich.markup import escape
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Input, RichLog, Static
@@ -38,31 +38,26 @@ from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
 from aai_cli.code_agent.summarize import summarize_call, summarize_result
 from aai_cli.code_agent.tui_status import _spinner_text, _status_text
-from aai_cli.code_agent.voice import spoken_summary
-from aai_cli.core import errors
+from aai_cli.code_agent.voice_ui import _VoiceIO, _VoiceLegs
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from textual.timer import Timer
 
 # Glyphs cycled by the working indicator's animation (purely cosmetic).
 _SPIN_FRAMES = "✶✷✸✹✺"  # pragma: no mutate
 # Seconds the Ctrl-C "press again to quit" hint stays armed (deepagents-code uses 3s too).
 _QUIT_HINT_SECONDS = 3  # pragma: no mutate
+# Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
+_VOICE_FRAMES = ("▁▃▅", "▃▅▇", "▅▇▆", "▆▇▅", "▇▅▃", "▅▃▁")  # pragma: no mutate
+# The three voice phases the bar distinguishes, each (label, accent color).
+_VOICE_PHASES: dict[str, tuple[str, str]] = {
+    "listening": ("Listening — speak your request", banner.BRAND_HEX),
+    "thinking": ("Thinking…", "#f59e0b"),
+    "speaking": ("Speaking…", "#22c55e"),
+}
 
 
-class _VoiceIO(Protocol):
-    """The speak-to-it / read-back slice the TUI drives; :class:`VoiceSession` satisfies it."""
-
-    def listen(self) -> str | None:
-        """Capture one spoken turn and return its transcript (``None`` on no speech)."""
-
-    def speak(self, text: str) -> None:
-        """Read ``text`` back aloud (a no-op when readback is unavailable)."""
-
-
-class CodeAgentApp(App[None]):
+class CodeAgentApp(_VoiceLegs):
     """The coding-agent TUI: conversation transcript + prompt + approval/ask modals."""
 
     # Flat pure-black canvas — no panel fills/gray, just the bordered prompt and a status
@@ -125,6 +120,9 @@ class CodeAgentApp(App[None]):
         self._voice = voice  # when set, spoken turns drive the prompt and replies are read back
         self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
         self._voice_paused = False  # user-toggled off via Ctrl-V (distinct from a mic failure)
+        self._voice_phase = "listening"  # listening / thinking / speaking, shown in the voice bar
+        self._voice_frames = itertools.cycle(_VOICE_FRAMES)
+        self._voice_timer: Timer | None = None  # animates the voice-bar meter while it's shown
         self._stream_buf = ""  # accumulates streamed reply tokens for the live region
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
@@ -153,10 +151,7 @@ class CodeAgentApp(App[None]):
         with Horizontal(id="promptbar"):
             yield Static(">", id="promptmark")
             yield Input(id="prompt", placeholder="Ask the agent to build something…")
-        yield Static(
-            f"[{banner.BRAND_HEX}]◉[/] Listening — speak your request   [dim](Ctrl-V to type)[/dim]",
-            id="voicebar",
-        )
+        yield Static("", id="voicebar")  # filled by _render_voicebar when voice mode is shown
         yield Static(
             _status_text(
                 self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
@@ -328,8 +323,31 @@ class CodeAgentApp(App[None]):
         listening = self._voice_active()
         self.query_one("#promptbar", Horizontal).display = not listening
         self.query_one("#voicebar", Static).display = listening
-        if not listening:
+        if listening:
+            self._render_voicebar()
+            if self._voice_timer is None:  # animate the meter only while the bar is shown
+                self._voice_timer = self.set_interval(0.3, self._tick_voice)  # pragma: no mutate
+        else:
+            if self._voice_timer is not None:
+                self._voice_timer.stop()
+                self._voice_timer = None
             self.query_one("#prompt", Input).focus()
+
+    def _set_voice_phase(self, phase: str) -> None:
+        """Switch the voice bar between listening / thinking / speaking and repaint it."""
+        self._voice_phase = phase
+        self._render_voicebar()
+
+    def _render_voicebar(self) -> None:
+        """Paint the voice bar for the current phase: an animated meter, label, and accent."""
+        label, color = _VOICE_PHASES[self._voice_phase]
+        meter = next(self._voice_frames)
+        hint = "   [dim](Ctrl-V to type)[/dim]" if self._voice_phase == "listening" else ""
+        self.query_one("#voicebar", Static).update(f"[{color}]{meter}[/] {escape(label)}{hint}")
+
+    def _tick_voice(self) -> None:
+        """Advance the voice-bar meter one frame (the animation timer's callback)."""
+        self._render_voicebar()
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
@@ -392,6 +410,7 @@ class CodeAgentApp(App[None]):
         log = self.query_one("#log", RichLog)
         log.write(f"[b cyan]» {escape(text)}[/b cyan]")
         self.query_one("#prompt", Input).disabled = True
+        self._set_voice_phase("thinking")  # voice bar reflects the turn (no-op when bar hidden)
         self._start_spinner()
         self._run_turn(text)
 
@@ -403,8 +422,14 @@ class CodeAgentApp(App[None]):
     # --- working indicator (spinner + elapsed) --------------------------------
 
     def _start_spinner(self) -> None:
-        """Show the working indicator and animate it while the turn runs."""
+        """Show the working indicator and animate it while the turn runs.
+
+        Skipped in voice mode — the voice bar already shows a "Thinking…" state, so a second
+        spinner would just be redundant chrome.
+        """
         self._turn_started = time.monotonic()
+        if self._voice_active():
+            return
         self.query_one("#spinner", Static).display = True
         self._tick()
         self._spin_timer = self.set_interval(0.25, self._tick)  # pragma: no mutate
@@ -429,60 +454,5 @@ class CodeAgentApp(App[None]):
             self._sync_input_mode()  # focus the prompt (text mode) or show the listening bar
             self._voice_followup()  # read a spoken summary back, then listen for the next turn
 
-    # --- voice (speak-to-it / read-summary-back; the legs run off the UI thread) ----
-
-    def _voice_active(self) -> bool:
-        """Voice capture is on: a session exists, the mic isn't ruled out, and it isn't paused."""
-        return self._voice is not None and not self._voice_typed and not self._voice_paused
-
-    def _spawn(self, target: Callable[[], None]) -> None:
-        """Run ``target`` on a daemon thread — voice legs block, so they stay off the UI thread."""
-        threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
-
-    def _begin_listening(self) -> None:
-        """Capture the next spoken turn on a background thread (no-op when voice is off)."""
-        if not self._voice_active():
-            return
-        self._spawn(self._capture_voice_turn)
-
-    def _voice_followup(self) -> None:
-        """After a turn finishes: read back a spoken summary, then listen for the next turn."""
-        voice = self._voice
-        if voice is None or self._voice_paused:  # paused via Ctrl-V: no readback, no listen
-            return
-        self._spawn(lambda: self._speak_then_listen(voice))
-
-    def _speak_then_listen(self, voice: _VoiceIO) -> None:
-        """Read a summary of the last reply aloud (no code), then capture the next spoken turn."""
-        voice.speak(spoken_summary(self._last_reply))
-        self._capture_voice_turn()
-
-    def _capture_voice_turn(self) -> None:
-        """Listen for one spoken turn; enter it into the prompt, or degrade to typing."""
-        voice = self._voice
-        if voice is None or self._voice_typed or self._voice_paused:
-            return
-        try:
-            transcript = voice.listen()
-        except errors.CLIError as exc:
-            # A capture failure (no mic, STT error) drops voice for the rest of the session
-            # rather than wedging it — the user just types instead.
-            self._voice_typed = True
-            self.call_from_thread(self._notice_voice_off, exc.message)
-            return
-        if transcript:
-            self.call_from_thread(self._enter_and_submit, transcript)
-
-    def _notice_voice_off(self, detail: str) -> None:
-        """Tell the user voice input stopped and that input is now typed (UI thread)."""
-        self.query_one("#log", RichLog).write(
-            f"[dim](voice input off: {escape(detail)}; type your request instead)[/dim]"
-        )
-        self._sync_input_mode()  # mic ruled out -> bring the text box back
-
-    def _enter_and_submit(self, text: str) -> None:
-        """Show the spoken text in the prompt, then submit it as a turn (UI thread)."""
-        prompt = self.query_one("#prompt", Input)
-        prompt.value = text
-        self._submit(text)
-        prompt.value = ""
+    # The off-thread voice legs (_voice_active, _begin_listening, _capture_voice_turn, …) are
+    # inherited from _VoiceLegs; the render/toggle side stays above.
