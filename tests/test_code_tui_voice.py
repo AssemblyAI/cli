@@ -1,0 +1,165 @@
+"""Tests for the `assembly code` TUI's voice integration.
+
+Drives the real Textual app (headless) with a fake agent and a scripted voice double, so
+the listen→enter-into-the-prompt→submit cycle and the spoken-summary readback are exercised
+without a microphone, speaker, or socket. Split from test_code_tui.py to keep each file under
+the 500-line gate.
+"""
+
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage
+from textual.widgets import Input
+
+from aai_cli.code_agent.tui import CodeAgentApp
+from aai_cli.core.errors import CLIError
+
+
+class FakeAgent:
+    """Replays scripted invoke() results so a turn can complete without a model."""
+
+    def __init__(self, results: list[dict[str, object]]) -> None:
+        self._results = results
+        self.calls = 0
+
+    def invoke(self, *args, **kwargs):
+        result = self._results[self.calls]
+        self.calls += 1
+        return result
+
+
+class FakeVoice:
+    """A scripted voice I/O double: listen() replays transcripts, speak() records text."""
+
+    def __init__(self, transcripts: list[str] | None = None, *, error: CLIError | None = None):
+        self._transcripts = list(transcripts or [])
+        self._error = error
+        self.spoken: list[str] = []
+        self.listens = 0
+
+    def listen(self) -> str | None:
+        self.listens += 1
+        if self._error is not None:
+            raise self._error
+        return self._transcripts.pop(0) if self._transcripts else None
+
+    def speak(self, text: str) -> None:
+        self.spoken.append(text)
+
+
+def _run(coro) -> None:
+    asyncio.run(coro)
+
+
+def _wait_until(pilot, predicate):
+    """Pump the event loop until ``predicate`` holds (lets a voice worker thread land)."""
+
+    async def loop() -> bool:
+        for _ in range(200):
+            await pilot.pause(0.01)
+            if predicate():
+                return True
+        return False
+
+    return loop()
+
+
+def test_voice_active_requires_a_session_and_an_available_mic() -> None:
+    async def go() -> None:
+        no_voice = CodeAgentApp(agent=FakeAgent([]))
+        async with no_voice.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert no_voice._voice_active() is False  # no voice session at all
+
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert app._voice_active() is True
+            app._voice_typed = True
+            assert app._voice_active() is False  # mic ruled out -> inactive
+
+    _run(go())
+
+
+def test_enter_and_submit_fills_prompt_then_clears_and_submits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            submitted: list[str] = []
+            monkeypatch.setattr(app, "_submit", submitted.append)
+            app._enter_and_submit("add a verbose flag")
+            assert submitted == ["add a verbose flag"]  # the spoken turn was submitted
+            assert app.query_one("#prompt", Input).value == ""  # prompt cleared afterwards
+
+    _run(go())
+
+
+def test_voice_on_mount_listens_and_submits_the_spoken_turn() -> None:
+    async def go() -> None:
+        agent = FakeAgent([{"messages": [HumanMessage("do x"), AIMessage("done")]}])
+        voice = FakeVoice(transcripts=["do x"])
+        app = CodeAgentApp(agent=agent, voice=voice)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # on_mount (no initial prompt) starts listening; the captured turn drives the agent.
+            assert await _wait_until(pilot, lambda: agent.calls >= 1)
+            assert voice.listens >= 1
+
+    _run(go())
+
+
+def test_capture_voice_turn_is_a_noop_once_typed() -> None:
+    async def go() -> None:
+        voice = FakeVoice(transcripts=["ignored"])
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_typed = True  # set before mount so on_mount never auto-listens
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._capture_voice_turn()  # typed -> returns before listen (safe on the UI thread)
+            assert voice.listens == 0
+
+    _run(go())
+
+
+def test_voice_degrades_to_typed_on_capture_error() -> None:
+    async def go() -> None:
+        voice = FakeVoice(error=CLIError("no mic", error_type="mic_missing", exit_code=2))
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert await _wait_until(pilot, lambda: app._voice_typed)
+            assert app._voice_typed is True  # a capture failure drops voice for the session
+
+    _run(go())
+
+
+def test_voice_followup_reads_a_summary_of_the_last_reply() -> None:
+    async def go() -> None:
+        voice = FakeVoice()
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._voice_typed = True  # isolate the readback: the post-speak listen is a no-op
+            app._last_reply = "Here is the plan.\n```py\ncode\n```"
+            app._voice_followup()
+            assert await _wait_until(pilot, lambda: bool(voice.spoken))
+            assert voice.spoken == ["Here is the plan."]  # summary only — the code is stripped
+
+    _run(go())
+
+
+def test_voice_followup_is_a_noop_without_voice() -> None:
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))  # no voice session
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._voice_followup()  # returns immediately without speaking or listening
+            assert app._voice is None
+
+    _run(go())

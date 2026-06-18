@@ -32,7 +32,12 @@ from aai_cli.code_agent.render import RichRenderer, make_approver
 from aai_cli.code_agent.session import CodeSession, EventSink, run_repl
 from aai_cli.code_agent.skills import build_skills_middleware
 from aai_cli.code_agent.store import build_checkpointer
-from aai_cli.code_agent.voice import AUDIO_ERROR_TYPES, VoiceSession, build_voice_session
+from aai_cli.code_agent.voice import (
+    AUDIO_ERROR_TYPES,
+    VoiceSession,
+    build_voice_session,
+    spoken_summary,
+)
 from aai_cli.code_agent.web_search import TAVILY_API_KEY_ENV, build_web_search_tool
 from aai_cli.core import env, errors, stdio
 from aai_cli.ui import output
@@ -139,11 +144,18 @@ def _web_note(opts: CodeOptions) -> str | None:
     return None
 
 
-def _run_tui(agent: CompiledAgent, opts: CodeOptions, bridge: AskBridge) -> None:
+def _run_tui(
+    agent: CompiledAgent,
+    opts: CodeOptions,
+    bridge: AskBridge,
+    *,
+    voice: VoiceSession | None = None,
+) -> None:
     from aai_cli.code_agent.tui import CodeAgentApp
 
     # mouse=False leaves terminal mouse reporting off, so native text selection (and
     # copy/paste) works in the transcript and prompt; the UI is fully keyboard-driven.
+    # ``voice`` (when set) routes spoken turns into the prompt and reads summaries back.
     CodeAgentApp(
         agent=agent,
         ask_bridge=bridge,
@@ -152,6 +164,7 @@ def _run_tui(agent: CompiledAgent, opts: CodeOptions, bridge: AskBridge) -> None
         thread_id=opts.session,
         cwd=opts.root_dir.resolve(),
         web_note=_web_note(opts),
+        voice=voice,
     ).run(mouse=False)
 
 
@@ -193,12 +206,12 @@ def _announce_voice(renderer: RichRenderer, voice: VoiceSession) -> None:
 
 
 def _voice_sink(renderer: RichRenderer, voice: VoiceSession) -> EventSink:
-    """Render every event, and read the assistant's natural-language text back aloud."""
+    """Render every event, and read a spoken *summary* of each reply back aloud (no code)."""
 
     def sink(event: Event) -> None:
         renderer(event)
         if isinstance(event, AssistantText):
-            voice.speak(event.text)
+            voice.speak(spoken_summary(event.text))
 
     return sink
 
@@ -255,8 +268,11 @@ def run_code(opts: CodeOptions, state: AppState, *, json_mode: bool) -> None:
     agent = _build_agent(api_key, opts, bridge)
     interactive = stdio.stdout_is_tty() and stdio.stdin_is_tty()
     try:
-        if opts.voice and interactive:
-            _run_voice(agent, opts, bridge, api_key)
+        if opts.voice and opts.tui and interactive:
+            # The default: spoken turns are entered into the TUI prompt; summaries read back.
+            _run_tui(agent, opts, bridge, voice=build_voice_session(api_key))
+        elif opts.voice and interactive:
+            _run_voice(agent, opts, bridge, api_key)  # --no-tui: the plain voice REPL
         elif opts.tui and interactive:
             _run_tui(agent, opts, bridge)
         else:

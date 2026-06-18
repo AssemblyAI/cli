@@ -337,6 +337,49 @@ def test_session_surfaces_turn_failure_as_error_event() -> None:
     assert any(isinstance(e, ErrorText) and "gateway 500" in e.text for e in seen)
 
 
+class StreamingAgent:
+    """A double exercising the streaming path: yields scripted state snapshots."""
+
+    def __init__(self, chunks: list[dict[str, object]]) -> None:
+        self._chunks = chunks
+
+    def stream(self, graph_input, config=None, *, stream_mode="values"):
+        del graph_input, config, stream_mode
+        yield from self._chunks
+
+    def invoke(self, *a, **k):  # the streaming branch is taken, so invoke is never used
+        raise AssertionError("a streaming agent must not be invoked")
+
+
+def test_send_streams_each_step_and_cancel_stops_the_loop() -> None:
+    from langchain_core.messages import HumanMessage
+
+    # Three successive graph states (messages grow by one each step); a stream_mode="values"
+    # graph yields exactly these snapshots, so the session must emit incrementally.
+    chunks: list[dict[str, object]] = [
+        {"messages": [HumanMessage("go")]},
+        {"messages": [HumanMessage("go"), AIMessage("first")]},
+        {"messages": [HumanMessage("go"), AIMessage("first"), AIMessage("second")]},
+    ]
+    seen: list[object] = []
+    session = CodeSession(
+        agent=StreamingAgent(chunks), sink=seen.append, approver=lambda n, a: True
+    )
+
+    def sink(event: object) -> None:
+        seen.append(event)
+        if isinstance(event, AssistantText) and event.text == "first":
+            session.request_cancel()  # cancel mid-stream, before the "second" chunk is consumed
+
+    session.sink = sink
+    session.send("go")
+
+    texts = [e.text for e in seen if isinstance(e, AssistantText)]
+    # "first" streamed out as its step landed; the cancel then broke the loop, so the later
+    # "second" step was never emitted — proving both incremental rendering and cancellation.
+    assert texts == ["first"]
+
+
 def test_session_propagates_keyboard_interrupt() -> None:
     class Stop:
         def invoke(self, *a, **k):

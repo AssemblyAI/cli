@@ -11,6 +11,7 @@ stay on screen as text. Microphone (STT) input works in every environment.
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
@@ -36,6 +37,29 @@ _TTS_SAMPLE_RATE = 24000
 # The streaming STT model used to transcribe a spoken turn — the same realtime default
 # `assembly stream` and `assembly agent-cascade` use.
 _SPEECH_MODEL = "u3-rt-pro"
+
+# Reading code aloud over TTS is useless, so the readback speaks only the prose. These
+# strip fenced and inline code, and the spoken summary is capped so a long reply stays brief.
+_FENCED_CODE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE = re.compile(r"`[^`]+`")
+_MAX_SPOKEN_CHARS = 600  # pragma: no mutate — a cosmetic cap on how much prose is read aloud
+_ALL_CODE_READBACK = "I've updated the code — see the transcript for the details."
+
+
+def spoken_summary(text: str) -> str:
+    """Reduce an assistant reply to the prose worth reading aloud.
+
+    Drops fenced and inline code, collapses whitespace, and caps the length. When the reply
+    was essentially all code (nothing but blocks), returns a short generic note so the
+    readback still says *something* rather than going silent.
+    """
+    prose = _INLINE_CODE.sub(" ", _FENCED_CODE.sub(" ", text))
+    prose = " ".join(prose.split()).strip()
+    if not prose:
+        return _ALL_CODE_READBACK
+    if len(prose) > _MAX_SPOKEN_CHARS:
+        return prose[:_MAX_SPOKEN_CHARS].rstrip() + "…"
+    return prose
 
 
 class Microphone(Protocol):
