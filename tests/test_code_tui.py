@@ -286,8 +286,14 @@ def test_spinner_starts_ticks_and_stops(monkeypatch: pytest.MonkeyPatch) -> None
             await pilot.pause()
             assert app.query_one("#spinner", Static).display is True
             # _tick wires the elapsed seconds off the start time; pin "now" to assert it.
+            # Stop the live interval first (and pause after the pinned tick) so only this
+            # deterministic tick writes the readout — otherwise a real-time auto-tick can
+            # race the assert on a loaded runner, which flaked CI with "(6s)" vs "(7s)".
+            assert app._spin_timer is not None
+            app._spin_timer.stop()
             monkeypatch.setattr(time, "monotonic", lambda: app._turn_started + 7.0)
             app._tick()
+            await pilot.pause()
             assert "Working… (7s)" in str(app.query_one("#spinner", Static).render())
             app._stop_spinner()
             assert app.query_one("#spinner", Static).display is False

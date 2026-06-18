@@ -3,11 +3,92 @@
 set -e # Exit on any error
 
 # Canonical installer for the AssemblyAI CLI (`assembly`).
-# Installs the app with uv (or pipx) if either is present, bootstrapping uv when
-# neither is — then installs the optional system deps via Homebrew if available.
+#
+# Default: installs the latest published code as an isolated tool with uv (or
+#   pipx), bootstrapping uv when neither is present.
+# Dev mode (--install-method git / --dev): clones the repo (or reuses the
+#   checkout you run this from) and installs it editable (`uv tool install -e .`),
+#   so local source edits take effect without reinstalling.
+# Either way it then installs the optional system deps via Homebrew if available.
+#
+# Usage:
+#   curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | bash
+#   ./install.sh --dev                                   # editable, from a clone
+#   curl -LsSf .../install.sh | bash -s -- --install-method git
 
-PACKAGE="git+https://github.com/AssemblyAI/cli.git"
+REPO_URL="https://github.com/AssemblyAI/cli.git"
+PACKAGE="git+${REPO_URL}"
 PYTHON_VERSION="3.13"
+
+# Install method: "release" (default, publish-style) or "git" (editable clone).
+# Overridable by env or the flags parsed below.
+INSTALL_METHOD="${AAI_INSTALL_METHOD:-release}"
+GIT_DIR="${AAI_GIT_DIR:-$HOME/.local/share/assembly-cli}"
+# Passed to the installer as `-e` only in dev mode (empty array otherwise).
+EDITABLE=()
+
+usage() {
+	cat <<'EOF'
+Install the AssemblyAI CLI (assembly).
+
+Usage: install.sh [options]
+
+Options:
+  --install-method <release|git>  release (default): install the latest
+                                  published code. git: clone the repo and
+                                  install it editable (development mode).
+  --dev, -e, --editable, --git    Shortcut for --install-method git.
+  --release                       Shortcut for --install-method release.
+  --dir <path>                    Clone directory for dev mode
+                                  (default: ~/.local/share/assembly-cli).
+  -h, --help                      Show this help.
+
+Environment:
+  AAI_INSTALL_METHOD=release|git  Same as --install-method.
+  AAI_GIT_DIR=<path>              Same as --dir.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--install-method | --method)
+		[ $# -ge 2 ] || {
+			echo "Missing value for $1" >&2
+			exit 2
+		}
+		INSTALL_METHOD="$2"
+		shift
+		;;
+	--dev | -e | --editable | --git) INSTALL_METHOD="git" ;;
+	--release | --published) INSTALL_METHOD="release" ;;
+	--dir | --git-dir)
+		[ $# -ge 2 ] || {
+			echo "Missing value for $1" >&2
+			exit 2
+		}
+		GIT_DIR="$2"
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "Unknown option: $1" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+	shift
+done
+
+case "$INSTALL_METHOD" in
+release | git) ;;
+*)
+	echo "Invalid --install-method: $INSTALL_METHOD (use 'release' or 'git')" >&2
+	exit 2
+	;;
+esac
 
 # Best-effort check for the PortAudio shared library (no `command` to probe, so
 # look via pkg-config, the dynamic linker cache, then well-known lib paths).
@@ -115,13 +196,42 @@ install_system_deps() {
 	esac
 }
 
+# Resolve the source for a development (editable) install: reuse the checkout we
+# are run from if it is the CLI repo, otherwise clone/update GIT_DIR. Sets PACKAGE
+# to the local path and EDITABLE so the installer passes `-e`.
+prepare_git_source() {
+	if [ -f pyproject.toml ] && grep -q '^name = "aai-cli"' pyproject.toml 2>/dev/null; then
+		PACKAGE="$(pwd)"
+		echo "Development install from current checkout: $PACKAGE"
+	else
+		if ! command -v git >/dev/null 2>&1; then
+			echo "Development install needs git to clone $REPO_URL" >&2
+			exit 1
+		fi
+		if [ -d "$GIT_DIR/.git" ]; then
+			echo "Updating existing clone at $GIT_DIR"
+			git -C "$GIT_DIR" pull --ff-only
+		else
+			echo "Cloning $REPO_URL to $GIT_DIR"
+			mkdir -p "$(dirname "$GIT_DIR")"
+			git clone "$REPO_URL" "$GIT_DIR"
+		fi
+		PACKAGE="$GIT_DIR"
+		echo "Development install from $PACKAGE"
+	fi
+	EDITABLE=(-e)
+}
+
 # Install `assembly` as an isolated tool. Prefer uv (it manages an isolated
 # Python for us), then fall back to an existing pipx, and only bootstrap uv if
-# neither is already present.
+# neither is already present. EDITABLE is empty for a release install and `-e`
+# for a dev install.
 install_with_uv() {
 	# "$1" is the uv executable to invoke.
-	"$1" tool install -U "$PACKAGE" --python "$PYTHON_VERSION"
+	"$1" tool install -U "${EDITABLE[@]}" "$PACKAGE" --python "$PYTHON_VERSION"
 }
+
+[ "$INSTALL_METHOD" = "git" ] && prepare_git_source
 
 if command -v uv >/dev/null 2>&1; then
 	# `uv self update` errors out when uv was installed via an external package
@@ -134,7 +244,7 @@ elif command -v pipx >/dev/null 2>&1; then
 	# --force makes a re-run upgrade in place: the git source's version may not
 	# change between commits, so a plain `pipx install` would refuse as "already
 	# installed" and never pick up new code.
-	pipx install --force "$PACKAGE"
+	pipx install --force "${EDITABLE[@]}" "$PACKAGE"
 else
 	echo "Neither uv nor pipx found. Installing uv..."
 	curl -LsSf https://astral.sh/uv/install.sh | sh
