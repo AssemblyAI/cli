@@ -31,7 +31,7 @@ Product-scoped variables are `ASSEMBLYAI_*`; CLI-behavior variables are
 | `ASSEMBLYAI_API_KEY` | API key for all API calls; beats the keyring, loses to nothing but a `--api-key` validation flag. |
 | `AAI_ENV` | Backend environment (`production`, `sandbox000`); beats the profile's stored env, loses to `--env`/`--sandbox`. The non-production environments are internal: selecting one (here, via `--env`/`--sandbox`, or a profile binding) is rejected with exit 2 unless the active profile is signed in with an `@assemblyai.com` login, and `--env`/`--sandbox` and the sandbox-only commands are hidden from `--help` for everyone else. |
 | `AAI_AUTH_PORT` | Loopback callback port for `assembly login` (dev/test only; default 8585). |
-| `AAI_NO_UPDATE_CHECK` | Disables the "update available" notice and its background refresh. |
+| `AAI_NO_UPDATE_CHECK` | Disables the "update available" notice, its interactive "update now?" prompt, and the background refresh. |
 | `AAI_TELEMETRY_DISABLED` / `DO_NOT_TRACK` | Disables anonymous usage telemetry (always beats the persisted choice). |
 | `NO_COLOR` / `FORCE_COLOR` | Standard color overrides; `--color always` / `--color never` sets them for child consoles too. |
 | `CI` | Suppresses interactive affordances (spinners, the update notice); never changes output shape. |

@@ -9,22 +9,29 @@ Every failure is swallowed: the notice must never delay or break a command.
 
 from __future__ import annotations
 
+import shlex
 import sys
 import time
 
+import typer
 from packaging.version import InvalidVersion, Version
 from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
 from aai_cli import __version__
-from aai_cli.core import config, env, procs
+from aai_cli.core import config, env, procs, stdio
 from aai_cli.core.errors import CLIError
 from aai_cli.ui import output
 
 ENV_DISABLED = "AAI_NO_UPDATE_CHECK"
 _RELEASES_URL = "https://api.github.com/repos/AssemblyAI/cli/releases/latest"
 DOCS_URL = "https://github.com/AssemblyAI/cli#installation"
+_INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh"
+# Generic fallback when the install channel is unknown: the canonical one-liner
+# installer, which re-installs over any existing copy (it runs through a shell
+# because of the pipe — see ``_upgrade_argv``).
+_INSTALL_SCRIPT_COMMAND = f"curl -LsSf {_INSTALL_SCRIPT_URL} | sh"
 _CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 _FETCH_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = f"assembly-cli/{__version__}"
@@ -63,6 +70,24 @@ def detect_upgrade_command() -> str:
         (command for marker, command in _UPGRADE_COMMAND_MARKERS if marker in executable),
         "",
     )
+
+
+def resolve_upgrade_command() -> str:
+    """The command that upgrades the running install, always non-empty.
+
+    The detected channel command (brew/pipx/uv) when known, otherwise the canonical
+    install-script one-liner — which works regardless of how the CLI was installed.
+    """
+    return detect_upgrade_command() or _INSTALL_SCRIPT_COMMAND
+
+
+def _upgrade_argv(command: str) -> list[str]:
+    """The argv for running ``command``. The install-script fallback is a shell
+    pipeline (``curl … | sh``) so it runs through ``sh -c``; the package-manager
+    commands are plain argv split on whitespace."""
+    if command == _INSTALL_SCRIPT_COMMAND:
+        return ["sh", "-c", command]
+    return shlex.split(command)
 
 
 def fetch_and_cache() -> None:
@@ -128,6 +153,35 @@ def _render(current: str, latest: str) -> None:
     output.error_console.print(panel)
 
 
+def _confirm_upgrade() -> bool:
+    """Ask whether to upgrade now (interactive sessions only). Default is No, so a
+    bare Enter declines; an aborted prompt (Ctrl-C / EOF) is treated as No too."""
+    try:
+        return typer.confirm("Update now?", default=False, err=True)
+    except (typer.Abort, EOFError):
+        return False
+
+
+def _report_upgrade(latest: str, command: str, returncode: int) -> None:
+    if returncode == 0:
+        msg = f"Updated to {latest}. Restart assembly to use it."
+        output.error_console.print(output.success(msg))
+    else:
+        output.error_console.print(output.fail(f"Update failed — run '{command}' manually."))
+
+
+def _maybe_prompt_upgrade(latest: str) -> None:
+    """After the notice, offer to run the upgrade in place. Only when stdin is a real
+    terminal, so a human can answer; a piped/redirected stdin is left untouched."""
+    if not stdio.stdin_is_tty():
+        return
+    command = resolve_upgrade_command()
+    if not _confirm_upgrade():
+        return
+    returncode = procs.run_foreground(_upgrade_argv(command))
+    _report_upgrade(latest, command, returncode)
+
+
 def _cache_is_stale(last_check: float | None, *, now: float) -> bool:
     if last_check is None:
         return True
@@ -153,5 +207,6 @@ def _maybe_notify(*, json_mode: bool) -> None:
     now = time.time()
     if latest is not None and is_newer(latest, __version__):
         _render(__version__, latest)
+        _maybe_prompt_upgrade(latest)
     if _cache_is_stale(last_check, now=now):
         spawn_refresh()
