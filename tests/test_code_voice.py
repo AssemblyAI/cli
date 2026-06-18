@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from aai_cli.code_agent import voice as voicemod
-from aai_cli.code_agent.voice import VoiceSession, build_voice_session
+from aai_cli.code_agent.voice import VoiceSession, build_voice_session, spoken_summary
 
 
 class FakeMic:
@@ -108,6 +108,36 @@ def test_speak_is_a_noop_when_readback_off_or_text_blank():
 
     blank = VoiceSession(api_key="k", readback=True, synth_fn=boom, player_factory=FakePlayer)
     blank.speak("   ")  # blank text -> no synthesis
+
+
+def test_spoken_summary_strips_code_and_keeps_prose():
+    text = (
+        "Here's the fix.\n\n```python\ndef f():\n    return 1\n```\n\n"
+        "Call it with `f()` when ready."
+    )
+    summary = spoken_summary(text)
+    # The fenced block and the inline `f()` are gone; only the prose is read aloud.
+    assert "def f" not in summary and "return 1" not in summary
+    assert "`" not in summary
+    assert summary == "Here's the fix. Call it with when ready."
+
+
+def test_spoken_summary_falls_back_when_reply_is_all_code():
+    # A reply that is nothing but a code block leaves no prose -> a generic spoken note,
+    # never an empty utterance.
+    assert spoken_summary("```\nprint('hi')\n```") == voicemod._ALL_CODE_READBACK
+
+
+def test_spoken_summary_truncates_long_prose():
+    long_prose = "word " * 400  # far over the cap
+    summary = spoken_summary(long_prose)
+    assert summary.endswith("…")
+    assert len(summary) <= voicemod._MAX_SPOKEN_CHARS + 1  # capped prose plus the ellipsis
+
+
+def test_spoken_summary_leaves_short_prose_unchanged():
+    # Below the cap: returned verbatim, with no truncation ellipsis appended.
+    assert spoken_summary("Done — added the flag.") == "Done — added the flag."
 
 
 def test_build_voice_session_readback_tracks_tts_availability(monkeypatch):

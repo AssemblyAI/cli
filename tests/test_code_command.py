@@ -44,19 +44,39 @@ def test_command_parses_flags_into_options(monkeypatch):
     assert opts.session == "s1" and opts.persist is False
 
 
-def test_run_code_dispatches_to_voice_by_default_when_tty(monkeypatch):
+def test_run_code_dispatches_to_tui_with_voice_by_default_when_tty(monkeypatch):
+    # The default (voice + tui in a TTY) now routes voice *into* the TUI: spoken turns are
+    # entered into the prompt there, rather than running the separate voice REPL.
     calls = {}
     monkeypatch.setattr(_exec, "_build_agent", lambda key, opts, bridge: "AGENT")
+    monkeypatch.setattr(_exec, "build_voice_session", lambda key: f"VOICE:{key}")
     monkeypatch.setattr(
-        _exec, "_run_voice", lambda agent, opts, bridge, key: calls.update(voice=(agent, key))
+        _exec, "_run_tui", lambda agent, opts, bridge, *, voice: calls.update(tui=(agent, voice))
     )
-    monkeypatch.setattr(_exec, "_run_tui", lambda *a: calls.update(tui=True))
+    monkeypatch.setattr(_exec, "_run_voice", lambda *a: calls.update(voice=True))
     monkeypatch.setattr(_exec, "_run_repl", lambda *a: calls.update(repl=True))
     monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
     monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
     state = SimpleNamespace(resolve_api_key=lambda: "k")
 
     _exec.run_code(_opts(), state, json_mode=False)
+    assert calls == {"tui": ("AGENT", "VOICE:k")}  # voice session handed to the TUI
+
+
+def test_run_code_uses_voice_repl_when_tui_off(monkeypatch):
+    # --no-tui keeps the plain voice REPL (speak, hear the reply) instead of the TUI.
+    calls = {}
+    monkeypatch.setattr(_exec, "_build_agent", lambda key, opts, bridge: "AGENT")
+    monkeypatch.setattr(
+        _exec, "_run_voice", lambda agent, opts, bridge, key: calls.update(voice=(agent, key))
+    )
+    monkeypatch.setattr(_exec, "_run_tui", lambda *a, **k: calls.update(tui=True))
+    monkeypatch.setattr(_exec, "_run_repl", lambda *a: calls.update(repl=True))
+    monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
+    monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
+    state = SimpleNamespace(resolve_api_key=lambda: "k")
+
+    _exec.run_code(_opts(tui=False), state, json_mode=False)
     assert calls == {"voice": ("AGENT", "k")}
 
 
@@ -110,10 +130,11 @@ def test_run_code_maps_keyboard_interrupt_to_exit_130(monkeypatch):
     monkeypatch.setattr("aai_cli.core.stdio.stdout_is_tty", lambda: True)
     monkeypatch.setattr("aai_cli.core.stdio.stdin_is_tty", lambda: True)
 
-    def boom(*a):
+    def boom(*a, **k):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(_exec, "_run_voice", boom)
+    monkeypatch.setattr(_exec, "build_voice_session", lambda key: "VOICE")
+    monkeypatch.setattr(_exec, "_run_tui", boom)  # the default front-end in a TTY
     state = SimpleNamespace(resolve_api_key=lambda: "k")
 
     with pytest.raises(typer.Exit) as exc:
