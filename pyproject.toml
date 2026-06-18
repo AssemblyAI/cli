@@ -420,6 +420,8 @@ max-statements = 40
 "aai_cli/core/environments.py" = ["PLW0603"]
 # Verbosity is process-global startup state by design (mirrors environments.py).
 "aai_cli/core/debuglog.py" = ["PLW0603"]
+# The "shutdown SIGINT guard installed" latch is process-global once-only state.
+"aai_cli/core/microphone.py" = ["PLW0603"]
 # BaseHTTPRequestHandler.log_message requires a parameter named `format`.
 "aai_cli/auth/loopback.py" = ["A002"]
 # Template constants include URL path names such as TOKEN_PATH, not credentials.
