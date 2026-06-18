@@ -282,6 +282,70 @@ def test_flatten_content_guards() -> None:
     assert items == ["raw", 123]
 
 
+def test_hoist_tool_call_ids_moves_id_out_of_function_only_when_missing() -> None:
+    # One chunk exercising every branch: each malformed variant is skipped, and only a
+    # tool call carrying a function-nested id gets hoisted. Hold references to the inner
+    # dicts so the in-place mutation is asserted with a clean type.
+    noid_fn: dict[str, object] = {"name": "b"}
+    hoist_fn: dict[str, object] = {"id": "HOIST", "name": "c", "arguments": ""}
+    noid_call: dict[str, object] = {"index": 1, "function": noid_fn}
+    hoist_call: dict[str, object] = {"index": 2, "function": hoist_fn}
+    tool_calls: list[object] = [
+        None,  # tool_call not a dict -> skipped
+        {"index": 0, "function": 7},  # function not a dict -> skipped
+        noid_call,  # function has no id -> nothing to hoist
+        hoist_call,  # the real gateway shape -> id hoisted out of function
+    ]
+    chunk: dict[str, object] = {
+        "choices": [
+            None,  # choice not a dict -> skipped
+            {"delta": None},  # delta not a dict -> skipped
+            {"delta": {"content": "hi"}},  # no tool_calls -> skipped
+            {"delta": {"tool_calls": 99}},  # tool_calls not a list -> skipped
+            {"delta": {"tool_calls": tool_calls}},
+        ]
+    }
+    model_mod._hoist_tool_call_ids(chunk)
+    assert "id" not in noid_call  # no id invented for a call that never had one
+    assert noid_fn == {"name": "b"}  # left untouched
+    assert hoist_call["id"] == "HOIST"  # hoisted to the top level where langchain reads it
+    assert "id" not in hoist_fn  # and removed from function so it isn't duplicated
+
+
+def test_hoist_tool_call_ids_guards() -> None:
+    model_mod._hoist_tool_call_ids(None)  # not a dict -> early return, no error
+    model_mod._hoist_tool_call_ids({"choices": 99})  # choices not a list -> early return
+
+
+def test_convert_chunk_hoists_streamed_tool_call_id() -> None:
+    from langchain_core.messages import AIMessageChunk
+    from langchain_openai import ChatOpenAI
+
+    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
+    assert isinstance(m, ChatOpenAI)  # narrow to the subclass that overrides the converter
+    # The gateway streams the tool-call id nested inside `function`; the override must hoist
+    # it so langchain's converted chunk carries the id (else the reply ToolMessage gets None).
+    chunk = {
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {"index": 0, "function": {"id": "toolu_X", "name": "get_weather"}}
+                    ],
+                },
+                "finish_reason": None,
+            }
+        ]
+    }
+    gen = m._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, None)
+    assert gen is not None
+    msg = gen.message
+    assert isinstance(msg, AIMessageChunk)
+    assert msg.tool_call_chunks[0]["id"] == "toolu_X"
+
+
 def test_fetch_url_fetches_and_truncates(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx
 
