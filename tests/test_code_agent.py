@@ -27,6 +27,7 @@ from aai_cli.code_agent import (
 )
 from aai_cli.code_agent.agent import MUTATING_TOOLS, build_agent
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
+from aai_cli.code_agent.prompt import build_system_prompt
 from aai_cli.code_agent.render import RichRenderer, make_approver
 from aai_cli.code_agent.session import QUIT_COMMANDS, CodeSession, run_repl
 
@@ -122,6 +123,17 @@ def test_run_repl_sends_initial_then_lines_until_quit(tmp_path: Path) -> None:
 
     texts = [e.text for e in sink if isinstance(e, AssistantText)]
     assert texts == ["a", "b"]  # initial + "second"; blank skipped, stops at /quit
+
+
+def test_system_prompt_steers_concise_speech() -> None:
+    prompt = build_system_prompt("/work")
+    assert "/work" in prompt  # anchored to the working directory
+    # The prose is read aloud, so the prompt must steer the model to concise, speech-ready
+    # replies with code kept out of the spoken text.
+    assert "read aloud" in prompt
+    assert "fenced code blocks" in prompt
+    lowered = prompt.lower()
+    assert "concise" in lowered and "spoken" in lowered
 
 
 def test_mutating_tools_include_cli_shell_and_fetch() -> None:

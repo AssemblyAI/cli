@@ -389,17 +389,18 @@ class CodeAgentApp(_VoiceLegs):
         return True
 
     def _stop_voice_activity(self) -> bool:
-        """Stop in-flight voice listening/readback and go idle; True if voice was active.
+        """Stop in-flight voice; True if voice was active.
 
-        In voice mode the agent is usually listening or reading a reply back — neither is a
-        "running turn", so without this an interrupt key would skip straight to the quit hint.
-        This cancels the active leg, pauses voice (the text prompt returns, no auto re-listen),
-        and refreshes the UI, so a first Ctrl-C/Escape gives immediate feedback. Once paused
-        ``_voice_active`` is False, so a second press falls through to the quit path.
+        Interrupting the readback (speaking) stops it and resumes listening — the cancelled
+        speak() returns and the loop captures the next turn. Interrupting while listening
+        pauses voice to the text prompt, after which a second press falls through to quit.
         """
         if self._voice is None or not self._voice_active():
             return False
         self._voice.cancel()
+        if self._voice_phase == "speaking":  # stop talking, stay in voice mode -> re-listen
+            self._note("stopped — listening…")
+            return True
         self._voice_paused = True
         self._refresh_status()
         self._sync_input_mode()  # active leg stopped -> bring the text prompt back
@@ -417,7 +418,8 @@ class CodeAgentApp(_VoiceLegs):
             self._quit_pending = False
             return
         if self._stop_voice_activity():
-            self._arm_quit_pending()  # idle now; a second Ctrl-C confirms the quit
+            if self._voice_paused:  # paused to text -> a 2nd Ctrl-C quits; re-listening doesn't
+                self._arm_quit_pending()
             return
         if self._quit_pending:
             self.exit()
@@ -481,8 +483,7 @@ class CodeAgentApp(_VoiceLegs):
         self.query_one("#spinner", Static).display = False
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        # Guard on is_running: a worker finishing *after* the app tears down (quit / test exit)
-        # would drive _finish_turn against an unmounted DOM — NoMatches on "#spinner", a flake.
+        # is_running guard: a worker finishing after teardown would hit an unmounted DOM.
         if event.worker.is_finished and self.is_running:
             self._finish_turn()
 

@@ -145,6 +145,22 @@ def test_ask_modal_returns_typed_answer() -> None:
     assert answer == "8080"
 
 
+def test_approval_modal_dismisses_on_escape_or_ctrl_c() -> None:
+    # Escape / Ctrl-C decline the tool (the safe cancel), like pressing "n".
+    app = CodeAgentApp(agent=FakeAgent([]))
+    assert _drive_modal(app, lambda: app._approve("execute", {"cmd": "ls"}), ["escape"]) is False
+    app2 = CodeAgentApp(agent=FakeAgent([]))
+    assert _drive_modal(app2, lambda: app2._approve("execute", {"cmd": "ls"}), ["ctrl+c"]) is False
+
+
+def test_ask_modal_dismisses_on_escape_or_ctrl_c_with_no_answer() -> None:
+    # Escape / Ctrl-C cancel the question; the agent gets an empty answer.
+    app = CodeAgentApp(agent=FakeAgent([]))
+    assert _drive_modal(app, lambda: app._ask("which port?"), ["escape"]) == ""
+    app2 = CodeAgentApp(agent=FakeAgent([]))
+    assert _drive_modal(app2, lambda: app2._ask("which port?"), ["ctrl+c"]) == ""
+
+
 def test_full_turn_with_approval_interrupt() -> None:
     async def go() -> None:
         agent = FakeAgent(

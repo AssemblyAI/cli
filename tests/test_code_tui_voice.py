@@ -140,6 +140,28 @@ def test_finished_worker_is_ignored_once_the_app_stops_running():  # untyped: du
     assert calls == [True]  # running -> the finished turn is handled
 
 
+def test_interrupt_while_speaking_resumes_listening_not_text():  # untyped: probes app internals
+    # Ctrl-C during the readback (speaking) cancels it but stays in voice mode — the loop
+    # re-listens — and doesn't arm the quit. Interrupting while listening pauses to the text
+    # prompt and arms the double-press quit.
+    async def go():
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._voice_phase = "speaking"
+            app.action_quit_or_interrupt()
+            assert app._voice.cancels >= 1  # the readback was cancelled
+            assert app._voice_paused is False  # stayed in voice mode -> will re-listen
+            assert app._quit_pending is False  # stopping the readback isn't a quit step
+
+            app._voice_phase = "listening"
+            app.action_quit_or_interrupt()
+            assert app._voice_paused is True  # listening-interrupt brings the text prompt back
+            assert app._quit_pending is True  # paused to text -> a 2nd Ctrl-C quits
+
+    _run(go())
+
+
 def test_capture_voice_turn_is_a_noop_once_typed() -> None:
     async def go() -> None:
         voice = FakeVoice(transcripts=["ignored"])
