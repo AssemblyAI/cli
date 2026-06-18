@@ -173,6 +173,38 @@ def test_ensure_tool_call_arguments_guards() -> None:
     model_mod._ensure_tool_call_arguments([{"tool_calls": 99}])  # tool_calls not a list
 
 
+def test_sanitize_tool_schemas_strips_model_incompatible_keys() -> None:
+    # Gemini's function_declarations 400 on $schema/additionalProperties/title; strip them
+    # recursively from each tool's parameters so a tool-bound request works on every model.
+    city: dict[str, object] = {"type": "string", "title": "City"}  # held ref (nested dict)
+    any_of: list[object] = [{"$schema": "x", "type": "string"}]  # held ref (nested list)
+    params: dict[str, object] = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": False,
+        "title": "Args",
+        "properties": {"city": city},
+        "anyOf": any_of,
+    }
+    payload: dict[str, object] = {
+        "tools": [
+            None,  # non-dict tool -> skipped
+            {"type": "function", "function": 7},  # function not a dict -> skipped
+            {"type": "function", "function": {"name": "get_weather", "parameters": params}},
+        ]
+    }
+    model_mod._sanitize_tool_schemas(payload)
+    assert not ({"$schema", "additionalProperties", "title"} & set(params))  # top-level stripped
+    assert params["type"] == "object"  # real schema keys preserved
+    assert city == {"type": "string"}  # nested dict stripped
+    assert any_of == [{"type": "string"}]  # nested list stripped
+
+
+def test_sanitize_tool_schemas_guards() -> None:
+    model_mod._sanitize_tool_schemas(None)  # not a dict -> early return, no error
+    model_mod._sanitize_tool_schemas({"tools": 99})  # tools not a list -> early return
+
+
 def test_get_request_payload_fills_empty_tool_call_arguments() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_openai import ChatOpenAI
