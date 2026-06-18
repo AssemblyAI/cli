@@ -20,10 +20,10 @@ from aai_cli.code_agent import (
     docs_mcp,
     events,
     fetch_tool,
+    firecrawl_search,
     memory,
     skills,
     store,
-    web_search,
 )
 from aai_cli.code_agent import model as model_mod
 from aai_cli.code_agent.agent import MUTATING_TOOLS, build_agent
@@ -225,12 +225,12 @@ def test_skills_middleware_present_and_absent(tmp_path: Path) -> None:
 
 
 def test_web_search_tool_gated_on_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
-    assert web_search.build_web_search_tool() is None
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+    assert firecrawl_search.build_web_search_tool() is None
 
-    monkeypatch.setenv("TAVILY_API_KEY", "tvly-key")
-    tool = web_search.build_web_search_tool()
-    assert tool is not None and tool.name == "tavily_search"
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-key")
+    tool = firecrawl_search.build_web_search_tool()
+    assert tool is not None and tool.name == "firecrawl_search"
 
 
 def test_message_events_coerces_list_content() -> None:
