@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
-from aai_cli.code_agent.web_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.core import debuglog
 
 if TYPE_CHECKING:
@@ -133,12 +133,12 @@ def build_live_tools() -> list[BaseTool]:
     All three are reused from the coding agent's tool modules. Unlike there they are
     *not* approval-gated — a spoken turn can't wait for a keyboard confirmation, so the
     live agent only gets read-only tools and runs them automatically. Web search is
-    present only when ``TAVILY_API_KEY`` is set; the docs MCP is best-effort (an empty
+    present only when ``FIRECRAWL_API_KEY`` is set; the docs MCP is best-effort (an empty
     list when the host is unreachable), so neither blocks a session.
     """
     from aai_cli.code_agent.docs_mcp import load_docs_tools
     from aai_cli.code_agent.fetch_tool import build_fetch_tool
-    from aai_cli.code_agent.web_search import build_web_search_tool
+    from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
     tools: list[BaseTool] = [build_fetch_tool()]
     search = build_web_search_tool()

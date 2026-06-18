@@ -59,7 +59,11 @@ class _NamedTool:
 def test_system_prompt_appends_tool_guidance_for_present_tools():
     prompt = brain.build_system_prompt(
         "You are a pirate.",
-        tools=[_NamedTool("tavily_search"), _NamedTool("fetch_url"), _NamedTool("docs_search")],
+        tools=[
+            _NamedTool(brain.WEB_SEARCH_TOOL_NAME),
+            _NamedTool("fetch_url"),
+            _NamedTool("docs_search"),
+        ],
     )
     # The persona is preserved, and the guidance advertises each capability that a present
     # tool backs (the plain cascade persona never mentions tools).
@@ -117,11 +121,20 @@ def test_join_clause_grammar():
 
 def test_web_search_tool_name_matches_built_tool(monkeypatch):
     # The prompt builder detects search by WEB_SEARCH_TOOL_NAME, so pin it against the real
-    # tool's registered name — if langchain_tavily renames it, detection would silently break.
-    from aai_cli.code_agent import web_search
+    # Firecrawl tool's registered name — if it renames, detection would silently break.
+    from aai_cli.code_agent import firecrawl_search
 
-    monkeypatch.setenv(web_search.TAVILY_API_KEY_ENV, "tvly-x")
-    assert web_search.build_web_search_tool().name == web_search.WEB_SEARCH_TOOL_NAME
+    monkeypatch.setenv(firecrawl_search.FIRECRAWL_API_KEY_ENV, "fc-x")
+    tool = firecrawl_search.build_web_search_tool()
+    assert tool is not None
+    assert tool.name == firecrawl_search.WEB_SEARCH_TOOL_NAME == brain.WEB_SEARCH_TOOL_NAME
+
+
+def test_web_search_absent_without_firecrawl_key(monkeypatch):
+    from aai_cli.code_agent import firecrawl_search
+
+    monkeypatch.delenv(firecrawl_search.FIRECRAWL_API_KEY_ENV, raising=False)
+    assert firecrawl_search.build_web_search_tool() is None
 
 
 # --- build_completer (driving the real graph with a fake model) --------------
@@ -326,7 +339,7 @@ def test_reply_text_is_empty_without_an_assistant_message():
 def test_build_live_tools_includes_search_when_keyed(monkeypatch):
     search = object()
     monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
-    monkeypatch.setattr("aai_cli.code_agent.web_search.build_web_search_tool", lambda: search)
+    monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
     monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", lambda: ["docs"])
     tools = brain.build_live_tools()
     # Fetch + the keyed search + the docs tools, in that order.
@@ -335,7 +348,7 @@ def test_build_live_tools_includes_search_when_keyed(monkeypatch):
 
 def test_build_live_tools_omits_search_when_unkeyed(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
-    monkeypatch.setattr("aai_cli.code_agent.web_search.build_web_search_tool", lambda: None)
+    monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
     monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", list)
     tools = brain.build_live_tools()
     # No TAVILY_API_KEY -> no search tool, just the fetch tool.

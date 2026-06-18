@@ -23,7 +23,8 @@ from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, client, config_builder, errors, llm, signals
+from aai_cli.code_agent import firecrawl_search
+from aai_cli.core import choices, client, config_builder, env, errors, llm, signals
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.sources import FileSource
@@ -73,9 +74,8 @@ class AgentCascadeOptions:
     # Text-to-speech: language named, any other query param via --tts-config.
     language: str | None
     tts_config: tuple[str, ...]
-    # Tools: standard mcpServers JSON config files, plus the curated demo server set.
+    # Tools: extra standard mcpServers JSON config files, on top of the default set.
     mcp_config: tuple[Path, ...]
-    demo_tools: bool
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
 
@@ -120,18 +120,27 @@ def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
     return extra
 
 
-def _resolve_mcp_servers(
-    demo_tools: bool, mcp_config: tuple[Path, ...]
-) -> dict[str, Mapping[str, object]]:
-    """The MCP servers for this run: the curated demo set (under --demo-tools) overlaid
-    with any --mcp-config files, so an explicit config can override a demo entry by name.
+def _warn_without_web_search(*, json_mode: bool) -> None:
+    """Warn that web search is off unless a ``FIRECRAWL_API_KEY`` is set to enable it.
 
-    The demo filesystem server is rooted at the working directory, scoping its file access
-    to one folder. Returns an empty mapping when neither tool source is requested.
+    The other default tools (URL fetch, AssemblyAI docs, and the MCP servers) need no
+    key; only Firecrawl web search does, so its absence is the one worth flagging up front.
     """
-    servers: dict[str, Mapping[str, object]] = {}
-    if demo_tools:
-        servers.update(mcp_tools.demo_servers(Path.cwd()))
+    if not env.get(firecrawl_search.FIRECRAWL_API_KEY_ENV):
+        output.emit_warning(
+            "Web search is off — set FIRECRAWL_API_KEY to enable the agent's web search tool.",
+            json_mode=json_mode,
+        )
+
+
+def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
+    """The MCP servers for this run: the curated default set overlaid with any --mcp-config
+    files, so an explicit config can extend the defaults or override one by name.
+
+    The default filesystem server is rooted at the working directory, scoping its file
+    access to one folder.
+    """
+    servers: dict[str, Mapping[str, object]] = dict(mcp_tools.default_servers(Path.cwd()))
     servers.update(mcp_tools.parse_mcp_config(mcp_config))
     return servers
 
@@ -172,13 +181,6 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
             "[aai.warn]Note:[/aai.warn] the generated script uses the microphone; "
             "it does not stream the audio source you passed."
         )
-    if opts.mcp_config or opts.demo_tools:
-        # The generated cascade snippet wires only the built-in tools; MCP servers are a
-        # CLI-runtime feature, so say so rather than silently dropping them.
-        output.error_console.print(
-            "[aai.warn]Note:[/aai.warn] the generated script does not include the MCP "
-            "tools; they are wired only when running 'assembly live'."
-        )
     config = CascadeConfig(
         voice=opts.voice,
         system_prompt=system_prompt_text,
@@ -204,6 +206,8 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         _print_show_code(opts, system_prompt_text)
         return
 
+    _warn_without_web_search(json_mode=json_mode)
+
     from_file = bool(opts.source) or opts.sample
     if from_file and opts.device is not None:
         raise UsageError("--device applies only to microphone input.")
@@ -216,7 +220,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     llm_extra = llm.parse_gateway_overrides(opts.llm_config)
     tts_extra = _parse_tts_config(opts.tts_config)
     # Resolve MCP servers before opening the device, so a malformed config fails fast.
-    mcp_servers = _resolve_mcp_servers(opts.demo_tools, opts.mcp_config)
+    mcp_servers = _resolve_mcp_servers(opts.mcp_config)
     api_key = state.resolve_api_key()
 
     config = CascadeConfig(

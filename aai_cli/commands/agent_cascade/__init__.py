@@ -58,11 +58,7 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
                 'assembly --sandbox live --system-prompt "You are a terse pirate."',
             ),
             (
-                "Add a curated, no-auth MCP toolset (time, weather, memory, …)",
-                "assembly --sandbox live --demo-tools",
-            ),
-            (
-                "Load tools from your own MCP servers config",
+                "Add your own MCP servers on top of the defaults",
                 "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
             ),
             ("See available voices", "assembly --sandbox live --list-voices"),
@@ -166,15 +162,9 @@ def live(
     mcp_config: list[Path] | None = typer.Option(
         None,
         "--mcp-config",
-        help='MCP servers config JSON ({"mcpServers": {…}}) to load tools from (repeatable)',
+        help='Extra MCP servers config JSON ({"mcpServers": {…}}) on top of the defaults (repeatable)',
         exists=True,
         dir_okay=False,
-        rich_help_panel=_PANEL_TOOLS,
-    ),
-    demo_tools: bool = typer.Option(
-        False,
-        "--demo-tools",
-        help="Load a curated, no-auth MCP toolset: time, fetch, memory, filesystem, weather",
         rich_help_panel=_PANEL_TOOLS,
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
@@ -210,13 +200,12 @@ def live(
     This only runs a conversation in the terminal — it writes no code. To build
     an agent-cascade app, run 'assembly init agent-cascade' instead.
 
-    Web search needs a TAVILY_API_KEY in the environment; without it the agent
-    keeps its URL-fetch and docs tools.
-
-    Give the agent more tools with MCP servers: --demo-tools loads a curated,
-    no-auth set (time, fetch, memory, filesystem, weather), and --mcp-config
-    loads any standard mcpServers JSON file. A server that won't start is skipped,
-    so one broken tool never sinks the session.
+    By default the agent loads a curated, no-auth MCP toolset (time, fetch,
+    memory, filesystem, weather) alongside its built-in URL fetch and AssemblyAI
+    docs. Firecrawl web search also loads when a FIRECRAWL_API_KEY is set (you'll
+    get a one-line notice when it isn't). Add your own servers with --mcp-config,
+    pointing at any standard mcpServers JSON file. A server that won't start is
+    skipped, so one broken tool never sinks the session.
     """
 
     if list_voices:
@@ -243,7 +232,6 @@ def live(
         language=language,
         tts_config=tuple(tts_config or ()),
         mcp_config=tuple(mcp_config or ()),
-        demo_tools=demo_tools,
         show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

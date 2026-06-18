@@ -16,11 +16,11 @@ from aai_cli.agent_cascade import mcp_tools
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.core.errors import UsageError
 
-# --- demo_servers ------------------------------------------------------------
+# --- default_servers ---------------------------------------------------------
 
 
-def test_demo_servers_curated_set_and_filesystem_root():
-    servers = mcp_tools.demo_servers(Path("/notes/dir"))
+def test_default_servers_curated_set_and_filesystem_root():
+    servers = mcp_tools.default_servers(Path("/notes/dir"))
     # The five curated, no-auth servers, each with a real launch command.
     assert set(servers) == {"time", "fetch", "memory", "filesystem", "weather"}
     assert servers["time"] == {"command": "uvx", "args": ["mcp-server-time"]}
@@ -148,34 +148,49 @@ def test_safe_load_returns_empty_on_failure():
     assert mcp_tools._safe_load(boom, "s", {"command": "x"}) == []
 
 
-# --- _resolve_mcp_servers (the --demo-tools / --mcp-config merge) -------------
+# --- _resolve_mcp_servers (the default set + --mcp-config merge) --------------
 
 
-def test_resolve_mcp_servers_demo_only():
-    servers = _exec._resolve_mcp_servers(demo_tools=True, mcp_config=())
-    # The curated demo set, with no config files.
+def test_resolve_mcp_servers_defaults_loaded_with_no_config():
+    servers = _exec._resolve_mcp_servers(mcp_config=())
+    # Every session loads the curated default set out of the box.
     assert {"time", "weather", "memory", "fetch", "filesystem"} <= set(servers)
 
 
-def test_resolve_mcp_servers_config_only(tmp_path):
+def test_resolve_mcp_servers_config_adds_to_defaults(tmp_path):
     path = tmp_path / "servers.json"
     path.write_text(
         '{"mcpServers": {"custom": {"command": "uvx", "args": ["x"]}}}', encoding="utf-8"
     )
-    servers = _exec._resolve_mcp_servers(demo_tools=False, mcp_config=(path,))
-    assert servers == {"custom": {"command": "uvx", "args": ["x"]}}
+    servers = _exec._resolve_mcp_servers(mcp_config=(path,))
+    # The config server is added alongside (not instead of) the defaults.
+    assert servers["custom"] == {"command": "uvx", "args": ["x"]}
+    assert "weather" in servers
 
 
-def test_resolve_mcp_servers_config_overrides_demo_by_name(tmp_path):
+def test_resolve_mcp_servers_config_overrides_default_by_name(tmp_path):
     path = tmp_path / "servers.json"
     path.write_text('{"mcpServers": {"time": {"command": "my-time"}}}', encoding="utf-8")
-    servers = _exec._resolve_mcp_servers(demo_tools=True, mcp_config=(path,))
-    # An explicit config entry overrides the demo entry of the same name.
+    servers = _exec._resolve_mcp_servers(mcp_config=(path,))
+    # An explicit config entry overrides the default server of the same name.
     assert servers["time"] == {"command": "my-time"}
 
 
-def test_resolve_mcp_servers_none_is_empty():
-    assert _exec._resolve_mcp_servers(demo_tools=False, mcp_config=()) == {}
+# --- _warn_without_web_search (the FIRECRAWL_API_KEY notice) ------------------
+
+
+def test_warn_without_web_search_emits_when_firecrawl_key_missing(monkeypatch, capsys):
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+    # JSON mode routes the non-fatal warning to a {"warning": …} line on stderr.
+    _exec._warn_without_web_search(json_mode=True)
+    assert "FIRECRAWL_API_KEY" in capsys.readouterr().err
+
+
+def test_warn_without_web_search_silent_when_firecrawl_key_set(monkeypatch, capsys):
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-x")
+    _exec._warn_without_web_search(json_mode=True)
+    # With the key present, web search is on, so nothing is emitted.
+    assert capsys.readouterr().err == ""
 
 
 def test_load_server_drives_the_adapter_with_a_one_server_client(monkeypatch):
