@@ -1,3 +1,4 @@
+import signal
 import sys
 import types
 from typing import Any
@@ -11,7 +12,10 @@ from aai_cli.core.microphone import (
     MicrophoneSource,
     _default_mic_stream,
     _device_default_rate,
+    _ignore_interrupt_during_shutdown,
+    _install_shutdown_interrupt_guard,
     _SoundDeviceMic,
+    import_sounddevice,
     resample_pcm16,
 )
 
@@ -365,3 +369,50 @@ def test_microphone_source_passes_through_factory_clierror():
         list(mic)
     assert exc.value is err  # passed through unchanged
     assert exc.value.suggestion == "grant it"
+
+
+def test_ignore_interrupt_during_shutdown_sets_sig_ign():
+    # The guard drops a second Ctrl-C during teardown so it can't raise inside
+    # sounddevice's atexit PortAudio terminate. Save/restore the global disposition.
+    before = signal.getsignal(signal.SIGINT)
+    try:
+        _ignore_interrupt_during_shutdown()
+        assert signal.getsignal(signal.SIGINT) is signal.SIG_IGN
+    finally:
+        signal.signal(signal.SIGINT, before)
+
+
+def test_install_shutdown_interrupt_guard_registers_once(monkeypatch):
+    registered = []
+    monkeypatch.setattr(microphone, "_shutdown_interrupt_guard_installed", False)
+    monkeypatch.setattr(microphone.atexit, "register", lambda fn: registered.append(fn))
+
+    _install_shutdown_interrupt_guard()
+    _install_shutdown_interrupt_guard()  # idempotent: the flag short-circuits the second call
+
+    assert registered == [_ignore_interrupt_during_shutdown]
+
+
+def test_import_sounddevice_installs_shutdown_guard(monkeypatch):
+    registered = []
+    monkeypatch.setattr(microphone, "_shutdown_interrupt_guard_installed", False)
+    monkeypatch.setattr(microphone.atexit, "register", lambda fn: registered.append(fn))
+    monkeypatch.setitem(sys.modules, "sounddevice", types.ModuleType("sounddevice"))
+
+    import_sounddevice()
+
+    assert registered == [_ignore_interrupt_during_shutdown]
+
+
+def test_import_sounddevice_missing_does_not_register_guard(monkeypatch):
+    # A broken install raises before the guard is reached, so nothing is registered.
+    registered = []
+    monkeypatch.setattr(microphone, "_shutdown_interrupt_guard_installed", False)
+    monkeypatch.setattr(microphone.atexit, "register", lambda fn: registered.append(fn))
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import -> ImportError
+
+    with pytest.raises(CLIError) as exc:
+        import_sounddevice()
+
+    assert exc.value.error_type == "mic_missing"
+    assert registered == []

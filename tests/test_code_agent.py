@@ -427,6 +427,29 @@ def test_cancel_within_a_step_breaks_on_a_token_delta() -> None:
     assert texts == []  # the post-cancel "late" reply was dropped, not rendered
 
 
+def test_only_values_chunks_are_rendered_not_messages_deltas() -> None:
+    # The dual-mode stream tags each yield by mode; only "values" snapshots are rendered (the
+    # "messages" deltas exist purely as cancel checkpoints). A messages delta that happens to
+    # be a dict must NOT be emitted — guards the `mode == "values" and ...` guard against an
+    # `and`->`or` slip that would render it.
+    seen: list[object] = []
+
+    class DualModeAgent:
+        def stream(self, graph_input, config=None, *, stream_mode=("values", "messages")):
+            del graph_input, config, stream_mode
+            yield ("messages", {"messages": [AIMessage("ghost")]})  # dict, but messages-mode
+            yield ("values", {"messages": [AIMessage("real")]})
+
+        def invoke(self, *a, **k):
+            raise AssertionError("a streaming agent must not be invoked")
+
+    session = CodeSession(agent=DualModeAgent(), sink=seen.append, approver=lambda n, a: True)
+    session.send("go")
+
+    texts = [e.text for e in seen if isinstance(e, AssistantText)]
+    assert texts == ["real"]  # the messages-mode dict ("ghost") was not rendered
+
+
 def test_session_propagates_keyboard_interrupt() -> None:
     class Stop:
         def invoke(self, *a, **k):

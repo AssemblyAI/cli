@@ -17,10 +17,10 @@ Learn more about the platform in the [AssemblyAI docs](https://www.assemblyai.co
 Install on macOS or Linux with one command:
 
 ```sh
-curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | bash
 ```
 
-This installs [uv](https://docs.astral.sh/uv/) if needed, then installs `assembly` as a uv tool.
+This installs `assembly` with [uv](https://docs.astral.sh/uv/) (or pipx), bootstrapping uv if needed.
 
 Sign in (stores your API key in the OS keyring) and run your first transcription:
 
@@ -231,12 +231,26 @@ Requires Python 3.12+ (Homebrew brings its own; for pipx/uv see the `--python` h
 ### Install script (recommended — macOS / Linux)
 
 ```sh
-curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | bash
 ```
 
-The [`install.sh`](install.sh) script bootstraps [uv](https://docs.astral.sh/uv/) if it
-isn't already present, then runs `uv tool install` to put `assembly` on your `PATH`. Re-run
-it any time to update to the latest version.
+The [`install.sh`](install.sh) script installs `assembly` with whichever tool installer you
+already have — [uv](https://docs.astral.sh/uv/) if present, otherwise [pipx](https://pipx.pypa.io) —
+and bootstraps uv only when neither is found. It then installs the optional live-audio system
+dependencies via [Homebrew](https://brew.sh) when `brew` is available, or prints the right
+install command for your platform otherwise. Re-run it any time to update to the latest version.
+
+For a **development install** — an editable checkout so local source edits take effect without
+reinstalling (`uv tool install -e .`) — pass `--install-method git` (or `--dev`). It reuses the
+checkout you run it from, or clones the repo to `~/.local/share/assembly-cli` (override with
+`--dir`):
+
+```sh
+# from a clone you already have
+./install.sh --dev
+# or fetch + editable-install in one shot
+curl -LsSf https://raw.githubusercontent.com/AssemblyAI/cli/main/install.sh | bash -s -- --install-method git
+```
 
 ### Homebrew (macOS / Linux)
 
@@ -266,7 +280,8 @@ Only the live-audio commands need anything extra: `stream`, `dictate`, and `agen
 microphone capture and [`ffmpeg`](https://ffmpeg.org) on `PATH` to stream non-WAV audio; `assembly share`
 uses [`cloudflared`](https://github.com/cloudflare/cloudflared) for its public tunnel.
 Plain `transcribe` uploads your file directly and needs none of them. The
-[`install.sh`](install.sh) script checks for these and prints the right install command when any are missing.
+[`install.sh`](install.sh) script checks for these and installs them via Homebrew when `brew` is
+available, otherwise printing the right install command for your platform.
 
 - Debian/Ubuntu: `sudo apt-get install libportaudio2 ffmpeg`
 - Fedora: `sudo dnf install portaudio ffmpeg`
