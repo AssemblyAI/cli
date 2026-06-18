@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # A capable gateway model by default; override with `--model`. The gateway is the
 # source of truth for what's accepted, so this is only a sensible default.
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "gpt-5.1"
 # Generous ceiling so long edits/explanations aren't clipped; the gateway only bills
 # tokens actually generated, so a high cap costs nothing on short replies.
 DEFAULT_MAX_TOKENS = 8192

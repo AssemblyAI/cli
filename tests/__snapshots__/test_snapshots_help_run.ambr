@@ -287,7 +287,7 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
   │ --model                       TEXT       LLM Gateway model                   │
-  │                                          [default: claude-sonnet-4-6]        │
+  │                                          [default: gpt-5.1]                  │
   │ --dir      -C                 DIRECTORY  Working directory the agent's file  │
   │                                          and shell tools operate in          │
   │                                          [default: .]                        │
@@ -667,8 +667,7 @@
   ╭─ Language model ─────────────────────────────────────────────────────────────╮
   │ --model             TEXT                  LLM Gateway model that powers the  │
   │                                           agent's replies                    │
-  │                                           [default:                          │
-  │                                           claude-haiku-4-5-20251001]         │
+  │                                           [default: gpt-5.1]                 │
   │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
   │                                           [default: 8192]                    │
   │ --llm-config        TEXT                  Set any LLM Gateway request field  │
