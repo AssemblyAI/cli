@@ -56,7 +56,26 @@ class _VoiceLegs(App[None]):
 
     def _spawn(self, target: Callable[[], None]) -> None:
         """Run ``target`` on a daemon thread — voice legs block, so they stay off the UI thread."""
-        threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
+        thread = threading.Thread(
+            target=lambda: self._run_leg(target),
+            daemon=True,  # pragma: no mutate — daemon flag only affects process exit, unassertable
+        )
+        thread.start()
+
+    def _run_leg(self, target: Callable[[], None]) -> None:
+        """Run one voice leg, dropping the callback error a torn-down app raises mid-flight.
+
+        A leg calls back onto the UI thread (``call_from_thread``); if the app stops — a quit,
+        or a test's ``run_test`` block exiting — while the leg is mid-call, that callback raises
+        ``RuntimeError`` in this daemon thread, which would otherwise surface as an unhandled
+        thread exception (a flaky Windows CI failure). The spoken turn is moot once the app is
+        gone, so swallow it then; a genuine failure while the app is still live still propagates.
+        """
+        try:
+            target()
+        except Exception:
+            if self.is_running:
+                raise
 
     def _begin_listening(self) -> None:
         """Capture the next spoken turn on a background thread (no-op when voice is off)."""

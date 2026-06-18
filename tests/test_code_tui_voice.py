@@ -316,6 +316,41 @@ def test_submit_sets_thinking_phase() -> None:
     _run(go())
 
 
+def test_run_leg_swallows_callback_error_after_the_app_stops() -> None:
+    # A voice leg still in flight when the app tears down calls back onto a dead UI thread;
+    # the resulting RuntimeError must be dropped (the spoken turn is moot), not surface as an
+    # unhandled thread exception. This app was never started, so is_running is False.
+    app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+    assert app.is_running is False
+    ran: list[bool] = []
+
+    def boom() -> None:
+        ran.append(True)
+        raise RuntimeError("App is not running")
+
+    app._run_leg(boom)  # returns without raising — the teardown-race error is swallowed
+    assert ran == [True]  # the leg body did run; only its post-teardown error was dropped
+
+
+def test_run_leg_reraises_a_genuine_failure_while_the_app_is_live() -> None:
+    # While the app is running, a real exception in a leg is a bug and must propagate (so it's
+    # reported), not be silently swallowed like the teardown race above.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # no auto-listen thread racing this assertion
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert app.is_running is True
+
+            def boom() -> None:
+                raise ValueError("genuine bug")
+
+            with pytest.raises(ValueError, match="genuine bug"):
+                app._run_leg(boom)
+
+    _run(go())
+
+
 def test_toggle_voice_without_session_notifies_and_stays_off() -> None:
     # With no voice front-end the toggle is a no-op (notice only) and never marks a pause.
     async def go() -> None:
