@@ -9,6 +9,7 @@ the 500-line gate.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -116,6 +117,27 @@ def test_voice_on_mount_listens_and_submits_the_spoken_turn() -> None:
             assert voice.listens >= 1
 
     _run(go())
+
+
+def test_finished_worker_is_ignored_once_the_app_stops_running():  # untyped: duck-typed event
+    # A turn worker can finish *after* the app starts tearing down; driving _finish_turn then
+    # queries an unmounted DOM (NoMatches on #spinner — a Windows CI flake). on_worker_state_changed
+    # must skip it when the app isn't running, and handle it when it is.
+    app = CodeAgentApp(agent=FakeAgent([]))
+    calls: list[bool] = []
+    app._finish_turn = lambda: calls.append(True)  # spy
+    finished = SimpleNamespace(worker=SimpleNamespace(is_finished=True))
+
+    assert app.is_running is False  # never mounted -> torn-down-equivalent
+    app.on_worker_state_changed(finished)  # duck-typed event stands in for Worker.StateChanged
+    assert calls == []  # guarded out: no _finish_turn against a dead DOM
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)):
+            app.on_worker_state_changed(finished)
+
+    _run(go())
+    assert calls == [True]  # running -> the finished turn is handled
 
 
 def test_capture_voice_turn_is_a_noop_once_typed() -> None:

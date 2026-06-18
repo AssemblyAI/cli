@@ -232,7 +232,16 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
 
         app = _app(run_conversation=run_conversation, on_stop=done.set)
         async with app.run_test(size=(100, 30)) as pilot:
-            assert await _wait_until(pilot, lambda: bool(app.query(AssistantMessage)))
+            # Wait for the reply *text* to land, not just the widget to mount: agent_transcript
+            # sets the text via a separate call_from_thread hop, so a widget-only wait races it
+            # (empty text on a slow runner — a Windows CI flake).
+            assert await _wait_until(
+                pilot,
+                lambda: (
+                    bool(app.query(AssistantMessage))
+                    and app.query_one(AssistantMessage).text == "Done. "
+                ),
+            )
             assert "» turn it up" in str(app.query_one(UserMessage).render())
             assert app.query_one(AssistantMessage).text == "Done. "
         assert done.is_set()  # leaving the run_test context unmounted -> on_stop released it
