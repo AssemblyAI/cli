@@ -16,6 +16,7 @@ seam the rest of the cascade uses for its STT/LLM/TTS legs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
@@ -23,10 +24,22 @@ from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
 from aai_cli.code_agent.web_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.core import debuglog
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
+
+# Verbose (`-v`) flow logging for the agent's tool loop. `invoke` runs the whole loop
+# internally, so without this `-v` only shows the httpx request lines and never which
+# tools the agent reached for or what they returned — exactly what you need to see when
+# a spoken turn stalls mid-tool. Logged at INFO so plain `-v` surfaces it.
+_FLOW_LOG = logging.getLogger("aai_cli.agent_cascade.brain")
+
+# Tool outputs (a fetched page, a search payload) can be huge; cap what we log per result
+# so a single tool call doesn't bury the rest of the flow in stderr. The exact cap is an
+# arbitrary tuning knob — a +-1 shift is behaviorally equivalent, so no test can kill it.
+_RESULT_LOG_CAP = 500  # pragma: no mutate
 
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
 _SPOKEN_TAIL = (
@@ -147,16 +160,77 @@ def build_completer(
 
     The cascade prepends its own ``system`` message to the history each turn; the graph
     already owns the system prompt, so we drop it before invoking. The graph runs the
-    full tool loop and we return its final spoken text. ``graph`` is injected in tests
-    so the per-turn wiring runs against a fake with no network.
+    full tool loop and we return its final spoken text. Under ``-v`` the loop is streamed
+    so each tool call/result is logged as it lands (see :func:`_run_graph`). ``graph`` is
+    injected in tests so the per-turn wiring runs against a fake with no network.
     """
     resolved = build_graph(api_key, config) if graph is None else graph
 
     def complete_reply(messages: list[ChatCompletionMessageParam]) -> str:
         conversation = [message for message in messages if message.get("role") != "system"]
-        return _reply_text(resolved.invoke({"messages": conversation}))
+        return _reply_text(_run_graph(resolved, conversation))
 
     return complete_reply
+
+
+def _run_graph(
+    graph: CompiledAgent, conversation: list[ChatCompletionMessageParam]
+) -> dict[str, object]:
+    """Run one turn through the graph, returning its end state.
+
+    Normally a single ``invoke`` (the whole tool loop runs internally). Under verbose
+    mode, and when the graph can stream, drive it as incremental state snapshots instead
+    so :func:`_log_flow` can surface each tool call/result on stderr as it happens — which
+    is what makes a stalled spoken turn debuggable. The test fakes only implement
+    ``invoke``, so they (and the non-verbose path) take the plain branch.
+    """
+    graph_input = {"messages": conversation}
+    if debuglog.active() and hasattr(graph, "stream"):
+        last: dict[str, object] = {}
+        seen = 0
+        for chunk in graph.stream(graph_input, None, stream_mode="values"):
+            seen = _log_flow(chunk, seen)
+            last = chunk
+        return last
+    return graph.invoke(graph_input)
+
+
+def _log_flow(state: dict[str, object], seen: int) -> int:
+    """Log the tool calls/results added to ``state`` since the first ``seen`` messages.
+
+    Reuses the coding agent's message→event vocabulary so the flow log knows the same
+    AIMessage/ToolMessage shapes the TUI does. Returns the new high-water message count
+    so the next snapshot only logs what it added.
+    """
+    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult, message_events
+
+    messages = state.get("messages")
+    if not isinstance(messages, list):
+        return seen
+    for message in messages[seen:]:
+        for event in message_events(message, announce_calls=True):
+            if isinstance(event, ToolCall):
+                _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
+            elif isinstance(event, ToolResult):
+                _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
+            elif isinstance(event, AssistantText):
+                _FLOW_LOG.info("llm: %s", event.text)
+    return len(messages)
+
+
+def _clip(text: str) -> str:
+    """Flatten a tool result onto one line and truncate it for the flow log.
+
+    Tool output is untrusted external content (a fetched page, a search payload), so its
+    whitespace — newlines especially — is collapsed before logging: a result can't then
+    forge extra ``[aai_cli.…]`` log lines, and each result stays on one readable line. The
+    length is capped so a multi-KB payload can't bury the rest of the flow. (Secrets are
+    separately masked by the debuglog formatter across every record.)
+    """
+    flattened = " ".join(text.split())
+    if len(flattened) <= _RESULT_LOG_CAP:
+        return flattened
+    return f"{flattened[:_RESULT_LOG_CAP]}… ({len(flattened)} chars)"
 
 
 def _reply_text(result: dict[str, object]) -> str:

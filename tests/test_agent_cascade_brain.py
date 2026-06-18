@@ -8,8 +8,10 @@ directly.
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from aai_cli.agent_cascade import brain
@@ -131,6 +133,131 @@ def test_completer_strips_system_message_before_invoking():
     assert roles == ["user"]
 
 
+# --- _run_graph / _log_flow (verbose tool-call flow) -------------------------
+
+
+class _StreamingGraph:
+    """A graph that streams scripted state snapshots (the shape the real graph yields).
+
+    Records the kwargs it was streamed with so a test can prove ``_run_graph`` asked for
+    incremental value snapshots, and exposes an ``invoke`` that must never run on the
+    verbose path."""
+
+    def __init__(self, snapshots):
+        self.snapshots = snapshots
+        self.stream_kwargs = None
+        self.invoked = False
+
+    def stream(self, graph_input, config, *, stream_mode):
+        del graph_input, config
+        self.stream_kwargs = stream_mode
+        yield from self.snapshots
+
+    def invoke(self, graph_input):
+        del graph_input
+        self.invoked = True
+        return {"messages": []}
+
+
+def _search_call_message():
+    return AIMessage(
+        content="Let me search.",
+        tool_calls=[{"name": "tavily_search", "args": {"query": "weather"}, "id": "c1"}],
+    )
+
+
+def test_run_graph_streams_and_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_state):
+    # Verbose mode streams the loop and logs each step — the assistant's interim line, the
+    # tool call (name + args), and the tool result — so a stalled spoken turn is debuggable.
+    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
+    call = _search_call_message()
+    snapshots = [
+        {"messages": [call]},
+        {
+            "messages": [
+                call,
+                ToolMessage(content="rainy, 52F", name="tavily_search", tool_call_id="c1"),
+            ]
+        },
+        {
+            "messages": [
+                call,
+                ToolMessage(content="rainy, 52F", name="tavily_search", tool_call_id="c1"),
+                AIMessage(content="It's rainy and 52 degrees in Portland."),
+            ]
+        },
+    ]
+    graph = _StreamingGraph(snapshots)
+    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
+    with caplog.at_level(logging.INFO, logger="aai_cli.agent_cascade.brain"):
+        reply = completer([{"role": "user", "content": "weather?"}])
+    # The streamed final state still yields the spoken reply, and the graph was streamed
+    # for incremental value snapshots (not invoked).
+    assert reply == "It's rainy and 52 degrees in Portland."
+    assert graph.stream_kwargs == "values"
+    assert graph.invoked is False
+    # The flow log carries the tool call (with its args), the tool result, and the interim
+    # assistant line — each logged exactly once despite the growing snapshots.
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == [
+        "llm: Let me search.",
+        "tool call tavily_search args={'query': 'weather'}",
+        "tool result tavily_search -> rainy, 52F",
+        "llm: It's rainy and 52 degrees in Portland.",
+    ]
+
+
+def test_run_graph_invokes_when_not_verbose():
+    # Default (non-verbose): the graph is invoked once, never streamed, and nothing is logged.
+    graph = _StreamingGraph([{"messages": [AIMessage(content="hi")]}])
+    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
+    assert completer([{"role": "user", "content": "hi"}]) == ""
+    assert graph.invoked is True
+    assert graph.stream_kwargs is None
+
+
+def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
+    # Verbose but the (test) graph only implements invoke: fall back to invoke rather than
+    # crashing on a missing .stream — the fakes and any non-streaming graph stay supported.
+    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
+
+    class _InvokeOnly:
+        def invoke(self, graph_input):
+            del graph_input
+            return {"messages": [AIMessage(content="from invoke")]}
+
+    completer = brain.build_completer("k", CascadeConfig(), graph=_InvokeOnly())
+    assert completer([{"role": "user", "content": "hi"}]) == "from invoke"
+
+
+def test_log_flow_ignores_non_list_messages():
+    # Defensive: a snapshot without a messages list logs nothing and reports no progress.
+    assert brain._log_flow({"messages": None}, 3) == 3
+
+
+def test_clip_passes_short_text_and_truncates_long_text():
+    assert brain._clip("short") == "short"
+    # A result exactly at the cap is left whole (the boundary is inclusive).
+    at_cap = "y" * brain._RESULT_LOG_CAP
+    assert brain._clip(at_cap) == at_cap
+    long = "x" * (brain._RESULT_LOG_CAP + 5000)
+    clipped = brain._clip(long)
+    # Only the first _RESULT_LOG_CAP chars survive, with a marker noting the full length —
+    # so a multi-KB tool payload can't bury the rest of the flow in stderr.
+    assert clipped == "x" * brain._RESULT_LOG_CAP + f"… ({len(long)} chars)"
+    assert len(clipped) < len(long)
+
+
+def test_clip_flattens_whitespace_so_tool_output_cant_forge_log_lines():
+    # Tool output is untrusted: a result with embedded CR/LF could otherwise inject fake
+    # "[aai_cli.…]" log lines. _clip collapses all whitespace runs to single spaces, so the
+    # result stays on one line.
+    forged = "ok\n[aai_cli.agent_cascade.brain] tool call rm_rf args={}\r\nmore"
+    assert brain._clip(forged) == "ok [aai_cli.agent_cascade.brain] tool call rm_rf args={} more"
+    assert "\n" not in brain._clip(forged)
+    assert "\r" not in brain._clip(forged)
+
+
 # --- _reply_text / _content_text ---------------------------------------------
 
 
@@ -153,7 +280,6 @@ def test_reply_text_joins_list_content_blocks():
 
 
 def test_reply_text_skips_non_assistant_messages():
-    from langchain_core.messages import ToolMessage
 
     # Scanning from the end, a trailing non-assistant message (e.g. a tool result) is
     # skipped — the spoken reply is the AIMessage before it.
