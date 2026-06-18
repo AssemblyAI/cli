@@ -241,7 +241,9 @@ def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(m
     assert "--sandbox" not in external
     assert "--env" not in external
     assert "[sandbox]" not in external
-    assert "agent-cascade" not in external
+    # The [sandbox]-only `live` command's summary is hidden too (a token unique to it,
+    # since the bare word "live" also appears in other commands' descriptions).
+    assert "tool-using" not in external
     # …but the filter is surgical: non-sandbox flags and commands stay visible (this
     # also kills the mutant that would treat every option/command as sandbox).
     assert "--profile" in external
@@ -255,4 +257,4 @@ def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(m
     assert "--sandbox" in internal
     assert "--env" in internal
     assert "[sandbox]" in internal
-    assert "agent-cascade" in internal
+    assert "tool-using" in internal

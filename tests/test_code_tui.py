@@ -269,6 +269,81 @@ def test_refresh_status_rerenders_badge() -> None:
     _run(go())
 
 
+def test_escape_interrupts_a_running_turn() -> None:
+    # While a turn is in flight (prompt disabled), Escape signals the session to stop its
+    # agent loop; it never quits the app. Drives the real "escape" binding end to end.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.query_one("#prompt", Input).disabled = True  # simulate a turn in progress
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app._session._cancel.is_set()  # the loop was asked to stop
+
+    _run(go())
+
+
+def test_escape_is_a_noop_when_idle() -> None:
+    # Idle (prompt enabled): Escape does nothing — no cancel signal, no quit.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.action_interrupt()  # idle: nothing to interrupt
+            assert app._session._cancel.is_set() is False
+
+    _run(go())
+
+
+def test_ctrl_c_interrupts_running_turn_and_does_not_arm_quit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.query_one("#prompt", Input).disabled = True  # a turn is running
+            app.action_quit_or_interrupt()
+            assert app._session._cancel.is_set()  # interrupted the turn
+            assert exited == []  # did NOT quit, because a turn was in flight
+            assert app._quit_pending is False  # interrupting never arms the quit hint
+
+    _run(go())
+
+
+def test_ctrl_c_needs_a_double_press_to_quit_when_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.action_quit_or_interrupt()  # first idle press: arms, does not quit
+            assert exited == []
+            assert app._quit_pending is True
+            app.action_quit_or_interrupt()  # second press confirms the quit
+            assert exited == [True]
+            assert app._session._cancel.is_set() is False  # nothing was cancelled
+
+    _run(go())
+
+
+def test_clear_quit_pending_resets_the_flag() -> None:
+    # The timer-fired reset (covered directly since the timer won't fire within the test).
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._quit_pending = True
+            app._clear_quit_pending()
+            assert app._quit_pending is False
+
+    _run(go())
+
+
 def test_spinner_text_formats_frame_and_elapsed() -> None:
     assert tui._spinner_text(46, "✶") == "✶ Working… (46s)"
     assert tui._spinner_text(0, "✷") == "✷ Working… (0s)"

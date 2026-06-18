@@ -36,7 +36,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 - **🎯 One command for everything**: transcription, real-time streaming, voice agents, LLM prompts, and WER benchmarking — no SDK boilerplate.
 - **🔌 Built for pipelines**: data goes to stdout, errors to stderr, `--json` gives stable machine-readable output, and `-` reads audio from stdin.
 - **🔐 Secure by default**: your API key lives in the OS keyring, never in a dotfile — and run commands have no `--api-key` flag, so keys can't leak into `ps` or shell history.
-- **🛠️ From demo to deployed app**: `assembly init` scaffolds a runnable FastAPI starter, `assembly dev` / `share` / `deploy` run, tunnel, and ship it, and `--show-code` prints the equivalent Python SDK script for any run command (`transcribe` / `stream` / `agent` / `agent-cascade`).
+- **🛠️ From demo to deployed app**: `assembly init` scaffolds a runnable FastAPI starter, `assembly dev` / `share` / `deploy` run, tunnel, and ship it, and `--show-code` prints the equivalent Python SDK script for any run command (`transcribe` / `stream` / `agent` / `live`).
 - **🤖 Agent-ready**: `assembly setup install` wires your coding agent up with the AssemblyAI docs MCP server and skills.
 - **📖 Open source**: MIT licensed.
 
@@ -48,7 +48,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
 | `assembly dictate` | Signal-driven dictation: records immediately, send SIGTERM for instant text — scriptable from hotkey tools like Hammerspoon (Sync STT API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
-| `assembly agent-cascade` | Same live conversation, but wired client-side from Streaming STT + the LLM Gateway + streaming TTS, like the `agent-cascade` starter (sandbox-only) |
+| `assembly live` | Talk live to a tool-using voice agent, wired client-side from Streaming STT + a deepagents brain on the LLM Gateway + streaming TTS — it can web-search, fetch URLs, and read the docs mid-conversation, like the `agent-cascade` starter (sandbox-only) |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, files, stdin, or a live stream |
 | `assembly code` | Terminal coding agent (deepagents SDK) backed only by the LLM Gateway — reads/writes/edits files, runs shell, searches the docs MCP, and can invoke the `assembly` CLI itself; mutating actions ask for approval. Defaults to voice in a terminal (speak your request, replies read back via streaming TTS in the sandbox); pass `--no-voice` for the keyboard TUI |
@@ -63,7 +63,7 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly transcripts` / `sessions` | Browse and fetch past transcripts and streaming sessions |
 | `assembly keys` / `balance` / `usage` / `limits` / `audit` | Account self-service via browser login |
 
-Add `--show-code` to `transcribe` / `stream` / `agent` / `agent-cascade` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
+Add `--show-code` to `transcribe` / `stream` / `agent` / `live` to print the equivalent Python SDK script instead of running — the built-in path from CLI experiment to SDK code.
 
 ## ✨ Things you can do with it
 
@@ -194,7 +194,7 @@ assembly transcripts list --json --limit 5 \
 assembly agent --voice ivy --system-prompt "you're a helpful interviewer"
 ```
 
-**Graduate to the SDK** — `--show-code` prints the equivalent Python script for any `transcribe`/`stream`/`agent`/`agent-cascade` run instead of executing it:
+**Graduate to the SDK** — `--show-code` prints the equivalent Python script for any `transcribe`/`stream`/`agent`/`live` run instead of executing it:
 
 ```sh
 assembly agent --system-prompt "you're a story generator" --show-code > story.py

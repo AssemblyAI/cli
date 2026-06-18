@@ -118,10 +118,10 @@ def main() -> int:
         ),
         (
             # Sandbox-only: streaming TTS has no prod host, so --sandbox makes the URLs valid.
-            "agent-cascade-basic",
+            "live-basic",
             (
                 "--sandbox",
-                "agent-cascade",
+                "live",
                 "--voice",
                 "jane",
                 "--greeting",

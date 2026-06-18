@@ -18,9 +18,10 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
+from aai_cli.agent_cascade import brain
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.text import split_sentences, trim_history
-from aai_cli.core import client, llm
+from aai_cli.core import client
 from aai_cli.core.errors import CLIError
 from aai_cli.tts import session as tts_session
 from aai_cli.tts.session import SpeakConfig
@@ -121,15 +122,9 @@ class CascadeDeps:
         def run_stt(on_turn: Callable[[object], None]) -> None:
             client.stream_audio(api_key, audio, params=stt_params, on_turn=on_turn)
 
-        def complete_reply(messages: list[ChatCompletionMessageParam]) -> str:
-            response = llm.complete(
-                api_key,
-                model=config.model,
-                messages=messages,
-                max_tokens=config.max_tokens,
-                extra=dict(config.llm_extra) or None,
-            )
-            return llm.content_of(response)
+        # The LLM leg is a deepagents graph (web search / URL fetch / docs tools), not a
+        # single completion, so a spoken turn can transparently use tools.
+        complete_reply = brain.build_completer(api_key, config)
 
         def synthesize(text: str) -> bytes:
             spec = SpeakConfig(

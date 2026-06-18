@@ -9,8 +9,10 @@ chat model and plain functions — no terminal, no framework.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.events import (
@@ -32,6 +34,20 @@ QUIT_COMMANDS = frozenset({"/exit", "/quit", "exit", "quit"})
 _DECLINED = "User declined to run this tool."
 
 
+@runtime_checkable
+class _SupportsStream(Protocol):
+    """An agent that can stream its run as incremental state snapshots.
+
+    The real compiled graph supports this; the unit-test fakes that only implement
+    ``invoke`` don't, so :meth:`CodeSession._run` falls back to a single emit for them.
+    """
+
+    def stream(
+        self, graph_input: object, config: Mapping[str, object] | None, *, stream_mode: str
+    ) -> Iterator[dict[str, object]]:
+        """Yield the running state (incl. the growing ``messages``) after each super-step."""
+
+
 @dataclass
 class CodeSession:
     """One coding conversation: a compiled agent plus the I/O seams that render it."""
@@ -42,27 +58,60 @@ class CodeSession:
     thread_id: str = "code"
     auto_approve: bool = False
     _seen: int = field(default=0, init=False)
+    _cancel: threading.Event = field(
+        default_factory=threading.Event,
+        init=False,  # pragma: no mutate
+    )
 
     def _config(self) -> dict[str, object]:
         return {"configurable": {"thread_id": self.thread_id}}
 
-    def send(self, text: str) -> None:
-        """Run one user turn to completion, resolving approvals and emitting events.
+    def request_cancel(self) -> None:
+        """Ask the running turn to stop its agent loop at the next step boundary.
 
-        A failure inside the graph (a gateway 5xx, a tool blowing up) is surfaced as an
-        ``ErrorText`` event rather than propagating — a single bad turn must not crash
-        the TUI worker or the REPL; the user can just try again.
+        Set from another thread (the TUI's Ctrl-C / Escape); the streaming loop in
+        :meth:`_run` and the approval loop both check it, so a long tool sequence stops
+        without having to kill the worker thread mid-step.
         """
+        self._cancel.set()
+
+    def send(self, text: str) -> None:
+        """Run one user turn, resolving approvals and emitting events as each step lands.
+
+        Events stream out incrementally (responsive UI) and :meth:`request_cancel` can stop
+        the loop early. A failure inside the graph (a gateway 5xx, a tool blowing up) is
+        surfaced as an ``ErrorText`` event rather than propagating — a single bad turn must
+        not crash the TUI worker or the REPL; the user can just try again.
+        """
+        self._cancel.clear()
         config = self._config()
         try:
-            result = self.agent.invoke({"messages": [{"role": "user", "content": text}]}, config)
-            result = self._resolve_interrupts(result, config)
+            result = self._run({"messages": [{"role": "user", "content": text}]}, config)
+            self._resolve_interrupts(result, config)
         except KeyboardInterrupt:
             raise
         except Exception as exc:
             self.sink(ErrorText(f"{type(exc).__name__}: {exc}"))
             return
+
+    def _run(self, graph_input: object, config: dict[str, object]) -> dict[str, object]:
+        """Drive one graph segment, emitting events as each step completes; return the end state.
+
+        Streaming (``stream_mode="values"``) renders intermediate tool calls/results live and
+        lets :meth:`request_cancel` break the loop between steps. A double that only implements
+        ``invoke`` (the TUI/REPL test fakes) emits once at the end instead.
+        """
+        if isinstance(self.agent, _SupportsStream):
+            last: dict[str, object] = {}
+            for chunk in self.agent.stream(graph_input, config, stream_mode="values"):
+                if self._cancel.is_set():
+                    break
+                self._emit_new(chunk)
+                last = chunk
+            return last
+        result = self.agent.invoke(graph_input, config)
         self._emit_new(result)
+        return result
 
     def _resolve_interrupts(
         self, result: dict[str, object], config: dict[str, object]
@@ -71,13 +120,15 @@ class CodeSession:
         from langgraph.types import Command
 
         while True:
+            if self._cancel.is_set():
+                return result
             request = interrupt_request(result)
             if request is None:
                 return result
             actions = request.get("action_requests")
             actions = actions if isinstance(actions, list) else []
             decisions = [self._decide(action) for action in actions]
-            result = self.agent.invoke(Command(resume={"decisions": decisions}), config)
+            result = self._run(Command(resume={"decisions": decisions}), config)
 
     def _decide(self, action: dict[str, object]) -> dict[str, object]:
         """Ask the approver about one pending tool call and shape the resume decision."""

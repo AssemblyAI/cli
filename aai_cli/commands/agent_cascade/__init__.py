@@ -31,7 +31,7 @@ app = typer.Typer()
 SPEC = command_registry.CommandModuleSpec(
     panel=help_panels.TRANSCRIPTION,
     order=45,  # pragma: no mutate -- sparse rank; a +-1 shift is order-equivalent
-    commands=("agent-cascade",),
+    commands=("live",),
 )
 
 
@@ -43,28 +43,28 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
 
 
 @app.command(
-    name="agent-cascade",
+    name="live",
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Start a live cascade conversation", "assembly --sandbox agent-cascade"),
+            ("Start a live voice conversation", "assembly --sandbox live"),
             (
                 "Pick a voice and opening line",
-                'assembly --sandbox agent-cascade --voice michael --greeting "Hi there"',
+                'assembly --sandbox live --voice michael --greeting "Hi there"',
             ),
             (
                 "Give the agent a persona",
-                'assembly --sandbox agent-cascade --system-prompt "You are a terse pirate."',
+                'assembly --sandbox live --system-prompt "You are a terse pirate."',
             ),
-            ("See available voices", "assembly --sandbox agent-cascade --list-voices"),
+            ("See available voices", "assembly --sandbox live --list-voices"),
             (
                 "Print equivalent Python instead of running",
-                "assembly --sandbox agent-cascade --show-code",
+                "assembly --sandbox live --show-code",
             ),
         ]
     ),
 )
-def agent_cascade(
+def live(
     ctx: typer.Context,
     source: str | None = typer.Argument(
         None, help="Audio file path or URL to speak to the agent. Omit to use the microphone."
@@ -169,14 +169,15 @@ def agent_cascade(
         help="Print the equivalent Python SDK code and exit (does not start a session)",
     ),
 ) -> None:
-    """\\[sandbox] Hold a live voice conversation through a self-wired cascade
+    """\\[sandbox] Talk live to a tool-using voice agent
 
-    Like 'assembly agent', but instead of AssemblyAI's Voice Agent endpoint this
-    wires the three primitives together itself — Streaming STT, the LLM Gateway,
-    and streaming TTS — exactly like the 'agent-cascade' init template does
-    server-side. Because it uses streaming TTS it only runs in the sandbox: run
-    it as 'assembly --sandbox agent-cascade' (--sandbox goes before the
-    subcommand).
+    A real-time spoken conversation, wired client-side from three primitives —
+    Streaming STT, a deepagents brain on the LLM Gateway, and streaming TTS. Unlike
+    'assembly agent' (the Voice Agent API), the brain here is an agent that can use
+    tools mid-conversation — web search, URL fetch, and the AssemblyAI docs — so it
+    answers like a live multimodal assistant. Because it uses streaming TTS it only
+    runs in the sandbox: run it as 'assembly --sandbox live' (--sandbox goes before
+    the subcommand).
 
     Use headphones: the mic stays open while the agent speaks, so on speakers it
     would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
@@ -185,6 +186,9 @@ def agent_cascade(
 
     This only runs a conversation in the terminal — it writes no code. To build
     an agent-cascade app, run 'assembly init agent-cascade' instead.
+
+    Web search needs a TAVILY_API_KEY in the environment; without it the agent
+    keeps its URL-fetch and docs tools.
     """
 
     if list_voices:

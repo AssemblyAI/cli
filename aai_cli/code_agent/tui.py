@@ -13,7 +13,7 @@ import itertools
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from rich.markup import escape
 from textual.app import App, ComposeResult
@@ -27,14 +27,28 @@ from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.ask_tool import AskBridge
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
 from aai_cli.code_agent.session import CodeSession
+from aai_cli.code_agent.voice import spoken_summary
+from aai_cli.core import errors
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from textual.timer import Timer
 
 # Glyphs cycled by the working indicator's animation (purely cosmetic).
 _SPIN_FRAMES = "✶✷✸✹✺"  # pragma: no mutate
+# Seconds the Ctrl-C "press again to quit" hint stays armed (deepagents-code uses 3s too).
+_QUIT_HINT_SECONDS = 3  # pragma: no mutate
+
+
+class _VoiceIO(Protocol):
+    """The speak-to-it / read-back slice the TUI drives; :class:`VoiceSession` satisfies it."""
+
+    def listen(self) -> str | None:
+        """Capture one spoken turn and return its transcript (``None`` on no speech)."""
+
+    def speak(self, text: str) -> None:
+        """Read ``text`` back aloud (a no-op when readback is unavailable)."""
 
 
 def _format_args(args: Mapping[str, object]) -> str:
@@ -91,7 +105,7 @@ class ApprovalScreen(ModalScreen[str]):
     ApprovalScreen { align: center bottom; background: transparent; }
     ApprovalScreen #approvalbox {
         dock: bottom; width: 1fr; height: auto;
-        border: round #f59e0b; background: #0b0e16; padding: 0 1; margin: 0 1 1 1;
+        border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     ApprovalScreen #approvalbox Label { height: auto; }
     ApprovalScreen #approvalbox Horizontal { height: auto; }
@@ -139,7 +153,7 @@ class AskScreen(ModalScreen[str]):
     AskScreen { align: center bottom; background: transparent; }
     AskScreen #askbox {
         dock: bottom; width: 1fr; height: auto;
-        border: round #3a3f55; background: #0b0e16; padding: 0 1; margin: 0 1 1 1;
+        border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     """
 
@@ -159,27 +173,30 @@ class AskScreen(ModalScreen[str]):
 class CodeAgentApp(App[None]):
     """The coding-agent TUI: conversation transcript + prompt + approval/ask modals."""
 
-    # Flat dark canvas — no panel borders/gray, just the bordered prompt and a status
+    # Flat pure-black canvas — no panel fills/gray, just the bordered prompt and a status
     # line, matching the deepagents-code look (wordmark in the AssemblyAI brand blue).
     CSS = f"""
-    Screen {{ background: #0b0e16; }}
+    Screen {{ background: #000000; }}
     #log {{
-        height: 1fr; border: none; background: #0b0e16; padding: 1 2;
+        height: 1fr; border: none; background: #000000; padding: 1 2;
         scrollbar-size-vertical: 0;
     }}
-    #promptbar {{ dock: bottom; height: 3; background: #0b0e16; border: round #3a3f55; margin: 1 1; }}
+    #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
-    #prompt {{ border: none; background: #0b0e16; padding: 0; }}
+    #prompt {{ border: none; background: #000000; padding: 0; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
-    #spinner {{ height: 1; background: #0b0e16; padding: 0 2;
+    #spinner {{ height: 1; background: #000000; padding: 0 2;
         color: {banner.BRAND_HEX}; display: none; }}
-    #status {{ dock: bottom; height: 1; background: #0b0e16; padding: 0 1; }}
+    #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
     """
     TITLE = "AssemblyAI Code"
     # Ctrl-C quits (in addition to Ctrl-Q); the built-in command palette is removed.
     ENABLE_COMMAND_PALETTE = False
+    # Interrupt/quit keys follow deepagents-code: Escape interrupts the running turn, and
+    # Ctrl-C interrupts a running turn or — when idle — quits only on a confirmed double-press.
     BINDINGS: ClassVar = [
-        ("ctrl+c", "quit", "Quit"),
+        ("escape", "interrupt", "Interrupt"),
+        ("ctrl+c", "quit_or_interrupt", "Interrupt / Quit"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+y", "copy_last", "Copy last reply"),
     ]
@@ -194,16 +211,20 @@ class CodeAgentApp(App[None]):
         thread_id: str = "default",
         cwd: Path | None = None,
         web_note: str | None = None,
+        voice: _VoiceIO | None = None,
     ) -> None:
         super().__init__()
         self._agent = agent
         self._ask_bridge = ask_bridge if ask_bridge is not None else AskBridge()
         self._auto_approve = auto_approve
         self._initial = initial
+        self._voice = voice  # when set, spoken turns drive the prompt and replies are read back
+        self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
         self._web_note = web_note
         self._last_reply = ""
+        self._quit_pending = False  # armed by a first idle Ctrl-C; a second confirms quit
         self._spin_frames = itertools.cycle(_SPIN_FRAMES)
         self._spin_timer: Timer | None = None
         self._turn_started = 0.0  # pragma: no mutate — always reset by _start_spinner first
@@ -248,6 +269,8 @@ class CodeAgentApp(App[None]):
         self.query_one("#prompt", Input).focus()
         if self._initial:
             self._submit(self._initial)
+        else:
+            self._begin_listening()  # in voice mode, capture the first spoken turn
 
     # --- event rendering (always called on the UI thread) ---------------------
 
@@ -323,6 +346,51 @@ class CodeAgentApp(App[None]):
         """Block the worker on a modal input screen and return the user's answer."""
         return self._modal_result(AskScreen(question), default="")
 
+    # --- interrupt / quit -----------------------------------------------------
+    # Mirrors deepagents-code: Escape interrupts a running turn; Ctrl-C interrupts a running
+    # turn or, when idle, quits only on a confirmed double-press (so it never drops the
+    # conversation by accident). Ctrl-Q stays an unconditional one-press quit.
+
+    def _turn_running(self) -> bool:
+        """Whether an agent turn is in flight (the prompt is disabled while one runs)."""
+        return self.query_one("#prompt", Input).disabled
+
+    def _cancel_turn(self) -> bool:
+        """Ask the session to stop its agent loop if a turn is running; True if one was.
+
+        Cooperative: the worker keeps running until the streaming loop sees the flag at
+        the next step boundary, then finishes and re-enables the prompt — so we never kill
+        the thread mid-step (which Textual can't do safely anyway).
+        """
+        if not self._turn_running():
+            return False
+        self._session.request_cancel()
+        self.query_one("#log", RichLog).write("[dim](cancelling…)[/dim]")
+        return True
+
+    def action_interrupt(self) -> None:
+        """Escape: interrupt a running agent turn (a no-op when idle, so Esc never quits)."""
+        self._cancel_turn()
+
+    def action_quit_or_interrupt(self) -> None:
+        """Ctrl-C: interrupt a running turn, else quit on a confirmed second press."""
+        if self._cancel_turn():
+            self._quit_pending = False
+            return
+        if self._quit_pending:
+            self.exit()
+        else:
+            self._arm_quit_pending()
+
+    def _arm_quit_pending(self) -> None:
+        """Arm Ctrl-C double-press-to-quit, showing a hint that expires after a few seconds."""
+        self._quit_pending = True
+        self.notify("Press Ctrl-C again to quit", timeout=_QUIT_HINT_SECONDS)
+        self.set_timer(_QUIT_HINT_SECONDS, self._clear_quit_pending)
+
+    def _clear_quit_pending(self) -> None:
+        self._quit_pending = False  # pragma: no mutate — timer-fired reset; timing-unassertable
+
     # --- input loop -----------------------------------------------------------
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -370,3 +438,61 @@ class CodeAgentApp(App[None]):
             prompt = self.query_one("#prompt", Input)
             prompt.disabled = False
             prompt.focus()
+            self._voice_followup()  # read a spoken summary back, then listen for the next turn
+
+    # --- voice (speak-to-it / read-summary-back; the legs run off the UI thread) ----
+
+    def _voice_active(self) -> bool:
+        """Voice capture is on: a session exists and the mic hasn't been ruled out yet."""
+        return self._voice is not None and not self._voice_typed
+
+    def _spawn(self, target: Callable[[], None]) -> None:
+        """Run ``target`` on a daemon thread — voice legs block, so they stay off the UI thread."""
+        threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
+
+    def _begin_listening(self) -> None:
+        """Capture the next spoken turn on a background thread (no-op when voice is off)."""
+        if not self._voice_active():
+            return
+        self._spawn(self._capture_voice_turn)
+
+    def _voice_followup(self) -> None:
+        """After a turn finishes: read back a spoken summary, then listen for the next turn."""
+        voice = self._voice
+        if voice is None:
+            return
+        self._spawn(lambda: self._speak_then_listen(voice))
+
+    def _speak_then_listen(self, voice: _VoiceIO) -> None:
+        """Read a summary of the last reply aloud (no code), then capture the next spoken turn."""
+        voice.speak(spoken_summary(self._last_reply))
+        self._capture_voice_turn()
+
+    def _capture_voice_turn(self) -> None:
+        """Listen for one spoken turn; enter it into the prompt, or degrade to typing."""
+        voice = self._voice
+        if voice is None or self._voice_typed:
+            return
+        try:
+            transcript = voice.listen()
+        except errors.CLIError as exc:
+            # A capture failure (no mic, STT error) drops voice for the rest of the session
+            # rather than wedging it — the user just types instead.
+            self._voice_typed = True
+            self.call_from_thread(self._notice_voice_off, exc.message)
+            return
+        if transcript:
+            self.call_from_thread(self._enter_and_submit, transcript)
+
+    def _notice_voice_off(self, detail: str) -> None:
+        """Tell the user voice input stopped and that input is now typed (UI thread)."""
+        self.query_one("#log", RichLog).write(
+            f"[dim](voice input off: {escape(detail)}; type your request instead)[/dim]"
+        )
+
+    def _enter_and_submit(self, text: str) -> None:
+        """Show the spoken text in the prompt, then submit it as a turn (UI thread)."""
+        prompt = self.query_one("#prompt", Input)
+        prompt.value = text
+        self._submit(text)
+        prompt.value = ""
