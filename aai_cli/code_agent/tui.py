@@ -43,7 +43,12 @@ from aai_cli.code_agent.messages import (
 )
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
-from aai_cli.code_agent.tui_status import _spinner_text, _status_text
+from aai_cli.code_agent.tui_status import (
+    VOICE_FRAMES,
+    _spinner_text,
+    _status_text,
+    voicebar_markup,
+)
 from aai_cli.code_agent.voice_ui import _VoiceIO, _VoiceLegs
 
 if TYPE_CHECKING:
@@ -53,14 +58,6 @@ if TYPE_CHECKING:
 _SPIN_FRAMES = "✶✷✸✹✺"  # pragma: no mutate
 # Seconds the Ctrl-C "press again to quit" hint stays armed (deepagents-code uses 3s too).
 _QUIT_HINT_SECONDS = 3  # pragma: no mutate
-# Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
-_VOICE_FRAMES = ("▁▃▅", "▃▅▇", "▅▇▆", "▆▇▅", "▇▅▃", "▅▃▁")  # pragma: no mutate
-# The three voice phases the bar distinguishes, each (label, accent color).
-_VOICE_PHASES: dict[str, tuple[str, str]] = {
-    "listening": ("Listening — speak your request", banner.BRAND_HEX),
-    "thinking": ("Thinking…", "#f59e0b"),
-    "speaking": ("Speaking…", "#22c55e"),
-}
 
 
 class CodeAgentApp(_VoiceLegs):
@@ -125,7 +122,7 @@ class CodeAgentApp(_VoiceLegs):
         self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
         self._voice_paused = False  # user-toggled off via Ctrl-V (distinct from a mic failure)
         self._voice_phase = "listening"  # listening / thinking / speaking, shown in the voice bar
-        self._voice_frames = itertools.cycle(_VOICE_FRAMES)
+        self._voice_frames = itertools.cycle(VOICE_FRAMES)
         self._voice_timer: Timer | None = None  # animates the voice-bar meter while it's shown
         self._streaming_msg: AssistantMessage | None = None  # the reply widget tokens stream into
         self._last_tool_output: ToolOutput | None = None  # the row Ctrl+O expands/collapses
@@ -351,10 +348,11 @@ class CodeAgentApp(_VoiceLegs):
 
     def _render_voicebar(self) -> None:
         """Paint the voice bar for the current phase: an animated meter, label, and accent."""
-        label, color = _VOICE_PHASES[self._voice_phase]
-        meter = next(self._voice_frames)
         hint = "   [dim](Ctrl-V to type)[/dim]" if self._voice_phase == "listening" else ""
-        self.query_one("#voicebar", Static).update(f"[{color}]{meter}[/] {escape(label)}{hint}")
+        meter = next(self._voice_frames)
+        self.query_one("#voicebar", Static).update(
+            voicebar_markup(self._voice_phase, meter, hint=hint)
+        )
 
     def _tick_voice(self) -> None:
         """Advance the voice-bar meter one frame (the animation timer's callback)."""

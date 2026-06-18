@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 
 from aai_cli.code_agent.events import AssistantDelta, AssistantText, ToolResult
-from aai_cli.code_agent.messages import AssistantMessage, ToolOutput
+from aai_cli.code_agent.messages import AssistantMessage, ToolOutput, UserMessage
 from aai_cli.code_agent.tui import CodeAgentApp
 
 
@@ -88,6 +88,22 @@ def test_finish_turn_finalizes_a_dangling_streamed_reply() -> None:
             app._finish_turn()
             assert app._streaming_msg is None  # finalized, not left dangling
             assert app.query_one(AssistantMessage).text == "partial repl"  # kept what streamed
+
+    _run(go())
+
+
+def test_user_message_prefixes_and_set_text_replaces_in_place() -> None:
+    # The prompt echo carries the "» " prefix; set_text() swaps the body in place (used to grow
+    # an interim voice transcript), keeping the same widget rather than mounting a new line.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            msg = UserMessage("hi")
+            await app.query_one("#log").mount(msg)
+            assert "» hi" in str(msg.render())
+            msg.set_text("hi there friend")
+            assert "» hi there friend" in str(msg.render())  # body replaced, not appended
 
     _run(go())
 

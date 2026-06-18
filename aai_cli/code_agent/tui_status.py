@@ -8,6 +8,31 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rich.markup import escape
+
+from aai_cli.ui import theme
+
+# Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
+# Public: both the `code` and `live` TUIs cycle it for their bar animation.
+VOICE_FRAMES = ("▁▃▅", "▃▅▇", "▅▇▆", "▆▇▅", "▇▅▃", "▅▃▁")  # pragma: no mutate
+# The voice phases the bar distinguishes, each (label, accent color). Shared by the `code`
+# and `live` TUIs so both read the same: blue while listening, amber thinking, green speaking.
+_VOICE_PHASES: dict[str, tuple[str, str]] = {
+    "listening": ("Listening — speak your request", theme.BRAND),
+    "thinking": ("Thinking…", "#f59e0b"),
+    "speaking": ("Speaking…", "#22c55e"),
+}
+
+
+def voicebar_markup(phase: str, frame: str, *, hint: str = "") -> str:
+    """The voice bar's content for one phase: an accented meter, the phase label, and a hint.
+
+    ``hint`` is appended verbatim (already-marked-up trailing copy, e.g. a Ctrl-V tip); the
+    label is escaped so a phase string can't inject styling.
+    """
+    label, color = _VOICE_PHASES[phase]
+    return f"[{color}]{frame}[/] {escape(label)}{hint}"
+
 
 def _spinner_text(elapsed_s: int, frame: str) -> str:
     """The working-indicator line: a spinner glyph and the elapsed seconds."""

@@ -24,7 +24,7 @@ from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_pr
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
 from aai_cli.code_agent import firecrawl_search
-from aai_cli.core import choices, client, config_builder, env, errors, llm, signals
+from aai_cli.core import choices, client, config_builder, env, errors, llm, signals, stdio
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
 from aai_cli.streaming.sources import FileSource
@@ -120,17 +120,22 @@ def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
     return extra
 
 
-def _warn_without_web_search(*, json_mode: bool) -> None:
-    """Warn that web search is off unless a ``FIRECRAWL_API_KEY`` is set to enable it.
+def _web_search_note() -> str | None:
+    """The "web search is off" notice when no ``FIRECRAWL_API_KEY`` enables it, else ``None``.
 
     The other default tools (URL fetch, AssemblyAI docs, and the MCP servers) need no
     key; only Firecrawl web search does, so its absence is the one worth flagging up front.
     """
-    if not env.get(firecrawl_search.FIRECRAWL_API_KEY_ENV):
-        output.emit_warning(
-            "Web search is off — set FIRECRAWL_API_KEY to enable the agent's web search tool.",
-            json_mode=json_mode,
-        )
+    if env.get(firecrawl_search.FIRECRAWL_API_KEY_ENV):
+        return None
+    return "Web search is off — set FIRECRAWL_API_KEY to enable the agent's web search tool."
+
+
+def _warn_without_web_search(*, json_mode: bool) -> None:
+    """Emit the web-search-off notice (if any) to stderr / the JSON warning channel."""
+    note = _web_search_note()
+    if note is not None:
+        output.emit_warning(note, json_mode=json_mode)
 
 
 def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
@@ -194,6 +199,46 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
     output.print_code(code_gen.agent_cascade(config, speech_model=opts.speech_model))
 
 
+def _should_use_tui(*, from_file: bool, json_mode: bool, text_mode: bool) -> bool:
+    """Whether to run the live conversation in the voice-only Textual TUI.
+
+    The TUI is the default for an interactive mic session in human mode. It's skipped for
+    file/sample input (a one-shot run with no live mic), for the machine output modes
+    (``--json`` / ``-o text`` stream to stdout), and when stdout/stdin aren't a TTY (piped or
+    CI) — all of which keep the plain line renderer.
+    """
+    return (
+        not from_file
+        and not json_mode
+        and not text_mode
+        and stdio.stdout_is_tty()
+        and stdio.stdin_is_tty()
+    )
+
+
+def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig) -> None:
+    """Run the live conversation inside the voice-only Textual TUI.
+
+    Opens the duplex mic/speaker, wires the cascade legs, and hands the app a blocking
+    ``run_conversation`` (driven on a worker thread) plus an ``on_stop`` that closes the audio
+    so a quit ends the mic iterator and unblocks that worker.
+    """
+    from aai_cli.agent_cascade.tui import LiveAgentApp
+
+    duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=opts.device)
+    stt_params = _build_stt_params(opts, SAMPLE_RATE)
+    deps = engine.CascadeDeps.real(api_key, config, audio=duplex.mic, stt_params=stt_params)
+
+    def run_conversation(renderer: engine.Renderer) -> None:
+        engine.run_cascade(renderer=renderer, player=duplex.player, config=config, deps=deps)
+
+    LiveAgentApp(
+        run_conversation=run_conversation,
+        on_stop=duplex.close,
+        web_note=_web_search_note(),
+    ).run(mouse=False)
+
+
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
@@ -205,8 +250,6 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     if opts.show_code:
         _print_show_code(opts, system_prompt_text)
         return
-
-    _warn_without_web_search(json_mode=json_mode)
 
     from_file = bool(opts.source) or opts.sample
     if from_file and opts.device is not None:
@@ -236,6 +279,13 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         tts_extra=tts_extra,
         mcp_servers=mcp_servers,
     )
+
+    if _should_use_tui(from_file=from_file, json_mode=json_mode, text_mode=text_mode):
+        # The voice-only Textual front-end surfaces the web-search note in-app, not on stderr.
+        _run_live_tui(api_key, opts, config)
+        return
+
+    _warn_without_web_search(json_mode=json_mode)
     renderer = AgentRenderer(json_mode=json_mode, text_mode=text_mode, mic_input=not from_file)
     audio, player, sample_rate = _open_audio(
         renderer, source=opts.source, sample=opts.sample, device=opts.device, from_file=from_file

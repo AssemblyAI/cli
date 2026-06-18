@@ -30,13 +30,22 @@ class Note(Static):
         super().__init__(Text(text, style=_DIM))
 
 
+def _user_markup(text: str) -> Text:
+    """The styled `» …` prompt echo, built in one place for the constructor and set_text."""
+    return Text(f"» {text}", style="bold #38bdf8")
+
+
 class UserMessage(Static):
     """The echoed user prompt, with a top margin so each turn is visually separated."""
 
     DEFAULT_CSS = "UserMessage { margin-top: 1; }"
 
     def __init__(self, text: str) -> None:
-        super().__init__(Text(f"» {text}", style="bold #38bdf8"))
+        super().__init__(_user_markup(text))
+
+    def set_text(self, text: str) -> None:
+        """Replace the shown prompt text — grows an interim voice transcript in place."""
+        self.update(_user_markup(text))
 
 
 class AssistantMessage(Static):
