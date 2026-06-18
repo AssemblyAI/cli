@@ -24,8 +24,12 @@ apt_retry() {
     if sudo timeout --kill-after=10s 120s apt-get "$@"; then
       return 0
     fi
-    echo "::warning::apt-get $* failed or stalled (attempt ${attempt}/3); retrying" >&2
-    sleep "$((attempt * 5))"
+    # Only announce a retry when another attempt actually follows; the 3rd failure
+    # falls through to the terminal error below.
+    if [ "$attempt" -lt 3 ]; then
+      echo "::warning::apt-get $* failed or stalled (attempt ${attempt}/3); retrying" >&2
+      sleep "$((attempt * 5))"
+    fi
   done
   echo "::error::apt-get $* failed after 3 attempts" >&2
   return 1
