@@ -163,3 +163,54 @@ def test_voice_followup_is_a_noop_without_voice() -> None:
             assert app._voice is None
 
     _run(go())
+
+
+def test_toggle_voice_pauses_and_resumes_capture() -> None:
+    # Ctrl-V flips voice off (no capture, no readback) and back on; the state badge tracks it.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Assert via the methods, not the `_voice_paused` attribute: mypy narrows the
+            # attribute and can't see action_toggle_voice() flip it back, flagging the second
+            # check unreachable. The method calls reflect the same state without that trap.
+            assert app._voice_active()
+            assert app._voice_state() == "on"
+            app.action_toggle_voice()  # pause
+            assert not app._voice_active()
+            assert app._voice_state() == "off"
+            app.action_toggle_voice()  # resume
+            assert app._voice_active()
+            assert app._voice_state() == "on"
+
+    _run(go())
+
+
+def test_paused_voice_skips_followup_readback() -> None:
+    # While paused, the post-turn followup neither speaks a summary nor listens.
+    async def go() -> None:
+        voice = FakeVoice(transcripts=["ignored"])
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_paused = True  # set before mount so on_mount never auto-listens
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._last_reply = "a reply"
+            app._voice_followup()
+            await pilot.pause()
+            assert voice.spoken == []  # paused: no readback
+            assert voice.listens == 0  # paused: no capture
+
+    _run(go())
+
+
+def test_toggle_voice_without_session_notifies_and_stays_off() -> None:
+    # With no voice front-end the toggle is a no-op (notice only) and never marks a pause.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))  # no voice
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.action_toggle_voice()
+            assert app._voice_paused is False  # nothing to pause
+            assert app._voice_state() is None  # no badge without a session
+
+    _run(go())

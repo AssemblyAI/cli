@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from rich.markdown import Markdown
 from rich.markup import escape
 
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
@@ -24,7 +25,10 @@ class RichRenderer:
         # escape() dynamic content so a model/tool string with "[" can't inject Rich
         # markup or raise MarkupError (matches the inline-escape convention in output.py).
         if isinstance(event, AssistantText):
-            output.console.print(escape(event.text))
+            # Render as Markdown so fenced code blocks are syntax-highlighted (and lists/
+            # headings format) instead of showing raw ``` markers — Markdown parses its own
+            # syntax, not console markup, so no escape()/injection concern.
+            output.console.print(Markdown(event.text))
         elif isinstance(event, ToolCall):
             output.console.print(
                 f"[aai.muted]→ {escape(summarize_call(event.name, event.args))}[/aai.muted]"

@@ -64,6 +64,18 @@ def test_git_branch_and_status(tmp_path: Path) -> None:
     assert "manual" in tui._status_text(tmp_path, auto_approve=False)
 
 
+def test_status_text_renders_voice_badge(tmp_path: Path) -> None:
+    # No voice front-end -> no voice badge (the dot glyphs are absent); on/off render the
+    # state so the Ctrl-V toggle shows. (Asserts on the dots, not the word — the tmp_path name
+    # itself can contain "voice".)
+    none = tui._status_text(tmp_path, auto_approve=False)
+    assert "●" not in none and "○" not in none
+    on = tui._status_text(tmp_path, auto_approve=False, voice_state="on")
+    off = tui._status_text(tmp_path, auto_approve=False, voice_state="off")
+    assert "voice on" in on and "●" in on  # filled dot when on
+    assert "voice off" in off and "○" in off  # hollow dot when off
+
+
 # --- pilot tests --------------------------------------------------------------
 
 
@@ -130,6 +142,24 @@ def test_write_event_each_type_and_copy(monkeypatch: pytest.MonkeyPatch) -> None
             assert app._last_reply == "[reply"
             app.action_copy_last()
             assert copied == ["[reply"]
+
+    _run(go())
+
+
+def test_assistant_reply_renders_markdown_code_block() -> None:
+    # Assistant text is rendered as Markdown so a fenced code block is syntax-highlighted —
+    # the raw ``` fence markers are consumed, the code shows, and the raw text is kept for copy.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            reply = "Here you go:\n\n```python\nprint('hi')\n```"
+            app._write_event(AssistantText(reply))
+            await pilot.pause()
+            rendered = "\n".join(strip.text for strip in app.query_one("#log", RichLog).lines)
+            assert "```" not in rendered  # markdown consumed the fence markers
+            assert "print('hi')" in rendered  # the code itself still renders
+            assert app._last_reply == reply  # raw markdown kept for clipboard copy
 
     _run(go())
 

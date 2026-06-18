@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
+from rich.markdown import Markdown
 from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
@@ -76,14 +77,22 @@ def _git_branch(start: Path) -> str | None:
     return None
 
 
-def _status_text(cwd: Path, *, auto_approve: bool) -> str:
-    """The bottom status line: a mode badge, the working directory, and the git branch."""
+def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = None) -> str:
+    """The bottom status line: a mode badge, the working directory, git branch, and voice state.
+
+    ``voice_state`` is ``"on"``/``"off"`` when the session has a voice front-end (so the
+    Ctrl-V toggle shows its effect), or ``None`` when voice isn't wired up at all.
+    """
     mode = "auto" if auto_approve else "manual"
     badge = f"[black on #f59e0b] {mode} [/]"
     parts = [badge, f"[dim]{_abbrev_home(cwd)}[/dim]"]
     branch = _git_branch(cwd)
     if branch:
         parts.append(f"[dim]↗ {branch}[/dim]")
+    if voice_state is not None:
+        # A filled/hollow dot (BMP glyphs, like the rest of the UI — no double-width emoji).
+        glyph, color = ("●", "#22c55e") if voice_state == "on" else ("○", "#6b7280")
+        parts.append(f"[{color}]{glyph} voice {voice_state}[/]")
     return " ".join(parts)
 
 
@@ -121,6 +130,7 @@ class CodeAgentApp(App[None]):
         ("ctrl+c", "quit_or_interrupt", "Interrupt / Quit"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+y", "copy_last", "Copy last reply"),
+        ("ctrl+v", "toggle_voice", "Toggle voice"),
     ]
 
     def __init__(
@@ -142,6 +152,7 @@ class CodeAgentApp(App[None]):
         self._initial = initial
         self._voice = voice  # when set, spoken turns drive the prompt and replies are read back
         self._voice_typed = False  # flips once the mic is ruled out; then input is typed only
+        self._voice_paused = False  # user-toggled off via Ctrl-V (distinct from a mic failure)
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
         self._web_note = web_note
@@ -167,7 +178,12 @@ class CodeAgentApp(App[None]):
         with Horizontal(id="promptbar"):
             yield Static(">", id="promptmark")
             yield Input(id="prompt", placeholder="Ask the agent to build something…")
-        yield Static(_status_text(self._cwd, auto_approve=self._auto_approve), id="status")
+        yield Static(
+            _status_text(
+                self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
+            ),
+            id="status",
+        )
 
     def _write_splash(self, log: RichLog) -> None:
         for row in banner.wordmark():
@@ -209,8 +225,10 @@ class CodeAgentApp(App[None]):
         # Escape dynamic content: a model/tool string containing "[" would otherwise be
         # parsed as Rich markup and raise MarkupError (crashing the turn), or inject styling.
         if isinstance(event, AssistantText):
-            self._last_reply = event.text
-            log.write(escape(event.text))
+            self._last_reply = event.text  # keep the raw text for clipboard copy
+            # Render as Markdown so fenced code is syntax-highlighted (Markdown parses its own
+            # syntax, not console markup, so the escape() the other branches need is moot here).
+            log.write(Markdown(event.text))
         elif isinstance(event, ToolCall):
             log.write(f"[dim]→ {escape(summarize_call(event.name, event.args))}[/dim]")
         elif isinstance(event, ToolResult):
@@ -265,10 +283,35 @@ class CodeAgentApp(App[None]):
         self.call_from_thread(self._refresh_status)
 
     def _refresh_status(self) -> None:
-        """Re-render the bottom status line (e.g. after the mode flips to auto)."""
+        """Re-render the bottom status line (e.g. after the mode flips to auto or voice toggles)."""
         self.query_one("#status", Static).update(
-            _status_text(self._cwd, auto_approve=self._auto_approve)
+            _status_text(
+                self._cwd, auto_approve=self._auto_approve, voice_state=self._voice_state()
+            )
         )
+
+    def _voice_state(self) -> str | None:
+        """``"on"``/``"off"`` for the status badge, or ``None`` when voice isn't wired up."""
+        if self._voice is None:
+            return None
+        return "on" if self._voice_active() else "off"
+
+    def action_toggle_voice(self) -> None:
+        """Ctrl-V: turn spoken input/readback on or off for the session.
+
+        A no-op notice when no voice front-end exists (e.g. a piped/typed run). Re-enabling
+        kicks off listening again unless a turn is mid-flight (the post-turn followup will).
+        """
+        if self._voice is None:
+            self.notify("Voice isn't available in this session", severity="warning")
+            return
+        self._voice_paused = not self._voice_paused
+        self._refresh_status()
+        if self._voice_paused:
+            self.notify("Voice off — type your request")
+        elif not self._turn_running():
+            self.notify("Voice on — listening")
+            self._begin_listening()
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
@@ -371,8 +414,8 @@ class CodeAgentApp(App[None]):
     # --- voice (speak-to-it / read-summary-back; the legs run off the UI thread) ----
 
     def _voice_active(self) -> bool:
-        """Voice capture is on: a session exists and the mic hasn't been ruled out yet."""
-        return self._voice is not None and not self._voice_typed
+        """Voice capture is on: a session exists, the mic isn't ruled out, and it isn't paused."""
+        return self._voice is not None and not self._voice_typed and not self._voice_paused
 
     def _spawn(self, target: Callable[[], None]) -> None:
         """Run ``target`` on a daemon thread — voice legs block, so they stay off the UI thread."""
@@ -387,7 +430,7 @@ class CodeAgentApp(App[None]):
     def _voice_followup(self) -> None:
         """After a turn finishes: read back a spoken summary, then listen for the next turn."""
         voice = self._voice
-        if voice is None:
+        if voice is None or self._voice_paused:  # paused via Ctrl-V: no readback, no listen
             return
         self._spawn(lambda: self._speak_then_listen(voice))
 
@@ -399,7 +442,7 @@ class CodeAgentApp(App[None]):
     def _capture_voice_turn(self) -> None:
         """Listen for one spoken turn; enter it into the prompt, or degrade to typing."""
         voice = self._voice
-        if voice is None or self._voice_typed:
+        if voice is None or self._voice_typed or self._voice_paused:
             return
         try:
             transcript = voice.listen()
