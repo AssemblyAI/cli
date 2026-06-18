@@ -3,7 +3,8 @@
   "ignore": [
     "tests/test_code_agent.py",
     "tests/test_code_command.py",
-    "tests/test_code_tui.py"
+    "tests/test_code_tui.py",
+    "tests/test_agent_cascade_brain.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "standard",

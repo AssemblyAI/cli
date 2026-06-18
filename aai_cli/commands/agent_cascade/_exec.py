@@ -169,9 +169,9 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
-    validate_voice(opts.voice, voices.VOICE_NAMES, command="agent-cascade")
+    validate_voice(opts.voice, voices.VOICE_NAMES, command="live")
     # Streaming TTS has no production host, so the whole cascade is sandbox-only.
-    tts_session.require_available("agent-cascade")
+    tts_session.require_available("live")
     system_prompt_text = _resolve_system_prompt(opts.system_prompt, opts.system_prompt_file)
 
     if opts.show_code:

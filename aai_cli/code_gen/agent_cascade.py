@@ -16,9 +16,11 @@ if TYPE_CHECKING:
 # which is never formatted — so no brace has to be doubled.
 _HEADER = """\
 # Live voice cascade: Streaming STT -> LLM Gateway -> streaming TTS, wired client-side.
-# This is what `assembly --sandbox agent-cascade` runs: it transcribes your speech,
+# The basic cascade behind `assembly --sandbox live`: it transcribes your speech,
 # sends each finalized turn to the LLM Gateway, and speaks the reply through streaming
 # TTS — the same three primitives the agent-cascade init template wires server-side.
+# (The `live` command adds a tool-using agent on the LLM leg; this snippet is the
+# plain single-completion version to build from.)
 # Requires audio + websockets:  pip install sounddevice websockets openai
 # Tip: use headphones — the mic stays open while the agent speaks, so on speakers it
 # would hear itself and loop.
