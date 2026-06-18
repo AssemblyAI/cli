@@ -8,10 +8,16 @@ never silently send the user's code to anything but AssemblyAI.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
+
+# The gateway omits Anthropic's required ``tool_use.input`` when an OpenAI tool call's
+# ``arguments`` is empty (``""`` / ``"{}"``); substitute a minimal non-empty object so the
+# field is emitted. See :func:`_ensure_tool_call_arguments`.
+_PLACEHOLDER_ARGUMENTS = '{"_": ""}'
 
 if TYPE_CHECKING:
     from langchain_core.language_models.chat_models import BaseChatModel
@@ -40,18 +46,23 @@ def _flatten_content(messages: object) -> None:
 
 
 def _hoist_tool_call_ids(chunk: object) -> None:
-    """Move each streamed tool-call ``id`` from inside ``function`` up to the tool-call top level.
+    """Normalize a streamed chunk's tool-call deltas: drop blank ones, hoist nested ids.
 
-    The AssemblyAI LLM Gateway's *streaming* ``/v1/chat/completions`` nests the tool-call
-    ``id`` under ``function`` — ``{"function": {"id": …, "name": …}}`` — instead of at the
-    tool-call's top level, which is where the OpenAI streaming spec (and
-    ``langchain_openai``, via ``id=rtc.get("id")``) reads it. Left alone, every streamed
-    tool call parses with a name and arguments but ``id=None``, so the reply ``ToolMessage``
-    fails Pydantic validation (``tool_call_id`` must be a string) and the whole turn errors
-    out. We move the id back up before langchain converts the chunk; the id rides only the
-    first delta of a call, so later argument-only deltas (no ``function.id``) are left
-    untouched. (The non-streaming endpoint already places the id correctly, so only the
-    streaming path needs this.)
+    Two AssemblyAI LLM Gateway streaming quirks, both fixed in place before langchain
+    converts the chunk:
+
+    1. **Spurious blank deltas.** Every streamed turn (when tools are available) starts with
+       an empty tool-call delta — ``{"function": {"id": "", "name": "", "arguments": ""}}``.
+       On a pure-text turn no real call follows, so langchain is left with a tool call whose
+       ``name`` is ``""``; deepagents then dispatches it and the turn dies with
+       ``Error:  is not a valid tool``. We drop any delta with no name, id, or arguments
+       (which also harmlessly drops the gateway's empty argument-continuation deltas).
+    2. **Misplaced id.** The id is nested under ``function`` instead of at the tool-call top
+       level where the OpenAI spec and ``langchain_openai`` (``id=rtc.get("id")``) read it,
+       so without help every call parses with ``id=None`` and its reply ``ToolMessage`` fails
+       validation. We move it back up; the id rides only a call's first delta.
+
+    (The non-streaming endpoint has neither quirk, so only the streaming path needs this.)
     """
     if not isinstance(chunk, dict):
         return
@@ -62,11 +73,26 @@ def _hoist_tool_call_ids(chunk: object) -> None:
 
 
 def _hoist_in_choice(choice: object) -> None:
-    """Hoist tool-call ids within one streamed choice's delta (helper for ``_hoist_tool_call_ids``)."""
-    delta = choice.get("delta") if isinstance(choice, dict) else None
-    tool_calls = delta.get("tool_calls") if isinstance(delta, dict) else None
+    """Drop blank tool-call deltas, then hoist ids, within one streamed choice's delta."""
+    if not isinstance(choice, dict):
+        return
+    delta = choice.get("delta")
+    if not isinstance(delta, dict):
+        return
+    tool_calls = delta.get("tool_calls")
     if isinstance(tool_calls, list):
-        _hoist_call_list(tool_calls)
+        delta["tool_calls"] = [tc for tc in tool_calls if not _is_blank_tool_call(tc)]
+        _hoist_call_list(delta["tool_calls"])
+
+
+def _is_blank_tool_call(tool_call: object) -> bool:
+    """True for the gateway's spurious empty tool-call delta (no name, id, or arguments)."""
+    if not isinstance(tool_call, dict):
+        return False
+    function = tool_call.get("function")
+    if not isinstance(function, dict):
+        return False
+    return not function.get("name") and not function.get("id") and not function.get("arguments")
 
 
 def _hoist_call_list(tool_calls: list[object]) -> None:
@@ -84,6 +110,52 @@ def _hoist_call_list(tool_calls: list[object]) -> None:
         function = tool_call.get("function")
         if isinstance(function, dict) and function.get("id") is not None:
             tool_call["id"] = function.pop("id")
+
+
+def _ensure_tool_call_arguments(messages: object) -> None:
+    """Give every empty tool-call ``arguments`` a non-empty placeholder object, in place.
+
+    The AssemblyAI LLM Gateway maps each OpenAI tool call's ``arguments`` (a JSON string)
+    onto Anthropic's ``tool_use.input`` object, but drops ``input`` entirely when the
+    arguments are empty (``""`` or ``"{}"``). Anthropic *requires* ``input`` to be present,
+    so replaying any argument-less tool call is rejected (400, surfaced as a 500 while
+    streaming) — and because the failing call sits in the conversation history, every later
+    turn fails too, wedging the session. We swap in a minimal non-empty object so the gateway
+    emits a valid ``input``. This only rewrites the request we send: the tool already ran
+    locally with its real (empty) arguments, and the gateway accepts the placeholder even for
+    tools that declare ``additionalProperties: false``. (Drop this once the gateway maps empty
+    arguments to ``input: {}`` itself.)
+    """
+    if not isinstance(messages, list):
+        return
+    for message in messages:
+        tool_calls = message.get("tool_calls") if isinstance(message, dict) else None
+        if isinstance(tool_calls, list):
+            _fill_empty_arguments(tool_calls)
+
+
+def _fill_empty_arguments(tool_calls: list[object]) -> None:
+    """Replace each empty ``function.arguments`` with the placeholder (helper for the above)."""
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        function = tool_call.get("function")
+        if isinstance(function, dict) and _is_empty_arguments(function.get("arguments")):
+            function["arguments"] = _PLACEHOLDER_ARGUMENTS
+
+
+def _is_empty_arguments(arguments: object) -> bool:
+    """True when ``arguments`` is an OpenAI args string carrying no fields (``""``/``"{}"``)."""
+    if not isinstance(arguments, str):
+        return False
+    stripped = arguments.strip()
+    if not stripped:
+        return True
+    try:
+        parsed = json.loads(stripped)
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and not parsed
 
 
 def build_model(
@@ -114,18 +186,21 @@ def build_model(
     class _GatewayChatOpenAI(ChatOpenAI):
         """ChatOpenAI that adapts the gateway's OpenAI-incompatible quirks for langchain.
 
-        Two fix-ups, each working around a gateway response/request bug the upstream client
-        doesn't expect: flatten list-content messages the gateway 500s on (request side, see
-        :func:`_flatten_content`), and hoist each streamed tool-call ``id`` back to the
-        tool-call top level where langchain reads it (response side, see
-        :func:`_hoist_tool_call_ids`).
+        Three fix-ups, each working around a gateway request/response bug the upstream client
+        doesn't expect: flatten list-content messages the gateway 500s on and give empty
+        tool-call arguments a placeholder the gateway can map to ``tool_use.input`` (request
+        side, see :func:`_flatten_content` / :func:`_ensure_tool_call_arguments`), and hoist
+        each streamed tool-call ``id`` back to the tool-call top level where langchain reads it
+        (response side, see :func:`_hoist_tool_call_ids`).
         """
 
         def _get_request_payload(
             self, input_: object, *, stop: list[str] | None = None, **kwargs: object
         ) -> dict:
             payload = super()._get_request_payload(input_, stop=stop, **kwargs)
-            _flatten_content(payload.get("messages"))
+            messages = payload.get("messages")
+            _flatten_content(messages)
+            _ensure_tool_call_arguments(messages)
             return payload
 
         def _convert_chunk_to_generation_chunk(

@@ -88,11 +88,20 @@ class PcmPlayer:
     def __enter__(self) -> PcmPlayer:
         return self
 
-    def feed(self, pcm: bytes, sample_rate: int) -> None:
-        """Play one PCM chunk, opening the device on the first chunk."""
+    def feed(
+        self, pcm: bytes, sample_rate: int, *, cancelled: Callable[[], bool] | None = None
+    ) -> None:
+        """Play one PCM chunk, opening the device on the first chunk.
+
+        ``cancelled`` is polled between the small piece-writes; when it returns True the
+        stream is aborted (buffered frames discarded) and the rest of the chunk is dropped.
+        This is the only cancellation path that works when playback runs off the main thread
+        — the coding-agent TUI plays on a daemon thread, so a Ctrl-C ``KeyboardInterrupt``
+        never reaches it; only a flag set from another thread can stop it.
+        """
         if self._stream is None:
             self._stream = self._open(sample_rate)
-        self._write(self._stream, pcm)
+        self._write(self._stream, pcm, cancelled)
 
     def _open(self, sample_rate: int) -> _OutputStream:
         try:
@@ -105,11 +114,16 @@ class PcmPlayer:
         return stream
 
     @staticmethod
-    def _write(stream: _OutputStream, pcm: bytes) -> None:
+    def _write(
+        stream: _OutputStream, pcm: bytes, cancelled: Callable[[], bool] | None = None
+    ) -> None:
         # KeyboardInterrupt (a BaseException) passes through this Exception handler
         # to __exit__, which aborts the device; only real device errors are wrapped.
         try:
             for offset in range(0, len(pcm), _PLAYBACK_CHUNK_BYTES):
+                if cancelled is not None and cancelled():
+                    stream.abort()  # discard buffered frames and stop now, mid-chunk
+                    return
                 stream.write(pcm[offset : offset + _PLAYBACK_CHUNK_BYTES])
         except Exception as exc:
             raise _playback_error(exc) from exc

@@ -31,7 +31,7 @@ from aai_cli.code_agent.model import build_model
 from aai_cli.code_agent.prompt import DEFAULT_MODEL
 from aai_cli.code_agent.render import RichRenderer, make_approver
 from aai_cli.code_agent.session import CodeSession, EventSink, run_repl
-from aai_cli.code_agent.skills import build_skills_middleware
+from aai_cli.code_agent.skills import build_skills
 from aai_cli.code_agent.store import build_checkpointer
 from aai_cli.code_agent.voice import (
     AUDIO_ERROR_TYPES,
@@ -82,12 +82,9 @@ def _assemble_tools(api_key: str, opts: CodeOptions, bridge: AskBridge) -> list[
 
 
 def _assemble_middlewares(opts: CodeOptions) -> list[AgentMiddleware]:
-    """Skills + long-term memory middleware, in load order."""
+    """The long-term memory middleware (skills are wired in :func:`_build_agent`, since the
+    skills middleware pairs with a tool)."""
     middlewares: list[AgentMiddleware] = []
-    if opts.skills:
-        skills = build_skills_middleware()
-        if skills is not None:
-            middlewares.append(skills)
     if opts.memory:
         middlewares.append(build_memory_middleware())
     return middlewares
@@ -95,11 +92,20 @@ def _assemble_middlewares(opts: CodeOptions) -> list[AgentMiddleware]:
 
 def _build_agent(api_key: str, opts: CodeOptions, bridge: AskBridge) -> CompiledAgent:
     """Wire the gateway model + tools + middlewares + checkpointer into the agent."""
+    tools = _assemble_tools(api_key, opts, bridge)
+    middlewares = _assemble_middlewares(opts)
+    # Skills add both a middleware (the skills prompt section) and the `read_skill` tool the
+    # prompt directs the model to; load the middleware ahead of memory to match prior order.
+    skills = build_skills() if opts.skills else None
+    if skills is not None:
+        middleware, reader = skills
+        middlewares.insert(0, middleware)
+        tools.append(reader)
     return build_agent(
         model=build_model(api_key, model=opts.model),
         root_dir=opts.root_dir.resolve(),
-        tools=_assemble_tools(api_key, opts, bridge),
-        middlewares=_assemble_middlewares(opts),
+        tools=tools,
+        middlewares=middlewares,
         checkpointer=build_checkpointer(persist=opts.persist),
         auto_approve=opts.auto,
     )

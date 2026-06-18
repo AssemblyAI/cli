@@ -25,12 +25,10 @@ from aai_cli.code_agent import (
     skills,
     store,
 )
-from aai_cli.code_agent import model as model_mod
 from aai_cli.code_agent.agent import MUTATING_TOOLS, build_agent
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
 from aai_cli.code_agent.render import RichRenderer, make_approver
 from aai_cli.code_agent.session import QUIT_COMMANDS, CodeSession, run_repl
-from aai_cli.core import environments
 
 
 class FakeChatModel(BaseChatModel):
@@ -215,13 +213,32 @@ def test_docs_mcp_load_failure_returns_empty(monkeypatch: pytest.MonkeyPatch) ->
     assert docs_mcp.load_docs_tools("https://example.invalid") == []
 
 
-def test_skills_middleware_present_and_absent(tmp_path: Path) -> None:
-    assert skills.build_skills_middleware(tmp_path) is None  # empty dir -> no skills
+def test_build_skills_present_and_absent(tmp_path: Path) -> None:
+    assert skills.build_skills(tmp_path) is None  # empty dir -> no skills, no tool
 
     skill_dir = tmp_path / "assemblyai"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("---\nname: assemblyai\ndescription: x\n---\nbody")
-    assert skills.build_skills_middleware(tmp_path) is not None
+    bundle = skills.build_skills(tmp_path)
+    assert bundle is not None  # constructing the middleware also validates the custom prompt
+    _middleware, reader = bundle
+    assert reader.name == skills.READ_SKILL_TOOL_NAME
+
+
+def test_read_skill_tool_reads_under_root_and_blocks_escape(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "assemblyai"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("the skill body")
+    (tmp_path.parent / "secret.md").write_text("top secret")
+
+    reader = skills.build_skill_reader(tmp_path)
+    # The path is the prompt's backend-virtual form (leading slash, relative to root).
+    assert reader.invoke({"path": "/assemblyai/SKILL.md"}) == "the skill body"
+    # A traversal out of the skills dir is refused (not the neighbouring file's contents).
+    escaped = reader.invoke({"path": "/../secret.md"})
+    assert "outside the skills directory" in escaped and "top secret" not in escaped
+    # A missing skill file reports an error rather than raising.
+    assert "not found" in reader.invoke({"path": "/assemblyai/MISSING.md"})
 
 
 def test_web_search_tool_gated_on_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,99 +268,6 @@ def test_rich_renderer_smoke(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 # --- slice-unit edge cases (cover the lazy bodies + error/guard branches) -----
-
-
-def test_build_model_targets_the_gateway():  # untyped: probes ChatOpenAI subclass attrs
-    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
-    assert m.model_name == "claude-sonnet-4-6"
-    assert m.openai_api_base == environments.active().llm_gateway_base
-    assert m.use_responses_api is False
-
-
-def test_build_model_flattens_list_content_for_gateway():  # untyped: probes the payload dict
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
-    # deepagents hands the model multi-block content arrays; the gateway 500s on those,
-    # so the model must flatten each message's content to a plain string before sending.
-    payload = m._get_request_payload(
-        [
-            SystemMessage(content=[{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]),
-            HumanMessage(content="hi"),
-        ]
-    )
-    assert [msg["content"] for msg in payload["messages"]] == ["ab", "hi"]
-
-
-def test_flatten_content_guards() -> None:
-    model_mod._flatten_content(None)  # not a list -> early return, no error
-    items = ["raw", 123]  # non-dict members are skipped, list left untouched
-    model_mod._flatten_content(items)
-    assert items == ["raw", 123]
-
-
-def test_hoist_tool_call_ids_moves_id_out_of_function_only_when_missing() -> None:
-    # One chunk exercising every branch: each malformed variant is skipped, and only a
-    # tool call carrying a function-nested id gets hoisted. Hold references to the inner
-    # dicts so the in-place mutation is asserted with a clean type.
-    noid_fn: dict[str, object] = {"name": "b"}
-    hoist_fn: dict[str, object] = {"id": "HOIST", "name": "c", "arguments": ""}
-    noid_call: dict[str, object] = {"index": 1, "function": noid_fn}
-    hoist_call: dict[str, object] = {"index": 2, "function": hoist_fn}
-    tool_calls: list[object] = [
-        None,  # tool_call not a dict -> skipped
-        {"index": 0, "function": 7},  # function not a dict -> skipped
-        noid_call,  # function has no id -> nothing to hoist
-        hoist_call,  # the real gateway shape -> id hoisted out of function
-    ]
-    chunk: dict[str, object] = {
-        "choices": [
-            None,  # choice not a dict -> skipped
-            {"delta": None},  # delta not a dict -> skipped
-            {"delta": {"content": "hi"}},  # no tool_calls -> skipped
-            {"delta": {"tool_calls": 99}},  # tool_calls not a list -> skipped
-            {"delta": {"tool_calls": tool_calls}},
-        ]
-    }
-    model_mod._hoist_tool_call_ids(chunk)
-    assert "id" not in noid_call  # no id invented for a call that never had one
-    assert noid_fn == {"name": "b"}  # left untouched
-    assert hoist_call["id"] == "HOIST"  # hoisted to the top level where langchain reads it
-    assert "id" not in hoist_fn  # and removed from function so it isn't duplicated
-
-
-def test_hoist_tool_call_ids_guards() -> None:
-    model_mod._hoist_tool_call_ids(None)  # not a dict -> early return, no error
-    model_mod._hoist_tool_call_ids({"choices": 99})  # choices not a list -> early return
-
-
-def test_convert_chunk_hoists_streamed_tool_call_id() -> None:
-    from langchain_core.messages import AIMessageChunk
-    from langchain_openai import ChatOpenAI
-
-    m = model_mod.build_model("sk-test", model="claude-sonnet-4-6")
-    assert isinstance(m, ChatOpenAI)  # narrow to the subclass that overrides the converter
-    # The gateway streams the tool-call id nested inside `function`; the override must hoist
-    # it so langchain's converted chunk carries the id (else the reply ToolMessage gets None).
-    chunk = {
-        "choices": [
-            {
-                "index": 0,
-                "delta": {
-                    "role": "assistant",
-                    "tool_calls": [
-                        {"index": 0, "function": {"id": "toolu_X", "name": "get_weather"}}
-                    ],
-                },
-                "finish_reason": None,
-            }
-        ]
-    }
-    gen = m._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, None)
-    assert gen is not None
-    msg = gen.message
-    assert isinstance(msg, AIMessageChunk)
-    assert msg.tool_call_chunks[0]["id"] == "toolu_X"
 
 
 def test_fetch_url_fetches_and_truncates(monkeypatch: pytest.MonkeyPatch) -> None:

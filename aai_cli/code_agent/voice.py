@@ -130,8 +130,10 @@ class Player(Protocol):
     def __exit__(self, exc_type: object, *exc: object) -> object:
         """Drain on a clean exit, abort otherwise; never suppress."""
 
-    def feed(self, pcm: bytes, sample_rate: int) -> None:
-        """Play one PCM chunk, opening the output device on the first call."""
+    def feed(
+        self, pcm: bytes, sample_rate: int, *, cancelled: Callable[[], bool] | None = None
+    ) -> None:
+        """Play one PCM chunk, polling ``cancelled`` between writes to stop mid-chunk."""
 
 
 def _stt_params(sample_rate: int) -> StreamingParameters:
@@ -219,7 +221,11 @@ class VoiceSession:
                 def feed(pcm: bytes, sample_rate: int) -> None:
                     if self._cancel.is_set():
                         _abort_readback()
-                    player.feed(pcm, sample_rate)
+                    # Poll cancel *during* playback too: a chunk can be seconds of audio, and
+                    # in the TUI the only cancel signal is this flag set from another thread.
+                    player.feed(pcm, sample_rate, cancelled=self._cancel.is_set)
+                    if self._cancel.is_set():
+                        _abort_readback()
 
                 self.synth_fn(self.api_key, config, on_audio=feed)
         except _ReadbackInterrupted:

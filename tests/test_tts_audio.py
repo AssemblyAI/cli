@@ -77,6 +77,29 @@ def test_play_pcm_writes_audio_in_bounded_chunks():
     assert b"".join(stream.writes) == pcm
 
 
+def test_feed_aborts_midchunk_when_cancelled_flag_flips():
+    # The daemon-thread readback can't see a Ctrl-C KeyboardInterrupt, so a cancel flag set
+    # from another thread must stop playback between piece-writes: abort the device and drop
+    # the rest of the chunk rather than playing it out.
+    stream = FakeStream()
+    pcm = bytes(256) * 40  # > 2 pieces, so there are several poll points
+    with audio.PcmPlayer(stream_factory=lambda rate: stream) as player:
+        # Report "cancelled" once the first piece has been written.
+        player.feed(pcm, 24000, cancelled=lambda: bool(stream.writes))
+    assert len(stream.writes) == 1  # stopped after the first piece instead of draining all
+    assert "abort" in stream.events  # discarded the buffered frames immediately
+
+
+def test_feed_without_cancel_poll_plays_every_piece():
+    # The cancel poll is optional (assembly speak passes none): all pieces still play.
+    stream = FakeStream()
+    pcm = bytes(256) * 40
+    with audio.PcmPlayer(stream_factory=lambda rate: stream) as player:
+        player.feed(pcm, 24000)
+    assert b"".join(stream.writes) == pcm  # nothing dropped
+    assert "abort" not in stream.events
+
+
 def test_play_pcm_aborts_and_propagates_on_ctrl_c():
     # Ctrl-C mid-playback must stop the device immediately (abort, not just stop)
     # and re-raise so the cancel reaches the CLI; the stream is still closed.

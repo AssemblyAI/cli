@@ -481,7 +481,9 @@ class CodeAgentApp(_VoiceLegs):
         self.query_one("#spinner", Static).display = False
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.is_finished:
+        # Guard on is_running: a worker finishing *after* the app tears down (quit / test exit)
+        # would drive _finish_turn against an unmounted DOM — NoMatches on "#spinner", a flake.
+        if event.worker.is_finished and self.is_running:
             self._finish_turn()
 
     def _finish_turn(self) -> None:

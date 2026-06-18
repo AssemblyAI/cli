@@ -119,7 +119,7 @@ class FakePlayer:
         self.exit_exc_type = exc_type  # records the abort path (an exception on the way out)
         return False
 
-    def feed(self, pcm, sample_rate):
+    def feed(self, pcm, sample_rate, *, cancelled=None):
         self.fed.append((pcm, sample_rate))
 
 
@@ -161,6 +161,34 @@ def test_speak_stops_synthesis_and_aborts_player_when_cancelled():
     assert player.fed == [(b"one", 24000)]  # only the pre-cancel chunk played
     assert reached_after_cancel == []  # synthesis stopped at the cancelled feed
     assert player.exit_exc_type is not None  # player saw the exception -> aborted, not drained
+
+
+def test_speak_hands_player_a_live_cancel_poll_for_midchunk_stop():
+    # In the TUI the readback plays on a daemon thread, so the only way to stop a chunk
+    # mid-playback is a flag set from another thread. speak() must hand the player a live
+    # poll of that flag (not just check it between synth chunks).
+    seen = {}
+    holder = {}
+
+    class PollPlayer(FakePlayer):
+        def feed(self, pcm, sample_rate, *, cancelled=None):
+            seen["poll"] = cancelled
+            seen["before"] = cancelled() if cancelled else None
+            holder["session"].cancel()  # another thread interrupts mid-playback
+            seen["after"] = cancelled() if cancelled else None
+            super().feed(pcm, sample_rate)
+
+    def fake_synth(api_key, config, *, on_audio):
+        on_audio(b"chunk", 24000)
+
+    session = VoiceSession(
+        api_key="k", readback=True, synth_fn=fake_synth, player_factory=PollPlayer
+    )
+    holder["session"] = session
+    session.speak("hello there")  # returns cleanly — the post-chunk cancel is swallowed
+    assert callable(seen["poll"])
+    assert seen["before"] is False  # not cancelled when the chunk starts playing
+    assert seen["after"] is True  # the poll reflects a cancel raised mid-playback
 
 
 def test_speak_clears_a_stale_cancel_before_playing():
