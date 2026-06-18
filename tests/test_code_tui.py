@@ -10,15 +10,15 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input, RichLog, Static
+from textual.containers import VerticalScroll
+from textual.widgets import Input, Label, Static
 
-from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
-from aai_cli.code_agent.tui import ApprovalScreen, AskScreen, CodeAgentApp
+from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
+from aai_cli.code_agent.tui import CodeAgentApp
 
 
 class FakeAgent:
@@ -39,39 +39,6 @@ class _Interrupt:
         self.value = value
 
 
-# --- pure helpers -------------------------------------------------------------
-
-
-def test_format_args_and_abbrev_home() -> None:
-    assert tui._format_args({"a": 1, "b": "x"}) == "a=1, b='x'"
-    assert tui._abbrev_home(Path.home() / "proj") == "~/proj"
-    # A path outside home renders as-is; compare to the platform-native string so this
-    # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
-    outside = Path("/etc/hosts")
-    assert tui._abbrev_home(outside) == str(outside)
-
-
-def test_approval_decision_defaults_to_reject() -> None:
-    assert tui._approval_decision("approve") == "approve"
-    assert tui._approval_decision("auto") == "auto"
-    # A button with no id (Textual allows None) is treated as a rejection, not approval.
-    assert tui._approval_decision(None) == "reject"
-    assert tui._approval_decision("") == "reject"
-
-
-def test_git_branch_and_status(tmp_path: Path) -> None:
-    assert tui._git_branch(tmp_path) is None  # no .git
-    (tmp_path / ".git").mkdir()
-    (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/feature-x\n")
-    assert tui._git_branch(tmp_path) == "feature-x"
-    (tmp_path / ".git" / "HEAD").write_text("a1b2c3d4e5f6\n")  # detached
-    assert tui._git_branch(tmp_path) == "a1b2c3d4"
-
-    status = tui._status_text(tmp_path, auto_approve=True)
-    assert "auto" in status and "a1b2c3d4" in status
-    assert "manual" in tui._status_text(tmp_path, auto_approve=False)
-
-
 # --- pilot tests --------------------------------------------------------------
 
 
@@ -84,8 +51,9 @@ def test_mount_renders_splash_and_focuses_input() -> None:
         app = CodeAgentApp(agent=FakeAgent([]), web_note="no key", thread_id="t1")
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            log = app.query_one("#log", RichLog)
-            assert len(log.lines) > 6  # wordmark + tagline
+            log = app.query_one("#log", VerticalScroll)
+            assert len(log.children) >= 1  # the splash is mounted into the transcript
+            assert "Ready to code" in str(log.children[0].render())  # splash intro shown
             assert app.focused is app.query_one("#prompt", Input)
 
     _run(go())
@@ -206,23 +174,66 @@ def test_full_turn_with_approval_interrupt() -> None:
     _run(go())
 
 
-def test_approval_button_press_dismisses() -> None:
-    # Covers ApprovalScreen.on_button_pressed (the click path; key paths are covered
-    # by the approve/reject modal tests above). The bracketed name/args also guard the
-    # compose() escape() — without it, Label markup parsing would raise on mount.
-    results: list[str | None] = []
-
+def test_approval_prompt_renders_keyboard_hint() -> None:
+    # The prompt is a plain y/a/n keyboard hint, not clickable buttons — assert each
+    # option's copy renders so dropping one is caught. The bracketed name/args also guard
+    # the compose() escape(): without it, Label markup parsing would raise on mount.
     async def go() -> None:
         app = CodeAgentApp(agent=FakeAgent([]))
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.push_screen(ApprovalScreen("exec[", {"cmd": "[ls"}), results.append)
+            app.push_screen(ApprovalScreen("exec[", {"cmd": "[ls"}))
             await pilot.pause()
-            await pilot.click("#reject")
-            await pilot.pause()
+            rendered = " ".join(str(label.render()) for label in app.screen.query(Label))
+            assert "approve" in rendered
+            assert "auto-approve" in rendered
+            assert "reject" in rendered
 
     _run(go())
-    assert results == ["reject"]
+
+
+def test_approval_expands_args_on_e() -> None:
+    # Collapsed, the prompt shows only the identifying arg (the filename); pressing `e`
+    # expands it to the full args, revealing the file content that was elided.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(
+                ApprovalScreen("write_file", {"file_path": "x.py", "content": "SECRET"})
+            )
+            await pilot.pause()
+            detail = app.screen.query_one("#approvaldetail", Label)
+            assert "SECRET" not in str(detail.render())  # collapsed: content elided
+            await pilot.press("e")
+            await pilot.pause()
+            assert "SECRET" in str(detail.render())  # expanded: full args shown
+            await pilot.press("e")  # toggles back
+            await pilot.pause()
+            assert "SECRET" not in str(detail.render())
+
+    _run(go())
+
+
+def test_approval_shows_risk_warning_for_dangerous_command() -> None:
+    # A destructive shell command carries a one-line warning above the prompt; a benign one
+    # mounts no warning label at all.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("execute", {"command": "rm -rf build/"}))
+            await pilot.pause()
+            warn = app.screen.query("#approvalwarn")
+            assert warn  # warning present
+            assert "deletes files" in str(warn.first().render())
+            app.pop_screen()
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("execute", {"command": "ls -la"}))
+            await pilot.pause()
+            assert not app.screen.query("#approvalwarn")  # benign: no warning mounted
+
+    _run(go())
 
 
 def test_approval_box_is_compact_and_bottom_docked() -> None:
@@ -238,6 +249,28 @@ def test_approval_box_is_compact_and_bottom_docked() -> None:
             assert box.region.height <= 8  # a handful of rows, not the full 30
             assert box.region.bottom <= 30  # anchored within the bottom of the screen
             assert box.region.y >= 15  # sits in the lower half, transcript visible above
+
+    _run(go())
+
+
+def test_modals_are_transparent_so_transcript_stays_visible() -> None:
+    # Regression guard: the app's `Screen { background: #000000 }` canvas rule matches every
+    # Screen subclass, and app CSS beats a widget's DEFAULT_CSS — so without the explicit
+    # `ModalScreen { background: transparent }` app rule, the modal paints opaque black and
+    # blanks the transcript behind it. Assert each modal resolves to a see-through background
+    # (alpha 0); an opaque modal (alpha 1.0) — the bug — fails here.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("write_file", {"file_path": "x.py"}))
+            await pilot.pause()
+            assert app.screen.styles.background.a == 0  # approval modal is see-through
+            app.pop_screen()
+            await pilot.pause()
+            app.push_screen(AskScreen("which port?"))
+            await pilot.pause()
+            assert app.screen.styles.background.a == 0  # ask modal is see-through
 
     _run(go())
 
@@ -342,11 +375,6 @@ def test_clear_quit_pending_resets_the_flag() -> None:
             assert app._quit_pending is False
 
     _run(go())
-
-
-def test_spinner_text_formats_frame_and_elapsed() -> None:
-    assert tui._spinner_text(46, "✶") == "✶ Working… (46s)"
-    assert tui._spinner_text(0, "✷") == "✷ Working… (0s)"
 
 
 def test_spinner_starts_ticks_and_stops(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from types import ModuleType
 from typing import Any, Protocol, cast
 
+from aai_cli.core import stdio
 from aai_cli.core.errors import CLIError
 
 with warnings.catch_warnings():
@@ -20,6 +21,8 @@ with warnings.catch_warnings():
 
 # Used when the device's native rate can't be determined (e.g. headless CI).
 _FALLBACK_RATE = 48000
+# Channel count for the multichannel-input fallback: capture stereo, then downmix to mono.
+_STEREO_CHANNELS = 2
 
 
 class _RawInputStream(Protocol):
@@ -122,7 +125,11 @@ def default_rate(kind: str, device: int | None = None) -> int:
     """
     sd = _sounddevice()
     try:
-        raw_rate = sd.query_devices(device, kind).get("default_samplerate", _FALLBACK_RATE)
+        # query_devices triggers PortAudio's lazy init, which prints device-probe noise to
+        # the C-level stderr; suppress it so a TUI mic-open can't corrupt the rendered screen.
+        with stdio.suppress_native_stderr():
+            devices = sd.query_devices(device, kind)
+        raw_rate = devices.get("default_samplerate", _FALLBACK_RATE)
         if not isinstance(raw_rate, str | int | float):
             return _FALLBACK_RATE
         rate = int(float(raw_rate))
@@ -144,35 +151,100 @@ def resample_pcm16(chunk: bytes, state: Any, *, src_rate: int, dst_rate: int) ->
 class _SoundDeviceMic:
     """Iterator of PCM16 byte chunks from a sounddevice raw input stream.
 
-    Yields ~100 ms blocks; closeable so MicrophoneSource can tear it down.
+    Yields ~100 ms blocks; closeable so MicrophoneSource can tear it down. When opened with
+    ``channels=2`` (the multichannel-input fallback below), each interleaved stereo block is
+    downmixed to mono so downstream — resampling and the STT stream — always sees one channel.
     """
 
-    def __init__(self, stream: _RawInputStream, blocksize: int) -> None:
+    def __init__(self, stream: _RawInputStream, blocksize: int, *, channels: int = 1) -> None:
         self._stream = stream
         self._blocksize = blocksize
+        self._channels = channels
 
     def __iter__(self) -> Iterator[bytes]:
         return self
 
     def __next__(self) -> bytes:
         data, _overflowed = self._stream.read(self._blocksize)
-        return bytes(data)
+        pcm = bytes(data)
+        if self._channels == _STEREO_CHANNELS:
+            # Average L/R into a single channel (width=2 → int16).
+            pcm = audioop.tomono(pcm, 2, 0.5, 0.5)
+        return pcm
 
     def close(self) -> None:
         self._stream.stop()
         self._stream.close()
 
 
-def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
-    """A sounddevice-backed PCM16 mic stream (imported lazily to keep startup fast)."""
-    sd = _sounddevice()
+def _open_input_stream(
+    sd: _SoundDeviceModule, *, sample_rate: int, device: int | None, channels: int, blocksize: int
+) -> _RawInputStream:
+    """Open and start a started PCM16 input stream at ``channels`` channels.
 
+    Wrapped in ``suppress_native_stderr`` because opening/starting is PortAudio's stderr-noisy
+    moment — kept off the terminal so a TUI mic-open can't corrupt the rendered screen.
+    """
+    with stdio.suppress_native_stderr():
+        stream = sd.RawInputStream(
+            samplerate=sample_rate,
+            device=device,
+            channels=channels,
+            dtype="int16",
+            blocksize=blocksize,
+        )
+        stream.start()
+    return stream
+
+
+def _max_input_channels(sd: _SoundDeviceModule, device: int | None) -> int:
+    """The device's advertised input-channel count (0 when it exposes no input)."""
+    with stdio.suppress_native_stderr():
+        info = sd.query_devices(device, "input")
+    raw = info.get("max_input_channels", 0)
+    return raw if isinstance(raw, int) else 0
+
+
+def _default_mic_stream(*, sample_rate: int, device: int | None) -> Iterator[bytes]:
+    """A sounddevice-backed PCM16 mono mic stream (imported lazily to keep startup fast).
+
+    Tries a mono open first. PortAudio rejects ``channels=1`` (``-9998``) when the device
+    exposes no usable mono input: either it has zero input channels (no mic permission, or the
+    default input isn't a microphone) — which no channel count can fix, so we raise an
+    actionable error — or it's a multichannel-only input, which we reopen at stereo and
+    downmix. Devices that already do mono never reach the fallback.
+    """
+    sd = _sounddevice()
     blocksize = max(1, sample_rate // 10)  # ~100 ms per read
-    stream = sd.RawInputStream(
-        samplerate=sample_rate, device=device, channels=1, dtype="int16", blocksize=blocksize
-    )
-    stream.start()
-    return _SoundDeviceMic(stream, blocksize)
+    try:
+        return _SoundDeviceMic(
+            _open_input_stream(
+                sd, sample_rate=sample_rate, device=device, channels=1, blocksize=blocksize
+            ),
+            blocksize,
+        )
+    except Exception:
+        max_in = _max_input_channels(sd, device)
+        if max_in < 1:
+            raise CLIError(
+                "The default microphone reports no input channels.",
+                error_type="mic_error",
+                exit_code=1,
+                suggestion=(
+                    "Grant microphone access to your terminal in System Settings > Privacy & "
+                    "Security > Microphone, or pick another input with --device."
+                ),
+            ) from None
+        if max_in < _STEREO_CHANNELS:
+            raise  # a 1-channel device should accept mono; surface the real PortAudio error
+        stream = _open_input_stream(
+            sd,
+            sample_rate=sample_rate,
+            device=device,
+            channels=_STEREO_CHANNELS,
+            blocksize=blocksize,
+        )
+        return _SoundDeviceMic(stream, blocksize, channels=_STEREO_CHANNELS)
 
 
 class MicrophoneSource:
@@ -212,6 +284,8 @@ class MicrophoneSource:
             stream: Any = self._factory(sample_rate=self._capture_rate, device=self.device)
         except ImportError as exc:
             raise audio_missing_error() from exc
+        except CLIError:
+            raise  # the factory already raised an actionable error; don't bury it in a re-wrap
         except Exception as exc:
             # "device None" reads like a bug; name the default mic in plain words.
             target = (

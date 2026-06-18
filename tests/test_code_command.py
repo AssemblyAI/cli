@@ -41,7 +41,20 @@ def test_command_parses_flags_into_options(monkeypatch):
     opts = captured["o"]
     assert opts.prompt == "build a thing"
     assert opts.auto is True and opts.web is False
-    assert opts.session == "s1" and opts.persist is False
+    assert opts.session == "s1" and opts.persist is False  # an explicit --session is honored
+
+
+def test_command_defaults_to_a_fresh_unique_session_each_run(monkeypatch):
+    # No --session: each invocation gets its own id (so a run never silently resumes the
+    # previous conversation), and two runs differ.
+    seen = []
+    monkeypatch.setattr(
+        _exec, "run_code", lambda opts, state, *, json_mode: seen.append(opts.session)
+    )
+    assert runner.invoke(app, ["code"]).exit_code == 0
+    assert runner.invoke(app, ["code"]).exit_code == 0
+    assert seen[0] != "default"  # not the old shared, auto-resumed thread
+    assert seen[0] and seen[1] and seen[0] != seen[1]  # a distinct id per run
 
 
 def test_run_code_dispatches_to_tui_with_voice_by_default_when_tty(monkeypatch):

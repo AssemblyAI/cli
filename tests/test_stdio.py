@@ -1,4 +1,5 @@
 import io
+import os
 
 from aai_cli.core import stdio
 
@@ -121,3 +122,59 @@ def test_silence_stdout_suppresses_oserror(monkeypatch):
     # Raising inside the suppressed block must not propagate.
     monkeypatch.setattr("os.open", boom)
     stdio.silence_stdout()
+
+
+def test_suppress_native_stderr_redirects_during_block_then_restores(monkeypatch):
+    # The fd dance: dup the real stderr (fd 2 itself — never sys.stderr.fileno(), which is
+    # an unusable redirector inside a TUI), point it at /dev/null for the body, then restore
+    # and close both temporaries. The body must run *while* redirected (between the dup2s).
+    events: list[object] = []
+    monkeypatch.setattr("os.dup", lambda fd: events.append(("dup", fd)) or 50)
+    monkeypatch.setattr("os.open", lambda path, flags: events.append(("open", path)) or 99)
+    monkeypatch.setattr("os.dup2", lambda src, dst: events.append(("dup2", src, dst)))
+    monkeypatch.setattr("os.close", lambda fd: events.append(("close", fd)))
+
+    with stdio.suppress_native_stderr():
+        events.append("body")
+
+    assert events == [
+        ("dup", 2),  # save the real stderr fd (literal 2)
+        ("open", os.devnull),  # open /dev/null
+        ("dup2", 99, 2),  # point stderr at /dev/null
+        "body",  # the block runs while stderr is redirected
+        ("dup2", 50, 2),  # restore the saved fd
+        ("close", 50),
+        ("close", 99),
+    ]
+
+
+def test_suppress_native_stderr_runs_body_when_redirect_fails(monkeypatch):
+    # Safe by construction: if the fd can't be duplicated, the block still runs (suppression
+    # is cosmetic and must never break the wrapped mic open) and stderr is never redirected.
+    def boom(_fd: int) -> int:
+        raise OSError("cannot dup")
+
+    redirected: list[tuple[int, int]] = []
+    monkeypatch.setattr("os.dup", boom)
+    monkeypatch.setattr("os.dup2", lambda src, dst: redirected.append((src, dst)))
+    ran: list[bool] = []
+
+    with stdio.suppress_native_stderr():
+        ran.append(True)
+
+    assert ran == [True]  # body ran despite the dup failure
+    assert redirected == []  # never redirected -> nothing left to restore
+
+
+def test_suppress_native_stderr_swallows_close_failure(monkeypatch):
+    # A teardown close hitting an already-closed/invalid fd must not escape the block.
+    def boom(_fd: int) -> None:
+        raise OSError("already closed")
+
+    monkeypatch.setattr("os.dup", lambda _fd: 50)
+    monkeypatch.setattr("os.open", lambda _path, _flags: 99)
+    monkeypatch.setattr("os.dup2", lambda _src, _dst: None)
+    monkeypatch.setattr("os.close", boom)
+
+    with stdio.suppress_native_stderr():
+        pass  # exits cleanly even though both teardown closes raise

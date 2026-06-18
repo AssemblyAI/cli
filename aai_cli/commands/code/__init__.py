@@ -6,6 +6,7 @@ import typer
 
 from aai_cli import command_registry, help_panels
 from aai_cli.app.context import run_with_options
+from aai_cli.code_agent import store
 from aai_cli.code_agent.prompt import DEFAULT_MODEL
 from aai_cli.commands.code import _exec as code_exec
 from aai_cli.core import llm as gateway
@@ -62,8 +63,10 @@ def code(
     memory: bool = typer.Option(
         True, "--memory/--no-memory", help="Load and persist the agent's long-term memory"
     ),
-    session: str = typer.Option(
-        "default", "--session", help="Conversation session name (reuse to resume it)"
+    session: str | None = typer.Option(
+        None,
+        "--session",
+        help="Resume a named session. Default: a new unique session each run",
     ),
     persist: bool = typer.Option(
         True, "--persist/--fresh", help="Persist the session to disk (--fresh: ephemeral)"
@@ -98,7 +101,9 @@ def code(
         skills=skills,
         web=web,
         memory=memory,
-        session=session,
+        # No --session given -> a fresh unique id, so each run starts a clean conversation
+        # instead of silently resuming the previous one.
+        session=session if session is not None else store.new_session_id(),
         persist=persist,
         tui=tui,
         voice=voice,
