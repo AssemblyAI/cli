@@ -157,6 +157,11 @@ jobs:
       # hung download is killed and the next attempt retries, instead of wedging the cell
       # until it's cancelled. The shim lands in choco's bin dir (machine-wide, already on the
       # runner PATH), so the parent shell and later steps pick it up.
+      #
+      # During a sustained community.chocolatey.org outage the feed returns 503s *quickly*,
+      # so every bounded attempt fails fast and the retry loop exhausts with no ffmpeg. Fall
+      # back to a static build off GitHub's release CDN (a different, far more reliable origin)
+      # and prepend its dir to GITHUB_PATH so later steps see it.
       - name: System deps (ffmpeg)
         shell: pwsh
         run: |
@@ -171,6 +176,17 @@ jobs:
             Remove-Job $job -Force
             if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
             Start-Sleep -Seconds 5
+          }
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            Write-Host "choco couldn't provide ffmpeg; downloading a static build from GitHub…"
+            $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+            $zip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+            $dest = Join-Path $env:RUNNER_TEMP "ffmpeg"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            $bin = (Get-ChildItem -Path $dest -Recurse -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+            $env:PATH = "$bin;$env:PATH"
+            Add-Content -Path $env:GITHUB_PATH -Value $bin
           }
           ffmpeg -version
 
