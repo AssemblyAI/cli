@@ -139,3 +139,24 @@ writes:
 derives that title from the transcript via the LLM Gateway once the stream ends,
 renaming the files to match (the timestamp stem is kept if the title is empty).
 The two are mutually exclusive.
+
+## Live agent tools (MCP)
+
+`assembly live` answers each spoken turn with a tool-using agent, so it can reach
+external tools mid-conversation. Beyond the built-in URL fetch, AssemblyAI docs,
+and Tavily web search (set `TAVILY_API_KEY`), two flags add Model Context Protocol
+(MCP) servers:
+
+- `--mcp-config FILE` loads tools from a standard `mcpServers` JSON file — the same
+  `{"mcpServers": {"name": {"command": "…", "args": […]}}}` shape Claude Desktop and
+  Claude Code use. Repeat the flag to merge several files; a later file wins on a
+  name clash. Remote servers use `{"url": "…"}` instead of `command`/`args`.
+- `--demo-tools` loads a curated, no-auth set for demos: `time` and `fetch`
+  (`uvx`), `memory` and `filesystem` (`npx`, the latter rooted at the working
+  directory), and an NWS-backed `weather` server. An explicit `--mcp-config` entry
+  overrides a demo entry of the same name.
+
+Each server is launched independently and best-effort: one that won't start (a
+missing `npx`/`uvx`, an offline host) drops only its own tools, so a single broken
+tool never sinks the session. MCP tools are a live-run feature and are not
+reflected in `--show-code` output.

@@ -107,6 +107,24 @@ def test_show_code_mic_emits_no_warning(monkeypatch):
     assert "uses the microphone" not in result.stderr  # mic script matches the run, nothing to warn
 
 
+def test_show_code_notes_mcp_tools_are_not_generated(monkeypatch):
+    # MCP tools are a live-run feature; --show-code can't render them, so it must say so
+    # on stderr (not silently drop them) while stdout stays a clean, runnable script.
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
+    result = runner.invoke(app, ["--sandbox", "live", "--demo-tools", "--show-code"])
+    assert result.exit_code == 0
+    assert "does not include the MCP tools" in result.stderr
+    assert "does not include the MCP tools" not in result.stdout
+    compile(result.stdout, "<show-code>", "exec")
+
+
+def test_show_code_without_mcp_emits_no_mcp_note(monkeypatch):
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kw: None)
+    result = runner.invoke(app, ["--sandbox", "live", "--show-code"])
+    assert result.exit_code == 0
+    assert "MCP tools" not in result.stderr
+
+
 def test_show_code_in_production_is_rejected_with_sandbox_hint():
     # --show-code still honors the sandbox-only guard, so the generated URLs are valid.
     result = runner.invoke(app, ["live", "--show-code"])

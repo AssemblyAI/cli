@@ -620,6 +620,11 @@
    Web search needs a TAVILY_API_KEY in the environment; without it the agent
    keeps its URL-fetch and docs tools.
   
+   Give the agent more tools with MCP servers: --demo-tools loads a curated,
+   no-auth set (time, fetch, memory, filesystem, weather), and --mcp-config
+   loads any standard mcpServers JSON file. A server that won't start is skipped,
+   so one broken tool never sinks the session.
+  
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   source      [SOURCE]  Audio file path or URL to speak to the agent. Omit   │
   │                         to use the microphone.                               │
@@ -692,6 +697,12 @@
   │ --stt-config-file                         FILE              JSON file of     │
   │                                                             streaming fields │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Tools ──────────────────────────────────────────────────────────────────────╮
+  │ --mcp-config        FILE  MCP servers config JSON ({"mcpServers": {…}}) to   │
+  │                           load tools from (repeatable)                       │
+  │ --demo-tools              Load a curated, no-auth MCP toolset: time, fetch,  │
+  │                           memory, filesystem, weather                        │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
    Start a live voice conversation
@@ -700,6 +711,10 @@
    $ assembly --sandbox live --voice michael --greeting "Hi there"
    Give the agent a persona
    $ assembly --sandbox live --system-prompt "You are a terse pirate."
+   Add a curated, no-auth MCP toolset (time, weather, memory, …)
+   $ assembly --sandbox live --demo-tools
+   Load tools from your own MCP servers config
+   $ assembly --sandbox live --mcp-config ~/.config/mcp/servers.json
    See available voices
    $ assembly --sandbox live --list-voices
    Print equivalent Python instead of running
