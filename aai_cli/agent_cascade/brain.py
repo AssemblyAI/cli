@@ -16,17 +16,30 @@ seam the rest of the cascade uses for its STT/LLM/TTS legs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
-from aai_cli.code_agent.web_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.core import debuglog
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
+
+# Verbose (`-v`) flow logging for the agent's tool loop. `invoke` runs the whole loop
+# internally, so without this `-v` only shows the httpx request lines and never which
+# tools the agent reached for or what they returned — exactly what you need to see when
+# a spoken turn stalls mid-tool. Logged at INFO so plain `-v` surfaces it.
+_FLOW_LOG = logging.getLogger("aai_cli.agent_cascade.brain")
+
+# Tool outputs (a fetched page, a search payload) can be huge; cap what we log per result
+# so a single tool call doesn't bury the rest of the flow in stderr. The exact cap is an
+# arbitrary tuning knob — a +-1 shift is behaviorally equivalent, so no test can kill it.
+_RESULT_LOG_CAP = 500  # pragma: no mutate
 
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
 _SPOKEN_TAIL = (
@@ -60,8 +73,8 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     """The spoken-capability phrases backed by an actually-present tool.
 
     Derived from the resolved tool names so the prompt never advertises a capability the
-    agent can't perform: web search is present only with a ``TAVILY_API_KEY``, and the docs
-    tools are best-effort (absent when the docs host is unreachable).
+    agent can't perform: web search is present only with a ``FIRECRAWL_API_KEY``, and the
+    docs tools are best-effort (absent when the docs host is unreachable).
     """
     names = {tool.name for tool in tools}
     capabilities: list[str] = []
@@ -74,15 +87,35 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     return capabilities
 
 
-def build_system_prompt(persona: str, *, tools: Sequence[BaseTool]) -> str:
+def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
+    """The spoken-capability phrase for user-configured MCP tools, listing them by name.
+
+    The deepagents graph already shows the model each tool's schema, so this only has to
+    name the tools so the guidance doesn't claim "no external tools" when MCP tools are
+    bound — and so the model knows to reach for them.
+    """
+    names = sorted(tool.name for tool in extra_tools)
+    if not names:
+        return None
+    return f"use your connected tools ({', '.join(names)})"
+
+
+def build_system_prompt(
+    persona: str, *, tools: Sequence[BaseTool], extra_tools: Sequence[BaseTool] = ()
+) -> str:
     """The live agent's system prompt: the user's persona plus tool guidance.
 
-    The guidance is tailored to ``tools`` so the model is only told about capabilities it
-    actually has — advertising a missing tool (web search without a ``TAVILY_API_KEY``) made
-    the agent announce an action it then couldn't take, leaving the turn hanging with no
-    answer. With no tools at all the model is told to answer from its own knowledge.
+    The guidance is tailored to the bound tools so the model is only told about
+    capabilities it actually has — advertising a missing tool (web search without a
+    ``FIRECRAWL_API_KEY``) made the agent announce an action it then couldn't take, leaving
+    the turn hanging with no answer. ``tools`` are the built-in legs (web search, URL
+    fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
+    generically by name. With no tools at all the model answers from its own knowledge.
     """
     capabilities = _tool_capabilities(tools)
+    extra = _extra_capability(extra_tools)
+    if extra is not None:
+        capabilities.append(extra)
     if not capabilities:
         return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
     guidance = (
@@ -100,12 +133,12 @@ def build_live_tools() -> list[BaseTool]:
     All three are reused from the coding agent's tool modules. Unlike there they are
     *not* approval-gated — a spoken turn can't wait for a keyboard confirmation, so the
     live agent only gets read-only tools and runs them automatically. Web search is
-    present only when ``TAVILY_API_KEY`` is set; the docs MCP is best-effort (an empty
+    present only when ``FIRECRAWL_API_KEY`` is set; the docs MCP is best-effort (an empty
     list when the host is unreachable), so neither blocks a session.
     """
     from aai_cli.code_agent.docs_mcp import load_docs_tools
     from aai_cli.code_agent.fetch_tool import build_fetch_tool
-    from aai_cli.code_agent.web_search import build_web_search_tool
+    from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
     tools: list[BaseTool] = [build_fetch_tool()]
     search = build_web_search_tool()
@@ -116,27 +149,36 @@ def build_live_tools() -> list[BaseTool]:
 
 
 def build_graph(
-    api_key: str, config: CascadeConfig, *, tools: Sequence[BaseTool] | None = None
+    api_key: str,
+    config: CascadeConfig,
+    *,
+    tools: Sequence[BaseTool] | None = None,
+    mcp_tools: Sequence[BaseTool] | None = None,
 ) -> CompiledAgent:
     """Compile the deepagents graph for one live session over the gateway model.
 
     Reuses the coding agent's gateway-bound ``ChatOpenAI`` (so the live agent can only
     ever reach AssemblyAI), threading the cascade's ``--max-tokens``/``--llm-config``
-    through it. ``tools`` defaults to :func:`build_live_tools`; tests pass an explicit
-    (possibly empty) list to skip the network-touching docs probe.
+    through it. ``tools`` defaults to :func:`build_live_tools`; ``mcp_tools`` defaults to
+    the tools of the servers in ``config.mcp_servers``. The two are kept apart so the
+    system prompt advertises the built-in legs and the MCP tools differently, but the
+    model is bound to both. Tests pass explicit (possibly empty) lists to skip the
+    network-touching docs/MCP probes.
     """
     from deepagents import create_deep_agent
 
+    from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
     from aai_cli.code_agent.model import build_model
 
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
     )
-    resolved = build_live_tools() if tools is None else list(tools)
+    builtin = build_live_tools() if tools is None else list(tools)
+    extra = load_mcp_tools(config.mcp_servers) if mcp_tools is None else list(mcp_tools)
     return create_deep_agent(
         model=model,
-        tools=resolved,
-        system_prompt=build_system_prompt(config.system_prompt, tools=resolved),
+        tools=builtin + extra,
+        system_prompt=build_system_prompt(config.system_prompt, tools=builtin, extra_tools=extra),
     )
 
 
@@ -147,16 +189,77 @@ def build_completer(
 
     The cascade prepends its own ``system`` message to the history each turn; the graph
     already owns the system prompt, so we drop it before invoking. The graph runs the
-    full tool loop and we return its final spoken text. ``graph`` is injected in tests
-    so the per-turn wiring runs against a fake with no network.
+    full tool loop and we return its final spoken text. Under ``-v`` the loop is streamed
+    so each tool call/result is logged as it lands (see :func:`_run_graph`). ``graph`` is
+    injected in tests so the per-turn wiring runs against a fake with no network.
     """
     resolved = build_graph(api_key, config) if graph is None else graph
 
     def complete_reply(messages: list[ChatCompletionMessageParam]) -> str:
         conversation = [message for message in messages if message.get("role") != "system"]
-        return _reply_text(resolved.invoke({"messages": conversation}))
+        return _reply_text(_run_graph(resolved, conversation))
 
     return complete_reply
+
+
+def _run_graph(
+    graph: CompiledAgent, conversation: list[ChatCompletionMessageParam]
+) -> dict[str, object]:
+    """Run one turn through the graph, returning its end state.
+
+    Normally a single ``invoke`` (the whole tool loop runs internally). Under verbose
+    mode, and when the graph can stream, drive it as incremental state snapshots instead
+    so :func:`_log_flow` can surface each tool call/result on stderr as it happens — which
+    is what makes a stalled spoken turn debuggable. The test fakes only implement
+    ``invoke``, so they (and the non-verbose path) take the plain branch.
+    """
+    graph_input = {"messages": conversation}
+    if debuglog.active() and hasattr(graph, "stream"):
+        last: dict[str, object] = {}
+        seen = 0
+        for chunk in graph.stream(graph_input, None, stream_mode="values"):
+            seen = _log_flow(chunk, seen)
+            last = chunk
+        return last
+    return graph.invoke(graph_input)
+
+
+def _log_flow(state: dict[str, object], seen: int) -> int:
+    """Log the tool calls/results added to ``state`` since the first ``seen`` messages.
+
+    Reuses the coding agent's message→event vocabulary so the flow log knows the same
+    AIMessage/ToolMessage shapes the TUI does. Returns the new high-water message count
+    so the next snapshot only logs what it added.
+    """
+    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult, message_events
+
+    messages = state.get("messages")
+    if not isinstance(messages, list):
+        return seen
+    for message in messages[seen:]:
+        for event in message_events(message, announce_calls=True):
+            if isinstance(event, ToolCall):
+                _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
+            elif isinstance(event, ToolResult):
+                _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
+            elif isinstance(event, AssistantText):
+                _FLOW_LOG.info("llm: %s", event.text)
+    return len(messages)
+
+
+def _clip(text: str) -> str:
+    """Flatten a tool result onto one line and truncate it for the flow log.
+
+    Tool output is untrusted external content (a fetched page, a search payload), so its
+    whitespace — newlines especially — is collapsed before logging: a result can't then
+    forge extra ``[aai_cli.…]`` log lines, and each result stays on one readable line. The
+    length is capped so a multi-KB payload can't bury the rest of the flow. (Secrets are
+    separately masked by the debuglog formatter across every record.)
+    """
+    flattened = " ".join(text.split())
+    if len(flattened) <= _RESULT_LOG_CAP:
+        return flattened
+    return f"{flattened[:_RESULT_LOG_CAP]}… ({len(flattened)} chars)"
 
 
 def _reply_text(result: dict[str, object]) -> str:

@@ -139,3 +139,27 @@ writes:
 derives that title from the transcript via the LLM Gateway once the stream ends,
 renaming the files to match (the timestamp stem is kept if the title is empty).
 The two are mutually exclusive.
+
+## Live agent tools (MCP)
+
+`assembly live` answers each spoken turn with a tool-using agent, so it can reach
+external tools mid-conversation. Out of the box it loads its built-in URL fetch,
+the AssemblyAI docs, and a curated, no-auth MCP toolset: `time` and `fetch`
+(`uvx`), `memory` and `filesystem` (`npx`, the latter rooted at the working
+directory), and an NWS-backed `weather` server.
+
+Firecrawl web search also loads when a `FIRECRAWL_API_KEY` is set; without it the
+session prints a one-line notice and runs without web search (every other default
+tool needs no key).
+
+`--mcp-config FILE` adds your own servers on top of the defaults, from a standard
+`mcpServers` JSON file — the same
+`{"mcpServers": {"name": {"command": "…", "args": […]}}}` shape Claude Desktop and
+Claude Code use. Repeat the flag to merge several files; a later file (or a config
+entry sharing a default's name) wins on a clash. Remote servers use `{"url": "…"}`
+instead of `command`/`args`.
+
+Each server is launched independently and best-effort: one that won't start (a
+missing `npx`/`uvx`, an offline host) drops only its own tools, so a single broken
+tool never sinks the session. MCP tools are a live-run feature and are not
+reflected in `--show-code` output.

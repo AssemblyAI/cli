@@ -48,6 +48,7 @@ _DEFAULTS = AgentCascadeOptions(
     llm_config=(),
     language=None,
     tts_config=(),
+    mcp_config=(),
     show_code=False,
 )
 
@@ -144,6 +145,19 @@ def test_stt_config_file_must_exist():
     assert "does not exist" in result.output
 
 
+def test_mcp_config_file_must_exist():
+    # --mcp-config is existence-checked at parse time (exists=True), so a missing path
+    # fails as a Typer usage error before the body runs. Wide terminal so the "does not
+    # exist" message isn't wrapped by the 80-col error box.
+    result = runner.invoke(
+        app,
+        ["live", "--mcp-config", "/no/such/servers.json"],
+        env={"COLUMNS": "300"},
+    )
+    assert result.exit_code == 2
+    assert "does not exist" in result.output
+
+
 # --- system prompt resolution ------------------------------------------------
 
 
@@ -200,6 +214,26 @@ def test_open_audio_mic_warns_and_uses_duplex_rate(monkeypatch):
     assert any("headphones" in note for note in notices)
 
 
+# --- MCP servers (resolution unit-tested in test_agent_cascade_mcp.py) -------
+def test_default_mcp_servers_flow_into_cascade_config(monkeypatch):
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
+    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    captured = {}
+
+    # Capture config at the deps seam so the graph (and its npx/uvx servers) never builds.
+    def fake_real(api_key, config, *, audio, stt_params):
+        captured["config"] = config
+        return "deps"
+
+    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
+    # With no flags, the default servers (e.g. weather) ride into the config the brain reads.
+    run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
+    assert "weather" in captured["config"].mcp_servers
+
+
 # --- run_agent_cascade wiring ----------------------------------------------
 
 
@@ -209,6 +243,9 @@ def test_run_wires_deps_and_invokes_cascade(monkeypatch):
     fake_source = types.SimpleNamespace(sample_rate=16000)
     monkeypatch.setattr(_exec, "FileSource", lambda src: fake_source)
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    # CascadeDeps.real builds the brain graph (which would launch the default MCP servers);
+    # stub the completer so deps still wire up without spawning any npx/uvx subprocess.
+    monkeypatch.setattr(_exec.engine.brain, "build_completer", lambda api_key, config: lambda m: "")
     captured = {}
 
     def fake_run_cascade(*, renderer, player, config, deps):
@@ -247,6 +284,8 @@ def _wire_run(monkeypatch, run_cascade):
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
     monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    # Stub the brain completer so CascadeDeps.real never launches the default MCP servers.
+    monkeypatch.setattr(_exec.engine.brain, "build_completer", lambda api_key, config: lambda m: "")
     monkeypatch.setattr(_exec.engine, "run_cascade", run_cascade)
     rendered = {}
     monkeypatch.setattr(
