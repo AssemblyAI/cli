@@ -92,8 +92,9 @@ class CodeAgentApp(_VoiceLegs):
     TITLE = "AssemblyAI Code"
     # Ctrl-C quits (in addition to Ctrl-Q); the built-in command palette is removed.
     ENABLE_COMMAND_PALETTE = False
-    # Interrupt/quit keys follow deepagents-code: Escape interrupts the running turn, and
-    # Ctrl-C interrupts a running turn or — when idle — quits only on a confirmed double-press.
+    # Interrupt/quit keys follow deepagents-code: Escape interrupts the running turn (or, in
+    # voice mode, the active listen/readback), and Ctrl-C interrupts a running turn or active
+    # voice, or — when idle — quits only on a confirmed double-press.
     BINDINGS: ClassVar = [
         ("escape", "interrupt", "Interrupt"),
         ("ctrl+c", "quit_or_interrupt", "Interrupt / Quit"),
@@ -389,14 +390,36 @@ class CodeAgentApp(_VoiceLegs):
         self._note("cancelling…")
         return True
 
+    def _stop_voice_activity(self) -> bool:
+        """Stop in-flight voice listening/readback and go idle; True if voice was active.
+
+        In voice mode the agent is usually listening or reading a reply back — neither is a
+        "running turn", so without this an interrupt key would skip straight to the quit hint.
+        This cancels the active leg, pauses voice (the text prompt returns, no auto re-listen),
+        and refreshes the UI, so a first Ctrl-C/Escape gives immediate feedback. Once paused
+        ``_voice_active`` is False, so a second press falls through to the quit path.
+        """
+        if self._voice is None or not self._voice_active():
+            return False
+        self._voice.cancel()
+        self._voice_paused = True
+        self._refresh_status()
+        self._sync_input_mode()  # active leg stopped -> bring the text prompt back
+        self._note("voice interrupted (Ctrl-V to talk again)")
+        return True
+
     def action_interrupt(self) -> None:
-        """Escape: interrupt a running agent turn (a no-op when idle, so Esc never quits)."""
-        self._cancel_turn()
+        """Escape: interrupt a running agent turn or in-flight voice (a no-op when idle)."""
+        if not self._cancel_turn():
+            self._stop_voice_activity()
 
     def action_quit_or_interrupt(self) -> None:
-        """Ctrl-C: interrupt a running turn, else quit on a confirmed second press."""
+        """Ctrl-C: interrupt a running turn or active voice, else quit on a second press."""
         if self._cancel_turn():
             self._quit_pending = False
+            return
+        if self._stop_voice_activity():
+            self._arm_quit_pending()  # idle now; a second Ctrl-C confirms the quit
             return
         if self._quit_pending:
             self.exit()

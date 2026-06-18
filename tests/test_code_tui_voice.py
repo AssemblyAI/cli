@@ -39,6 +39,7 @@ class FakeVoice:
         self._error = error
         self.spoken: list[str] = []
         self.listens = 0
+        self.cancels = 0
 
     def listen(self) -> str | None:
         self.listens += 1
@@ -48,6 +49,9 @@ class FakeVoice:
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
+
+    def cancel(self) -> None:
+        self.cancels += 1
 
 
 def _run(coro) -> None:
@@ -347,6 +351,92 @@ def test_run_leg_reraises_a_genuine_failure_while_the_app_is_live() -> None:
 
             with pytest.raises(ValueError, match="genuine bug"):
                 app._run_leg(boom)
+
+    _run(go())
+
+
+def test_ctrl_c_interrupts_active_voice_then_quits_on_second_press(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In voice mode the agent is listening/speaking (not a "running turn"), so the first Ctrl-C
+    # stops that voice activity and goes idle; a second Ctrl-C then confirms the quit.
+    async def go() -> None:
+        voice = FakeVoice()
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_paused = True  # keep on_mount from racing a real listen thread
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app._voice_paused = False  # voice now active (listening)
+            app.action_quit_or_interrupt()  # first press: stop the voice, go idle
+            assert voice.cancels == 1  # the in-flight listen/readback was cancelled
+            assert app._voice_paused is True  # paused -> idle, the text prompt returns
+            assert app._quit_pending is True  # quit armed so the next press confirms
+            assert exited == []  # did NOT quit on the first press
+            app.action_quit_or_interrupt()  # second press: now idle -> quits
+            assert exited == [True]
+            assert voice.cancels == 1  # the idle press didn't re-cancel
+
+    _run(go())
+
+
+def test_ctrl_c_on_active_voice_interrupts_even_when_a_quit_was_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Stopping active voice takes priority over a pending quit: a Ctrl-C that lands while the
+    # agent is listening/speaking interrupts the voice and never quits, even if the quit hint
+    # was already armed from an earlier press.
+    async def go() -> None:
+        voice = FakeVoice()
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_paused = True
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app._voice_paused = False  # voice active (listening)
+            app._quit_pending = True  # a quit hint was already armed
+            app.action_quit_or_interrupt()  # Ctrl-C: interrupt the voice, do NOT quit
+            assert voice.cancels == 1
+            assert exited == []  # active voice is interrupted, never quit
+
+    _run(go())
+
+
+def test_escape_interrupts_active_voice_without_arming_quit() -> None:
+    # Escape stops in-flight voice the same way, but (unlike Ctrl-C) never arms the quit hint.
+    async def go() -> None:
+        voice = FakeVoice()
+        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        app._voice_paused = True
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._voice_paused = False  # active
+            app.action_interrupt()  # Escape
+            assert voice.cancels == 1  # voice stopped
+            assert app._voice_paused is True  # idle
+            assert app._quit_pending is False  # Escape is not a quit key
+
+    _run(go())
+
+
+def test_stop_voice_activity_is_a_noop_when_voice_inactive() -> None:
+    # No voice session, or a paused one, is not "active": the interrupt defers to the quit path
+    # rather than cancelling anything.
+    async def go() -> None:
+        no_voice = CodeAgentApp(agent=FakeAgent([]))
+        async with no_voice.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert no_voice._stop_voice_activity() is False  # nothing to stop
+
+        voice = FakeVoice()
+        paused = CodeAgentApp(agent=FakeAgent([]), voice=voice)
+        paused._voice_paused = True
+        async with paused.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert paused._stop_voice_activity() is False  # paused -> inactive
+            assert voice.cancels == 0  # a paused session is never cancelled
 
     _run(go())
 
