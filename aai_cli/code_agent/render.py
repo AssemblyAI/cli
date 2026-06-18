@@ -13,15 +13,8 @@ from rich.markup import escape
 
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
 from aai_cli.code_agent.session import Approver
+from aai_cli.code_agent.summarize import summarize_call, summarize_result
 from aai_cli.ui import output
-
-# Tool output can be long; clip it for the inline transcript.
-_RESULT_PREVIEW = 2000
-
-
-def _format_args(args: dict[str, object]) -> str:
-    """A compact one-line view of a tool call's arguments."""
-    return ", ".join(f"{key}={value!r}" for key, value in args.items())
 
 
 class RichRenderer:
@@ -34,10 +27,10 @@ class RichRenderer:
             output.console.print(escape(event.text))
         elif isinstance(event, ToolCall):
             output.console.print(
-                f"[aai.muted]→ {escape(event.name)}({escape(_format_args(event.args))})[/aai.muted]"
+                f"[aai.muted]→ {escape(summarize_call(event.name, event.args))}[/aai.muted]"
             )
         elif isinstance(event, ToolResult):
-            preview = escape(event.content.strip()[:_RESULT_PREVIEW])
+            preview = escape(summarize_result(event.content))
             output.console.print(f"[aai.muted]  {escape(event.name)}: {preview}[/aai.muted]")
         elif isinstance(event, ErrorText):
             output.error_console.print(output.fail(escape(event.text)))

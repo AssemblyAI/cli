@@ -43,9 +43,18 @@ class _SupportsStream(Protocol):
     """
 
     def stream(
-        self, graph_input: object, config: Mapping[str, object] | None, *, stream_mode: str
-    ) -> Iterator[dict[str, object]]:
-        """Yield the running state (incl. the growing ``messages``) after each super-step."""
+        self,
+        graph_input: object,
+        config: Mapping[str, object] | None,
+        *,
+        stream_mode: list[str],
+    ) -> Iterator[tuple[str, object]]:
+        """Yield ``(mode, payload)`` pairs — ``"values"`` state snapshots and ``"messages"`` deltas.
+
+        With a *list* ``stream_mode`` langgraph tags each yield with its mode, so the caller
+        can render off the per-super-step ``"values"`` state while still seeing the frequent
+        per-token ``"messages"`` deltas (used only as a fine-grained cancellation checkpoint).
+        """
 
 
 @dataclass
@@ -97,17 +106,23 @@ class CodeSession:
     def _run(self, graph_input: object, config: dict[str, object]) -> dict[str, object]:
         """Drive one graph segment, emitting events as each step completes; return the end state.
 
-        Streaming (``stream_mode="values"``) renders intermediate tool calls/results live and
-        lets :meth:`request_cancel` break the loop between steps. A double that only implements
+        We render from the per-super-step ``"values"`` snapshots, but stream ``"messages"``
+        (per-token) deltas alongside them purely so :meth:`request_cancel` is observed
+        *within* a long step: a single model generation is one super-step, so a values-only
+        loop can't break until the whole reply has been produced — checking the flag on the
+        frequent token deltas lets a Ctrl-C stop it promptly. A double that only implements
         ``invoke`` (the TUI/REPL test fakes) emits once at the end instead.
         """
         if isinstance(self.agent, _SupportsStream):
             last: dict[str, object] = {}
-            for chunk in self.agent.stream(graph_input, config, stream_mode="values"):
+            for mode, payload in self.agent.stream(
+                graph_input, config, stream_mode=["values", "messages"]
+            ):
                 if self._cancel.is_set():
                     break
-                self._emit_new(chunk)
-                last = chunk
+                if mode == "values" and isinstance(payload, dict):
+                    self._emit_new(payload)
+                    last = payload
             return last
         result = self.agent.invoke(graph_input, config)
         self._emit_new(result)

@@ -42,8 +42,7 @@ class _Interrupt:
 # --- pure helpers -------------------------------------------------------------
 
 
-def test_format_args_and_abbrev_home() -> None:
-    assert tui._format_args({"a": 1, "b": "x"}) == "a=1, b='x'"
+def test_abbrev_home() -> None:
     assert tui._abbrev_home(Path.home() / "proj") == "~/proj"
     # A path outside home renders as-is; compare to the platform-native string so this
     # holds on Windows (where str(Path(...)) uses backslashes) as well as POSIX.
@@ -229,6 +228,28 @@ def test_approval_box_is_compact_and_bottom_docked() -> None:
             assert box.region.height <= 8  # a handful of rows, not the full 30
             assert box.region.bottom <= 30  # anchored within the bottom of the screen
             assert box.region.y >= 15  # sits in the lower half, transcript visible above
+
+    _run(go())
+
+
+def test_modals_are_transparent_so_transcript_stays_visible() -> None:
+    # Regression guard: the app's `Screen { background: #000000 }` canvas rule matches every
+    # Screen subclass, and app CSS beats a widget's DEFAULT_CSS — so without the explicit
+    # `ModalScreen { background: transparent }` app rule, the modal paints opaque black and
+    # blanks the transcript behind it. Assert each modal resolves to a see-through background
+    # (alpha 0); an opaque modal (alpha 1.0) — the bug — fails here.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("write_file", {"file_path": "x.py"}))
+            await pilot.pause()
+            assert app.screen.styles.background.a == 0  # approval modal is see-through
+            app.pop_screen()
+            await pilot.pause()
+            app.push_screen(AskScreen("which port?"))
+            await pilot.pause()
+            assert app.screen.styles.background.a == 0  # ask modal is see-through
 
     _run(go())
 

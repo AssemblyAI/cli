@@ -345,14 +345,25 @@ def test_session_surfaces_turn_failure_as_error_event() -> None:
 
 
 class StreamingAgent:
-    """A double exercising the streaming path: yields scripted state snapshots."""
+    """A double exercising the dual-mode streaming path.
 
-    def __init__(self, chunks: list[dict[str, object]]) -> None:
+    Mirrors langgraph's ``stream_mode=["values", "messages"]`` contract: each scripted state
+    snapshot is yielded tagged as ``("values", snapshot)``, optionally preceded by
+    ``("messages", delta)`` per-token deltas (the fine-grained cancellation checkpoints).
+    """
+
+    def __init__(
+        self, chunks: list[dict[str, object]], *, token_deltas: tuple[str, ...] = ()
+    ) -> None:
         self._chunks = chunks
+        self._token_deltas = token_deltas
 
-    def stream(self, graph_input, config=None, *, stream_mode="values"):
+    def stream(self, graph_input, config=None, *, stream_mode=("values", "messages")):
         del graph_input, config, stream_mode
-        yield from self._chunks
+        for delta in self._token_deltas:
+            yield ("messages", delta)
+        for chunk in self._chunks:
+            yield ("values", chunk)
 
     def invoke(self, *a, **k):  # the streaming branch is taken, so invoke is never used
         raise AssertionError("a streaming agent must not be invoked")
@@ -385,6 +396,35 @@ def test_send_streams_each_step_and_cancel_stops_the_loop() -> None:
     # "first" streamed out as its step landed; the cancel then broke the loop, so the later
     # "second" step was never emitted — proving both incremental rendering and cancellation.
     assert texts == ["first"]
+
+
+def test_cancel_within_a_step_breaks_on_a_token_delta() -> None:
+    # A single model generation is one super-step, so a values-only loop can't break until the
+    # whole reply lands. Streaming the per-token "messages" deltas alongside gives a frequent
+    # cancel checkpoint: a Ctrl-C mid-generation breaks before the reply ("late") is ever
+    # rendered. Modeled by an agent that requests cancel between two token deltas.
+    seen: list[object] = []
+
+    class TokenStreamAgent:
+        session: CodeSession
+
+        def stream(self, graph_input, config=None, *, stream_mode=("values", "messages")):
+            del graph_input, config, stream_mode
+            yield ("messages", "par")  # first token arrives — loop sees no cancel yet
+            self.session.request_cancel()  # user hits Ctrl-C mid-generation
+            yield ("messages", "tial")  # next token: the loop's top-of-iteration check breaks
+            yield ("values", {"messages": [AIMessage("late")]})  # must never be rendered
+
+        def invoke(self, *a, **k):
+            raise AssertionError("a streaming agent must not be invoked")
+
+    agent = TokenStreamAgent()
+    session = CodeSession(agent=agent, sink=seen.append, approver=lambda n, a: True)
+    agent.session = session
+    session.send("go")
+
+    texts = [e.text for e in seen if isinstance(e, AssistantText)]
+    assert texts == []  # the post-cancel "late" reply was dropped, not rendered
 
 
 def test_session_propagates_keyboard_interrupt() -> None:

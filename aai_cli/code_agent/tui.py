@@ -27,6 +27,7 @@ from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.ask_tool import AskBridge
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
 from aai_cli.code_agent.session import CodeSession
+from aai_cli.code_agent.summarize import describe_args, summarize_call, summarize_result
 from aai_cli.code_agent.voice import spoken_summary
 from aai_cli.core import errors
 
@@ -49,10 +50,6 @@ class _VoiceIO(Protocol):
 
     def speak(self, text: str) -> None:
         """Read ``text`` back aloud (a no-op when readback is unavailable)."""
-
-
-def _format_args(args: Mapping[str, object]) -> str:
-    return ", ".join(f"{key}={value!r}" for key, value in args.items())
 
 
 def _spinner_text(elapsed_s: int, frame: str) -> str:
@@ -121,7 +118,7 @@ class ApprovalScreen(ModalScreen[str]):
         with Vertical(id="approvalbox"):
             yield Label(
                 f"Run tool [b]{escape(self._tool_name)}[/b]?  "
-                f"[dim]{escape(_format_args(self._args))}[/dim]"
+                f"[dim]{escape(describe_args(self._args))}[/dim]"
             )
             yield Label(
                 f"[b #22c55e]y[/] approve   [b {banner.BRAND_HEX}]a[/] auto-approve   "
@@ -169,6 +166,11 @@ class CodeAgentApp(App[None]):
     # line, matching the deepagents-code look (wordmark in the AssemblyAI brand blue).
     CSS = f"""
     Screen {{ background: #000000; }}
+    /* The approval/ask modals must stay see-through so the transcript shows above their
+       docked prompt. Their own DEFAULT_CSS sets `background: transparent`, but app CSS beats
+       a widget's DEFAULT_CSS — without this rule the `Screen` canvas above paints the modal
+       opaque black (it matches every Screen subclass) and blanks the transcript behind it. */
+    ModalScreen {{ background: transparent; }}
     #log {{
         height: 1fr; border: none; background: #000000; padding: 1 2;
         scrollbar-size-vertical: 0;
@@ -282,9 +284,11 @@ class CodeAgentApp(App[None]):
             self._last_reply = event.text
             log.write(escape(event.text))
         elif isinstance(event, ToolCall):
-            log.write(f"[dim]→ {escape(event.name)}({escape(_format_args(event.args))})[/dim]")
+            log.write(f"[dim]→ {escape(summarize_call(event.name, event.args))}[/dim]")
         elif isinstance(event, ToolResult):
-            log.write(f"[dim]  {escape(event.name)}: {escape(event.content.strip()[:2000])}[/dim]")
+            log.write(
+                f"[dim]  {escape(event.name)}: {escape(summarize_result(event.content))}[/dim]"
+            )
         elif isinstance(event, ErrorText):
             log.write(f"[#F04438]✗ {escape(event.text)}[/#F04438]")
 
