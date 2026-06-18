@@ -15,12 +15,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from rich.markdown import Markdown
 from rich.markup import escape
 from textual.app import ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Input, RichLog, Static
+from textual.widgets import Input, Static
 from textual.worker import Worker
 
 from aai_cli.code_agent import banner
@@ -34,9 +33,16 @@ from aai_cli.code_agent.events import (
     ToolCall,
     ToolResult,
 )
+from aai_cli.code_agent.messages import (
+    AssistantMessage,
+    ErrorMessage,
+    Note,
+    ToolCallLine,
+    ToolOutput,
+    UserMessage,
+)
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
-from aai_cli.code_agent.summarize import summarize_call, summarize_result
 from aai_cli.code_agent.tui_status import _spinner_text, _status_text
 from aai_cli.code_agent.voice_ui import _VoiceIO, _VoiceLegs
 
@@ -69,19 +75,15 @@ class CodeAgentApp(_VoiceLegs):
        a widget's DEFAULT_CSS — without this rule the `Screen` canvas above paints the modal
        opaque black (it matches every Screen subclass) and blanks the transcript behind it. */
     ModalScreen {{ background: transparent; }}
-    #log {{
-        height: 1fr; border: none; background: #000000; padding: 1 2;
-        scrollbar-size-vertical: 0;
-    }}
+    /* The transcript is a scroll container of mounted message widgets (not a RichLog), so the
+       reply streams in place and tool output can expand/collapse. */
+    #log {{ height: 1fr; border: none; background: #000000; padding: 1 2; }}
     #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
     /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */
     #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
         margin: 1 1; content-align: center middle; display: none; }}
-    /* Live region: the assistant reply streaming in token-by-token (capped to its tail),
-       shown above the spinner while a turn runs and cleared once the full reply lands. */
-    #stream {{ height: auto; max-height: 10; background: #000000; padding: 0 2; display: none; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
     #spinner {{ height: 1; background: #000000; padding: 0 2;
         color: {banner.BRAND_HEX}; display: none; }}
@@ -98,6 +100,7 @@ class CodeAgentApp(_VoiceLegs):
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+y", "copy_last", "Copy last reply"),
         ("ctrl+v", "toggle_voice", "Toggle voice"),
+        ("ctrl+o", "toggle_output", "Expand/collapse output"),
     ]
 
     def __init__(
@@ -123,7 +126,8 @@ class CodeAgentApp(_VoiceLegs):
         self._voice_phase = "listening"  # listening / thinking / speaking, shown in the voice bar
         self._voice_frames = itertools.cycle(_VOICE_FRAMES)
         self._voice_timer: Timer | None = None  # animates the voice-bar meter while it's shown
-        self._stream_buf = ""  # accumulates streamed reply tokens for the live region
+        self._streaming_msg: AssistantMessage | None = None  # the reply widget tokens stream into
+        self._last_tool_output: ToolOutput | None = None  # the row Ctrl+O expands/collapses
         self._session_name = thread_id  # not _thread_id: that shadows Textual App's int
         self._cwd = cwd if cwd is not None else Path.cwd()
         self._web_note = web_note
@@ -143,9 +147,7 @@ class CodeAgentApp(_VoiceLegs):
     def compose(self) -> ComposeResult:
         # No Header/Footer chrome — the splash is the title and the bottom status line
         # the only footer, so the screen stays a flat dark canvas.
-        yield RichLog(id="log", wrap=True, markup=True)
-        # Live streaming reply (above the spinner), shown while tokens arrive then cleared.
-        yield Static("", id="stream")
+        yield VerticalScroll(id="log")
         # Docked before the prompt bar, so the working indicator sits just above the input.
         yield Static("", id="spinner")
         with Horizontal(id="promptbar"):
@@ -159,21 +161,35 @@ class CodeAgentApp(_VoiceLegs):
             id="status",
         )
 
-    def _write_splash(self, log: RichLog) -> None:
-        for row in banner.wordmark():
-            log.write(f"[bold {banner.BRAND_HEX}]{row}[/]")
-        log.write(f"[dim]{banner.version()}[/dim]")
-        log.write("")
-        log.write(f"[dim]Thread: {self._session_name}[/dim]")
-        log.write("")
-        log.write(f"[{banner.BRAND_HEX}]{banner.READY_LINE}[/]")
-        log.write(f"[dim]{banner.TIP_LINE}[/dim]")
+    def _write_splash(self) -> None:
+        # The whole splash is fixed copy except the session name, so this markup is safe to
+        # parse (only the session name — a --session value — is escaped).
+        rows = [f"[bold {banner.BRAND_HEX}]{row}[/]" for row in banner.wordmark()]
+        rows += [
+            f"[dim]{banner.version()}[/dim]",
+            "",
+            f"[dim]Thread: {escape(self._session_name)}[/dim]",
+            "",
+            f"[{banner.BRAND_HEX}]{banner.READY_LINE}[/]",
+            f"[dim]{banner.TIP_LINE}[/dim]",
+        ]
+        self._mount("\n".join(rows))
+
+    def _mount(self, widget: Static | str) -> None:
+        """Append a transcript widget (or a markup string) and scroll it into view."""
+        log = self.query_one("#log", VerticalScroll)
+        log.mount(Static(widget) if isinstance(widget, str) else widget)
+        log.scroll_end(animate=False)  # pragma: no mutate — cosmetic; animate flag is unassertable
+
+    def _note(self, text: str) -> None:
+        """Append a dim transcript aside (cancelling / copied / voice-off)."""
+        self._mount(Note(text))
 
     def on_mount(self) -> None:
         # Route the agent's ask_user tool through a modal (the bridge is shared with
         # the tool built before this app existed).
         self._ask_bridge.handler = self._ask
-        self._write_splash(self.query_one("#log", RichLog))
+        self._write_splash()
         if self._web_note:
             self.notify(self._web_note, title="Web search disabled", severity="warning", timeout=10)
         # Put the cursor in the prompt so the user can type immediately (RichLog would
@@ -196,46 +212,34 @@ class CodeAgentApp(_VoiceLegs):
         self.call_from_thread(self._write_event, event)
 
     def _write_event(self, event: Event) -> None:
-        log = self.query_one("#log", RichLog)
-        # Escape dynamic content: a model/tool string containing "[" would otherwise be
-        # parsed as Rich markup and raise MarkupError (crashing the turn), or inject styling.
         if isinstance(event, AssistantDelta):
-            # A streamed token: accumulate and show the tail in the live region. Superseded
-            # by the AssistantText below once the reply lands, so this is purely live preview.
-            self._stream_buf += event.text
-            self._show_stream()
-            return
-        if isinstance(event, AssistantText):
-            self._clear_stream()  # the full reply lands in the log; drop the live preview
+            # Stream the token into the live reply widget (mounting one on the first token),
+            # updated in place until the authoritative AssistantText finalizes it below.
+            if self._streaming_msg is None:
+                self._streaming_msg = AssistantMessage()
+                self._mount(self._streaming_msg)
+            self._streaming_msg.stream(event.text)
+            self.query_one("#log", VerticalScroll).scroll_end(animate=False)  # pragma: no mutate
+        elif isinstance(event, AssistantText):
             self._last_reply = event.text  # keep the raw text for clipboard copy
-            # Render as Markdown so fenced code is syntax-highlighted (Markdown parses its own
-            # syntax, not console markup, so the escape() the other branches need is moot here).
-            log.write(Markdown(event.text))
+            self._finalize_reply(event.text)
         elif isinstance(event, ToolCall):
-            log.write(f"[dim]→ {escape(summarize_call(event.name, event.args))}[/dim]")
+            self._mount(ToolCallLine(event.name, event.args))
         elif isinstance(event, ToolResult):
-            log.write(
-                f"[dim]  {escape(event.name)}: {escape(summarize_result(event.content))}[/dim]"
-            )
+            self._last_tool_output = ToolOutput(event.name, event.content)
+            self._mount(self._last_tool_output)
         elif isinstance(event, ErrorText):
-            log.write(f"[#F04438]✗ {escape(event.text)}[/#F04438]")
+            self._mount(ErrorMessage(event.text))
 
-    # The live-streaming reply region (tokens land here until the full reply commits).
-    _STREAM_TAIL_LINES = 8  # show only the last few streamed lines so it can't grow unbounded
-
-    def _show_stream(self) -> None:
-        """Render the streamed-so-far reply (its tail) in the live region as plain text."""
-        tail = "\n".join(self._stream_buf.splitlines()[-self._STREAM_TAIL_LINES :])
-        stream = self.query_one("#stream", Static)
-        stream.update(escape(tail))
-        stream.display = True
-
-    def _clear_stream(self) -> None:
-        """Reset the live region (the full reply now renders in the log)."""
-        self._stream_buf = ""
-        stream = self.query_one("#stream", Static)
-        stream.update("")
-        stream.display = False
+    def _finalize_reply(self, text: str) -> None:
+        """Commit the reply: finalize the streamed widget in place, or mount a fresh one."""
+        if self._streaming_msg is not None:
+            self._streaming_msg.finalize(text)
+            self._streaming_msg = None
+        else:
+            msg = AssistantMessage()
+            self._mount(msg)
+            msg.finalize(text)
 
     def action_copy_last(self) -> None:
         """Copy the most recent assistant reply to the system clipboard."""
@@ -243,7 +247,12 @@ class CodeAgentApp(_VoiceLegs):
 
         if self._last_reply:
             pyperclip.copy(self._last_reply)
-            self.query_one("#log", RichLog).write("[dim](copied last reply to clipboard)[/dim]")
+            self._note("(copied last reply to clipboard)")
+
+    def action_toggle_output(self) -> None:
+        """Ctrl-O: expand/collapse the most recent tool output (a no-op if there's none)."""
+        if self._last_tool_output is not None:
+            self._last_tool_output.toggle()
 
     # --- approval / ask (called on the worker thread) -------------------------
 
@@ -372,7 +381,7 @@ class CodeAgentApp(_VoiceLegs):
         if not self._turn_running():
             return False
         self._session.request_cancel()
-        self.query_one("#log", RichLog).write("[dim](cancelling…)[/dim]")
+        self._note("cancelling…")
         return True
 
     def action_interrupt(self) -> None:
@@ -407,8 +416,7 @@ class CodeAgentApp(_VoiceLegs):
             self._submit(text)
 
     def _submit(self, text: str) -> None:
-        log = self.query_one("#log", RichLog)
-        log.write(f"[b cyan]» {escape(text)}[/b cyan]")
+        self._mount(UserMessage(text))
         self.query_one("#prompt", Input).disabled = True
         self._set_voice_phase("thinking")  # voice bar reflects the turn (no-op when bar hidden)
         self._start_spinner()
@@ -448,11 +456,16 @@ class CodeAgentApp(_VoiceLegs):
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         if event.worker.is_finished:
-            self._stop_spinner()
-            self._clear_stream()  # drop any live preview left over (e.g. a cancelled generation)
-            self.query_one("#prompt", Input).disabled = False
-            self._sync_input_mode()  # focus the prompt (text mode) or show the listening bar
-            self._voice_followup()  # read a spoken summary back, then listen for the next turn
+            self._finish_turn()
+
+    def _finish_turn(self) -> None:
+        """Wind down a completed turn: stop the spinner, re-enable input, resume voice."""
+        self._stop_spinner()
+        if self._streaming_msg is not None:  # a cancelled generation: keep what streamed in
+            self._finalize_reply(self._streaming_msg.text)
+        self.query_one("#prompt", Input).disabled = False
+        self._sync_input_mode()  # focus the prompt (text mode) or show the listening bar
+        self._voice_followup()  # read a spoken summary back, then listen for the next turn
 
     # The off-thread voice legs (_voice_active, _begin_listening, _capture_voice_turn, …) are
     # inherited from _VoiceLegs; the render/toggle side stays above.

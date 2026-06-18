@@ -11,9 +11,8 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Protocol
 
-from rich.markup import escape
 from textual.app import App
-from textual.widgets import Input, RichLog
+from textual.widgets import Input
 
 from aai_cli.code_agent.voice import spoken_summary
 from aai_cli.core import errors
@@ -49,6 +48,7 @@ class _VoiceLegs(App[None]):
         def _set_voice_phase(self, phase: str) -> None: ...
         def _sync_input_mode(self) -> None: ...
         def _submit(self, text: str) -> None: ...
+        def _note(self, text: str) -> None: ...
 
     def _voice_active(self) -> bool:
         """Voice capture is on: a session exists, the mic isn't ruled out, and it isn't paused."""
@@ -96,9 +96,7 @@ class _VoiceLegs(App[None]):
 
     def _notice_voice_off(self, detail: str) -> None:
         """Tell the user voice input stopped and that input is now typed (UI thread)."""
-        self.query_one("#log", RichLog).write(
-            f"[dim](voice input off: {escape(detail)}; type your request instead)[/dim]"
-        )
+        self._note(f"voice input off: {detail}; type your request instead")
         self._sync_input_mode()  # mic ruled out -> bring the text box back
 
     def _enter_and_submit(self, text: str) -> None:

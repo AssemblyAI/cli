@@ -13,7 +13,8 @@ import time
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.widgets import Input, Label, RichLog, Static
+from textual.containers import VerticalScroll
+from textual.widgets import Input, Label, Static
 
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
@@ -50,8 +51,9 @@ def test_mount_renders_splash_and_focuses_input() -> None:
         app = CodeAgentApp(agent=FakeAgent([]), web_note="no key", thread_id="t1")
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            log = app.query_one("#log", RichLog)
-            assert len(log.lines) > 6  # wordmark + tagline
+            log = app.query_one("#log", VerticalScroll)
+            assert len(log.children) >= 1  # the splash is mounted into the transcript
+            assert "Ready to code" in str(log.children[0].render())  # splash intro shown
             assert app.focused is app.query_one("#prompt", Input)
 
     _run(go())
@@ -104,68 +106,6 @@ def test_write_event_each_type_and_copy(monkeypatch: pytest.MonkeyPatch) -> None
             assert app._last_reply == "[reply"
             app.action_copy_last()
             assert copied == ["[reply"]
-
-    _run(go())
-
-
-def test_assistant_reply_renders_markdown_code_block() -> None:
-    # Assistant text is rendered as Markdown so a fenced code block is syntax-highlighted —
-    # the raw ``` fence markers are consumed, the code shows, and the raw text is kept for copy.
-    async def go() -> None:
-        app = CodeAgentApp(agent=FakeAgent([]))
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            reply = "Here you go:\n\n```python\nprint('hi')\n```"
-            app._write_event(AssistantText(reply))
-            await pilot.pause()
-            rendered = "\n".join(strip.text for strip in app.query_one("#log", RichLog).lines)
-            assert "```" not in rendered  # markdown consumed the fence markers
-            assert "print('hi')" in rendered  # the code itself still renders
-            assert app._last_reply == reply  # raw markdown kept for clipboard copy
-
-    _run(go())
-
-
-def test_assistant_deltas_stream_into_live_region_then_clear() -> None:
-    # Streamed tokens (AssistantDelta) show in the live #stream region; the final AssistantText
-    # commits the full reply to the log and clears the region.
-    async def go() -> None:
-        from aai_cli.code_agent.events import AssistantDelta
-
-        app = CodeAgentApp(agent=FakeAgent([]))
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            app._write_event(AssistantDelta("Hello, "))
-            app._write_event(AssistantDelta("world!"))
-            await pilot.pause()
-            # Re-query for each display check so mypy can't narrow a stored bool across writes.
-            assert app.query_one("#stream", Static).display is True
-            assert "Hello, world!" in str(app.query_one("#stream", Static).render())  # live
-            app._write_event(AssistantText("Hello, world!"))
-            await pilot.pause()
-            assert app.query_one("#stream", Static).display is False  # cleared once reply lands
-            assert app._stream_buf == ""
-            rendered = "\n".join(strip.text for strip in app.query_one("#log", RichLog).lines)
-            assert "Hello, world!" in rendered  # full reply committed to the transcript
-
-    _run(go())
-
-
-def test_stream_region_shows_only_the_tail() -> None:
-    # The live region is capped to its last few lines so a long reply can't make it grow
-    # unbounded; the full reply still commits to the log on completion.
-    async def go() -> None:
-        from aai_cli.code_agent.events import AssistantDelta
-
-        app = CodeAgentApp(agent=FakeAgent([]))
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            app._write_event(AssistantDelta("\n".join(f"line{i}" for i in range(10))))
-            await pilot.pause()
-            shown = str(app.query_one("#stream", Static).render())
-            assert "line9" in shown  # the latest lines are visible
-            assert "line2" in shown  # the 8-line tail reaches back to line2 (of lines 2..9)
-            assert "line1" not in shown  # but not line1 — older lines are dropped
 
     _run(go())
 
