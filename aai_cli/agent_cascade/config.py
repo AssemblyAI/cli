@@ -43,6 +43,11 @@ class CascadeConfig:
     llm_extra: Mapping[str, object] = field(default_factory=dict[str, object])
     # Extra streaming-TTS query params (the --tts-config escape hatch).
     tts_extra: Mapping[str, str] = field(default_factory=dict[str, str])
+    # MCP servers (name -> launch spec) whose tools the deepagents brain can call. Empty
+    # by default; populated from --mcp-config files and/or the --demo-tools curated set.
+    mcp_servers: Mapping[str, Mapping[str, object]] = field(
+        default_factory=dict[str, Mapping[str, object]]
+    )
     # Whether STT formats finalized turns. The reply trigger waits for the formatted
     # turn when on; with it off, an unformatted end-of-turn is the cue instead.
     format_turns: bool = True

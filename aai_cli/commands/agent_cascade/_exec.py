@@ -8,7 +8,7 @@ constructing options directly rather than round-tripping through ``CliRunner``.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,7 +18,7 @@ import typer
 from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import engine, voices
+from aai_cli.agent_cascade import engine, mcp_tools, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
@@ -73,6 +73,9 @@ class AgentCascadeOptions:
     # Text-to-speech: language named, any other query param via --tts-config.
     language: str | None
     tts_config: tuple[str, ...]
+    # Tools: standard mcpServers JSON config files, plus the curated demo server set.
+    mcp_config: tuple[Path, ...]
+    demo_tools: bool
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
 
@@ -117,6 +120,22 @@ def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
     return extra
 
 
+def _resolve_mcp_servers(
+    demo_tools: bool, mcp_config: tuple[Path, ...]
+) -> dict[str, Mapping[str, object]]:
+    """The MCP servers for this run: the curated demo set (under --demo-tools) overlaid
+    with any --mcp-config files, so an explicit config can override a demo entry by name.
+
+    The demo filesystem server is rooted at the working directory, scoping its file access
+    to one folder. Returns an empty mapping when neither tool source is requested.
+    """
+    servers: dict[str, Mapping[str, object]] = {}
+    if demo_tools:
+        servers.update(mcp_tools.demo_servers(Path.cwd()))
+    servers.update(mcp_tools.parse_mcp_config(mcp_config))
+    return servers
+
+
 def _open_audio(
     renderer: AgentRenderer,
     *,
@@ -152,6 +171,13 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
         output.error_console.print(
             "[aai.warn]Note:[/aai.warn] the generated script uses the microphone; "
             "it does not stream the audio source you passed."
+        )
+    if opts.mcp_config or opts.demo_tools:
+        # The generated cascade snippet wires only the built-in tools; MCP servers are a
+        # CLI-runtime feature, so say so rather than silently dropping them.
+        output.error_console.print(
+            "[aai.warn]Note:[/aai.warn] the generated script does not include the MCP "
+            "tools; they are wired only when running 'assembly live'."
         )
     config = CascadeConfig(
         voice=opts.voice,
@@ -189,6 +215,8 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     # fails fast instead of after the mic is live.
     llm_extra = llm.parse_gateway_overrides(opts.llm_config)
     tts_extra = _parse_tts_config(opts.tts_config)
+    # Resolve MCP servers before opening the device, so a malformed config fails fast.
+    mcp_servers = _resolve_mcp_servers(opts.demo_tools, opts.mcp_config)
     api_key = state.resolve_api_key()
 
     config = CascadeConfig(
@@ -202,6 +230,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         format_turns=opts.format_turns,
         llm_extra=llm_extra,
         tts_extra=tts_extra,
+        mcp_servers=mcp_servers,
     )
     renderer = AgentRenderer(json_mode=json_mode, text_mode=text_mode, mic_input=not from_file)
     audio, player, sample_rate = _open_audio(

@@ -48,6 +48,8 @@ _DEFAULTS = AgentCascadeOptions(
     llm_config=(),
     language=None,
     tts_config=(),
+    mcp_config=(),
+    demo_tools=False,
     show_code=False,
 )
 
@@ -144,6 +146,19 @@ def test_stt_config_file_must_exist():
     assert "does not exist" in result.output
 
 
+def test_mcp_config_file_must_exist():
+    # --mcp-config is existence-checked at parse time (exists=True), so a missing path
+    # fails as a Typer usage error before the body runs. Wide terminal so the "does not
+    # exist" message isn't wrapped by the 80-col error box.
+    result = runner.invoke(
+        app,
+        ["live", "--mcp-config", "/no/such/servers.json"],
+        env={"COLUMNS": "300"},
+    )
+    assert result.exit_code == 2
+    assert "does not exist" in result.output
+
+
 # --- system prompt resolution ------------------------------------------------
 
 
@@ -198,6 +213,28 @@ def test_open_audio_mic_warns_and_uses_duplex_rate(monkeypatch):
     assert player is fake_duplex.player
     assert rate == _exec.SAMPLE_RATE
     assert any("headphones" in note for note in notices)
+
+
+# --- MCP server resolution (unit tests live in test_agent_cascade_mcp.py) -----
+
+
+def test_demo_tools_flow_into_cascade_config(monkeypatch):
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
+    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    captured = {}
+
+    # Capture the config at the deps seam so the graph (and its npx/uvx servers) never builds.
+    def fake_real(api_key, config, *, audio, stt_params):
+        captured["config"] = config
+        return "deps"
+
+    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
+    run_agent_cascade(_opts(source="clip.wav", demo_tools=True), AppState(), json_mode=False)
+    # The resolved demo servers ride into the config the cascade brain reads.
+    assert "weather" in captured["config"].mcp_servers
 
 
 # --- run_agent_cascade wiring ----------------------------------------------

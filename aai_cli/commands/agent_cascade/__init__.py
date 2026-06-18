@@ -25,6 +25,7 @@ from aai_cli.ui.help_text import examples_epilog
 _PANEL_STT = "Speech-to-text"
 _PANEL_LLM = "Language model"
 _PANEL_TTS = "Text-to-speech"
+_PANEL_TOOLS = "Tools"
 
 app = typer.Typer()
 
@@ -55,6 +56,14 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
             (
                 "Give the agent a persona",
                 'assembly --sandbox live --system-prompt "You are a terse pirate."',
+            ),
+            (
+                "Add a curated, no-auth MCP toolset (time, weather, memory, …)",
+                "assembly --sandbox live --demo-tools",
+            ),
+            (
+                "Load tools from your own MCP servers config",
+                "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
             ),
             ("See available voices", "assembly --sandbox live --list-voices"),
             (
@@ -154,6 +163,20 @@ def live(
         dir_okay=False,
     ),
     greeting: str = typer.Option(DEFAULT_GREETING, "--greeting", help="Spoken greeting"),
+    mcp_config: list[Path] | None = typer.Option(
+        None,
+        "--mcp-config",
+        help='MCP servers config JSON ({"mcpServers": {…}}) to load tools from (repeatable)',
+        exists=True,
+        dir_okay=False,
+        rich_help_panel=_PANEL_TOOLS,
+    ),
+    demo_tools: bool = typer.Option(
+        False,
+        "--demo-tools",
+        help="Load a curated, no-auth MCP toolset: time, fetch, memory, filesystem, weather",
+        rich_help_panel=_PANEL_TOOLS,
+    ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit"),
     json_out: bool = options.json_option("Emit newline-delimited JSON events"),
@@ -189,6 +212,11 @@ def live(
 
     Web search needs a TAVILY_API_KEY in the environment; without it the agent
     keeps its URL-fetch and docs tools.
+
+    Give the agent more tools with MCP servers: --demo-tools loads a curated,
+    no-auth set (time, fetch, memory, filesystem, weather), and --mcp-config
+    loads any standard mcpServers JSON file. A server that won't start is skipped,
+    so one broken tool never sinks the session.
     """
 
     if list_voices:
@@ -214,6 +242,8 @@ def live(
         llm_config=tuple(llm_config or ()),
         language=language,
         tts_config=tuple(tts_config or ()),
+        mcp_config=tuple(mcp_config or ()),
+        demo_tools=demo_tools,
         show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

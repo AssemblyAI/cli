@@ -88,6 +88,24 @@ def test_system_prompt_tells_model_not_to_promise_tools_when_none():
     assert "Never say" in prompt
 
 
+def test_extra_capability_lists_sorted_tool_names():
+    # MCP tools are advertised generically, by name, alphabetically.
+    phrase = brain._extra_capability([_NamedTool("zeta"), _NamedTool("alpha")])
+    assert phrase == "use your connected tools (alpha, zeta)"
+
+
+def test_extra_capability_is_none_without_extra_tools():
+    assert brain._extra_capability([]) is None
+
+
+def test_system_prompt_advertises_mcp_extra_tools():
+    # With MCP tools bound (but no built-in legs), the model must be told it HAS tools —
+    # not handed the "no external tools" guidance — and the tools are named.
+    prompt = brain.build_system_prompt("persona", tools=[], extra_tools=[_NamedTool("get_time")])
+    assert "your own knowledge" not in prompt
+    assert "use your connected tools (get_time)" in prompt
+
+
 def test_join_clause_grammar():
     # One/two/three capability phrases each render with natural conjunctions.
     assert brain._join_clause(["a"]) == "a"
@@ -218,6 +236,52 @@ def test_build_graph_uses_gateway_model_and_runs_offline(monkeypatch):
     # The compiled graph is a real deepagents graph that answers offline via the fake model.
     completer = brain.build_completer("k", cfg, graph=graph)
     assert completer([{"role": "user", "content": "hi"}]) == "hi from the agent"
+
+
+# --- build_graph MCP tool wiring ---------------------------------------------
+
+
+def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatch):
+    import deepagents
+
+    captured = {}
+
+    def fake_create(*, model, tools, system_prompt):
+        del model
+        captured["tools"] = tools
+        captured["system_prompt"] = system_prompt
+        return "graph"
+
+    monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
+    builtin = [_NamedTool("fetch_url")]
+    extra = [_NamedTool("get_time")]
+    graph = brain.build_graph("k", CascadeConfig(), tools=builtin, mcp_tools=extra)
+    # The model is bound to both tool sets, in built-in-then-MCP order.
+    assert graph == "graph"
+    assert captured["tools"] == builtin + extra
+    # The prompt advertises the built-in fetch leg AND the MCP tool by name.
+    assert "fetch a specific URL" in captured["system_prompt"]
+    assert "use your connected tools (get_time)" in captured["system_prompt"]
+
+
+def test_build_graph_loads_mcp_tools_from_config_when_not_injected(monkeypatch):
+    import deepagents
+
+    seen = {}
+
+    def fake_load(servers):
+        seen["servers"] = servers
+        return [_NamedTool("weather")]
+
+    monkeypatch.setattr("aai_cli.agent_cascade.mcp_tools.load_mcp_tools", fake_load)
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
+    monkeypatch.setattr(deepagents, "create_deep_agent", lambda **kwargs: kwargs["tools"])
+    cfg = CascadeConfig(mcp_servers={"weather": {"command": "npx"}})
+    tools = brain.build_graph("k", cfg, tools=[])
+    # The config's servers are loaded (default path) and their tools bound.
+    assert seen["servers"] == {"weather": {"command": "npx"}}
+    assert [t.name for t in tools] == ["weather"]
 
 
 # --- build_model new knobs ---------------------------------------------------
