@@ -20,6 +20,9 @@ _PREVIEW_CHARS = 300
 # Per-arg and arg-count caps so one giant value (a file's contents) can't flood the line.
 _MAX_ARG_VALUE = 60
 _MAX_ARGS = 3
+# Per-value cap for the *expanded* approval view: values shown whole (newlines kept) but bounded
+# so a multi-megabyte file can't make the modal unbounded.
+_EXPANDED_VALUE = 1000
 # Args that identify a call on their own — show only this and elide bulky siblings (content).
 _IDENTITY_ARGS = ("file_path", "path", "filename", "command", "url", "query", "pattern")
 
@@ -50,6 +53,23 @@ def describe_args(args: Mapping[str, object]) -> str:
 def summarize_call(name: str, args: Mapping[str, object]) -> str:
     """A compact ``name(key arg)`` view of a tool call for the transcript."""
     return f"{name}({describe_args(args)})"
+
+
+def full_args(args: Mapping[str, object]) -> str:
+    """The full ``key=value`` arg view shown when the approval prompt is expanded (``e``).
+
+    Values are shown whole (newlines preserved) but each is capped at ``_EXPANDED_VALUE`` so a
+    huge file can't make the modal unbounded; :func:`describe_args` is the collapsed view.
+    """
+    lines = []
+    for key, value in args.items():
+        text = str(value)
+        if len(text) > _EXPANDED_VALUE:
+            text = (
+                f"{text[:_EXPANDED_VALUE].rstrip()} … (+{len(text) - _EXPANDED_VALUE} more chars)"
+            )
+        lines.append(f"{key}={text}")
+    return "\n".join(lines)
 
 
 def summarize_result(content: str) -> str:

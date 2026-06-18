@@ -18,7 +18,8 @@ from textual.widgets import Input, Label, RichLog, Static
 
 from aai_cli.code_agent import tui
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
-from aai_cli.code_agent.tui import ApprovalScreen, AskScreen, CodeAgentApp
+from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
+from aai_cli.code_agent.tui import CodeAgentApp
 
 
 class FakeAgent:
@@ -211,6 +212,50 @@ def test_approval_prompt_renders_keyboard_hint() -> None:
             assert "approve" in rendered
             assert "auto-approve" in rendered
             assert "reject" in rendered
+
+    _run(go())
+
+
+def test_approval_expands_args_on_e() -> None:
+    # Collapsed, the prompt shows only the identifying arg (the filename); pressing `e`
+    # expands it to the full args, revealing the file content that was elided.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(
+                ApprovalScreen("write_file", {"file_path": "x.py", "content": "SECRET"})
+            )
+            await pilot.pause()
+            detail = app.screen.query_one("#approvaldetail", Label)
+            assert "SECRET" not in str(detail.render())  # collapsed: content elided
+            await pilot.press("e")
+            await pilot.pause()
+            assert "SECRET" in str(detail.render())  # expanded: full args shown
+            await pilot.press("e")  # toggles back
+            await pilot.pause()
+            assert "SECRET" not in str(detail.render())
+
+    _run(go())
+
+
+def test_approval_shows_risk_warning_for_dangerous_command() -> None:
+    # A destructive shell command carries a one-line warning above the prompt; a benign one
+    # mounts no warning label at all.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("execute", {"command": "rm -rf build/"}))
+            await pilot.pause()
+            warn = app.screen.query("#approvalwarn")
+            assert warn  # warning present
+            assert "deletes files" in str(warn.first().render())
+            app.pop_screen()
+            await pilot.pause()
+            app.push_screen(ApprovalScreen("execute", {"command": "ls -la"}))
+            await pilot.pause()
+            assert not app.screen.query("#approvalwarn")  # benign: no warning mounted
 
     _run(go())
 

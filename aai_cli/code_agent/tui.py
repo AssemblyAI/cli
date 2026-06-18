@@ -17,22 +17,23 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from rich.markup import escape
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, RichLog, Static
+from textual.widgets import Input, RichLog, Static
 from textual.worker import Worker
 
 from aai_cli.code_agent import banner
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.ask_tool import AskBridge
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
+from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.session import CodeSession
-from aai_cli.code_agent.summarize import describe_args, summarize_call, summarize_result
+from aai_cli.code_agent.summarize import summarize_call, summarize_result
 from aai_cli.code_agent.voice import spoken_summary
 from aai_cli.core import errors
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from textual.timer import Timer
 
@@ -84,79 +85,6 @@ def _status_text(cwd: Path, *, auto_approve: bool) -> str:
     if branch:
         parts.append(f"[dim]↗ {branch}[/dim]")
     return " ".join(parts)
-
-
-class ApprovalScreen(ModalScreen[str]):
-    """A compact, bottom-docked prompt to approve/auto-approve/reject one tool call.
-
-    Keyboard-only — a plain one-line ``y / a / n`` hint instead of clickable buttons, so it
-    reads like a CLI prompt rather than a chrome-heavy dialog. The transparent screen
-    background leaves the transcript visible above (no full-screen takeover); the decision is
-    one of ``"approve"``, ``"auto"``, or ``"reject"``.
-    """
-
-    DEFAULT_CSS = """
-    ApprovalScreen { align: center bottom; background: transparent; }
-    ApprovalScreen #approvalbox {
-        dock: bottom; width: 1fr; height: auto;
-        border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
-    }
-    ApprovalScreen #approvalbox Label { height: auto; }
-    """
-    BINDINGS: ClassVar = [
-        ("y", "approve", "Approve"),
-        ("a", "auto", "Auto-approve"),
-        ("n", "reject", "Reject"),
-    ]
-
-    def __init__(self, name: str, args: Mapping[str, object]) -> None:
-        super().__init__()
-        self._tool_name = name  # not _name: that shadows Textual Widget's str|None attr
-        self._args = args
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="approvalbox"):
-            yield Label(
-                f"Run tool [b]{escape(self._tool_name)}[/b]?  "
-                f"[dim]{escape(describe_args(self._args))}[/dim]"
-            )
-            yield Label(
-                f"[b #22c55e]y[/] approve   [b {banner.BRAND_HEX}]a[/] auto-approve   "
-                "[b #f04438]n[/] reject"
-            )
-
-    def action_approve(self) -> None:
-        self.dismiss("approve")
-
-    def action_auto(self) -> None:
-        self.dismiss("auto")
-
-    def action_reject(self) -> None:
-        self.dismiss("reject")
-
-
-class AskScreen(ModalScreen[str]):
-    """A bottom-docked prompt that relays a question from the agent and returns the answer."""
-
-    DEFAULT_CSS = """
-    AskScreen { align: center bottom; background: transparent; }
-    AskScreen #askbox {
-        dock: bottom; width: 1fr; height: auto;
-        border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
-    }
-    """
-
-    def __init__(self, question: str) -> None:
-        super().__init__()
-        self._question = question
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="askbox"):
-            yield Label(f"[b]The agent asks:[/b] {escape(self._question)}")
-            yield Input(id="answer", placeholder="Type your answer and press Enter…")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self.dismiss(event.value)
 
 
 class CodeAgentApp(App[None]):
