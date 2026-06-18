@@ -192,3 +192,26 @@ def test_human_you_label_is_colored():
     assert "you: " in out
     assert "what is the time" in out
     assert "\x1b[" in out
+
+
+def _truecolor_sgr(style_name: str) -> str:
+    """The foreground SGR a truecolor console emits for a named theme style."""
+    color = theme.make_console(color_system="truecolor").get_style(style_name).color
+    assert color is not None
+    t = color.get_truecolor()
+    return f"\x1b[38;2;{t.red};{t.green};{t.blue}m"
+
+
+def test_human_whole_turn_is_tinted_in_speaker_color():
+    # The whole line — label *and* body — is wrapped in the speaker's color, and the two
+    # speakers render in different colors, so a glance separates "you" from "agent".
+    r, buf = _human(color_system="truecolor")
+    r.user_final("hello")
+    r.agent_transcript("hi there", interrupted=False)
+    r.close()
+    out = buf.getvalue()
+    you_sgr, agent_sgr = _truecolor_sgr("aai.you"), _truecolor_sgr("aai.agent")
+    assert you_sgr != agent_sgr  # contrasting hues, not two shades of the same color
+    # The body text rides inside the colored span (it follows the SGR, before any reset).
+    assert f"{you_sgr}you: hello" in out
+    assert f"{agent_sgr}agent: hi there" in out

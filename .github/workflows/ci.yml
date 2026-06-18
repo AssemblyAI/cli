@@ -26,7 +26,7 @@ jobs:
   check:
     name: lint + typecheck + tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     # Test both ends of the supported range: 3.12 is the floor (requires-python),
     # 3.13 is what the Homebrew formula ships. fail-fast off so one version's
     # failure doesn't mask the other's.
@@ -49,8 +49,9 @@ jobs:
 
       # PortAudio backs sounddevice; ffmpeg decodes non-WAV/URL audio (the `--sample`
       # stream tests build a FileSource for the hosted sample, which needs ffmpeg).
+      # Slow-mirror resilience (bounded retry + trimmed payload) lives in the script.
       - name: System deps (PortAudio + ffmpeg)
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+        run: ./scripts/ci_install_audio_deps.sh
 
       # check.sh lints Markdown and template JS/CSS via Node CLIs; versions are
       # pinned in scripts/gate_tool_pins.sh (shared with the web session-start
@@ -245,7 +246,7 @@ jobs:
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -257,7 +258,7 @@ jobs:
 
       # PortAudio backs sounddevice; ffmpeg decodes the `--sample` stream source.
       - name: System deps (PortAudio + ffmpeg)
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+        run: ./scripts/ci_install_audio_deps.sh
 
       # The local pytest hook runs `uv run --frozen python -m pytest`, so the tests
       # resolve the LOCKED dependency versions (uv.lock) rather than the newest
@@ -341,7 +342,7 @@ jobs:
       # PortAudio + ffmpeg so `assembly --help` (which imports the full command
       # tree) loads cleanly; also lets install.sh's dep check find them present.
       - name: System deps (PortAudio + ffmpeg)
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
+        run: ./scripts/ci_install_audio_deps.sh
 
       - name: Run install.sh (editable, from this checkout)
         run: ./install.sh --install-method git
