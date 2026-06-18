@@ -278,7 +278,8 @@ class CodeAgentApp(_VoiceLegs):
         """
         if self._auto_approve:
             return True
-        decision = self._modal_result(ApprovalScreen(name, args), default="reject")
+        screen = ApprovalScreen(name, args, voice=self._modal_voice())
+        decision = self._modal_result(screen, default="reject")
         if decision == "auto":
             self._enable_auto_approve()
             return True
@@ -360,7 +361,11 @@ class CodeAgentApp(_VoiceLegs):
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
-        return self._modal_result(AskScreen(question), default="")
+        return self._modal_result(AskScreen(question, voice=self._modal_voice()), default="")
+
+    def _modal_voice(self) -> _VoiceIO | None:
+        """The voice IO to drive a modal by speech, or ``None`` when voice isn't active."""
+        return self._voice if self._voice_active() else None
 
     # --- interrupt / quit -----------------------------------------------------
     # Mirrors deepagents-code: Escape interrupts a running turn; Ctrl-C interrupts a running
