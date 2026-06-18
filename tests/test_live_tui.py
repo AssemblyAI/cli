@@ -1,0 +1,342 @@
+"""Tests for the voice-only `assembly live` Textual TUI (``LiveAgentApp``).
+
+Drives the real Textual app headless. Most tests call the transcript/phase methods directly
+(they always run on the UI thread), mirroring the code-TUI suite; two drive the worker leg with
+a scripted ``run_conversation`` through the real ``_TuiRenderer`` to cover the off-thread hop,
+the error path, and teardown — all without a mic, speaker, or socket.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import types
+
+import pytest
+from textual.widgets import Static
+
+from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
+from aai_cli.app.context import AppState
+from aai_cli.code_agent.messages import AssistantMessage, ErrorMessage, Note, UserMessage
+from aai_cli.commands.agent_cascade import _exec
+from aai_cli.commands.agent_cascade._exec import run_agent_cascade
+from aai_cli.core import config, stdio
+from aai_cli.core.errors import CLIError
+from tests.test_agent_cascade_command import _opts
+
+
+def _run(coro) -> None:
+    asyncio.run(coro)
+
+
+def _wait_until(pilot, predicate):
+    """Pump the event loop until ``predicate`` holds (lets a worker thread land)."""
+
+    async def loop() -> bool:
+        for _ in range(200):
+            await pilot.pause(0.01)
+            if predicate():
+                return True
+        return False
+
+    return loop()
+
+
+def _app(run_conversation=None, on_stop=None, web_note=None):
+    """A LiveAgentApp whose worker stays alive for the test, releasing on teardown.
+
+    The real ``run_conversation`` blocks on the live mic; the default here blocks on an event
+    so the app doesn't auto-exit (an instant return makes the worker close the app). Teardown
+    always sets that event — and still runs any test-supplied ``on_stop`` — so no worker leaks.
+    """
+    release = threading.Event()
+
+    def stop() -> None:
+        release.set()
+        if on_stop is not None:
+            on_stop()
+
+    def block(renderer) -> None:
+        release.wait(30)  # block like a live mic; teardown releases it well before this
+
+    return LiveAgentApp(
+        run_conversation=run_conversation or block,
+        on_stop=stop,
+        web_note=web_note,
+    )
+
+
+def _voicebar(app) -> str:
+    return str(app.query_one("#voicebar", Static).render())
+
+
+def test_splash_and_status_render() -> None:
+    # The session opens on the ASSEMBLY wordmark + ready line, and the footer shows the only
+    # control (quit) — there is no text prompt mounted (input is voice-only).
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            splash = str(app.query_one("#log").children[0].render())
+            assert "█" in splash and "Listening… start talking" in splash  # the wordmark splash
+            assert "Listening" in _voicebar(app)  # opens in the listening phase
+            assert "Ctrl-C to quit" in str(app.query_one("#status", Static).render())
+            assert len(app.query("#prompt")) == 0  # no text input — voice only
+            assert app.ENABLE_COMMAND_PALETTE is False  # the voice UI hides the command palette
+
+    _run(go())
+
+
+def test_user_partial_grows_then_finalizes_into_thinking() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_user_partial("what is")
+            app.show_user_partial("what is the weather")
+            # One growing user line, not two — the partial updates in place.
+            assert len(app.query(UserMessage)) == 1
+            assert "Listening" in _voicebar(app)
+            app.show_user_final("what is the weather")
+            assert "» what is the weather" in str(app.query_one(UserMessage).render())
+            assert "Thinking" in _voicebar(app)  # a finalized turn -> the LLM is thinking
+
+    _run(go())
+
+
+def test_user_final_without_a_prior_partial_still_shows_the_turn() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_user_final("hello")  # no partial first (formatted turn arrives whole)
+            assert "» hello" in str(app.query_one(UserMessage).render())
+            assert "Thinking" in _voicebar(app)
+
+    _run(go())
+
+
+def test_reply_streams_sentences_and_finalizes_back_to_listening() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.begin_reply()
+            assert "Speaking" in _voicebar(app)
+            app.show_agent_sentence("Hello.")
+            app.show_agent_sentence("How can I help?")
+            reply = app.query_one(AssistantMessage)
+            assert reply.text == "Hello. How can I help? "
+            app.end_reply(interrupted=False)
+            assert "Listening" in _voicebar(app)  # reply done -> back to listening
+            assert len(app.query(Note)) == 0  # not interrupted -> no interrupted aside
+
+    _run(go())
+
+
+def test_agent_sentence_without_begin_reply_mounts_a_reply() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_agent_sentence("Standalone.")  # defensive: no begin_reply first
+            assert app.query_one(AssistantMessage).text == "Standalone. "
+
+    _run(go())
+
+
+def test_interrupted_reply_notes_the_barge_in() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.begin_reply()
+            app.show_agent_sentence("As I was saying")
+            app.end_reply(interrupted=True)  # the user barged in
+            assert any("interrupted" in str(n.render()) for n in app.query(Note))
+            assert "Listening" in _voicebar(app)
+
+    _run(go())
+
+
+def test_end_reply_without_an_active_reply_is_a_safe_noop() -> None:
+    # A reply_done with no open reply widget (e.g. a turn that produced no spoken sentence) must
+    # not touch the absent widget — it just returns to listening.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.end_reply(interrupted=False)  # no begin_reply first
+            assert len(app.query(AssistantMessage)) == 0  # nothing mounted
+            assert "Listening" in _voicebar(app)
+
+    _run(go())
+
+
+def test_voice_bar_animation_advances_on_tick() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            before = _voicebar(app)
+            app._tick_voice()
+            assert _voicebar(app) != before  # the meter advanced a frame
+
+    _run(go())
+
+
+def test_web_note_is_surfaced_as_a_notification() -> None:
+    async def go() -> None:
+        app = _app(web_note="Web search is off — set FIRECRAWL_API_KEY")
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert any("FIRECRAWL_API_KEY" in n.message for n in app._notifications)
+
+    _run(go())
+
+
+def test_action_stop_tears_down_audio_and_exits(monkeypatch) -> None:
+    async def go() -> None:
+        stops: list[bool] = []
+        app = _app(on_stop=lambda: stops.append(True))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.action_stop()
+            assert stops == [True]  # the audio was closed (unblocks the cascade worker)
+            assert exited == [True]
+            app.action_stop()  # idempotent: a second stop never re-closes the audio
+            assert stops == [True]
+
+    _run(go())
+
+
+def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
+    # The blocking run_conversation runs on a worker thread and reaches the UI through the real
+    # _TuiRenderer; tearing the app down fires on_stop, which (in production) ends the mic and
+    # lets the worker return.
+    async def go() -> None:
+        done = threading.Event()
+
+        def run_conversation(renderer) -> None:
+            # A full spoken turn, exercising every _TuiRenderer leg (each hops to the UI thread).
+            renderer.connected()
+            renderer.user_partial("turn it")
+            renderer.user_final("turn it up")
+            renderer.reply_started()
+            renderer.agent_transcript("Done.", interrupted=False)
+            renderer.reply_done(interrupted=False)
+            done.wait(30)  # block until teardown's on_stop fires (timeout is just a leak guard)
+
+        app = _app(run_conversation=run_conversation, on_stop=done.set)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await _wait_until(pilot, lambda: bool(app.query(AssistantMessage)))
+            assert "» turn it up" in str(app.query_one(UserMessage).render())
+            assert app.query_one(AssistantMessage).text == "Done. "
+        assert done.is_set()  # leaving the run_test context unmounted -> on_stop released it
+
+    _run(go())
+
+
+def test_worker_surfaces_a_leg_error_in_the_transcript() -> None:
+    async def go() -> None:
+        def boom(renderer) -> None:
+            raise CLIError("gateway down", error_type="api_error", exit_code=1)
+
+        app = _app(run_conversation=boom)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await _wait_until(pilot, lambda: bool(app.query(ErrorMessage)))
+            assert "gateway down" in str(app.query_one(ErrorMessage).render())
+
+    _run(go())
+
+
+def test_tui_renderer_drops_calls_after_the_app_stops() -> None:
+    # A renderer call that lands after teardown must be swallowed (the turn is moot), not raised
+    # as an unhandled worker-thread error. This app was never started, so is_running is False.
+    app = _app()
+    assert app.is_running is False
+    renderer = _TuiRenderer(app)
+    renderer.user_final("ignored")  # returns without raising
+    renderer.reply_done(interrupted=False)
+
+
+# --- run_agent_cascade -> TUI selection + wiring -----------------------------
+
+
+def test_should_use_tui_only_for_interactive_human_mic_sessions(monkeypatch) -> None:
+    # The TUI is the default for a live mic session in human mode on a TTY. Each of the four
+    # disqualifiers (file input, --json, -o text, no TTY) falls back to the line renderer.
+    monkeypatch.setattr(stdio, "stdout_is_tty", lambda: True)
+    monkeypatch.setattr(stdio, "stdin_is_tty", lambda: True)
+    assert _exec._should_use_tui(from_file=False, json_mode=False, text_mode=False) is True
+    assert _exec._should_use_tui(from_file=True, json_mode=False, text_mode=False) is False
+    assert _exec._should_use_tui(from_file=False, json_mode=True, text_mode=False) is False
+    assert _exec._should_use_tui(from_file=False, json_mode=False, text_mode=True) is False
+    monkeypatch.setattr(stdio, "stdout_is_tty", lambda: False)
+    assert _exec._should_use_tui(from_file=False, json_mode=False, text_mode=False) is False
+
+
+def test_web_search_note_tracks_the_firecrawl_key(monkeypatch) -> None:
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+    assert "FIRECRAWL_API_KEY" in (_exec._web_search_note() or "")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-x")
+    assert _exec._web_search_note() is None
+
+
+def _wire_tui(monkeypatch):
+    """Stub auth/audio/deps so run_agent_cascade reaches the TUI launch on an interactive mic run."""
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(stdio, "stdout_is_tty", lambda: True)
+    monkeypatch.setattr(stdio, "stdin_is_tty", lambda: True)
+    fake_duplex = types.SimpleNamespace(mic=object(), player=object(), close=lambda: None)
+    monkeypatch.setattr(_exec, "DuplexAudio", lambda **kwargs: fake_duplex)
+    monkeypatch.setattr(engine.CascadeDeps, "real", lambda *a, **k: "deps")
+    return fake_duplex
+
+
+def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
+    # A mic session in human mode on a TTY runs the Textual app, not the line renderer.
+    fake_duplex = _wire_tui(monkeypatch)
+    captured: dict[str, object] = {}
+
+    class FakeApp:
+        def __init__(self, *, run_conversation, on_stop, web_note):
+            captured["run_conversation"] = run_conversation
+            captured["on_stop"] = on_stop
+
+        def run(self, **kwargs):
+            captured["ran"] = kwargs
+
+    monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
+    # AgentRenderer must NOT be built on the TUI path — fail loudly if the line path is taken.
+    monkeypatch.setattr(
+        _exec, "AgentRenderer", lambda **kw: pytest.fail("line renderer used in TUI mode")
+    )
+    run_agent_cascade(_opts(), AppState(), json_mode=False)
+    assert callable(captured["run_conversation"])  # the TUI was launched with a cascade closure
+    assert captured["on_stop"] is fake_duplex.close  # quit closes the audio
+    assert captured["ran"] == {"mouse": False}  # mouse off so transcript text stays selectable
+
+
+def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
+    # The closure handed to the app runs the cascade with the duplex player and the wired deps.
+    fake_duplex = _wire_tui(monkeypatch)
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(engine, "run_cascade", lambda **kw: captured.update(kw))
+
+    class FakeApp:
+        def __init__(self, *, run_conversation, on_stop, web_note):
+            self._rc = run_conversation
+
+        def run(self, **kwargs):
+            self._rc("renderer-sentinel")  # the app would call this on its worker thread
+
+    monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
+    run_agent_cascade(_opts(), AppState(), json_mode=False)
+    assert captured["player"] is fake_duplex.player
+    assert captured["deps"] == "deps"
+    assert captured["renderer"] == "renderer-sentinel"

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aai_cli.code_agent import tui_status
+from aai_cli.ui import theme
 
 
 def test_spinner_text_formats_frame_and_elapsed() -> None:
@@ -35,6 +36,19 @@ def test_git_branch_and_status(tmp_path: Path) -> None:
     status = tui_status._status_text(tmp_path, auto_approve=True)
     assert "auto" in status and "a1b2c3d4" in status
     assert "manual" in tui_status._status_text(tmp_path, auto_approve=False)
+
+
+def test_voicebar_markup_per_phase_carries_label_meter_accent_and_hint() -> None:
+    # Each phase renders its own label + accent color; the meter frame and any trailing hint
+    # are passed through verbatim. Assert the literal accents (not the dict value) so a mutated
+    # color literal is caught — reading from the dict would mutate in lockstep and survive.
+    listening = tui_status.voicebar_markup("listening", "▁▃▅", hint=" (Ctrl-V)")
+    assert "Listening" in listening and "▁▃▅" in listening and " (Ctrl-V)" in listening
+    assert theme.BRAND in listening  # blue accent while listening
+    thinking = tui_status.voicebar_markup("thinking", "▃▅▇")
+    assert "Thinking" in thinking and "#f59e0b" in thinking  # amber, no hint
+    speaking = tui_status.voicebar_markup("speaking", "▅▇▆")
+    assert "Speaking" in speaking and "#22c55e" in speaking  # green
 
 
 def test_status_text_renders_voice_badge(tmp_path: Path) -> None:
