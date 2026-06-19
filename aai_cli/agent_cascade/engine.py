@@ -83,6 +83,10 @@ class Player(Protocol):
     def flush(self) -> None:
         """Drop any queued-but-unplayed audio (used on barge-in)."""
 
+    def pending(self) -> int:
+        """How many unplayed samples are still queued (>0 while audio is audibly playing)."""
+        ...
+
     def close(self) -> None:
         """Close the output stream."""
 
@@ -191,30 +195,40 @@ class CascadeSession:
             self.renderer.user_partial(text)
             self._barge_in()
 
-    def _barge_in(self) -> None:
-        """Stop a reply that is still playing: flush the queued audio and cancel the
-        worker (the player flush is what silences the browser-equivalent local buffer)."""
-        if self._reply is not None and self._reply.is_alive():
+    def _silence_if_speaking(self) -> bool:
+        """Cut the agent off if it's currently audible: signal the worker and flush audio.
+
+        "Speaking" is broader than a live reply worker: it also covers the greeting (enqueued
+        with no worker) and the *tail* of a reply whose worker has already finished enqueuing
+        but whose audio is still draining from the player. In every case there is sound to
+        silence, so a barge-in or an interrupt should cut it — a bare ``_reply.is_alive()``
+        check would leave the greeting (and a reply's last sentence) un-interruptible. Setting
+        the stop flag is harmless when no worker is running (the next ``_start_reply`` clears
+        it). Returns whether anything was silenced.
+        """
+        speaking = (self._reply is not None and self._reply.is_alive()) or self.player.pending() > 0
+        if speaking:
             self._stop.set()
             self.player.flush()
+        return speaking
+
+    def _barge_in(self) -> None:
+        """Stop whatever the agent is saying (reply, greeting, or a draining tail) and join."""
+        self._silence_if_speaking()
         self._join_reply()
 
     def interrupt_reply(self) -> bool:
         """Signal an in-flight reply to stop, without waiting for it; True if one was playing.
 
         The UI-thread-safe counterpart to a spoken barge-in: the live TUI's Escape/Ctrl-C
-        calls this to silence the agent mid-reply without the user having to talk over it.
-        Flushing the queued audio stops speech at once; the reply worker then sees the stop
-        flag, unwinds on its own, and emits ``reply_done`` so the front-end returns to
+        calls this to silence the agent mid-reply (or mid-greeting) without the user having to
+        talk over it. Flushing the queued audio stops speech at once; a reply worker then sees
+        the stop flag, unwinds on its own, and emits ``reply_done`` so the front-end returns to
         listening (the STT loop keeps running, so the next spoken turn is handled normally).
         It deliberately does *not* join the worker — a join from the UI thread would deadlock
         against the worker's own ``call_from_thread`` render hops.
         """
-        playing = self._reply is not None and self._reply.is_alive()
-        if playing:
-            self._stop.set()
-            self.player.flush()
-        return playing
+        return self._silence_if_speaking()
 
     def _join_reply(self) -> None:
         """Wait for the current reply worker (if any) to unwind, then drop the handle."""
