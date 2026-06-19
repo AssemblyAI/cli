@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Static
 
 from aai_cli.code_agent import banner, tui_status
@@ -128,6 +129,15 @@ class LiveAgentApp(App[None]):
         self._user_partial: UserMessage | None = None  # the in-place "you: …" widget for a turn
         self._reply_msg: AssistantMessage | None = None  # the reply widget sentences stream into
         self._stopped = False  # guards on_stop against a double teardown (quit + unmount)
+        # A fatal cascade error caught on the worker thread, re-raised on the main thread (after
+        # app.run returns) so the command exits with the error's code instead of a silent 0 —
+        # the same record-then-re-raise the engine's CascadeSession.error uses across threads.
+        self._error: CLIError | None = None
+
+    @property
+    def error(self) -> CLIError | None:
+        """The fatal cascade error (if any), for the launcher to re-raise after ``run`` returns."""
+        return self._error
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="log")
@@ -154,6 +164,9 @@ class LiveAgentApp(App[None]):
         try:
             self._run_conversation(renderer)
         except CLIError as exc:
+            # Keep the error so the main thread can re-raise it for the right exit code, and show
+            # it inline too (the post-exit stderr render is the durable copy a torn-down TUI keeps).
+            self._error = exc
             self._safely(self._show_error, exc.message)
         # The cascade returned (STT closed, a leg failed, or a quit closed the audio) — exit.
         self._safely(self.exit)
@@ -233,10 +246,17 @@ class LiveAgentApp(App[None]):
         self._render_voicebar()
 
     def _render_voicebar(self) -> None:
-        """Paint the voice bar for the current phase (no Ctrl-V hint — input is voice-only)."""
-        self.query_one("#voicebar", Static).update(
-            tui_status.voicebar_markup(self._voice_phase, next(self._voice_frames))
-        )
+        """Paint the voice bar for the current phase (no Ctrl-V hint — input is voice-only).
+
+        A no-op once the bar is gone: the 0.3s animation timer can fire one last ``_tick_voice``
+        during teardown, after the DOM is dismantled but before the interval is cancelled, so the
+        query is defensive (a miss only happens on the way out, where the repaint is moot).
+        """
+        try:
+            bar = self.query_one("#voicebar", Static)
+        except NoMatches:
+            return
+        bar.update(tui_status.voicebar_markup(self._voice_phase, next(self._voice_frames)))
 
     def _tick_voice(self) -> None:
         """Advance the voice-bar meter one frame (the animation timer's callback)."""

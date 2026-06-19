@@ -63,6 +63,21 @@ def test_mount_renders_splash_and_focuses_input() -> None:
     _run(go())
 
 
+def test_voicebar_render_after_the_bar_is_gone_is_a_safe_noop() -> None:
+    # The 0.3s animation timer drives _render_voicebar and can fire one last tick during teardown,
+    # after #voicebar is removed but before the interval is cancelled; it must no-op, not raise the
+    # NoMatches that surfaced as a py3.13 CI flake.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            await app.query_one("#voicebar", Static).remove()
+            assert len(app.query("#voicebar")) == 0
+            app._render_voicebar()  # must not raise now that the bar is gone
+
+    _run(go())
+
+
 def test_initial_prompt_runs_a_turn_on_mount() -> None:
     async def go() -> None:
         agent = FakeAgent([{"messages": [HumanMessage("seed"), AIMessage("seeded reply")]}])

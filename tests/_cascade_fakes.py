@@ -46,6 +46,10 @@ class FakePlayer:
         self.flushed = 0
         self.started = False
         self.closed = False
+        # What pending() reports: tests set it >0 to simulate audio still draining (a
+        # greeting, or a reply tail whose worker already exited). flush() zeroes it, mirroring
+        # the real player dropping its queue.
+        self.pending_samples = 0
 
     def start(self):
         self.started = True
@@ -55,6 +59,10 @@ class FakePlayer:
 
     def flush(self):
         self.flushed += 1
+        self.pending_samples = 0
+
+    def pending(self):
+        return self.pending_samples
 
     def close(self):
         self.closed = True

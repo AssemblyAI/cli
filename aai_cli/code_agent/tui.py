@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar
 from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 from textual.worker import Worker
@@ -102,6 +103,8 @@ class CodeAgentApp(_VoiceLegs):
         ("ctrl+v", "toggle_voice", "Toggle voice"),
         ("ctrl+o", "toggle_output", "Expand/collapse output"),
     ]
+    # The voice-bar meter's animation cadence; a cosmetic value, so it's mutation-exempt.
+    _TICK_SECONDS: ClassVar[float] = 0.3  # pragma: no mutate
 
     def __init__(
         self,
@@ -335,7 +338,7 @@ class CodeAgentApp(_VoiceLegs):
         if listening:
             self._render_voicebar()
             if self._voice_timer is None:  # animate the meter only while the bar is shown
-                self._voice_timer = self.set_interval(0.3, self._tick_voice)  # pragma: no mutate
+                self._voice_timer = self.set_interval(self._TICK_SECONDS, self._render_voicebar)
         else:
             if self._voice_timer is not None:
                 self._voice_timer.stop()
@@ -348,16 +351,13 @@ class CodeAgentApp(_VoiceLegs):
         self._render_voicebar()
 
     def _render_voicebar(self) -> None:
-        """Paint the voice bar for the current phase: an animated meter, label, and accent."""
+        """Paint/advance the voice bar (the 0.3s timer's callback); no-op once the bar is gone."""
+        try:
+            bar = self.query_one("#voicebar", Static)
+        except NoMatches:
+            return  # a tick can fire during teardown after the bar is removed; the repaint is moot
         hint = "   [dim](Ctrl-V to type)[/dim]" if self._voice_phase == "listening" else ""
-        meter = next(self._voice_frames)
-        self.query_one("#voicebar", Static).update(
-            voicebar_markup(self._voice_phase, meter, hint=hint)
-        )
-
-    def _tick_voice(self) -> None:
-        """Advance the voice-bar meter one frame (the animation timer's callback)."""
-        self._render_voicebar()
+        bar.update(voicebar_markup(self._voice_phase, next(self._voice_frames), hint=hint))
 
     def _ask(self, question: str) -> str:
         """Block the worker on a modal input screen and return the user's answer."""
