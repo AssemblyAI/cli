@@ -2,8 +2,12 @@ import json
 
 import pytest
 
-from aai_cli.core import config, keyring_store
+from aai_cli.core import config, config_store, keyring_store
 from aai_cli.core.errors import CLIError, NotAuthenticated
+
+# Captured at import time, before the autouse tmp_config fixture patches the module
+# attribute, so a test can exercise the real resolver rather than the temp-dir stub.
+_REAL_CONFIG_DIR = config_store.config_dir
 
 
 def test_set_and_get_api_key_roundtrip():
@@ -250,8 +254,8 @@ def test_validation_summary_joins_multiple_problems():
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError) as exc:
-        config.Config.model_validate({"profiles": "oops", "active_profile": 7})
-    summary = config._validation_summary(exc.value)
+        config_store.Config.model_validate({"profiles": "oops", "active_profile": 7})
+    summary = config_store._validation_summary(exc.value)
     assert "profiles:" in summary
     assert "active_profile:" in summary
     assert "; " in summary  # both problems, compactly joined
@@ -262,15 +266,15 @@ def test_validation_summary_labels_rootlevel_problems():
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError) as exc:
-        config.Config.model_validate("not a table")
-    assert config._validation_summary(exc.value).startswith("top level: ")
+        config_store.Config.model_validate("not a table")
+    assert config_store._validation_summary(exc.value).startswith("top level: ")
 
 
 def test_dump_creates_missing_parent_directories(monkeypatch, tmp_path):
     # The config dir's parents may not exist yet (first run on a fresh machine);
     # _dump must create the whole chain (mkdir parents=True), not just the leaf.
     nested = tmp_path / "deeply" / "nested" / "config"
-    monkeypatch.setattr("aai_cli.core.config.config_dir", lambda: nested)
+    monkeypatch.setattr("aai_cli.core.config_store.config_dir", lambda: nested)
     config.set_api_key("default", "sk_abc")
     assert nested.is_dir()
     assert (nested / "config.toml").exists()
@@ -301,9 +305,9 @@ def test_dump_cleans_up_temp_file_when_write_fails(tmp_config, monkeypatch):
     def boom(_data, _fh):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(config.tomli_w, "dump", boom)
+    monkeypatch.setattr(config_store.tomli_w, "dump", boom)
     with pytest.raises(RuntimeError):
-        config._dump(config.Config())
+        config_store.dump(config_store.Config())
 
     names = sorted(p.name for p in tmp_config.iterdir())
     assert names == ["config.toml"]  # no .config-*.toml.tmp left behind
@@ -315,13 +319,13 @@ def test_load_caches_parsed_config_between_calls(monkeypatch):
     # parse must happen once, with later reads served from the mtime-keyed cache.
     config.set_profile_env("default", "production")
     parses = {"n": 0}
-    real_load = config.tomllib.load
+    real_load = config_store.tomllib.load
 
     def counting_load(fh):
         parses["n"] += 1
         return real_load(fh)
 
-    monkeypatch.setattr(config.tomllib, "load", counting_load)
+    monkeypatch.setattr(config_store.tomllib, "load", counting_load)
     assert config.get_active_profile() == "default"
     assert config.get_profile_env("default") == "production"
     assert parses["n"] == 1
@@ -339,13 +343,51 @@ def test_load_returns_independent_copies():
     # Callers mutate the returned Config (persist_login snapshots one for rollback),
     # so the cache must hand out copies — a caller's mutation can't poison it.
     config.set_api_key("default", "sk_abc")
-    first = config._load()  # cache miss: parses and primes the cache
+    first = config_store.load()  # cache miss: parses and primes the cache
     first.active_profile = "mutated"
     first.profiles.clear()
-    assert config._load().active_profile == "default"
-    hit = config._load()  # cache hit: must also be a *deep* copy
+    assert config_store.load().active_profile == "default"
+    hit = config_store.load()  # cache hit: must also be a *deep* copy
     hit.profiles.clear()
-    assert "default" in config._load().profiles
+    assert "default" in config_store.load().profiles
+
+
+def test_retry_on_sharing_violation_rides_out_transient_permission_errors(monkeypatch):
+    # Windows raises a transient PermissionError when an open races _dump's os.replace;
+    # the helper retries (after a short sleep) and returns once the op finally succeeds.
+    monkeypatch.setattr(config_store.time, "sleep", lambda _seconds: None)
+    calls = {"n": 0}
+
+    def flaky() -> str:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise PermissionError("sharing violation")
+        return "ok"
+
+    assert config_store._retry_on_sharing_violation(flaky) == "ok"
+    assert calls["n"] == 3  # two transient failures, then success
+
+
+def test_retry_on_sharing_violation_propagates_a_persistent_error(monkeypatch):
+    # A genuine permission problem (every attempt fails) must surface, not loop forever:
+    # the budget is exactly _SHARING_RETRIES attempts (the loop plus the final try).
+    monkeypatch.setattr(config_store.time, "sleep", lambda _seconds: None)
+    calls = {"n": 0}
+
+    def always_fails() -> str:
+        calls["n"] += 1
+        raise PermissionError("locked")
+
+    with pytest.raises(PermissionError):
+        config_store._retry_on_sharing_violation(always_fails)
+    assert calls["n"] == config_store._SHARING_RETRIES
+
+
+def test_config_dir_resolves_under_the_platformdirs_app_location():
+    # The autouse tmp_config fixture patches config_dir to a temp path for isolation;
+    # this exercises the real resolver, which anchors config.toml under the
+    # "assemblyai" application directory on whichever platform we're on.
+    assert _REAL_CONFIG_DIR().name == "assemblyai"
 
 
 def test_get_api_key_treats_broken_keyring_backend_as_no_key(monkeypatch):

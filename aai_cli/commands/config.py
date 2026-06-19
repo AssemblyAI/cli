@@ -14,7 +14,7 @@ from rich.markup import escape
 
 from aai_cli import command_registry, help_panels, options
 from aai_cli.app.context import AppState, run_command
-from aai_cli.core import config, environments
+from aai_cli.core import config, config_store, environments
 from aai_cli.core.choices import ConfigKey
 from aai_cli.core.errors import UsageError
 from aai_cli.ui import output
@@ -104,7 +104,7 @@ def path(
     """Print where config.toml lives"""
 
     def body(_state: AppState, json_mode: bool) -> None:
-        file = config.config_file_path()
+        file = config_store.config_file_path()
         if json_mode:
             output.emit({"path": str(file)}, str, json_mode=True)
         else:
@@ -134,7 +134,7 @@ def list_settings(
 
     def body(_state: AppState, json_mode: bool) -> None:
         data: dict[str, object] = {
-            "path": str(config.config_file_path()),
+            "path": str(config_store.config_file_path()),
             "active_profile": config.get_active_profile(),
             "profiles": config.list_profiles(),
             "telemetry_enabled": config.get_telemetry_enabled(),

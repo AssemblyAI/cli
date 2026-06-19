@@ -244,5 +244,5 @@ def internal_profile(monkeypatch):
 def tmp_config(monkeypatch, tmp_path):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr("aai_cli.core.config.config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("aai_cli.core.config_store.config_dir", lambda: cfg_dir)
     return cfg_dir

@@ -18,6 +18,7 @@ import pytest
 
 from aai_cli.app import mediafile
 from aai_cli.app.context import AppState
+from aai_cli.commands.clip import _cut as clip_cut
 from aai_cli.commands.clip import _exec as clip_exec
 from aai_cli.commands.clip._select import Segment
 from aai_cli.core import client, config
@@ -53,7 +54,7 @@ def test_options_are_immutable():
 @pytest.mark.parametrize(
     "instance",
     [
-        clip_exec.WrittenClip(path=Path("x.mp4"), segment=Segment(0.0, 1.0)),
+        clip_cut.WrittenClip(path=Path("x.mp4"), segment=Segment(0.0, 1.0)),
         clip_exec._PipedTranscript(id="tr_1", utterances=[]),
     ],
     ids=["written_clip", "piped_transcript"],
