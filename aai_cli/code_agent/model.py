@@ -158,10 +158,32 @@ def _is_empty_arguments(arguments: object) -> bool:
     return isinstance(parsed, dict) and not parsed
 
 
-# JSON-Schema metadata keys some gateway-routed models reject on tool definitions. OpenAI
-# ignores them, but Gemini's ``function_declarations`` 400 on ``$schema`` (and friends), which
-# kills any tool-bound turn — so strip them from every tool's parameter schema before sending.
-_UNSUPPORTED_SCHEMA_KEYS = ("$schema", "additionalProperties", "title")
+# JSON-Schema keywords some gateway-routed models reject on tool definitions. OpenAI ignores
+# them, but Gemini's ``function_declarations`` 400 on them ("Unknown name …"), which kills any
+# tool-bound turn. These are all validation/metadata keywords — stripping them leaves the
+# structural schema (type/properties/items/required/enum/anyOf/description/…) the model needs
+# to call the tool, so the call still works; only the unenforced constraints are dropped.
+_UNSUPPORTED_SCHEMA_KEYS = (
+    "$schema",
+    "$id",
+    "$comment",
+    "title",
+    "default",
+    "examples",
+    "const",
+    "additionalProperties",
+    "unevaluatedProperties",
+    "patternProperties",
+    "minProperties",
+    "maxProperties",
+    "propertyNames",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "additionalItems",
+    "unevaluatedItems",
+    "contains",
+)
 
 
 def _sanitize_tool_schemas(payload: object) -> None:

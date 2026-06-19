@@ -174,17 +174,40 @@ def test_ensure_tool_call_arguments_guards() -> None:
 
 
 def test_sanitize_tool_schemas_strips_model_incompatible_keys() -> None:
-    # Gemini's function_declarations 400 on $schema/additionalProperties/title; strip them
-    # recursively from each tool's parameters so a tool-bound request works on every model.
-    city: dict[str, object] = {"type": "string", "title": "City"}  # held ref (nested dict)
-    any_of: list[object] = [{"$schema": "x", "type": "string"}]  # held ref (nested list)
+    # Gemini's function_declarations 400 on these validation/metadata keywords; strip every
+    # one (recursively) while keeping structural keys, so a tool-bound request works.
+    denied = [
+        "$schema",
+        "$id",
+        "$comment",
+        "title",
+        "default",
+        "examples",
+        "const",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "patternProperties",
+        "minProperties",
+        "maxProperties",
+        "propertyNames",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "additionalItems",
+        "unevaluatedItems",
+        "contains",
+    ]
+    # Pin the shipped denylist against this list: a renamed/dropped key would silently leak an
+    # unsupported keyword to Gemini (and break a tool-bound turn).
+    assert set(model_mod._UNSUPPORTED_SCHEMA_KEYS) == set(denied)
+
+    nested: dict[str, object] = {"type": "string", **dict.fromkeys(denied, "x")}
+    inside_list: dict[str, object] = {"type": "number", **dict.fromkeys(denied, "x")}
     params: dict[str, object] = {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
-        "additionalProperties": False,
-        "title": "Args",
-        "properties": {"city": city},
-        "anyOf": any_of,
+        "properties": {"city": nested},  # nested dict
+        "anyOf": [inside_list],  # nested list
+        **dict.fromkeys(denied, "x"),
     }
     payload: dict[str, object] = {
         "tools": [
@@ -194,10 +217,10 @@ def test_sanitize_tool_schemas_strips_model_incompatible_keys() -> None:
         ]
     }
     model_mod._sanitize_tool_schemas(payload)
-    assert not ({"$schema", "additionalProperties", "title"} & set(params))  # top-level stripped
-    assert params["type"] == "object"  # real schema keys preserved
-    assert city == {"type": "string"}  # nested dict stripped
-    assert any_of == [{"type": "string"}]  # nested list stripped
+    assert not (set(denied) & set(params))  # every denied key stripped at the top level
+    assert params["type"] == "object"  # structural keys preserved
+    assert nested == {"type": "string"}  # nested dict fully stripped
+    assert inside_list == {"type": "number"}  # nested-in-list fully stripped
 
 
 def test_sanitize_tool_schemas_guards() -> None:
