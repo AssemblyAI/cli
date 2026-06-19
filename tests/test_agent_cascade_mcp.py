@@ -150,6 +150,25 @@ def test_safe_load_returns_empty_on_failure():
     assert mcp_tools._safe_load(boom, "s", {"command": "x"}) == []
 
 
+def test_load_server_times_out_on_a_slow_server(monkeypatch):
+    # A server that won't list its tools within the timeout is cancelled, so it can't hang
+    # `assembly live` startup forever; _safe_load then turns the TimeoutError into [].
+    import asyncio
+
+    class _SlowClient:
+        def __init__(self, connections):
+            del connections
+
+        async def get_tools(self):
+            await asyncio.sleep(10)  # never finishes before the (patched) timeout
+            return []
+
+    monkeypatch.setattr("langchain_mcp_adapters.client.MultiServerMCPClient", _SlowClient)
+    monkeypatch.setattr(mcp_tools, "_LOAD_TIMEOUT_S", 0.05)
+    with pytest.raises(TimeoutError):
+        mcp_tools._load_server("slow", mcp_tools._to_connection({"command": "x"}))
+
+
 # --- _resolve_mcp_servers (the default set + --mcp-config merge) --------------
 
 

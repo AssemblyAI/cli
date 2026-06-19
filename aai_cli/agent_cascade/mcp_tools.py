@@ -112,13 +112,23 @@ def _to_connection(spec: ServerSpec) -> Connection:
     return {"transport": "stdio", "command": str(spec["command"]), "args": args, "env": env}
 
 
+# A server that hasn't listed its tools within this window is skipped, so a slow or hung
+# MCP server (npx/uvx cold-start, an unreachable host) can't block `assembly live` startup.
+_LOAD_TIMEOUT_S = 15.0  # pragma: no mutate — a tuning knob; ±a few seconds is equivalent
+
+
 def _load_server(name: str, conn: Connection) -> list[BaseTool]:
-    """Connect to one MCP server and return its tools (drives the async adapter)."""
+    """Connect to one MCP server and return its tools, bounded by :data:`_LOAD_TIMEOUT_S`.
+
+    The timeout is what keeps a slow/hung server from hanging startup forever — on timeout
+    the fetch is cancelled, ``asyncio.run`` raises ``TimeoutError``, and :func:`_safe_load`
+    turns that into an empty toolset (the server is simply skipped).
+    """
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
     async def _fetch() -> list[BaseTool]:
         client = MultiServerMCPClient({name: conn})
-        return await client.get_tools()
+        return await asyncio.wait_for(client.get_tools(), timeout=_LOAD_TIMEOUT_S)
 
     return asyncio.run(_fetch())
 
