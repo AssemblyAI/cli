@@ -190,7 +190,8 @@ def test_end_reply_without_an_active_reply_is_a_safe_noop() -> None:
     _run(go())
 
 
-def test_voice_bar_animation_advances_on_tick() -> None:
+def test_voice_bar_tick_advances_then_survives_teardown() -> None:
+    # Each tick advances the meter; once #voicebar is gone (a teardown tick) it must no-op, not raise.
     async def go() -> None:
         app = _app()
         async with app.run_test(size=(100, 30)) as pilot:
@@ -198,6 +199,9 @@ def test_voice_bar_animation_advances_on_tick() -> None:
             before = _voicebar(app)
             app._tick_voice()
             assert _voicebar(app) != before  # the meter advanced a frame
+            await app.query_one("#voicebar", Static).remove()
+            app._tick_voice()  # bar gone -> no-op, no NoMatches
+            assert len(app.query("#voicebar")) == 0
 
     _run(go())
 
