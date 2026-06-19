@@ -12,19 +12,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from aai_cli.core import env
+from aai_cli.code_agent._config_root import claude_config_root
 
 if TYPE_CHECKING:
     from deepagents.middleware.memory import MemoryMiddleware
 
-_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR"
-
 
 def memory_root() -> Path:
     """Directory where the agent's long-term memory files live (created on demand)."""
-    config_dir = env.get(_CLAUDE_CONFIG_DIR)
-    root = Path(config_dir) if config_dir else Path.home() / ".claude"
-    return root / "code-memory"
+    return claude_config_root() / "code-memory"
 
 
 # The single memory file the agent reads and appends learnings to. MemoryMiddleware

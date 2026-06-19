@@ -84,9 +84,14 @@ def keyring_usable() -> bool:
     return keyring_store.usable()
 
 
+def _profile(profile: str) -> Profile | None:
+    """The stored profile record, or None if the profile has none yet."""
+    return config_store.load().profiles.get(profile)
+
+
 def get_profile_env(profile: str) -> str | None:
     """The backend environment recorded for a profile, if any (e.g. 'sandbox000')."""
-    prof = config_store.load().profiles.get(profile)
+    prof = _profile(profile)
     return prof.env if prof else None
 
 
@@ -99,7 +104,7 @@ def set_profile_env(profile: str, env: str) -> None:
 
 def get_profile_email(profile: str) -> str | None:
     """The login email recorded for a profile at browser login, if any."""
-    prof = config_store.load().profiles.get(profile)
+    prof = _profile(profile)
     return prof.email if prof else None
 
 
@@ -150,7 +155,7 @@ def get_session(profile: str) -> dict[str, str] | None:
 
 def get_account_id(profile: str) -> int | None:
     """The AMS account id recorded at login for a profile, if any."""
-    prof = config_store.load().profiles.get(profile)
+    prof = _profile(profile)
     return prof.account_id if prof else None
 
 

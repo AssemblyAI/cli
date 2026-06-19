@@ -29,7 +29,7 @@ from aai_cli.code_agent.firecrawl_search import FIRECRAWL_API_KEY_ENV, build_web
 from aai_cli.code_agent.memory import build_memory_middleware
 from aai_cli.code_agent.model import build_model
 from aai_cli.code_agent.prompt import DEFAULT_MODEL
-from aai_cli.code_agent.render import RichRenderer, make_approver
+from aai_cli.code_agent.render import RichRenderer
 from aai_cli.code_agent.session import CodeSession, EventSink, run_repl
 from aai_cli.code_agent.skills import build_skills
 from aai_cli.code_agent.store import build_checkpointer
@@ -192,7 +192,7 @@ def _run_repl(agent: CompiledAgent, opts: CodeOptions, bridge: AskBridge) -> Non
     session = CodeSession(
         agent=agent,
         sink=RichRenderer(),
-        approver=make_approver(_confirm),
+        approver=_confirm,
         thread_id=opts.session,
         auto_approve=opts.auto,
     )
@@ -260,7 +260,7 @@ def _run_voice(agent: CompiledAgent, opts: CodeOptions, bridge: AskBridge, api_k
     session = CodeSession(
         agent=agent,
         sink=_voice_sink(renderer, voice),
-        approver=make_approver(_confirm),
+        approver=_confirm,
         thread_id=opts.session,
         auto_approve=opts.auto,
     )

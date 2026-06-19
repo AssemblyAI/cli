@@ -162,8 +162,11 @@ def _dub_worker(
     already exists (unless ``--force``), else dub it with spinners silenced."""
     quiet_state = dataclasses.replace(state, quiet=True)
 
+    def namer(media: Path) -> Path:
+        return default_out_path(media, language)
+
     def worker(source: str) -> batch.SourceResult:
-        if not force and (existing := _existing_output(source, language)) is not None:
+        if not force and (existing := mediafile.existing_output(source, namer)) is not None:
             return batch.SourceResult(
                 payload={"source": source, "out": str(existing)},
                 summary=f"{existing} exists",
@@ -178,15 +181,6 @@ def _dub_worker(
         )
 
     return worker
-
-
-def _existing_output(source: str, language: str) -> Path | None:
-    """The default output for a local ``source`` when it already exists (so batch mode
-    skips it), else ``None`` — a URL or a source with no prior output, both processed."""
-    if "://" in source:
-        return None
-    out = default_out_path(Path(source), language)
-    return out if out.exists() else None
 
 
 def _dub_one(
@@ -254,7 +248,7 @@ def _dub_build(
         # transcription auto-detects the source language unless --source-lang pins it.
         detect_language=opts.source_language is None,
     )
-    transcript_id = str(getattr(transcript, "id", ""))
+    transcript_id = mediafile.transcript_id(transcript)
     utterances = pipeline.utterances_of(transcript, transcript_id)
     translations = pipeline.translate(
         api_key, utterances, language, opts, json_mode=json_mode, quiet=state.quiet

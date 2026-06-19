@@ -7,13 +7,10 @@ and as the simple fallback. Errors/notices go to stderr so stdout stays clean.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from rich.markdown import Markdown
 from rich.markup import escape
 
 from aai_cli.code_agent.events import AssistantText, ErrorText, Event, ToolCall, ToolResult
-from aai_cli.code_agent.session import Approver
 from aai_cli.code_agent.summarize import summarize_call, summarize_result
 from aai_cli.ui import output
 
@@ -42,16 +39,3 @@ class RichRenderer:
     def notice(self, text: str) -> None:
         """A dim advisory on stderr (so it never pollutes piped stdout)."""
         output.error_console.print(output.hint(text))
-
-
-def make_approver(confirm: Callable[[str, dict[str, object]], bool]) -> Approver:
-    """Build the approval callback from a yes/no ``confirm`` prompt.
-
-    Kept thin so the interactive confirm (stdin read) is injected by the command and
-    a test passes a scripted decision.
-    """
-
-    def approver(name: str, args: dict[str, object]) -> bool:
-        return confirm(name, args)
-
-    return approver

@@ -153,7 +153,7 @@ def balance(
         cents = jsonshape.as_float(data.get("balance_in_cents"))
         output.emit(
             data,
-            lambda _d: f"Balance: [aai.success]${cents / 100:,.2f}[/aai.success]",
+            lambda _d: f"Balance: [aai.success]{_format_dollars(cents)}[/aai.success]",
             json_mode=json_mode,
             fields=fields,
         )

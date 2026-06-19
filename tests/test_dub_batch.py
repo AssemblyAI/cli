@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from aai_cli.app import batch
+from aai_cli.app import batch, mediafile
 from aai_cli.app.context import AppState
 from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.core import stdio
@@ -109,15 +109,19 @@ def test_batch_rejects_transcript_id(monkeypatch):
     assert "can't apply to many sources" in (exc.value.suggestion or "")
 
 
-# --- _existing_output --------------------------------------------------------
+# --- skip-on-existing-output (dub's language-bound namer through mediafile.existing_output) ---
+
+
+def _german_output(source: str) -> Path | None:
+    return mediafile.existing_output(source, lambda m: dub_exec.default_out_path(m, "German"))
 
 
 def test_existing_output_is_none_for_a_url():
-    assert dub_exec._existing_output("https://youtu.be/x", "German") is None
+    assert _german_output("https://youtu.be/x") is None
 
 
 def test_existing_output_is_none_when_missing(tmp_path):
-    assert dub_exec._existing_output(str(tmp_path / "a.mp4"), "German") is None
+    assert _german_output(str(tmp_path / "a.mp4")) is None
 
 
 def test_existing_output_returns_the_path_when_present(tmp_path):
@@ -125,4 +129,4 @@ def test_existing_output_returns_the_path_when_present(tmp_path):
     src.write_bytes(b"x")
     out = tmp_path / "a.dub.german.mp4"
     out.write_bytes(b"old")
-    assert dub_exec._existing_output(str(src), "German") == out
+    assert _german_output(str(src)) == out
