@@ -89,6 +89,8 @@ class LiveAgentApp(App[None]):
     #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
         margin: 1 1; content-align: center middle; }}
     #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
+    /* Blank line above each agent reply (and the greeting), so turns don't run together. */
+    AssistantMessage {{ margin-top: 1; }}
     """
     TITLE = "AssemblyAI Live"
     ENABLE_COMMAND_PALETTE = False
