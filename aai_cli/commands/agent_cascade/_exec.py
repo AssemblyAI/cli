@@ -247,6 +247,20 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
     app.run(mouse=False)
 
 
+def _launch_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig) -> None:
+    """Run the voice-only TUI, mapping a setup-time Ctrl-C to a clean exit.
+
+    A Ctrl-C during setup — opening the mic, building the graph, loading ``--mcp-config``
+    servers — lands before Textual captures the keyboard, so it surfaces as a plain
+    ``KeyboardInterrupt`` here. Map it to exit 130 (cancel) rather than letting it dump a
+    half-initialized asyncio/threading traceback.
+    """
+    try:
+        _run_live_tui(api_key, opts, config)
+    except KeyboardInterrupt:
+        raise typer.Exit(code=errors.CANCELLED_EXIT_CODE) from None
+
+
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
@@ -290,7 +304,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
 
     if _should_use_tui(from_file=from_file, json_mode=json_mode, text_mode=text_mode):
         # The voice-only Textual front-end surfaces the web-search note in-app, not on stderr.
-        _run_live_tui(api_key, opts, config)
+        _launch_tui(api_key, opts, config)
         return
 
     _warn_without_web_search(json_mode=json_mode)

@@ -13,6 +13,7 @@ import threading
 import types
 
 import pytest
+import typer
 from textual.widgets import Static
 
 from aai_cli.agent_cascade import engine
@@ -416,6 +417,20 @@ def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
     assert callable(captured["run_conversation"])  # the TUI was launched with a cascade closure
     assert captured["on_stop"] is fake_duplex.close  # quit closes the audio
     assert captured["ran"] == {"mouse": False}  # mouse off so transcript text stays selectable
+
+
+def test_tui_setup_keyboard_interrupt_exits_clean(monkeypatch) -> None:
+    # Ctrl-C during TUI setup (mic open / graph build / --mcp-config load) lands before
+    # Textual captures the keyboard; it must exit 130, not surface a raw traceback.
+    _wire_tui(monkeypatch)
+
+    def boom(*_a, **_k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(_exec, "_run_live_tui", boom)
+    with pytest.raises(typer.Exit) as exc:
+        run_agent_cascade(_opts(), AppState(), json_mode=False)
+    assert exc.value.exit_code == 130
 
 
 def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
