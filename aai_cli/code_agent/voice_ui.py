@@ -113,7 +113,10 @@ class _VoiceLegs(App[None]):
             self._voice_typed = True
             self.call_from_thread(self._notice_voice_off, exc.message)
             return
-        if transcript:
+        # Re-check after listen(): the user may have switched to text (Ctrl-V) or interrupted
+        # (Escape/Ctrl-C) while this capture was blocking, in which case a turn that finalized
+        # in that window must not be submitted behind their back.
+        if transcript and self._voice_active():
             self.call_from_thread(self._enter_and_submit, transcript)
 
     def _notice_voice_off(self, detail: str) -> None:

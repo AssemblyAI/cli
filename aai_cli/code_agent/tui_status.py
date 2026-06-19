@@ -7,10 +7,15 @@ imports, so they unit-test as plain functions.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+import pyperclip
 from rich.markup import escape
 
 from aai_cli.ui import theme
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
 # Public: both the `code` and `live` TUIs cycle it for their bar animation.
@@ -37,6 +42,23 @@ def voicebar_markup(phase: str, frame: str, *, hint: str = "") -> str:
 def _spinner_text(elapsed_s: int, frame: str) -> str:
     """The working-indicator line: a spinner glyph and the elapsed seconds."""
     return f"{frame} Working… ({elapsed_s}s)"
+
+
+def copy_note(reply: str, copier: Callable[[str], None]) -> str:
+    """Copy ``reply`` to the clipboard via ``copier``, returning the transcript note to show.
+
+    Keeps the Ctrl-Y action a one-liner and handles its two non-happy paths so they can't
+    surprise the user: nothing has been said yet, and a headless/clipboard-less box where
+    ``pyperclip`` raises (an unhandled raise there would tear down the whole TUI). ``copier``
+    is ``pyperclip.copy`` in production, injected so this unit-tests with no real clipboard.
+    """
+    if not reply:
+        return "(nothing to copy yet)"
+    try:
+        copier(reply)
+    except pyperclip.PyperclipException:
+        return "(couldn't copy: no clipboard available)"
+    return "(copied last reply to clipboard)"
 
 
 def _abbrev_home(path: Path) -> str:

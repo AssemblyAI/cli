@@ -47,6 +47,7 @@ from aai_cli.code_agent.tui_status import (
     VOICE_FRAMES,
     _spinner_text,
     _status_text,
+    copy_note,
     voicebar_markup,
 )
 from aai_cli.code_agent.voice_ui import _VoiceIO, _VoiceLegs
@@ -242,12 +243,10 @@ class CodeAgentApp(_VoiceLegs):
             msg.finalize(text)
 
     def action_copy_last(self) -> None:
-        """Copy the most recent assistant reply to the system clipboard."""
+        """Copy the most recent assistant reply to the system clipboard, noting the outcome."""
         import pyperclip
 
-        if self._last_reply:
-            pyperclip.copy(self._last_reply)
-            self._note("(copied last reply to clipboard)")
+        self._note(copy_note(self._last_reply, pyperclip.copy))
 
     def action_toggle_output(self) -> None:
         """Ctrl-O: expand/collapse the most recent tool output (a no-op if there's none)."""
@@ -318,6 +317,7 @@ class CodeAgentApp(_VoiceLegs):
         self._refresh_status()
         self._sync_input_mode()  # show/hide the text box vs. the listening affordance
         if self._voice_paused:
+            self._voice.cancel()  # release the mic now, don't leave a capture running unseen
             self.notify("Voice off — type your request")
         elif not self._turn_running():
             self.notify("Voice on — listening")
