@@ -82,12 +82,11 @@ class CodeAgentApp(_VoiceLegs):
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
     /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */
-    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
-        margin: 1 1; content-align: center middle; display: none; }}
+    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX}; margin: 1 1; content-align: center middle; display: none; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
-    #spinner {{ height: 1; background: #000000; padding: 0 2;
-        color: {banner.BRAND_HEX}; display: none; }}
-    #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
+    #spinner {{ height: 1; background: #000000; padding: 0 2; color: {banner.BRAND_HEX}; display: none; }}
+    /* Two rows: the mode/cwd/branch/voice line and the dim key-legend below it. */
+    #status {{ dock: bottom; height: 2; background: #000000; padding: 0 1; }}
     """
     TITLE = "AssemblyAI Code"
     # Ctrl-C quits (in addition to Ctrl-Q); the built-in command palette is removed.

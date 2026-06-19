@@ -79,6 +79,30 @@ def test_copy_note_degrades_when_no_clipboard() -> None:
     assert "no clipboard available" in note
 
 
+def test_keyhints_lists_shortcuts_and_gates_voice_on_availability() -> None:
+    # The legend always lists copy/expand/interrupt/quit; the Ctrl-V voice toggle appears
+    # only when a voice front-end exists, and the whole line is dim.
+    with_voice = tui_status.keyhints_text(voice=True)
+    assert "copy" in with_voice and "expand" in with_voice and "quit" in with_voice
+    assert "voice" in with_voice  # the Ctrl-V hint is listed when voice is available
+    assert with_voice.startswith("[dim]")  # rendered as a dim legend
+    without_voice = tui_status.keyhints_text(voice=False)
+    assert "voice" not in without_voice  # no Ctrl-V hint without a voice front-end
+    assert "copy" in without_voice and "quit" in without_voice
+
+
+def test_status_text_appends_the_key_legend(tmp_path: Path) -> None:
+    # The footer is two rows: the status info, then the dim key legend beneath it.
+    footer = tui_status._status_text(tmp_path, auto_approve=False)
+    info, _, hints = footer.partition("\n")
+    assert "manual" in info  # row one is the status info
+    assert "quit" in hints and "copy" in hints  # row two is the key legend
+    assert "voice" not in hints  # no voice front-end -> the legend omits the Ctrl-V hint
+    # With a voice front-end the legend's second row gains the Ctrl-V hint.
+    voiced = tui_status._status_text(tmp_path, auto_approve=False, voice_state="on")
+    assert "voice" in voiced.partition("\n")[2]
+
+
 def test_status_text_renders_voice_badge(tmp_path: Path) -> None:
     # No voice front-end -> no voice badge (the dot glyphs are absent); on/off render the
     # state so the Ctrl-V toggle shows. (Asserts on the dots, not the word — the tmp_path name

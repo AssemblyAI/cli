@@ -44,6 +44,21 @@ def _spinner_text(elapsed_s: int, frame: str) -> str:
     return f"{frame} Working… ({elapsed_s}s)"
 
 
+def keyhints_text(*, voice: bool) -> str:
+    """The dim key-legend footer for the `code` TUI — the shortcuts worth surfacing.
+
+    The keyboard chords are otherwise undiscoverable (the app has no Footer widget). The
+    Ctrl-V voice toggle is only listed when the session has a voice front-end. Caret notation
+    (``^Y``) keeps the legend short enough to fit a narrow terminal; the chords are bold so
+    they read against the dim labels.
+    """
+    hints = ["[b]^Y[/b] copy"]
+    if voice:
+        hints.append("[b]^V[/b] voice")
+    hints += ["[b]^O[/b] expand", "[b]esc[/b] interrupt", "[b]^C[/b] quit"]
+    return f"[dim]{' · '.join(hints)}[/dim]"
+
+
 def copy_note(reply: str, copier: Callable[[str], None]) -> str:
     """Copy ``reply`` to the clipboard via ``copier``, returning the transcript note to show.
 
@@ -80,10 +95,12 @@ def _git_branch(start: Path) -> str | None:
 
 
 def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = None) -> str:
-    """The bottom status line: a mode badge, the working directory, git branch, and voice state.
+    """The two-row bottom footer: a status line, and a dim key-legend beneath it.
 
-    ``voice_state`` is ``"on"``/``"off"`` when the session has a voice front-end (so the
-    Ctrl-V toggle shows its effect), or ``None`` when voice isn't wired up at all.
+    Row one is a mode badge, the working directory, the git branch, and voice state; row two
+    is :func:`keyhints_text`. ``voice_state`` is ``"on"``/``"off"`` when the session has a
+    voice front-end (so the Ctrl-V toggle shows its effect, and the legend lists it), or
+    ``None`` when voice isn't wired up at all.
     """
     mode = "auto" if auto_approve else "manual"
     badge = f"[black on #f59e0b] {mode} [/]"
@@ -95,4 +112,4 @@ def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = Non
         # A filled/hollow dot (BMP glyphs, like the rest of the UI — no double-width emoji).
         glyph, color = ("●", "#22c55e") if voice_state == "on" else ("○", "#6b7280")
         parts.append(f"[{color}]{glyph} voice {voice_state}[/]")
-    return " ".join(parts)
+    return " ".join(parts) + "\n" + keyhints_text(voice=voice_state is not None)
