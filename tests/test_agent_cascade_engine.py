@@ -15,95 +15,9 @@ from aai_cli.agent_cascade import engine
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
 from aai_cli.core.errors import APIError
-
-
-class FakeRenderer:
-    def __init__(self):
-        self.calls = []
-
-    def connected(self):
-        self.calls.append(("connected",))
-
-    def user_partial(self, text):
-        self.calls.append(("user_partial", text))
-
-    def user_final(self, text):
-        self.calls.append(("user_final", text))
-
-    def reply_started(self):
-        self.calls.append(("reply_started",))
-
-    def agent_transcript(self, text, *, interrupted):
-        self.calls.append(("agent_transcript", text, interrupted))
-
-    def reply_done(self, *, interrupted):
-        self.calls.append(("reply_done", interrupted))
-
-
-class FakePlayer:
-    def __init__(self):
-        self.enqueued = []
-        self.flushed = 0
-        self.started = False
-        self.closed = False
-
-    def start(self):
-        self.started = True
-
-    def enqueue(self, pcm):
-        self.enqueued.append(pcm)
-
-    def flush(self):
-        self.flushed += 1
-
-    def close(self):
-        self.closed = True
-
-
-class FakeWorker:
-    def __init__(self, *, alive):
-        self._alive = alive
-        self.joined = 0
-
-    def is_alive(self):
-        return self._alive
-
-    def join(self):
-        self.joined += 1
-        self._alive = False
-
-
-def _sync_spawn(target):
-    """Run the reply body inline and hand back a finished worker, so the cascade is
-    driven deterministically without real threads."""
-    target()
-    return FakeWorker(alive=False)
-
-
-def _turn(text, *, end_of_turn=True, turn_is_formatted=True):
-    return types.SimpleNamespace(
-        transcript=text, end_of_turn=end_of_turn, turn_is_formatted=turn_is_formatted
-    )
-
-
-def make_session(
-    *,
-    complete_reply=lambda messages: "Hello there.",
-    synthesize=lambda text: b"pcm:" + text.encode(),
-    spawn=_sync_spawn,
-    run_stt=lambda on_turn: None,
-    config=None,
-):
-    deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=complete_reply, synthesize=synthesize, spawn=spawn
-    )
-    renderer = FakeRenderer()
-    player = FakePlayer()
-    session = CascadeSession(
-        deps=deps, renderer=renderer, player=player, config=config or CascadeConfig()
-    )
-    return session, renderer, player
-
+from tests._cascade_fakes import FakePlayer, FakeRenderer, FakeWorker, make_session
+from tests._cascade_fakes import sync_spawn as _sync_spawn
+from tests._cascade_fakes import turn as _turn
 
 # --- greeting ----------------------------------------------------------------
 
@@ -146,7 +60,7 @@ def test_on_turn_blank_transcript_ignored():
 
 
 def test_on_turn_final_renders_and_replies():
-    session, renderer, player = make_session(complete_reply=lambda m: "Sure thing.")
+    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "Sure thing.")
     session.on_turn(_turn("what time is it"))
     assert ("user_final", "what time is it") in renderer.calls
     assert {"role": "user", "content": "what time is it"} in session.history
@@ -155,9 +69,23 @@ def test_on_turn_final_renders_and_replies():
     assert ("reply_done", False) in renderer.calls
 
 
+def test_reply_forwards_tool_calls_to_the_renderer():
+    # The reply worker hands complete_reply an on_tool sink; a tool call it makes surfaces on
+    # the renderer, so the live UI can show a "Searching the web…" affordance mid-turn.
+    def reply(messages, on_tool):
+        on_tool("Searching the web")
+        return "Found it."
+
+    session, renderer, _player = make_session(complete_reply=reply)
+    session.on_turn(_turn("what's the news"))
+    assert ("tool_call", "Searching the web") in renderer.calls
+
+
 def test_on_turn_interim_shows_partial_and_does_not_reply():
     replies = []
-    session, renderer, _player = make_session(complete_reply=lambda m: replies.append(m) or "x")
+    session, renderer, _player = make_session(
+        complete_reply=lambda m, on_tool=None: replies.append(m) or "x"
+    )
     session.on_turn(_turn("partial words", end_of_turn=False))
     assert ("user_partial", "partial words") in renderer.calls
     assert replies == []  # no reply generated for an interim turn
@@ -178,7 +106,7 @@ def test_on_turn_interim_barges_in_on_live_reply():
 def test_generate_reply_speaks_each_sentence():
     spoken = []
     session, renderer, player = make_session(
-        complete_reply=lambda m: "One. Two! Three?",
+        complete_reply=lambda m, on_tool=None: "One. Two! Three?",
         synthesize=lambda text: spoken.append(text) or text.encode(),
     )
     session._generate_reply()
@@ -193,7 +121,7 @@ def test_generate_reply_speaks_each_sentence():
 def test_generate_reply_threads_system_prompt_and_history():
     captured = {}
 
-    def capture(messages):
+    def capture(messages, on_tool=None):
         captured["messages"] = messages
         return "Ok."
 
@@ -208,7 +136,7 @@ def test_generate_reply_threads_system_prompt_and_history():
 
 def test_generate_reply_trims_history_window():
     session, _renderer, _player = make_session(
-        complete_reply=lambda m: "a. b.", config=CascadeConfig(max_history=1)
+        complete_reply=lambda m, on_tool=None: "a. b.", config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "user", "content": "hi"})
     session._generate_reply()
@@ -219,7 +147,7 @@ def test_generate_reply_trims_history_window():
 def test_on_turn_trims_history_window():
     # An empty reply adds no assistant turn, so only on_turn's own trim caps the list.
     session, _renderer, _player = make_session(
-        complete_reply=lambda m: "", config=CascadeConfig(max_history=1)
+        complete_reply=lambda m, on_tool=None: "", config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "assistant", "content": "old"})
     session.on_turn(_turn("newest"))
@@ -232,7 +160,9 @@ def test_generate_reply_stop_after_first_sentence_records_partial():
             session._stop.set()
         return text.encode()
 
-    session, renderer, player = make_session(complete_reply=lambda m: "One. Two. Three.")
+    session, renderer, player = make_session(
+        complete_reply=lambda m, on_tool=None: "One. Two. Three."
+    )
     session.deps.synthesize = synth
     session._generate_reply()
     # Only the first sentence finished enqueuing before the barge-in stop landed.
@@ -242,7 +172,7 @@ def test_generate_reply_stop_after_first_sentence_records_partial():
 
 
 def test_generate_reply_stop_before_first_sentence_speaks_nothing():
-    session, renderer, player = make_session(complete_reply=lambda m: "One. Two.")
+    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "One. Two.")
     session._stop.set()
     session._generate_reply()
     assert player.enqueued == []
@@ -252,7 +182,7 @@ def test_generate_reply_stop_before_first_sentence_speaks_nothing():
 
 
 def test_generate_reply_llm_failure_is_recorded_and_surfaced():
-    def boom(messages):
+    def boom(messages, on_tool=None):
         del messages
         raise APIError("gateway down")
 
@@ -269,7 +199,9 @@ def test_generate_reply_tts_failure_midway_is_recorded():
     def boom(text):
         raise APIError("tts down")
 
-    session, renderer, player = make_session(complete_reply=lambda m: "Hi.", synthesize=boom)
+    session, renderer, player = make_session(
+        complete_reply=lambda m, on_tool=None: "Hi.", synthesize=boom
+    )
     session._generate_reply()
     assert isinstance(session.error, APIError)
     assert player.enqueued == []
@@ -403,7 +335,7 @@ def test_run_cascade_greets_then_pumps_turns():
 
     session_box = {}
 
-    def complete_reply(messages):
+    def complete_reply(messages, on_tool=None):
         session_box["messages"] = messages
         return "Hi back."
 
@@ -432,7 +364,7 @@ def test_run_cascade_hands_the_session_to_on_session_before_greeting():
     player = FakePlayer()
     deps = CascadeDeps(
         run_stt=lambda on_turn: None,
-        complete_reply=lambda m: "hi",
+        complete_reply=lambda m, on_tool=None: "hi",
         synthesize=lambda text: b"",
         spawn=_sync_spawn,
     )
@@ -458,7 +390,10 @@ def test_run_cascade_shuts_down_inflight_worker():
         on_turn(_turn("hello"))
 
     deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=lambda m: "hi", synthesize=lambda t: b"", spawn=lazy_spawn
+        run_stt=run_stt,
+        complete_reply=lambda m, on_tool=None: "hi",
+        synthesize=lambda t: b"",
+        spawn=lazy_spawn,
     )
     run_cascade(
         renderer=FakeRenderer(), player=FakePlayer(), config=CascadeConfig(greeting=""), deps=deps
@@ -470,7 +405,7 @@ def test_run_cascade_reraises_recorded_leg_error():
     def run_stt(on_turn):
         on_turn(_turn("hi"))
 
-    def boom(messages):
+    def boom(messages, on_tool=None):
         raise APIError("gateway down")
 
     deps = CascadeDeps(
@@ -491,7 +426,10 @@ def test_run_cascade_closes_player_when_stt_raises():
 
     player = FakePlayer()
     deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=lambda m: "", synthesize=lambda t: b"", spawn=_sync_spawn
+        run_stt=run_stt,
+        complete_reply=lambda m, on_tool=None: "",
+        synthesize=lambda t: b"",
+        spawn=_sync_spawn,
     )
     with pytest.raises(APIError, match="stt failed"):
         run_cascade(

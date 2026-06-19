@@ -19,6 +19,10 @@ from aai_cli.agent import events
         (events.UserFinal(text="hello"), {"type": "transcript.user", "text": "hello"}),
         (events.ReplyStarted(), {"type": "reply.started"}),
         (
+            events.ToolUse(label="Searching the web"),
+            {"type": "tool.use", "label": "Searching the web"},
+        ),
+        (
             events.AgentTranscript(text="hi back", interrupted=False),
             {"type": "transcript.agent", "text": "hi back", "interrupted": False},
         ),

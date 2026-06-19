@@ -124,6 +124,26 @@ def test_human_agent_line_labeled():
     assert "the time is noon" in out
 
 
+def test_json_tool_call_emits_tool_use_event():
+    buf = io.StringIO()
+    AgentRenderer(json_mode=True, out=buf).tool_call("Searching the web")
+    assert {"type": "tool.use", "label": "Searching the web"} in _json_lines(buf)
+
+
+def test_text_tool_call_goes_to_stderr_not_stdout():
+    # The tool affordance is status, so in piped text mode it stays off stdout (transcript-only).
+    out, err = io.StringIO(), io.StringIO()
+    AgentRenderer(json_mode=False, text_mode=True, out=out, err=err).tool_call("Searching the web")
+    assert "Searching the web" in err.getvalue()
+    assert out.getvalue() == ""
+
+
+def test_human_tool_call_shows_inline_line():
+    r, buf = _human()
+    r.tool_call("Searching the web")
+    assert "Searching the web" in buf.getvalue()
+
+
 def test_human_close_commits_open_partial():
     r, buf = _human()
     r.user_partial("half a sentence")

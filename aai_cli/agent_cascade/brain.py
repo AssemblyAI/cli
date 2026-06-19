@@ -42,6 +42,16 @@ _FLOW_LOG = logging.getLogger("aai_cli.agent_cascade.brain")
 # arbitrary tuning knob — a +-1 shift is behaviorally equivalent, so no test can kill it.
 _RESULT_LOG_CAP = 500  # pragma: no mutate
 
+# Human, speakable labels for the tool affordance the live UI shows while a tool runs (so a
+# spoken turn that pauses to use a tool says *why* it's working, not just spin silently).
+_TOOL_LABELS = {WEB_SEARCH_TOOL_NAME: "Searching the web"}
+
+
+def _tool_label(name: str) -> str:
+    """A short present-tense label for a tool call, shown as the live UI's tool affordance."""
+    return _TOOL_LABELS.get(name, f"Using {name}")
+
+
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
 _SPOKEN_TAIL = (
     "Your reply is read aloud, so keep it short and spoken — no markdown, lists, code, or raw URLs."
@@ -177,37 +187,44 @@ def build_graph(
 
 def build_completer(
     api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
-) -> Callable[[list[ChatCompletionMessageParam]], str]:
+) -> Callable[..., str]:
     """A ``complete_reply`` for the cascade engine backed by the deepagents graph.
 
     The cascade prepends its own ``system`` message to the history each turn; the graph
-    already owns the system prompt, so we drop it before invoking. The graph runs the
-    full tool loop and we return its final spoken text. Under ``-v`` the loop is streamed
-    so each tool call/result is logged as it lands (see :func:`_run_graph`). ``graph`` is
-    injected in tests so the per-turn wiring runs against a fake with no network.
+    already owns the system prompt, so we drop it before invoking. The graph runs the full
+    tool loop and we return its final spoken text. ``on_tool`` (when given) is called with a
+    short label as each tool call lands, so the front-end can show a "Searching the web…"
+    affordance instead of sitting silent while the agent works; the loop is also streamed —
+    rather than ``invoke``-d — whenever a sink is wired or under ``-v`` (see :func:`_run_graph`).
+    ``graph`` is injected in tests so the per-turn wiring runs against a fake with no network.
     """
     resolved = build_graph(api_key, config) if graph is None else graph
 
-    def complete_reply(messages: list[ChatCompletionMessageParam]) -> str:
+    def complete_reply(
+        messages: list[ChatCompletionMessageParam],
+        on_tool: Callable[[str], None] | None = None,
+    ) -> str:
         conversation = [message for message in messages if message.get("role") != "system"]
-        return _reply_text(_run_graph(resolved, conversation))
+        return _reply_text(_run_graph(resolved, conversation, on_tool))
 
     return complete_reply
 
 
 def _run_graph(
-    graph: CompiledAgent, conversation: list[ChatCompletionMessageParam]
+    graph: CompiledAgent,
+    conversation: list[ChatCompletionMessageParam],
+    on_tool: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """Run one turn through the graph, returning its end state.
 
-    Normally a single ``invoke`` (the whole tool loop runs internally). Under verbose
-    mode, and when the graph can stream, drive it as incremental state snapshots instead
-    so :func:`_log_flow` can surface each tool call/result on stderr as it happens — which
-    is what makes a stalled spoken turn debuggable. The test fakes only implement
-    ``invoke``, so they (and the non-verbose path) take the plain branch.
+    Normally a single ``invoke`` (the whole tool loop runs internally). When a tool sink is
+    wired (the live UI's affordance) or under verbose mode, and the graph can stream, drive
+    it as incremental state snapshots instead so :func:`_log_flow` surfaces each tool call as
+    it happens. The test fakes only implement ``invoke``, so they (and the plain path with no
+    sink) take the invoke branch.
     """
     try:
-        return _drive_graph(graph, {"messages": conversation})
+        return _drive_graph(graph, {"messages": conversation}, on_tool)
     except CLIError:
         raise
     except Exception as exc:
@@ -220,39 +237,60 @@ def _run_graph(
         ) from exc
 
 
-def _drive_graph(graph: CompiledAgent, graph_input: dict[str, object]) -> dict[str, object]:
-    """Invoke the graph (or stream it under ``-v`` so :func:`_log_flow` can trace each step)."""
-    if debuglog.active() and hasattr(graph, "stream"):
+def _drive_graph(
+    graph: CompiledAgent,
+    graph_input: dict[str, object],
+    on_tool: Callable[[str], None] | None = None,
+) -> dict[str, object]:
+    """Invoke the graph, or stream it (when a tool sink is wired or under ``-v``) so
+    :func:`_log_flow` can surface each tool call as it lands."""
+    if (on_tool is not None or debuglog.active()) and hasattr(graph, "stream"):
         last: dict[str, object] = {}
         seen = 0
         for chunk in graph.stream(graph_input, None, stream_mode="values"):
-            seen = _log_flow(chunk, seen)
+            seen = _log_flow(chunk, seen, on_tool)
             last = chunk
         return last
     return graph.invoke(graph_input)
 
 
-def _log_flow(state: dict[str, object], seen: int) -> int:
-    """Log the tool calls/results added to ``state`` since the first ``seen`` messages.
+def _log_flow(
+    state: dict[str, object], seen: int, on_tool: Callable[[str], None] | None = None
+) -> int:
+    """Surface the tool calls/results added to ``state`` since the first ``seen`` messages.
 
-    Reuses the coding agent's message→event vocabulary so the flow log knows the same
-    AIMessage/ToolMessage shapes the TUI does. Returns the new high-water message count
-    so the next snapshot only logs what it added.
+    Feeds ``on_tool`` a speakable label as each tool call lands (the live UI's affordance) and,
+    under ``-v``, logs the call/result/interim line to stderr. Reuses the coding agent's
+    message→event vocabulary so it reads the same AIMessage/ToolMessage shapes the TUI does.
+    Returns the new high-water message count so the next snapshot only re-surfaces what it added.
     """
-    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult, message_events
+    from aai_cli.code_agent.events import message_events
 
     messages = state.get("messages")
     if not isinstance(messages, list):
         return seen
+    verbose = debuglog.active()
     for message in messages[seen:]:
         for event in message_events(message, announce_calls=True):
-            if isinstance(event, ToolCall):
-                _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
-            elif isinstance(event, ToolResult):
-                _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
-            elif isinstance(event, AssistantText):
-                _FLOW_LOG.info("llm: %s", event.text)
+            _surface_event(event, on_tool, verbose=verbose)
     return len(messages)
+
+
+def _surface_event(event: object, on_tool: Callable[[str], None] | None, *, verbose: bool) -> None:
+    """Surface one flow event: feed a tool call's label to ``on_tool``, and (under ``-v``)
+    log the call/result/interim line to stderr."""
+    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult
+
+    if isinstance(event, ToolCall) and on_tool is not None:
+        on_tool(_tool_label(event.name))
+    if not verbose:
+        return
+    if isinstance(event, ToolCall):
+        _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
+    elif isinstance(event, ToolResult):
+        _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
+    elif isinstance(event, AssistantText):
+        _FLOW_LOG.info("llm: %s", event.text)
 
 
 def _clip(text: str) -> str:

@@ -58,6 +58,9 @@ class Renderer(Protocol):
     def user_final(self, text: str) -> None:
         """Show a finalized user transcript."""
 
+    def tool_call(self, label: str) -> None:
+        """Show that the agent is using a tool (e.g. "Searching the web") while it thinks."""
+
     def reply_started(self) -> None:
         """Mark the start of an agent reply."""
 
@@ -106,7 +109,9 @@ class CascadeDeps:
     """
 
     run_stt: Callable[[Callable[[object], None]], None]
-    complete_reply: Callable[[list[ChatCompletionMessageParam]], str]
+    # complete_reply(messages, on_tool=None) -> spoken text; on_tool is fed a label per tool
+    # call so the front-end can show a "Searching the web…" affordance (brain.build_completer).
+    complete_reply: Callable[..., str]
     synthesize: Callable[[str], bytes]
     spawn: Callable[[Callable[[], None]], _Worker] = _spawn_thread
 
@@ -230,7 +235,7 @@ class CascadeSession:
             *self.history,
         ]
         try:
-            reply = self.deps.complete_reply(messages)
+            reply = self.deps.complete_reply(messages, on_tool=self.renderer.tool_call)
         except CLIError as exc:
             # The reply leg failed (gateway/tool/graph error, now converted to a CLIError in
             # brain._run_graph). Show it in the transcript so the turn doesn't just vanish —

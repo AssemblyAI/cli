@@ -136,6 +136,20 @@ def test_reply_streams_sentences_and_finalizes_back_to_listening() -> None:
     _run(go())
 
 
+def test_show_tool_call_mounts_an_inline_affordance() -> None:
+    # A tool call mid-turn drops a dim "Searching the web…" note, so the thinking pause reads
+    # as progress rather than a hang (the live tool affordance).
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_tool_call("Searching the web")
+            notes = [str(n.render()) for n in app.query(Note)]
+            assert any("Searching the web" in n for n in notes)
+
+    _run(go())
+
+
 def test_agent_sentence_without_begin_reply_mounts_a_reply() -> None:
     async def go() -> None:
         app = _app()
@@ -295,6 +309,7 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
             renderer.connected()
             renderer.user_partial("turn it")
             renderer.user_final("turn it up")
+            renderer.tool_call("Searching the web")
             renderer.reply_started()
             renderer.agent_transcript("Done.", interrupted=False)
             renderer.reply_done(interrupted=False)
@@ -314,6 +329,8 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
             )
             assert "» turn it up" in str(app.query_one(UserMessage).render())
             assert app.query_one(AssistantMessage).text == "Done. "
+            # The tool_call leg hopped to the UI thread and surfaced the affordance note.
+            assert any("Searching the web" in str(n.render()) for n in app.query(Note))
         assert done.is_set()  # leaving the run_test context unmounted -> on_stop released it
 
     _run(go())

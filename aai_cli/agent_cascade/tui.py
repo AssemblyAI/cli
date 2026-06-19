@@ -59,6 +59,9 @@ class _TuiRenderer:
     def user_final(self, text: str) -> None:
         self._dispatch(self._app.show_user_final, text)
 
+    def tool_call(self, label: str) -> None:
+        self._dispatch(self._app.show_tool_call, label)
+
     def reply_started(self) -> None:
         self._dispatch(self._app.begin_reply)
 
@@ -186,6 +189,15 @@ class LiveAgentApp(App[None]):
             self._user_partial.set_text(text)
         self._user_partial = None  # finalized; the next partial starts a fresh line
         self._set_phase("thinking")
+        self._scroll_end()
+
+    def show_tool_call(self, label: str) -> None:
+        """Surface the agent's tool use inline as it happens (the live tool affordance).
+
+        A spoken turn that pauses to use a tool would otherwise sit silent on "thinking…";
+        this drops a dim "Searching the web…" line so the wait reads as progress, not a hang.
+        """
+        self._mount(Note(f"{label}…"))
         self._scroll_end()
 
     def begin_reply(self) -> None:
