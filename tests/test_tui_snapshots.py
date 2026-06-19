@@ -31,6 +31,11 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
 
 
+# More than the 4-line preview budget, so summarize_result clips it and the ToolOutput
+# row becomes expandable — the collapsed/expanded snapshots below pin both states.
+_LONG_OUTPUT = "\n".join(f"tests/test_module_{i}.py .... [ {i * 10}%]" for i in range(8))
+
+
 @pytest.fixture(autouse=True)
 def _pin_version(monkeypatch: pytest.MonkeyPatch) -> None:
     h.pin_banner_version(monkeypatch)
@@ -114,6 +119,63 @@ def test_code_ask_modal(snap_compare, tmp_path, monkeypatch) -> None:
     )
 
 
+def test_code_approval_modal_expanded(snap_compare, tmp_path, monkeypatch) -> None:
+    """`e` expands the approval prompt from the identifying arg to the full args.
+
+    Collapsed, a write_file call shows only the filename; expanded, it reveals the file
+    content that was elided — a taller box, pinned so the reveal can't regress.
+    """
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        h.freeze_animation(pilot.app)
+        pilot.app.push_screen(
+            ApprovalScreen(
+                "write_file", {"file_path": "app.py", "content": "PORT = 8080\nDEBUG = 1"}
+            )
+        )
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), press=["e"], terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_tool_output_collapsed(snap_compare, tmp_path, monkeypatch) -> None:
+    """Long tool output clips to a preview with a `(Ctrl+O to expand)` hint."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, CodeAgentApp)
+        h.freeze_animation(app)
+        app._mount(UserMessage("run the tests"))
+        app._write_event(ToolCall(name="execute", args={"command": "pytest -q"}))
+        app._write_event(ToolResult(name="execute", content=_LONG_OUTPUT))
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_tool_output_expanded(snap_compare, tmp_path, monkeypatch) -> None:
+    """Ctrl+O expands the clipped tool output to the full content with a collapse hint."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, CodeAgentApp)
+        h.freeze_animation(app)
+        app._mount(UserMessage("run the tests"))
+        app._write_event(ToolCall(name="execute", args={"command": "pytest -q"}))
+        app._write_event(ToolResult(name="execute", content=_LONG_OUTPUT))
+        await pilot.pause()  # let the ToolOutput mount before toggling it
+        app.action_toggle_output()  # Ctrl+O
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
 # --- assembly live -----------------------------------------------------------
 
 
@@ -137,5 +199,18 @@ def test_live_conversation(snap_compare) -> None:
         app.begin_reply()
         app.show_agent_sentence("It's sunny and about sixty degrees right now.")
         h.freeze_animation(app)  # begin_reply switched the phase, which repainted the bar
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
+def test_live_thinking(snap_compare) -> None:
+    """After a finalized turn, the bar shows the amber `Thinking…` phase before the reply."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_final("what's the weather like in Boston?")
+        h.freeze_animation(app)  # show_user_final switched the phase to thinking
 
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
