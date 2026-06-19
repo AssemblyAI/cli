@@ -57,6 +57,23 @@ class FakeAgent:
         return {}
 
 
+class FakeVoice:
+    """A no-op ``_VoiceIO``; voice-mode snapshots never reach the capture/readback legs.
+
+    The capture leg is stubbed in :class:`_SnapshotCodeApp`, so these are unreached by any
+    render and are covered by ``test_fake_voice_is_inert`` instead.
+    """
+
+    def listen(self) -> str | None:
+        return None
+
+    def speak(self, text: str) -> None:
+        pass
+
+    def cancel(self) -> None:
+        pass
+
+
 class _SnapshotLiveApp(LiveAgentApp):
     """``LiveAgentApp`` whose cascade worker never starts, so the app stays up for a render.
 
@@ -69,9 +86,27 @@ class _SnapshotLiveApp(LiveAgentApp):
         pass
 
 
+class _SnapshotCodeApp(CodeAgentApp):
+    """``CodeAgentApp`` whose background voice-capture leg never starts.
+
+    In voice mode ``on_mount`` spawns a daemon thread that blocks on ``voice.listen()`` and
+    marshals phase changes back onto the UI thread — which would race the screenshot and make
+    the bar frame non-deterministic. Stubbing ``_begin_listening`` keeps the app in the
+    synchronously-rendered listening state (voice bar shown, prompt hidden) with no thread.
+    """
+
+    def _begin_listening(self) -> None:
+        pass
+
+
 def build_code_app(*, cwd: Path, auto_approve: bool = False) -> CodeAgentApp:
     """A ``CodeAgentApp`` wired to a fake agent for a visual snapshot."""
     return CodeAgentApp(agent=FakeAgent(), cwd=cwd, auto_approve=auto_approve)
+
+
+def build_code_voice_app(*, cwd: Path) -> _SnapshotCodeApp:
+    """A ``CodeAgentApp`` in voice mode (listening), with the mic-capture leg stubbed out."""
+    return _SnapshotCodeApp(agent=FakeAgent(), cwd=cwd, voice=FakeVoice())
 
 
 def build_live_app() -> _SnapshotLiveApp:

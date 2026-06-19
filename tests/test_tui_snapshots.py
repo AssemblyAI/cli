@@ -48,6 +48,14 @@ def test_fake_agent_returns_empty_state() -> None:
     assert h.FakeAgent().invoke("prompt") == {}
 
 
+def test_fake_voice_is_inert() -> None:
+    """The voice double satisfies _VoiceIO without capturing or speaking anything."""
+    voice = h.FakeVoice()
+    assert voice.listen() is None
+    voice.speak("hello")
+    voice.cancel()
+
+
 # --- assembly code -----------------------------------------------------------
 
 
@@ -241,6 +249,19 @@ def test_code_error(snap_compare, tmp_path, monkeypatch) -> None:
 
     assert snap_compare(
         h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_voice_listening(snap_compare, tmp_path, monkeypatch) -> None:
+    """Voice mode swaps the prompt for the listening bar (with a Ctrl-V hint) and shows the
+    green `● voice on` status badge — the whole alternate-input chrome."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        h.freeze_animation(pilot.app)
+
+    assert snap_compare(
+        h.build_code_voice_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
     )
 
 
