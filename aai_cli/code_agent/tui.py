@@ -75,7 +75,9 @@ class CodeAgentApp(_VoiceLegs):
     /* The transcript is a scroll container of mounted message widgets (not a RichLog), so the
        reply streams in place and tool output can expand/collapse. */
     #log {{ height: 1fr; border: none; background: #000000; padding: 1 2; }}
-    #promptbar {{ dock: bottom; height: 3; background: #000000; border: round #3a3f55; margin: 1 1; }}
+    /* width: 100% (not the 1fr default) so the bordered box fits inside its 1-col side margins;
+       a docked 1fr container ignores horizontal margin and overflows, clipping the right border. */
+    #promptbar {{ dock: bottom; height: 3; width: 100%; background: #000000; border: round #3a3f55; margin: 1 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
     /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */

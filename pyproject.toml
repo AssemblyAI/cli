@@ -117,6 +117,12 @@ dev = [
     # failure instead of a wedged session (not in addopts — opt-in per run).
     "pytest-timeout>=2.3.1",
     "time-machine>=3.1.0",
+    # Visual-regression snapshots for the Textual TUIs (`assembly code` / `live`): the
+    # `snap_compare` fixture renders an app to SVG and diffs it against a committed golden,
+    # catching CSS/layout/docking regressions the behavioral pilot tests can't see. Stores
+    # SVGs under tests/__snapshots__/<module>/ (regenerate with --snapshot-update like the
+    # .ambr goldens). See tests/AGENTS.md "Textual visual snapshots".
+    "pytest-textual-snapshot>=1.0.0",
     "hypothesis>=6.155.1",
     "ruff>=0.15.15",
     "mypy>=2.1.0",

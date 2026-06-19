@@ -65,8 +65,10 @@ class ApprovalScreen(ModalScreen[str]):
 
     DEFAULT_CSS = """
     ApprovalScreen { align: center bottom; background: transparent; }
+    /* width: 100% (not 1fr) so the box honors its 1-col side margins — a docked 1fr container
+       ignores horizontal margin and overflows the screen, clipping the right border off-edge. */
     ApprovalScreen #approvalbox {
-        dock: bottom; width: 1fr; height: auto;
+        dock: bottom; width: 100%; height: auto;
         border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     ApprovalScreen #approvalbox Label { height: auto; }
@@ -163,7 +165,7 @@ class AskScreen(ModalScreen[str]):
     DEFAULT_CSS = """
     AskScreen { align: center bottom; background: transparent; }
     AskScreen #askbox {
-        dock: bottom; width: 1fr; height: auto;
+        dock: bottom; width: 100%; height: auto;
         border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     """
