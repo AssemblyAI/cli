@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -17,6 +18,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from aai_cli.agent_cascade import brain
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent import model as model_mod
+from aai_cli.core.errors import CLIError
 
 
 class FakeChatModel(BaseChatModel):
@@ -56,33 +58,22 @@ class _NamedTool:
         self.name = name
 
 
-def test_system_prompt_appends_tool_guidance_for_present_tools():
+def test_system_prompt_advertises_web_search_when_present():
     prompt = brain.build_system_prompt(
-        "You are a pirate.",
-        tools=[
-            _NamedTool(brain.WEB_SEARCH_TOOL_NAME),
-            _NamedTool("fetch_url"),
-            _NamedTool("docs_search"),
-        ],
+        "You are a pirate.", tools=[_NamedTool(brain.WEB_SEARCH_TOOL_NAME)]
     )
-    # The persona is preserved, and the guidance advertises each capability that a present
-    # tool backs (the plain cascade persona never mentions tools).
+    # The persona is preserved, and the guidance advertises the web-search capability the
+    # present tool backs (the plain cascade persona never mentions tools).
     assert prompt.startswith("You are a pirate.")
     assert "search the web" in prompt
-    assert "fetch a specific URL" in prompt
-    assert "AssemblyAI documentation" in prompt
 
 
-def test_system_prompt_omits_web_search_when_no_search_tool():
-    # With no TAVILY_API_KEY the search tool is absent — the guidance must NOT promise web
-    # search, since announcing a missing tool makes the agent narrate "I'll search…" and
-    # then stall with no answer. The capabilities it *does* have still appear.
-    prompt = brain.build_system_prompt(
-        "persona", tools=[_NamedTool("fetch_url"), _NamedTool("docs_search")]
-    )
+def test_system_prompt_omits_web_search_when_search_tool_absent():
+    # Without the Firecrawl search tool the guidance must NOT promise web search — announcing
+    # a missing tool makes the agent narrate "I'll search…" and then stall with no answer. A
+    # non-search tool name must not falsely trigger the web-search capability.
+    prompt = brain.build_system_prompt("persona", tools=[_NamedTool("some_other_tool")])
     assert "search the web for current or unfamiliar facts" not in prompt
-    assert "fetch a specific URL" in prompt
-    assert "AssemblyAI documentation" in prompt
 
 
 def test_system_prompt_tells_model_not_to_promise_tools_when_none():
@@ -239,12 +230,33 @@ def test_run_graph_streams_and_logs_flow_when_verbose(monkeypatch, caplog, prese
 
 
 def test_run_graph_invokes_when_not_verbose():
-    # Default (non-verbose): the graph is invoked once, never streamed, and nothing is logged.
+    # Default (non-verbose, no tool sink): invoked once, never streamed, nothing logged.
     graph = _StreamingGraph([{"messages": [AIMessage(content="hi")]}])
     completer = brain.build_completer("k", CascadeConfig(), graph=graph)
     assert completer([{"role": "user", "content": "hi"}]) == ""
     assert graph.invoked is True
     assert graph.stream_kwargs is None
+
+
+def test_on_tool_sink_streams_and_reports_each_tool_call_by_label():
+    # A wired tool sink (the live UI affordance) streams the graph — even without -v — and
+    # reports each tool call by its speakable label, while still returning the final reply.
+    labels: list[str] = []
+    call = AIMessage(
+        content="", tool_calls=[{"name": brain.WEB_SEARCH_TOOL_NAME, "args": {}, "id": "c1"}]
+    )
+    snapshots = [{"messages": [call]}, {"messages": [call, AIMessage(content="Here's the news.")]}]
+    graph = _StreamingGraph(snapshots)
+    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
+    reply = completer([{"role": "user", "content": "news?"}], on_tool=labels.append)
+    assert reply == "Here's the news."
+    assert labels == ["Searching the web"]
+    assert graph.stream_kwargs == "values" and graph.invoked is False  # streamed, not invoked
+
+
+def test_tool_label_maps_web_search_and_falls_back_for_others():
+    assert brain._tool_label(brain.WEB_SEARCH_TOOL_NAME) == "Searching the web"
+    assert brain._tool_label("get_time") == "Using get_time"
 
 
 def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
@@ -259,6 +271,33 @@ def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
 
     completer = brain.build_completer("k", CascadeConfig(), graph=_InvokeOnly())
     assert completer([{"role": "user", "content": "hi"}]) == "from invoke"
+
+
+def test_run_graph_converts_graph_errors_to_cli_error():
+    # A graph failure (gateway 4xx/5xx, a tool raising, a recursion limit) must become a
+    # CLIError so the cascade surfaces it instead of the reply worker dying silently.
+    class _Boom:
+        def invoke(self, graph_input):
+            del graph_input
+            raise ValueError("bedrock said no")
+
+    completer = brain.build_completer("k", CascadeConfig(), graph=_Boom())
+    with pytest.raises(CLIError) as excinfo:
+        completer([{"role": "user", "content": "hi"}])
+    assert "couldn't complete the turn" in excinfo.value.message
+    assert "bedrock said no" in excinfo.value.message  # the cause is preserved for diagnosis
+
+
+def test_run_graph_passes_cli_error_through():
+    # A CLIError from the graph is already user-facing -> propagate as-is, not re-wrapped.
+    class _CliBoom:
+        def invoke(self, graph_input):
+            del graph_input
+            raise CLIError("already clean", error_type="x")
+
+    completer = brain.build_completer("k", CascadeConfig(), graph=_CliBoom())
+    with pytest.raises(CLIError, match="already clean"):
+        completer([{"role": "user", "content": "hi"}])
 
 
 def test_log_flow_ignores_non_list_messages():
@@ -336,23 +375,17 @@ def test_reply_text_is_empty_without_an_assistant_message():
 # --- build_live_tools --------------------------------------------------------
 
 
-def test_build_live_tools_includes_search_when_keyed(monkeypatch):
+def test_build_live_tools_is_just_web_search_when_keyed(monkeypatch):
     search = object()
-    monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
-    monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", lambda: ["docs"])
-    tools = brain.build_live_tools()
-    # Fetch + the keyed search + the docs tools, in that order.
-    assert tools == ["fetch", search, "docs"]
+    # The live agent's sole built-in tool is Firecrawl web search — no URL fetch, no docs.
+    assert brain.build_live_tools() == [search]
 
 
-def test_build_live_tools_omits_search_when_unkeyed(monkeypatch):
-    monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
+def test_build_live_tools_is_empty_without_firecrawl_key(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
-    monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", list)
-    tools = brain.build_live_tools()
-    # No TAVILY_API_KEY -> no search tool, just the fetch tool.
-    assert tools == ["fetch"]
+    # No FIRECRAWL_API_KEY -> no tool at all; the agent then runs tool-free.
+    assert brain.build_live_tools() == []
 
 
 # --- build_graph (model construction + compile, with the docs probe skipped) -
@@ -393,14 +426,14 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
 
     monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
     monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
-    builtin = [_NamedTool("fetch_url")]
+    builtin = [_NamedTool(brain.WEB_SEARCH_TOOL_NAME)]
     extra = [_NamedTool("get_time")]
     graph = brain.build_graph("k", CascadeConfig(), tools=builtin, mcp_tools=extra)
     # The model is bound to both tool sets, in built-in-then-MCP order.
     assert graph == "graph"
     assert captured["tools"] == builtin + extra
-    # The prompt advertises the built-in fetch leg AND the MCP tool by name.
-    assert "fetch a specific URL" in captured["system_prompt"]
+    # The prompt advertises the built-in web-search leg AND the MCP tool by name.
+    assert "search the web" in captured["system_prompt"]
     assert "use your connected tools (get_time)" in captured["system_prompt"]
 
 

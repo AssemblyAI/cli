@@ -23,18 +23,40 @@ DEFAULT_MAX_TOKENS = 8192
 # is supplied. Must be exactly "{{ transcript }}" (spaces included).
 TRANSCRIPT_TAG = "{{ transcript }}"
 
-# A curated subset for `assembly llm --list-models` and help text. The gateway is the
-# source of truth for what's actually accepted, so we don't validate against this.
+# The known model ids surfaced by `assembly llm --list-models`, help text, and shell
+# completion, grouped by provider. The gateway is the source of truth for what's
+# actually accepted, so we don't validate against this — a newer id works even before
+# it lands here.
 KNOWN_MODELS = (
+    # Anthropic
     "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5-20251101",
     "claude-sonnet-4-6",
+    "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5-20251001",
+    # OpenAI
+    "gpt-5.5",
+    "gpt-5.2",
     "gpt-5.1",
     "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
     "gpt-4.1",
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    # Google
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
+    # Moonshot AI
+    "kimi-k2.5",
+    # Alibaba Cloud
+    "qwen3-next-80b-a3b",
+    "qwen3-32B",
 )
 
 

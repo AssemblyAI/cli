@@ -13,6 +13,7 @@ import threading
 import types
 
 import pytest
+import typer
 from textual.widgets import Static
 
 from aai_cli.agent_cascade import engine
@@ -72,8 +73,8 @@ def _voicebar(app) -> str:
 
 
 def test_splash_and_status_render() -> None:
-    # The session opens on the ASSEMBLY wordmark + ready line, and the footer shows the only
-    # control (quit) — there is no text prompt mounted (input is voice-only).
+    # The session opens on the ASSEMBLY wordmark + ready line, and the footer shows the
+    # interrupt/quit controls — there is no text prompt mounted (input is voice-only).
     async def go() -> None:
         app = _app()
         async with app.run_test(size=(100, 30)) as pilot:
@@ -81,7 +82,8 @@ def test_splash_and_status_render() -> None:
             splash = str(app.query_one("#log").children[0].render())
             assert "█" in splash and "Listening… start talking" in splash  # the wordmark splash
             assert "Listening" in _voicebar(app)  # opens in the listening phase
-            assert "Ctrl-C to quit" in str(app.query_one("#status", Static).render())
+            status = str(app.query_one("#status", Static).render())
+            assert "interrupt" in status and "Ctrl-Q to quit" in status
             assert len(app.query("#prompt")) == 0  # no text input — voice only
             assert app.ENABLE_COMMAND_PALETTE is False  # the voice UI hides the command palette
 
@@ -131,6 +133,20 @@ def test_reply_streams_sentences_and_finalizes_back_to_listening() -> None:
             app.end_reply(interrupted=False)
             assert "Listening" in _voicebar(app)  # reply done -> back to listening
             assert len(app.query(Note)) == 0  # not interrupted -> no interrupted aside
+
+    _run(go())
+
+
+def test_show_tool_call_mounts_an_inline_affordance() -> None:
+    # A tool call mid-turn drops a dim "Searching the web…" note, so the thinking pause reads
+    # as progress rather than a hang (the live tool affordance).
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_tool_call("Searching the web")
+            notes = [str(n.render()) for n in app.query(Note)]
+            assert any("Searching the web" in n for n in notes)
 
     _run(go())
 
@@ -196,6 +212,75 @@ def test_web_note_is_surfaced_as_a_notification() -> None:
     _run(go())
 
 
+def test_escape_interrupts_a_playing_reply_via_the_session_hook() -> None:
+    # Escape fires the session's reply-interrupt (set once the cascade has a session) and
+    # never quits — the worker unwinds and the renderer returns the bar to listening.
+    async def go() -> None:
+        fired: list[bool] = []
+
+        def hook() -> bool:
+            fired.append(True)
+            return True
+
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.set_interrupt(hook)
+            app.action_interrupt()
+            assert fired == [True]
+
+    _run(go())
+
+
+def test_ctrl_c_interrupts_a_playing_reply_without_quitting(monkeypatch) -> None:
+    # While a reply is playing (the hook returns True), Ctrl-C interrupts it and stays — it
+    # must NOT quit, so a long answer can be cut off without ending the session.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.set_interrupt(lambda: True)  # a reply is playing
+            app.action_interrupt_or_quit()
+            assert exited == []  # interrupted, not quit
+
+    _run(go())
+
+
+def test_ctrl_c_quits_when_nothing_is_playing(monkeypatch) -> None:
+    # With no reply playing (the hook returns False, or none is wired yet), Ctrl-C quits.
+    async def go() -> None:
+        stops: list[bool] = []
+        app = _app(on_stop=lambda: stops.append(True))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.set_interrupt(lambda: False)  # nothing playing
+            app.action_interrupt_or_quit()
+            assert stops == [True] and exited == [True]
+
+    _run(go())
+
+
+def test_interrupt_before_a_session_is_wired_is_a_safe_noop(monkeypatch) -> None:
+    # A keypress before the cascade has built its session (no interrupt hook yet): Escape is a
+    # no-op and Ctrl-C falls through to quit, so an early press can never wedge the UI.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            exited: list[bool] = []
+            monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
+            app.action_interrupt()  # no hook wired -> nothing happens, no crash
+            assert exited == []
+            app.action_interrupt_or_quit()  # nothing to interrupt -> quits
+            assert exited == [True]
+
+    _run(go())
+
+
 def test_action_stop_tears_down_audio_and_exits(monkeypatch) -> None:
     async def go() -> None:
         stops: list[bool] = []
@@ -225,6 +310,7 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
             renderer.connected()
             renderer.user_partial("turn it")
             renderer.user_final("turn it up")
+            renderer.tool_call("Searching the web")
             renderer.reply_started()
             renderer.agent_transcript("Done.", interrupted=False)
             renderer.reply_done(interrupted=False)
@@ -244,6 +330,8 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
             )
             assert "» turn it up" in str(app.query_one(UserMessage).render())
             assert app.query_one(AssistantMessage).text == "Done. "
+            # The tool_call leg hopped to the UI thread and surfaced the affordance note.
+            assert any("Searching the web" in str(n.render()) for n in app.query(Note))
         assert done.is_set()  # leaving the run_test context unmounted -> on_stop released it
 
     _run(go())
@@ -331,11 +419,32 @@ def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
     assert captured["ran"] == {"mouse": False}  # mouse off so transcript text stays selectable
 
 
+def test_tui_setup_keyboard_interrupt_exits_clean(monkeypatch) -> None:
+    # Ctrl-C during TUI setup (mic open / graph build / --mcp-config load) lands before
+    # Textual captures the keyboard; it must exit 130, not surface a raw traceback.
+    _wire_tui(monkeypatch)
+
+    def boom(*_a, **_k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(_exec, "_run_live_tui", boom)
+    with pytest.raises(typer.Exit) as exc:
+        run_agent_cascade(_opts(), AppState(), json_mode=False)
+    assert exc.value.exit_code == 130
+
+
 def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
-    # The closure handed to the app runs the cascade with the duplex player and the wired deps.
+    # The closure handed to the app runs the cascade with the duplex player and the wired
+    # deps, and the cascade's on_session wires the session's reply-interrupt onto the app.
     fake_duplex = _wire_tui(monkeypatch)
     captured: dict[str, object] = {}
-    monkeypatch.setattr(engine, "run_cascade", lambda **kw: captured.update(kw))
+
+    def fake_run_cascade(**kw):
+        captured.update(kw)
+        # run_cascade hands the freshly built session to on_session before the conversation.
+        kw["on_session"](types.SimpleNamespace(interrupt_reply="session-interrupt"))
+
+    monkeypatch.setattr(engine, "run_cascade", fake_run_cascade)
 
     class FakeApp:
         def __init__(self, *, run_conversation, on_stop, web_note):
@@ -344,8 +453,13 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
         def run(self, **kwargs):
             self._rc("renderer-sentinel")  # the app would call this on its worker thread
 
+        def set_interrupt(self, interrupt):
+            captured["interrupt"] = interrupt
+
     monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
     run_agent_cascade(_opts(), AppState(), json_mode=False)
     assert captured["player"] is fake_duplex.player
     assert captured["deps"] == "deps"
     assert captured["renderer"] == "renderer-sentinel"
+    # The session's interrupt_reply was wired onto the app (so Escape/Ctrl-C can use it).
+    assert captured["interrupt"] == "session-interrupt"

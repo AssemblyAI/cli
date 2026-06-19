@@ -52,6 +52,13 @@ class ReplyStarted(_Event):
     type: Literal["reply.started"] = "reply.started"
 
 
+class ToolUse(_Event):
+    """The agent invoked a tool mid-reply (``label`` is a short, human description)."""
+
+    type: Literal["tool.use"] = "tool.use"
+    label: str
+
+
 class AgentTranscript(_Event):
     """The agent's reply transcript (``interrupted`` when the user barged in)."""
 
@@ -67,4 +74,4 @@ class ReplyDone(_Event):
     interrupted: bool
 
 
-Event = SessionReady | UserDelta | UserFinal | ReplyStarted | AgentTranscript | ReplyDone
+Event = SessionReady | UserDelta | UserFinal | ToolUse | ReplyStarted | AgentTranscript | ReplyDone

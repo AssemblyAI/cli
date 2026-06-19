@@ -75,6 +75,19 @@ class AgentRenderer(BaseRenderer):
         else:
             self._finalize_line(_labeled("you: ", text, style="aai.you"))
 
+    def tool_call(self, label: str) -> None:
+        """Surface that the agent is using a tool (e.g. "Searching the web") while it thinks.
+
+        JSON emits a ``tool.use`` event; piped text keeps it off stdout (transcript-only) by
+        routing to stderr; human mode shows a muted inline line.
+        """
+        if self.json_mode:
+            self._emit_event(events.ToolUse(label=label))
+        elif self.text_mode:
+            self._status(f"{label}…")
+        else:
+            self._line(_labeled("", f"{label}…", style="aai.muted"))
+
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:
         if self.json_mode:

@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 # Splash intro copy (the code agent's banner copy is code-specific, so `live` carries its own).
 _READY_LINE = "Listening… start talking when you're ready."
 _TIP_LINE = "Use headphones — the mic stays open while the agent speaks."
-# The one-line footer: a hands-free session, so the only control is quit.
-_STATUS_LINE = "Ctrl-C to quit"
+# The one-line footer: a hands-free session, so the controls are interrupt-and-quit.
+_STATUS_LINE = "Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
 
 
 class _TuiRenderer:
@@ -58,6 +58,9 @@ class _TuiRenderer:
 
     def user_final(self, text: str) -> None:
         self._dispatch(self._app.show_user_final, text)
+
+    def tool_call(self, label: str) -> None:
+        self._dispatch(self._app.show_tool_call, label)
 
     def reply_started(self) -> None:
         self._dispatch(self._app.begin_reply)
@@ -89,13 +92,19 @@ class LiveAgentApp(App[None]):
     #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX};
         margin: 1 1; content-align: center middle; }}
     #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
+    /* Blank line above each agent reply (and the greeting), so turns don't run together. */
+    AssistantMessage {{ margin-top: 1; }}
     """
     TITLE = "AssemblyAI Live"
     ENABLE_COMMAND_PALETTE = False
-    # Ctrl-C / Ctrl-Q both stop the session; there is no turn to interrupt and nothing to type,
-    # so a single press quits (closing the audio unblocks the cascade worker).
+    # Escape and Ctrl-C interrupt a playing reply (silence it and drop back to listening),
+    # the same as talking over the agent — so you can stop a long answer without speaking.
+    # When nothing is speaking, Ctrl-C quits; Ctrl-Q always quits (the guaranteed escape
+    # hatch, so a stuck reply can never trap the session). Quitting closes the audio, which
+    # unblocks the cascade worker.
     BINDINGS: ClassVar = [
-        ("ctrl+c", "stop", "Quit"),
+        ("escape", "interrupt", "Interrupt"),
+        ("ctrl+c", "interrupt_or_quit", "Interrupt / Quit"),
         ("ctrl+q", "stop", "Quit"),
     ]
 
@@ -110,6 +119,9 @@ class LiveAgentApp(App[None]):
         self._run_conversation = run_conversation  # blocking; runs the cascade given a Renderer
         self._on_stop = on_stop  # closes the audio so a quit unblocks the cascade worker
         self._web_note = web_note
+        # The cascade's reply-interrupt, wired once its session exists (see set_interrupt);
+        # None until then, so an early keypress is a harmless no-op.
+        self._interrupt: Callable[[], bool] | None = None
         self._voice_phase = "listening"
         self._voice_frames = itertools.cycle(tui_status.VOICE_FRAMES)
         self._voice_timer: Timer | None = None
@@ -179,6 +191,15 @@ class LiveAgentApp(App[None]):
         self._set_phase("thinking")
         self._scroll_end()
 
+    def show_tool_call(self, label: str) -> None:
+        """Surface the agent's tool use inline as it happens (the live tool affordance).
+
+        A spoken turn that pauses to use a tool would otherwise sit silent on "thinking…";
+        this drops a dim "Searching the web…" line so the wait reads as progress, not a hang.
+        """
+        self._mount(Note(f"{label}…"))
+        self._scroll_end()
+
     def begin_reply(self) -> None:
         """Open a fresh reply widget the agent's sentences stream into; switch to speaking."""
         self._set_phase("speaking")
@@ -241,10 +262,35 @@ class LiveAgentApp(App[None]):
     def _scroll_end(self) -> None:
         self.query_one("#log", VerticalScroll).scroll_end(animate=False)  # pragma: no mutate
 
-    # --- quit -----------------------------------------------------------------
+    # --- interrupt / quit -----------------------------------------------------
+
+    def set_interrupt(self, interrupt: Callable[[], bool]) -> None:
+        """Wire the session's reply-interrupt once the cascade has built its session.
+
+        Called from the cascade worker thread (via ``run_cascade``'s ``on_session``); it only
+        stores a callable reference, so no UI hop is needed.
+        """
+        self._interrupt = interrupt
+
+    def action_interrupt(self) -> None:
+        """Escape: silence a playing reply and return to listening (a no-op when idle)."""
+        self._do_interrupt()
+
+    def action_interrupt_or_quit(self) -> None:
+        """Ctrl-C: silence a playing reply and keep listening; quit when nothing is speaking."""
+        if not self._do_interrupt():
+            self.action_stop()
+
+    def _do_interrupt(self) -> bool:
+        """Fire the session's reply-interrupt; True if a reply was playing.
+
+        The reply worker then unwinds and emits ``reply_done``, so the renderer is what
+        returns the voice bar to listening — this only has to signal the stop.
+        """
+        return self._interrupt is not None and self._interrupt()
 
     def action_stop(self) -> None:
-        """Ctrl-C / Ctrl-Q: stop the audio (unblocking the cascade worker) and exit."""
+        """Ctrl-Q (or Ctrl-C when idle): stop the audio (unblocking the worker) and exit."""
         self._teardown()
         self.exit()
 

@@ -76,6 +76,8 @@ class ApprovalScreen(ModalScreen[str]):
         ("a", "auto", "Auto-approve"),
         ("n", "reject", "Reject"),
         ("e", "expand", "Expand"),
+        # Escape / Ctrl-C dismiss the modal — declining the tool is the safe cancel.
+        ("escape,ctrl+c", "reject", "Cancel"),
     ]
 
     def __init__(
@@ -165,6 +167,8 @@ class AskScreen(ModalScreen[str]):
         border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     """
+    # Escape / Ctrl-C dismiss the question with no answer.
+    BINDINGS: ClassVar = [("escape,ctrl+c", "cancel", "Cancel")]
 
     def __init__(self, question: str, *, voice: _VoiceIO | None = None) -> None:
         super().__init__()
@@ -197,6 +201,10 @@ class AskScreen(ModalScreen[str]):
             return
         self._answered = True
         self.dismiss(text)
+
+    def action_cancel(self) -> None:
+        """Escape / Ctrl-C: dismiss with no answer (the agent gets an empty reply)."""
+        self._answer("")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self._answer(event.value)

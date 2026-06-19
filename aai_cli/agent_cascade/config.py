@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from aai_cli.agent_cascade.voices import DEFAULT_VOICE
 from aai_cli.core import llm
 
-# `assembly live` defaults to a capable gateway model (override with --model); kept a
-# literal rather than llm.DEFAULT_MODEL so the live agent's default is independent of the
-# one-shot `assembly llm` default.
-DEFAULT_MODEL = "gpt-5.1"
+# `assembly live` defaults to a fast, low-latency gateway model (override with --model) —
+# a literal rather than llm.DEFAULT_MODEL so the live agent's default is independent of the
+# one-shot `assembly llm` default. Latency matters most for a spoken back-and-forth.
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
 # The realtime model the cascade transcribes with (same as the agent-cascade template).
 DEFAULT_SPEECH_MODEL = "u3-rt-pro"

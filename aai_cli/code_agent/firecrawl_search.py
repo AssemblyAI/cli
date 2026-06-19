@@ -11,6 +11,7 @@ agent share this single search tool via Firecrawl's official LangChain integrati
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 from aai_cli.core import env
@@ -32,6 +33,13 @@ def build_web_search_tool() -> BaseTool | None:
     if not env.get(FIRECRAWL_API_KEY_ENV):
         return None
 
-    from langchain_firecrawl import FirecrawlSearch
+    with warnings.catch_warnings():
+        # firecrawl-py's pydantic models name fields ``json``/``schema``, which shadow
+        # BaseModel attributes and emit noisy UserWarnings on import. They're harmless and
+        # out of our control, so silence them at runtime (pytest filters them via pyproject).
+        warnings.filterwarnings(
+            "ignore", message="Field name .* shadows an attribute", category=UserWarning
+        )
+        from langchain_firecrawl import FirecrawlSearch
 
     return FirecrawlSearch()

@@ -173,6 +173,61 @@ def test_ensure_tool_call_arguments_guards() -> None:
     model_mod._ensure_tool_call_arguments([{"tool_calls": 99}])  # tool_calls not a list
 
 
+def test_sanitize_tool_schemas_strips_model_incompatible_keys() -> None:
+    # Gemini's function_declarations 400 on these validation/metadata keywords; strip every
+    # one (recursively) while keeping structural keys, so a tool-bound request works.
+    denied = [
+        "$schema",
+        "$id",
+        "$comment",
+        "title",
+        "default",
+        "examples",
+        "const",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "patternProperties",
+        "minProperties",
+        "maxProperties",
+        "propertyNames",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "additionalItems",
+        "unevaluatedItems",
+        "contains",
+    ]
+    # Pin the shipped denylist against this list: a renamed/dropped key would silently leak an
+    # unsupported keyword to Gemini (and break a tool-bound turn).
+    assert set(model_mod._UNSUPPORTED_SCHEMA_KEYS) == set(denied)
+
+    nested: dict[str, object] = {"type": "string", **dict.fromkeys(denied, "x")}
+    inside_list: dict[str, object] = {"type": "number", **dict.fromkeys(denied, "x")}
+    params: dict[str, object] = {
+        "type": "object",
+        "properties": {"city": nested},  # nested dict
+        "anyOf": [inside_list],  # nested list
+        **dict.fromkeys(denied, "x"),
+    }
+    payload: dict[str, object] = {
+        "tools": [
+            None,  # non-dict tool -> skipped
+            {"type": "function", "function": 7},  # function not a dict -> skipped
+            {"type": "function", "function": {"name": "get_weather", "parameters": params}},
+        ]
+    }
+    model_mod._sanitize_tool_schemas(payload)
+    assert not (set(denied) & set(params))  # every denied key stripped at the top level
+    assert params["type"] == "object"  # structural keys preserved
+    assert nested == {"type": "string"}  # nested dict fully stripped
+    assert inside_list == {"type": "number"}  # nested-in-list fully stripped
+
+
+def test_sanitize_tool_schemas_guards() -> None:
+    model_mod._sanitize_tool_schemas(None)  # not a dict -> early return, no error
+    model_mod._sanitize_tool_schemas({"tools": 99})  # tools not a list -> early return
+
+
 def test_get_request_payload_fills_empty_tool_call_arguments() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_openai import ChatOpenAI

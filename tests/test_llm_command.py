@@ -37,6 +37,37 @@ def test_llm_help_lists_command():
     assert "gateway" in result.output.lower()
 
 
+def test_known_models_is_the_full_gateway_list():
+    # Pin the exact ids so a typo'd/renamed model id is caught (the --list-models
+    # tests below compare output against KNOWN_MODELS itself, so they can't).
+    assert KNOWN_MODELS == (
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-opus-4-5-20251101",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5-20250929",
+        "claude-haiku-4-5-20251001",
+        "gpt-5.5",
+        "gpt-5.2",
+        "gpt-5.1",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-4.1",
+        "gpt-oss-120b",
+        "gpt-oss-20b",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "kimi-k2.5",
+        "qwen3-next-80b-a3b",
+        "qwen3-32B",
+    )
+
+
 def test_llm_list_models_exits_without_network(monkeypatch):
     called = {"ran": False}
     monkeypatch.setattr(

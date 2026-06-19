@@ -58,6 +58,9 @@ class Renderer(Protocol):
     def user_final(self, text: str) -> None:
         """Show a finalized user transcript."""
 
+    def tool_call(self, label: str) -> None:
+        """Show that the agent is using a tool (e.g. "Searching the web") while it thinks."""
+
     def reply_started(self) -> None:
         """Mark the start of an agent reply."""
 
@@ -106,7 +109,9 @@ class CascadeDeps:
     """
 
     run_stt: Callable[[Callable[[object], None]], None]
-    complete_reply: Callable[[list[ChatCompletionMessageParam]], str]
+    # complete_reply(messages, on_tool=None) -> spoken text; on_tool is fed a label per tool
+    # call so the front-end can show a "Searching the web…" affordance (brain.build_completer).
+    complete_reply: Callable[..., str]
     synthesize: Callable[[str], bytes]
     spawn: Callable[[Callable[[], None]], _Worker] = _spawn_thread
 
@@ -194,6 +199,23 @@ class CascadeSession:
             self.player.flush()
         self._join_reply()
 
+    def interrupt_reply(self) -> bool:
+        """Signal an in-flight reply to stop, without waiting for it; True if one was playing.
+
+        The UI-thread-safe counterpart to a spoken barge-in: the live TUI's Escape/Ctrl-C
+        calls this to silence the agent mid-reply without the user having to talk over it.
+        Flushing the queued audio stops speech at once; the reply worker then sees the stop
+        flag, unwinds on its own, and emits ``reply_done`` so the front-end returns to
+        listening (the STT loop keeps running, so the next spoken turn is handled normally).
+        It deliberately does *not* join the worker — a join from the UI thread would deadlock
+        against the worker's own ``call_from_thread`` render hops.
+        """
+        playing = self._reply is not None and self._reply.is_alive()
+        if playing:
+            self._stop.set()
+            self.player.flush()
+        return playing
+
     def _join_reply(self) -> None:
         """Wait for the current reply worker (if any) to unwind, then drop the handle."""
         worker = self._reply
@@ -213,9 +235,15 @@ class CascadeSession:
             *self.history,
         ]
         try:
-            reply = self.deps.complete_reply(messages)
+            reply = self.deps.complete_reply(messages, on_tool=self.renderer.tool_call)
         except CLIError as exc:
+            # The reply leg failed (gateway/tool/graph error, now converted to a CLIError in
+            # brain._run_graph). Show it in the transcript so the turn doesn't just vanish —
+            # the user sees *why* there was no answer instead of silence.
             self._record_error(exc)
+            self.renderer.reply_started()
+            self.renderer.agent_transcript(f"(error: {exc.message})", interrupted=False)
+            self.renderer.reply_done(interrupted=False)
             return
         self.renderer.reply_started()
         spoken: list[str] = []
@@ -264,14 +292,24 @@ def _is_final_turn(event: object, *, format_turns: bool) -> bool:
 
 
 def run_cascade(
-    *, renderer: Renderer, player: Player, config: CascadeConfig, deps: CascadeDeps
+    *,
+    renderer: Renderer,
+    player: Player,
+    config: CascadeConfig,
+    deps: CascadeDeps,
+    on_session: Callable[[CascadeSession], None] | None = None,
 ) -> None:
     """Run one terminal cascade conversation until STT closes or the user stops.
 
     Greets, then pumps STT turns through the LLM+TTS reply path. A recorded leg
-    failure is re-raised here so the command exits with the right code.
+    failure is re-raised here so the command exits with the right code. ``on_session`` is
+    handed the freshly built session before the conversation starts, so a front-end (the
+    live TUI) can grab a handle to it — e.g. to wire a keyboard interrupt to
+    :meth:`CascadeSession.interrupt_reply`.
     """
     session = CascadeSession(deps=deps, renderer=renderer, player=player, config=config)
+    if on_session is not None:
+        on_session(session)
     player.start()
     try:
         session.greet()

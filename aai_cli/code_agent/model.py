@@ -9,7 +9,7 @@ never silently send the user's code to anything but AssemblyAI.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
 from aai_cli.core import environments
@@ -158,6 +158,61 @@ def _is_empty_arguments(arguments: object) -> bool:
     return isinstance(parsed, dict) and not parsed
 
 
+# JSON-Schema keywords some gateway-routed models reject on tool definitions. OpenAI ignores
+# them, but Gemini's ``function_declarations`` 400 on them ("Unknown name …"), which kills any
+# tool-bound turn. These are all validation/metadata keywords — stripping them leaves the
+# structural schema (type/properties/items/required/enum/anyOf/description/…) the model needs
+# to call the tool, so the call still works; only the unenforced constraints are dropped.
+_UNSUPPORTED_SCHEMA_KEYS = (
+    "$schema",
+    "$id",
+    "$comment",
+    "title",
+    "default",
+    "examples",
+    "const",
+    "additionalProperties",
+    "unevaluatedProperties",
+    "patternProperties",
+    "minProperties",
+    "maxProperties",
+    "propertyNames",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "additionalItems",
+    "unevaluatedItems",
+    "contains",
+)
+
+
+def _sanitize_tool_schemas(payload: object) -> None:
+    """Strip model-incompatible JSON-Schema keys from each tool's ``parameters``, in place."""
+    if not isinstance(payload, dict):
+        return
+    tools = payload.get("tools")
+    if not isinstance(tools, list):
+        return
+    for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if isinstance(function, dict):
+            _strip_schema_keys(function.get("parameters"))
+
+
+def _strip_schema_keys(node: object) -> None:
+    """Recursively drop :data:`_UNSUPPORTED_SCHEMA_KEYS` from a JSON-Schema-shaped structure."""
+    if isinstance(node, dict):
+        for key in _UNSUPPORTED_SCHEMA_KEYS:
+            node.pop(key, None)
+        children: Iterable[object] = list(node.values())
+    elif isinstance(node, list):
+        children = node
+    else:
+        return
+    for child in children:
+        _strip_schema_keys(child)
+
+
 def build_model(
     api_key: str,
     *,
@@ -201,6 +256,7 @@ def build_model(
             messages = payload.get("messages")
             _flatten_content(messages)
             _ensure_tool_call_arguments(messages)
+            _sanitize_tool_schemas(payload)
             return payload
 
         def _convert_chunk_to_generation_chunk(

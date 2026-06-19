@@ -58,7 +58,7 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
                 'assembly --sandbox live --system-prompt "You are a terse pirate."',
             ),
             (
-                "Add your own MCP servers on top of the defaults",
+                "Add your own MCP servers (none load by default)",
                 "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
             ),
             ("See available voices", "assembly --sandbox live --list-voices"),
@@ -162,7 +162,7 @@ def live(
     mcp_config: list[Path] | None = typer.Option(
         None,
         "--mcp-config",
-        help='Extra MCP servers config JSON ({"mcpServers": {…}}) on top of the defaults (repeatable)',
+        help='MCP servers config JSON ({"mcpServers": {…}}) to add (repeatable; none load by default)',
         exists=True,
         dir_okay=False,
         rich_help_panel=_PANEL_TOOLS,
@@ -200,12 +200,12 @@ def live(
     This only runs a conversation in the terminal — it writes no code. To build
     an agent-cascade app, run 'assembly init agent-cascade' instead.
 
-    By default the agent loads a curated, no-auth MCP toolset (time, fetch,
-    memory, filesystem, weather) alongside its built-in URL fetch and AssemblyAI
-    docs. Firecrawl web search also loads when a FIRECRAWL_API_KEY is set (you'll
-    get a one-line notice when it isn't). Add your own servers with --mcp-config,
-    pointing at any standard mcpServers JSON file. A server that won't start is
-    skipped, so one broken tool never sinks the session.
+    The agent keeps a deliberately small toolset for low-latency spoken turns: its
+    one built-in tool is Firecrawl web search, which loads when a FIRECRAWL_API_KEY
+    is set (you'll get a one-line notice when it isn't). Add your own MCP servers
+    with --mcp-config, pointing at any standard mcpServers JSON file (none load by
+    default). A server that won't start is skipped, so one broken tool never sinks
+    the session.
     """
 
     if list_voices:
