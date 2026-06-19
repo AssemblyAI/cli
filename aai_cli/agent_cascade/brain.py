@@ -25,6 +25,7 @@ from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.core import debuglog
+from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -213,7 +214,22 @@ def _run_graph(
     is what makes a stalled spoken turn debuggable. The test fakes only implement
     ``invoke``, so they (and the non-verbose path) take the plain branch.
     """
-    graph_input = {"messages": conversation}
+    try:
+        return _drive_graph(graph, {"messages": conversation})
+    except CLIError:
+        raise
+    except Exception as exc:
+        # The graph can fail anywhere in the tool loop — a gateway 4xx/5xx, a tool raising,
+        # a langgraph recursion limit. Convert it to a CLIError so the cascade records and
+        # *surfaces* it (the engine shows it in the transcript) instead of the reply worker
+        # dying silently and the user getting no answer with no clue why.
+        raise CLIError(
+            f"the agent couldn't complete the turn: {exc}", error_type="agent_brain_error"
+        ) from exc
+
+
+def _drive_graph(graph: CompiledAgent, graph_input: dict[str, object]) -> dict[str, object]:
+    """Invoke the graph (or stream it under ``-v`` so :func:`_log_flow` can trace each step)."""
     if debuglog.active() and hasattr(graph, "stream"):
         last: dict[str, object] = {}
         seen = 0

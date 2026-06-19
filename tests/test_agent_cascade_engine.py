@@ -251,14 +251,18 @@ def test_generate_reply_stop_before_first_sentence_speaks_nothing():
     assert ("reply_done", True) in renderer.calls
 
 
-def test_generate_reply_llm_failure_is_recorded_and_aborts():
+def test_generate_reply_llm_failure_is_recorded_and_surfaced():
     def boom(messages):
+        del messages
         raise APIError("gateway down")
 
-    session, renderer, _player = make_session(complete_reply=boom)
+    session, renderer, player = make_session(complete_reply=boom)
     session._generate_reply()
-    assert isinstance(session.error, APIError)
-    assert ("reply_started",) not in renderer.calls  # aborted before speaking
+    assert isinstance(session.error, APIError)  # recorded for the exit path
+    # Surfaced in the transcript (not swallowed) but nothing is spoken — the turn aborts.
+    assert ("agent_transcript", "(error: gateway down)", False) in renderer.calls
+    assert ("reply_done", False) in renderer.calls  # the error line is closed off cleanly
+    assert player.enqueued == []
 
 
 def test_generate_reply_tts_failure_midway_is_recorded():

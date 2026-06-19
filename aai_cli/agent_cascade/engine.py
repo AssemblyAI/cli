@@ -215,7 +215,13 @@ class CascadeSession:
         try:
             reply = self.deps.complete_reply(messages)
         except CLIError as exc:
+            # The reply leg failed (gateway/tool/graph error, now converted to a CLIError in
+            # brain._run_graph). Show it in the transcript so the turn doesn't just vanish —
+            # the user sees *why* there was no answer instead of silence.
             self._record_error(exc)
+            self.renderer.reply_started()
+            self.renderer.agent_transcript(f"(error: {exc.message})", interrupted=False)
+            self.renderer.reply_done(interrupted=False)
             return
         self.renderer.reply_started()
         spoken: list[str] = []

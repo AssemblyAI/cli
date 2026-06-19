@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -17,6 +18,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from aai_cli.agent_cascade import brain
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent import model as model_mod
+from aai_cli.core.errors import CLIError
 
 
 class FakeChatModel(BaseChatModel):
@@ -259,6 +261,33 @@ def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
 
     completer = brain.build_completer("k", CascadeConfig(), graph=_InvokeOnly())
     assert completer([{"role": "user", "content": "hi"}]) == "from invoke"
+
+
+def test_run_graph_converts_graph_errors_to_cli_error():
+    # A graph failure (gateway 4xx/5xx, a tool raising, a recursion limit) must become a
+    # CLIError so the cascade surfaces it instead of the reply worker dying silently.
+    class _Boom:
+        def invoke(self, graph_input):
+            del graph_input
+            raise ValueError("bedrock said no")
+
+    completer = brain.build_completer("k", CascadeConfig(), graph=_Boom())
+    with pytest.raises(CLIError) as excinfo:
+        completer([{"role": "user", "content": "hi"}])
+    assert "couldn't complete the turn" in excinfo.value.message
+    assert "bedrock said no" in excinfo.value.message  # the cause is preserved for diagnosis
+
+
+def test_run_graph_passes_cli_error_through():
+    # A CLIError from the graph is already user-facing -> propagate as-is, not re-wrapped.
+    class _CliBoom:
+        def invoke(self, graph_input):
+            del graph_input
+            raise CLIError("already clean", error_type="x")
+
+    completer = brain.build_completer("k", CascadeConfig(), graph=_CliBoom())
+    with pytest.raises(CLIError, match="already clean"):
+        completer([{"role": "user", "content": "hi"}])
 
 
 def test_log_flow_ignores_non_list_messages():
