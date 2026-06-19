@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyperclip
+
 from aai_cli.code_agent import tui_status
 from aai_cli.ui import theme
 
@@ -49,6 +51,56 @@ def test_voicebar_markup_per_phase_carries_label_meter_accent_and_hint() -> None
     assert "Thinking" in thinking and "#f59e0b" in thinking  # amber, no hint
     speaking = tui_status.voicebar_markup("speaking", "▅▇▆")
     assert "Speaking" in speaking and "#22c55e" in speaking  # green
+
+
+def test_copy_note_copies_and_confirms() -> None:
+    # The happy path: the reply is handed to the copier and a confirmation note returned.
+    copied: list[str] = []
+    note = tui_status.copy_note("a reply", copied.append)
+    assert copied == ["a reply"]
+    assert "copied" in note
+
+
+def test_copy_note_when_nothing_to_copy() -> None:
+    # No reply yet: don't touch the clipboard, and tell the user there's nothing to copy.
+    copied: list[str] = []
+    note = tui_status.copy_note("", copied.append)
+    assert copied == []  # copier never called
+    assert "nothing to copy" in note
+
+
+def test_copy_note_degrades_when_no_clipboard() -> None:
+    # A headless/clipboard-less box: pyperclip raises; copy_note must absorb it and return a
+    # note rather than letting the raise propagate (which would tear down the TUI).
+    def _boom(_text: str) -> None:
+        raise pyperclip.PyperclipException("no copy/paste mechanism")
+
+    note = tui_status.copy_note("a reply", _boom)
+    assert "no clipboard available" in note
+
+
+def test_keyhints_lists_shortcuts_and_gates_voice_on_availability() -> None:
+    # The legend always lists copy/expand/interrupt/quit; the Ctrl-V voice toggle appears
+    # only when a voice front-end exists, and the whole line is dim.
+    with_voice = tui_status.keyhints_text(voice=True)
+    assert "copy" in with_voice and "expand" in with_voice and "quit" in with_voice
+    assert "voice" in with_voice  # the Ctrl-V hint is listed when voice is available
+    assert with_voice.startswith("[dim]")  # rendered as a dim legend
+    without_voice = tui_status.keyhints_text(voice=False)
+    assert "voice" not in without_voice  # no Ctrl-V hint without a voice front-end
+    assert "copy" in without_voice and "quit" in without_voice
+
+
+def test_status_text_appends_the_key_legend(tmp_path: Path) -> None:
+    # The footer is two rows: the status info, then the dim key legend beneath it.
+    footer = tui_status._status_text(tmp_path, auto_approve=False)
+    info, _, hints = footer.partition("\n")
+    assert "manual" in info  # row one is the status info
+    assert "quit" in hints and "copy" in hints  # row two is the key legend
+    assert "voice" not in hints  # no voice front-end -> the legend omits the Ctrl-V hint
+    # With a voice front-end the legend's second row gains the Ctrl-V hint.
+    voiced = tui_status._status_text(tmp_path, auto_approve=False, voice_state="on")
+    assert "voice" in voiced.partition("\n")[2]
 
 
 def test_status_text_renders_voice_badge(tmp_path: Path) -> None:

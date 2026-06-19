@@ -7,10 +7,15 @@ imports, so they unit-test as plain functions.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+import pyperclip
 from rich.markup import escape
 
 from aai_cli.ui import theme
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
 # Public: both the `code` and `live` TUIs cycle it for their bar animation.
@@ -39,6 +44,38 @@ def _spinner_text(elapsed_s: int, frame: str) -> str:
     return f"{frame} Working… ({elapsed_s}s)"
 
 
+def keyhints_text(*, voice: bool) -> str:
+    """The dim key-legend footer for the `code` TUI — the shortcuts worth surfacing.
+
+    The keyboard chords are otherwise undiscoverable (the app has no Footer widget). The
+    Ctrl-V voice toggle is only listed when the session has a voice front-end. Caret notation
+    (``^Y``) keeps the legend short enough to fit a narrow terminal; the chords are bold so
+    they read against the dim labels.
+    """
+    hints = ["[b]^Y[/b] copy"]
+    if voice:
+        hints.append("[b]^V[/b] voice")
+    hints += ["[b]^O[/b] expand", "[b]esc[/b] interrupt", "[b]^C[/b] quit"]
+    return f"[dim]{' · '.join(hints)}[/dim]"
+
+
+def copy_note(reply: str, copier: Callable[[str], None]) -> str:
+    """Copy ``reply`` to the clipboard via ``copier``, returning the transcript note to show.
+
+    Keeps the Ctrl-Y action a one-liner and handles its two non-happy paths so they can't
+    surprise the user: nothing has been said yet, and a headless/clipboard-less box where
+    ``pyperclip`` raises (an unhandled raise there would tear down the whole TUI). ``copier``
+    is ``pyperclip.copy`` in production, injected so this unit-tests with no real clipboard.
+    """
+    if not reply:
+        return "(nothing to copy yet)"
+    try:
+        copier(reply)
+    except pyperclip.PyperclipException:
+        return "(couldn't copy: no clipboard available)"
+    return "(copied last reply to clipboard)"
+
+
 def _abbrev_home(path: Path) -> str:
     """Render ``path`` with the home directory collapsed to ``~``."""
     try:
@@ -58,10 +95,12 @@ def _git_branch(start: Path) -> str | None:
 
 
 def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = None) -> str:
-    """The bottom status line: a mode badge, the working directory, git branch, and voice state.
+    """The two-row bottom footer: a status line, and a dim key-legend beneath it.
 
-    ``voice_state`` is ``"on"``/``"off"`` when the session has a voice front-end (so the
-    Ctrl-V toggle shows its effect), or ``None`` when voice isn't wired up at all.
+    Row one is a mode badge, the working directory, the git branch, and voice state; row two
+    is :func:`keyhints_text`. ``voice_state`` is ``"on"``/``"off"`` when the session has a
+    voice front-end (so the Ctrl-V toggle shows its effect, and the legend lists it), or
+    ``None`` when voice isn't wired up at all.
     """
     mode = "auto" if auto_approve else "manual"
     badge = f"[black on #f59e0b] {mode} [/]"
@@ -73,4 +112,4 @@ def _status_text(cwd: Path, *, auto_approve: bool, voice_state: str | None = Non
         # A filled/hollow dot (BMP glyphs, like the rest of the UI — no double-width emoji).
         glyph, color = ("●", "#22c55e") if voice_state == "on" else ("○", "#6b7280")
         parts.append(f"[{color}]{glyph} voice {voice_state}[/]")
-    return " ".join(parts)
+    return " ".join(parts) + "\n" + keyhints_text(voice=voice_state is not None)
