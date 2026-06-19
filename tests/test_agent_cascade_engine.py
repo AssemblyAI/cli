@@ -266,6 +266,29 @@ def test_interrupt_reply_is_a_noop_when_nothing_is_playing():
     assert not session._stop.is_set()
 
 
+def test_interrupt_reply_silences_the_greeting_with_no_worker():
+    # The greeting is enqueued with no reply worker; Escape/Ctrl-C must still cut it. With audio
+    # queued (pending>0) the interrupt flushes the player and reports that it silenced something,
+    # so the live TUI interrupts the greeting instead of (for Ctrl-C) quitting the session.
+    session, _renderer, player = make_session()
+    player.pending_samples = 1  # even a single queued sample (>0) means sound is still playing
+    assert session.interrupt_reply() is True
+    assert player.flushed == 1
+    assert player.pending() == 0  # the queued greeting was dropped
+
+
+def test_barge_in_silences_a_draining_reply_tail_after_the_worker_exits():
+    # The reply worker enqueues every sentence then exits, but the audio keeps draining. A new
+    # spoken turn in that window must still cut the tail — a bare is_alive() check would miss it.
+    session, _renderer, player = make_session()
+    session._reply = FakeWorker(alive=False)  # worker finished enqueuing
+    player.pending_samples = 9600  # ...but its audio is still playing
+    session._barge_in()
+    assert session._stop.is_set()
+    assert player.flushed == 1
+    assert session._reply is None
+
+
 def test_shutdown_joins_live_worker():
     session, _renderer, _player = make_session()
     worker = FakeWorker(alive=True)

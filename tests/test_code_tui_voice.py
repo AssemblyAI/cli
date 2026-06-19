@@ -342,7 +342,7 @@ def test_voice_bar_animation_timer_runs_and_advances() -> None:
             running_timer = app._voice_timer
             assert running_timer is not None
             before = str(app.query_one("#voicebar", Static).render())
-            app._tick_voice()
+            app._render_voicebar()
             assert str(app.query_one("#voicebar", Static).render()) != before  # meter advanced
             app.action_toggle_voice()  # voice off -> timer stopped
             await pilot.pause()
