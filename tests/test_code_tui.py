@@ -13,7 +13,7 @@ import time
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Input, Label, Static
 
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
@@ -55,6 +55,10 @@ def test_mount_renders_splash_and_focuses_input() -> None:
             assert len(log.children) >= 1  # the splash is mounted into the transcript
             assert "Ready to code" in str(log.children[0].render())  # splash intro shown
             assert app.focused is app.query_one("#prompt", Input)
+            # The bordered prompt bar must fit inside the screen so its right border isn't
+            # clipped off-edge — `width: 100%` honors the side margins where the docked
+            # default (`1fr`) would overflow to x=1..101 on a 100-wide screen.
+            assert app.query_one("#promptbar", Horizontal).region.right <= 100
 
     _run(go())
 
@@ -265,6 +269,10 @@ def test_approval_box_is_compact_and_bottom_docked() -> None:
             assert box.region.height <= 8  # a handful of rows, not the full 30
             assert box.region.bottom <= 30  # anchored within the bottom of the screen
             assert box.region.y >= 15  # sits in the lower half, transcript visible above
+            # The box must fit inside the screen so its rounded border isn't clipped off the
+            # right edge: a docked `width: 1fr` container ignores horizontal margin and
+            # overflows to x=1..101 on a 100-wide screen (the bug `width: 100%` fixes).
+            assert box.region.right <= 100
 
     _run(go())
 

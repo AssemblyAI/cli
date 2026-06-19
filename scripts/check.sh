@@ -238,6 +238,21 @@ echo "==> pytest (with branch-coverage gate)"
 # splitting it across workers is safe.
 uv run pytest -q --strict-config --strict-markers -n auto -m "not e2e and not install" --cov=aai_cli --cov-branch --cov-context=test --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 
+echo "==> Textual TUI coverage (>=90% on the textual-importing modules)"
+# The project-wide 90% gate above is an average, so a TUI module can rot while the rest
+# of the suite carries it. The Textual TUIs (`assembly code` / `live`) are the most
+# layout-fragile, regression-prone surface in the repo (see tests/AGENTS.md), so hold
+# them to their own >=90% floor. The module set is *derived* — every aai_cli file that
+# imports `textual` — so a new TUI module is picked up automatically with no list to
+# hand-maintain. Reuses the .coverage data the pytest step just wrote (no re-run), and
+# counts branches because that data was collected with --cov-branch.
+tui_modules="$(git grep -lP '^\s*(from|import) textual' -- 'aai_cli/**/*.py' | paste -sd, -)"
+if [[ -z "$tui_modules" ]]; then
+  echo "   no textual-importing modules found (the derive pattern is stale?)"
+  exit 1
+fi
+uv run coverage report --include="$tui_modules" --fail-under=90
+
 echo "==> diff-cover (patch coverage: every changed line must be tested)"
 # The 90% gate above is project-wide, so new code can ride on the existing suite and
 # stay untested. diff-cover requires 100% coverage of the lines changed versus the
