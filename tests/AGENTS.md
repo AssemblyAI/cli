@@ -37,6 +37,8 @@ A Textual app renders non-deterministically unless four things are frozen — al
 
 The `.raw` SVGs live in a `tests/__snapshots__/test_tui_snapshots/` **subdirectory**, so `scripts/unused_fixtures_gate.py` (which globs only top-level `*.ambr`) doesn't police them — delete a renamed test's stale `.raw` by hand.
 
+On top of the project-wide 90% gate, `check.sh` enforces a **per-surface ≥90% coverage floor on the Textual modules** (every `aai_cli` file that imports `textual` — derived, not hand-listed — reusing the pytest `.coverage`), so a fragile TUI module can't rot while the rest of the suite carries the average. Keep these modules well-covered by the pilot tests; a new TUI module is held to the floor automatically.
+
 ## Hermeticity (enforced three ways)
 
 The suite is hermetic by construction (`tests/conftest.py` + `pyproject.toml` `[tool.pytest.ini_options]`): **pytest-randomly** shuffles order, an autouse `pin_timezone` fixture pins `TZ` to a fixed non-UTC zone (UTC-normalized rendering must be unaffected; use **time-machine** to freeze `now`), and **pytest-socket** (`--disable-socket`) blocks real network so an unmocked SDK/HTTP call fails loudly instead of hitting the API. A test that only binds a loopback server opts back in with the tight `@pytest.mark.allow_hosts(["127.0.0.1"])` (still blocks external hosts). The `e2e`/`install` marker suites legitimately reach the real network in-process (PyPI reachability probes, real-API runs), so a `pytest_collection_modifyitems` hook in `conftest.py` auto-grants them full sockets — adding a network marker is all that's needed, no per-test `enable_socket`.
