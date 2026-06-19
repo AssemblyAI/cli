@@ -282,9 +282,9 @@ def test_bare_aai_with_corrupt_config_shows_help_without_crashing(
     # A corrupt config.toml is deferred by the root callback. Bare `assembly` must still
     # print help cleanly — without the deferral guard, _profile_has_key -> resolve_api_key
     # re-raises invalid_config (which it doesn't catch) and the callback dumps a traceback.
-    from aai_cli.core import config
+    from aai_cli.core import config_store
 
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     (tmp_path / "config.toml").write_text("this is not = valid = toml ][", encoding="utf-8")
     monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
     monkeypatch.delenv("AAI_ENV", raising=False)
