@@ -16,25 +16,6 @@ from aai_cli.agent_cascade import mcp_tools
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.core.errors import UsageError
 
-# --- default_servers ---------------------------------------------------------
-
-
-def test_default_servers_curated_set_and_filesystem_root():
-    root = Path("/notes/dir")
-    servers = mcp_tools.default_servers(root)
-    # The five curated, no-auth servers, each with a real launch command.
-    assert set(servers) == {"time", "fetch", "memory", "filesystem", "weather"}
-    assert servers["time"] == {"command": "uvx", "args": ["mcp-server-time"]}
-    assert servers["memory"]["args"] == ["-y", "@modelcontextprotocol/server-memory"]
-    # The filesystem server is scoped to the passed-in root directory. Compare against
-    # str(root), not a hardcoded "/notes/dir", so it holds on Windows (backslash paths).
-    assert servers["filesystem"]["args"] == [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        str(root),
-    ]
-
-
 # --- parse_mcp_config --------------------------------------------------------
 
 
@@ -172,29 +153,19 @@ def test_load_server_times_out_on_a_slow_server(monkeypatch):
 # --- _resolve_mcp_servers (the default set + --mcp-config merge) --------------
 
 
-def test_resolve_mcp_servers_defaults_loaded_with_no_config():
-    servers = _exec._resolve_mcp_servers(mcp_config=())
-    # Every session loads the curated default set out of the box.
-    assert {"time", "weather", "memory", "fetch", "filesystem"} <= set(servers)
+def test_resolve_mcp_servers_empty_with_no_config():
+    # No --mcp-config -> no MCP servers; the live agent runs with just its web-search tool.
+    assert _exec._resolve_mcp_servers(mcp_config=()) == {}
 
 
-def test_resolve_mcp_servers_config_adds_to_defaults(tmp_path):
+def test_resolve_mcp_servers_returns_only_config_servers(tmp_path):
     path = tmp_path / "servers.json"
     path.write_text(
         '{"mcpServers": {"custom": {"command": "uvx", "args": ["x"]}}}', encoding="utf-8"
     )
     servers = _exec._resolve_mcp_servers(mcp_config=(path,))
-    # The config server is added alongside (not instead of) the defaults.
-    assert servers["custom"] == {"command": "uvx", "args": ["x"]}
-    assert "weather" in servers
-
-
-def test_resolve_mcp_servers_config_overrides_default_by_name(tmp_path):
-    path = tmp_path / "servers.json"
-    path.write_text('{"mcpServers": {"time": {"command": "my-time"}}}', encoding="utf-8")
-    servers = _exec._resolve_mcp_servers(mcp_config=(path,))
-    # An explicit config entry overrides the default server of the same name.
-    assert servers["time"] == {"command": "my-time"}
+    # Only the opt-in config server is present — there is no curated default set to merge.
+    assert servers == {"custom": {"command": "uvx", "args": ["x"]}}
 
 
 # --- _warn_without_web_search (the FIRECRAWL_API_KEY notice) ------------------

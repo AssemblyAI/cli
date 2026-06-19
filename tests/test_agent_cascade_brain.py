@@ -58,33 +58,22 @@ class _NamedTool:
         self.name = name
 
 
-def test_system_prompt_appends_tool_guidance_for_present_tools():
+def test_system_prompt_advertises_web_search_when_present():
     prompt = brain.build_system_prompt(
-        "You are a pirate.",
-        tools=[
-            _NamedTool(brain.WEB_SEARCH_TOOL_NAME),
-            _NamedTool("fetch_url"),
-            _NamedTool("docs_search"),
-        ],
+        "You are a pirate.", tools=[_NamedTool(brain.WEB_SEARCH_TOOL_NAME)]
     )
-    # The persona is preserved, and the guidance advertises each capability that a present
-    # tool backs (the plain cascade persona never mentions tools).
+    # The persona is preserved, and the guidance advertises the web-search capability the
+    # present tool backs (the plain cascade persona never mentions tools).
     assert prompt.startswith("You are a pirate.")
     assert "search the web" in prompt
-    assert "fetch a specific URL" in prompt
-    assert "AssemblyAI documentation" in prompt
 
 
-def test_system_prompt_omits_web_search_when_no_search_tool():
-    # With no TAVILY_API_KEY the search tool is absent — the guidance must NOT promise web
-    # search, since announcing a missing tool makes the agent narrate "I'll search…" and
-    # then stall with no answer. The capabilities it *does* have still appear.
-    prompt = brain.build_system_prompt(
-        "persona", tools=[_NamedTool("fetch_url"), _NamedTool("docs_search")]
-    )
+def test_system_prompt_omits_web_search_when_search_tool_absent():
+    # Without the Firecrawl search tool the guidance must NOT promise web search — announcing
+    # a missing tool makes the agent narrate "I'll search…" and then stall with no answer. A
+    # non-search tool name must not falsely trigger the web-search capability.
+    prompt = brain.build_system_prompt("persona", tools=[_NamedTool("some_other_tool")])
     assert "search the web for current or unfamiliar facts" not in prompt
-    assert "fetch a specific URL" in prompt
-    assert "AssemblyAI documentation" in prompt
 
 
 def test_system_prompt_tells_model_not_to_promise_tools_when_none():
@@ -365,23 +354,17 @@ def test_reply_text_is_empty_without_an_assistant_message():
 # --- build_live_tools --------------------------------------------------------
 
 
-def test_build_live_tools_includes_search_when_keyed(monkeypatch):
+def test_build_live_tools_is_just_web_search_when_keyed(monkeypatch):
     search = object()
-    monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
-    monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", lambda: ["docs"])
-    tools = brain.build_live_tools()
-    # Fetch + the keyed search + the docs tools, in that order.
-    assert tools == ["fetch", search, "docs"]
+    # The live agent's sole built-in tool is Firecrawl web search — no URL fetch, no docs.
+    assert brain.build_live_tools() == [search]
 
 
-def test_build_live_tools_omits_search_when_unkeyed(monkeypatch):
-    monkeypatch.setattr("aai_cli.code_agent.fetch_tool.build_fetch_tool", lambda: "fetch")
+def test_build_live_tools_is_empty_without_firecrawl_key(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
-    monkeypatch.setattr("aai_cli.code_agent.docs_mcp.load_docs_tools", list)
-    tools = brain.build_live_tools()
-    # No TAVILY_API_KEY -> no search tool, just the fetch tool.
-    assert tools == ["fetch"]
+    # No FIRECRAWL_API_KEY -> no tool at all; the agent then runs tool-free.
+    assert brain.build_live_tools() == []
 
 
 # --- build_graph (model construction + compile, with the docs probe skipped) -
@@ -422,14 +405,14 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
 
     monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
     monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
-    builtin = [_NamedTool("fetch_url")]
+    builtin = [_NamedTool(brain.WEB_SEARCH_TOOL_NAME)]
     extra = [_NamedTool("get_time")]
     graph = brain.build_graph("k", CascadeConfig(), tools=builtin, mcp_tools=extra)
     # The model is bound to both tool sets, in built-in-then-MCP order.
     assert graph == "graph"
     assert captured["tools"] == builtin + extra
-    # The prompt advertises the built-in fetch leg AND the MCP tool by name.
-    assert "fetch a specific URL" in captured["system_prompt"]
+    # The prompt advertises the built-in web-search leg AND the MCP tool by name.
+    assert "search the web" in captured["system_prompt"]
     assert "use your connected tools (get_time)" in captured["system_prompt"]
 
 

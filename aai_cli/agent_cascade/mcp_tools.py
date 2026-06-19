@@ -3,16 +3,13 @@
 The live voice agent's brain is a deepagents graph, so any Model Context Protocol
 server's tools can be threaded into it through ``langchain-mcp-adapters`` — the same
 adapter `docs_mcp.py` uses for the hosted AssemblyAI docs. This lets a spoken
-conversation reach real tools (clock, weather, memory, a notes folder, …), bringing
-`assembly live` toward Gemini-Live / ChatGPT-voice parity.
+conversation reach real tools (a clock, a notes folder, …), bringing `assembly live`
+toward Gemini-Live / ChatGPT-voice parity.
 
-Two entry points feed the brain:
-
-- :func:`default_servers` returns a curated, zero/low-auth set (time, fetch, memory,
-  filesystem, weather) that every live session loads out of the box.
-- :func:`parse_mcp_config` reads one or more standard ``mcpServers`` JSON files — the
-  exact shape Claude Desktop / Claude Code use — so an existing config drops in
-  unchanged and can extend or override the defaults.
+The live agent ships with only its built-in Firecrawl web-search tool; MCP servers are
+**strictly opt-in** (a low-latency spoken turn does best with a small toolset).
+:func:`parse_mcp_config` reads one or more standard ``mcpServers`` JSON files — the exact
+shape Claude Desktop / Claude Code use — so an existing config drops in unchanged.
 
 Launching a server is **best-effort per server**: a missing ``npx``/``uvx`` or an
 offline run skips that one server (the others still load) rather than aborting the
@@ -40,26 +37,6 @@ ServerSpec = Mapping[str, object]
 # A loader maps (server name, adapter connection dict) -> the server's tools. Injected in
 # tests so the per-server orchestration runs without subprocesses or sockets.
 Loader = Callable[[str, "Connection"], "list[BaseTool]"]
-
-
-def default_servers(filesystem_root: Path) -> dict[str, ServerSpec]:
-    """The curated server set every live session loads: zero/low-auth, fast, speakable.
-
-    Every entry is a published reference server runnable with no API key:
-    ``time``/``fetch`` over ``uvx`` (PyPI), ``memory``/``filesystem`` over ``npx`` (npm),
-    and an NWS-backed ``weather`` server. ``filesystem`` is rooted at ``filesystem_root``
-    (the working directory) so "summarize my notes file" stays scoped to one folder.
-    """
-    return {
-        "time": {"command": "uvx", "args": ["mcp-server-time"]},
-        "fetch": {"command": "uvx", "args": ["mcp-server-fetch"]},
-        "memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]},
-        "filesystem": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(filesystem_root)],
-        },
-        "weather": {"command": "npx", "args": ["-y", "@h1deya/mcp-server-weather"]},
-    }
 
 
 def parse_mcp_config(paths: Sequence[Path]) -> dict[str, ServerSpec]:

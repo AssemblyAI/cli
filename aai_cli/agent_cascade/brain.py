@@ -1,9 +1,10 @@
 """Deepagents-powered reply brain for the live voice cascade.
 
 `assembly live` answers each spoken turn with a deepagents graph instead of a single
-LLM completion, so the agent can transparently reach for tools — web search, URL
-fetch, the AssemblyAI docs — mid-conversation, mimicking a live multimodal assistant
-(the "talk to Gemini Live" experience). The graph is built once per session
+LLM completion, so the agent can transparently reach for a tool — web search —
+mid-conversation, mimicking a live multimodal assistant (the "talk to Gemini Live"
+experience). The toolset is deliberately minimal: a low-latency spoken turn does best
+with one obvious tool rather than a menu it has to choose among. The graph is built once per session
 (:func:`build_graph`) and invoked statelessly per turn with the running history the
 cascade already keeps (:func:`build_completer`); tools are read-only and auto-approved,
 because a spoken turn can't pause for a keyboard confirmation, and the system prompt
@@ -22,7 +23,6 @@ from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
-from aai_cli.code_agent.fetch_tool import FETCH_TOOL_NAME
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
@@ -71,21 +71,17 @@ def _join_clause(parts: list[str]) -> str:
 
 
 def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
-    """The spoken-capability phrases backed by an actually-present tool.
+    """The spoken-capability phrase backed by a present built-in tool.
 
-    Derived from the resolved tool names so the prompt never advertises a capability the
-    agent can't perform: web search is present only with a ``FIRECRAWL_API_KEY``, and the
-    docs tools are best-effort (absent when the docs host is unreachable).
+    The live agent's only built-in tool is Firecrawl web search, bound just when a
+    ``FIRECRAWL_API_KEY`` is set — so the prompt advertises web search only when the agent
+    can really do it. Advertising a tool it doesn't have made it announce an action ("I'll
+    search…") it then couldn't take, leaving the turn with no answer.
     """
     names = {tool.name for tool in tools}
-    capabilities: list[str] = []
     if WEB_SEARCH_TOOL_NAME in names:
-        capabilities.append("search the web for current or unfamiliar facts")
-    if FETCH_TOOL_NAME in names:
-        capabilities.append("fetch a specific URL")
-    if names - {WEB_SEARCH_TOOL_NAME, FETCH_TOOL_NAME}:
-        capabilities.append("look up the AssemblyAI documentation")
-    return capabilities
+        return ["search the web for current or unfamiliar facts"]
+    return []
 
 
 def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
@@ -129,24 +125,20 @@ def build_system_prompt(
 
 
 def build_live_tools() -> list[BaseTool]:
-    """The live agent's read-only toolset: URL fetch, web search (if keyed), and docs.
+    """The live agent's single read-only tool: Firecrawl web search (only when keyed).
 
-    All three are reused from the coding agent's tool modules. Unlike there they are
-    *not* approval-gated — a spoken turn can't wait for a keyboard confirmation, so the
-    live agent only gets read-only tools and runs them automatically. Web search is
-    present only when ``FIRECRAWL_API_KEY`` is set; the docs MCP is best-effort (an empty
-    list when the host is unreachable), so neither blocks a session.
+    Deliberately minimal. A low-latency spoken turn does best with one obvious tool rather
+    than a large menu it has to choose among — a big toolset made the model narrate "I'll
+    search…" without ever calling anything, and bloated every request with tool schemas.
+    Web search is the one capability worth the round-trip; everything else the agent answers
+    from its own knowledge. The tool is reused (un-approval-gated) from the coding agent and
+    is present only when ``FIRECRAWL_API_KEY`` is set, so an unkeyed session simply runs
+    tool-free. Extra tools remain strictly opt-in via ``--mcp-config``.
     """
-    from aai_cli.code_agent.docs_mcp import load_docs_tools
-    from aai_cli.code_agent.fetch_tool import build_fetch_tool
     from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
-    tools: list[BaseTool] = [build_fetch_tool()]
     search = build_web_search_tool()
-    if search is not None:
-        tools.append(search)
-    tools.extend(load_docs_tools())
-    return tools
+    return [search] if search is not None else []
 
 
 def build_graph(

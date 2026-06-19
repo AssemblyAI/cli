@@ -215,23 +215,23 @@ def test_open_audio_mic_warns_and_uses_duplex_rate(monkeypatch):
 
 
 # --- MCP servers (resolution unit-tested in test_agent_cascade_mcp.py) -------
-def test_default_mcp_servers_flow_into_cascade_config(monkeypatch):
+def test_no_mcp_servers_load_by_default(monkeypatch):
     monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
     monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
     captured = {}
 
-    # Capture config at the deps seam so the graph (and its npx/uvx servers) never builds.
+    # Capture config at the deps seam so the graph never builds.
     def fake_real(api_key, config, *, audio, stt_params):
         captured["config"] = config
         return "deps"
 
     monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
     monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
-    # With no flags, the default servers (e.g. weather) ride into the config the brain reads.
+    # With no --mcp-config, no MCP servers load — the agent keeps just its web-search tool.
     run_agent_cascade(_opts(source="clip.wav"), AppState(), json_mode=False)
-    assert "weather" in captured["config"].mcp_servers
+    assert captured["config"].mcp_servers == {}
 
 
 # --- run_agent_cascade wiring ----------------------------------------------

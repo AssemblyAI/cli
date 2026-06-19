@@ -74,7 +74,7 @@ class AgentCascadeOptions:
     # Text-to-speech: language named, any other query param via --tts-config.
     language: str | None
     tts_config: tuple[str, ...]
-    # Tools: extra standard mcpServers JSON config files, on top of the default set.
+    # Tools: opt-in standard mcpServers JSON config files (none load by default).
     mcp_config: tuple[Path, ...]
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
@@ -123,8 +123,9 @@ def _parse_tts_config(pairs: tuple[str, ...]) -> dict[str, str]:
 def _web_search_note() -> str | None:
     """The "web search is off" notice when no ``FIRECRAWL_API_KEY`` enables it, else ``None``.
 
-    The other default tools (URL fetch, AssemblyAI docs, and the MCP servers) need no
-    key; only Firecrawl web search does, so its absence is the one worth flagging up front.
+    Web search (Firecrawl) is the live agent's one built-in tool and the only one needing a
+    key, so its absence — which leaves the agent answering from its own knowledge alone — is
+    worth flagging up front.
     """
     if env.get(firecrawl_search.FIRECRAWL_API_KEY_ENV):
         return None
@@ -139,15 +140,13 @@ def _warn_without_web_search(*, json_mode: bool) -> None:
 
 
 def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
-    """The MCP servers for this run: the curated default set overlaid with any --mcp-config
-    files, so an explicit config can extend the defaults or override one by name.
+    """The MCP servers for this run: only those from ``--mcp-config`` files (none by default).
 
-    The default filesystem server is rooted at the working directory, scoping its file
-    access to one folder.
+    The live agent ships with just its Firecrawl web-search tool; extra MCP servers are
+    strictly opt-in, so a low-latency spoken turn isn't handed a large tool menu it has to
+    choose among.
     """
-    servers: dict[str, Mapping[str, object]] = dict(mcp_tools.default_servers(Path.cwd()))
-    servers.update(mcp_tools.parse_mcp_config(mcp_config))
-    return servers
+    return dict(mcp_tools.parse_mcp_config(mcp_config))
 
 
 def _open_audio(
@@ -230,13 +229,22 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
     deps = engine.CascadeDeps.real(api_key, config, audio=duplex.mic, stt_params=stt_params)
 
     def run_conversation(renderer: engine.Renderer) -> None:
-        engine.run_cascade(renderer=renderer, player=duplex.player, config=config, deps=deps)
+        # Hand the app the session's reply-interrupt so Escape/Ctrl-C can silence a reply
+        # mid-sentence and drop back to listening (the session is built inside run_cascade).
+        engine.run_cascade(
+            renderer=renderer,
+            player=duplex.player,
+            config=config,
+            deps=deps,
+            on_session=lambda session: app.set_interrupt(session.interrupt_reply),
+        )
 
-    LiveAgentApp(
+    app = LiveAgentApp(
         run_conversation=run_conversation,
         on_stop=duplex.close,
         web_note=_web_search_note(),
-    ).run(mouse=False)
+    )
+    app.run(mouse=False)
 
 
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:

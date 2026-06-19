@@ -302,18 +302,36 @@ def test_barge_in_cancels_and_flushes_live_worker():
     assert session._reply is None
 
 
-def test_barge_in_no_worker_does_not_flush():
+def test_barge_in_without_a_live_worker_does_not_flush():
+    # No worker, or one that already finished: nothing to cancel, so no flush.
     session, _renderer, player = make_session()
-    session._barge_in()
-    assert player.flushed == 0
-
-
-def test_barge_in_finished_worker_does_not_flush():
-    session, _renderer, player = make_session()
+    session._barge_in()  # no worker
     session._reply = FakeWorker(alive=False)
-    session._barge_in()
+    session._barge_in()  # finished worker
     assert player.flushed == 0
     assert session._reply is None
+
+
+def test_interrupt_reply_signals_stop_and_flushes_without_joining():
+    # Live TUI Escape/Ctrl-C silences a playing reply: stop flag + flush, but NO join.
+    session, _renderer, player = make_session()
+    worker = FakeWorker(alive=True)
+    session._reply = worker
+    assert session.interrupt_reply() is True
+    assert session._stop.is_set()
+    assert player.flushed == 1
+    assert worker.joined == 0  # not joined — the worker unwinds on its own
+    assert session._reply is worker  # still tracked; the next turn's barge-in joins it
+
+
+def test_interrupt_reply_is_a_noop_when_nothing_is_playing():
+    # No worker, or one that already finished: nothing to stop, so no flush and no stop flag.
+    session, _renderer, player = make_session()
+    assert session.interrupt_reply() is False  # no worker
+    session._reply = FakeWorker(alive=False)
+    assert session.interrupt_reply() is False  # finished worker
+    assert player.flushed == 0
+    assert not session._stop.is_set()
 
 
 def test_shutdown_joins_live_worker():
@@ -406,6 +424,27 @@ def test_run_cascade_greets_then_pumps_turns():
     assert ("user_final", "hello") in renderer.calls
     # The greeting is threaded into the LLM call as prior context.
     assert {"role": "assistant", "content": "Welcome."} in session_box["messages"]
+
+
+def test_run_cascade_hands_the_session_to_on_session_before_greeting():
+    # run_cascade hands the session to on_session before the player starts (TUI wires it).
+    captured = {}
+    player = FakePlayer()
+    deps = CascadeDeps(
+        run_stt=lambda on_turn: None,
+        complete_reply=lambda m: "hi",
+        synthesize=lambda text: b"",
+        spawn=_sync_spawn,
+    )
+    run_cascade(
+        renderer=FakeRenderer(),
+        player=player,
+        config=CascadeConfig(greeting=""),
+        deps=deps,
+        on_session=lambda s: captured.update(session=s, started=player.started),
+    )
+    assert isinstance(captured["session"], CascadeSession)
+    assert captured["started"] is False
 
 
 def test_run_cascade_shuts_down_inflight_worker():

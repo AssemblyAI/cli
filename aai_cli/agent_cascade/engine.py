@@ -194,6 +194,23 @@ class CascadeSession:
             self.player.flush()
         self._join_reply()
 
+    def interrupt_reply(self) -> bool:
+        """Signal an in-flight reply to stop, without waiting for it; True if one was playing.
+
+        The UI-thread-safe counterpart to a spoken barge-in: the live TUI's Escape/Ctrl-C
+        calls this to silence the agent mid-reply without the user having to talk over it.
+        Flushing the queued audio stops speech at once; the reply worker then sees the stop
+        flag, unwinds on its own, and emits ``reply_done`` so the front-end returns to
+        listening (the STT loop keeps running, so the next spoken turn is handled normally).
+        It deliberately does *not* join the worker — a join from the UI thread would deadlock
+        against the worker's own ``call_from_thread`` render hops.
+        """
+        playing = self._reply is not None and self._reply.is_alive()
+        if playing:
+            self._stop.set()
+            self.player.flush()
+        return playing
+
     def _join_reply(self) -> None:
         """Wait for the current reply worker (if any) to unwind, then drop the handle."""
         worker = self._reply
@@ -270,14 +287,24 @@ def _is_final_turn(event: object, *, format_turns: bool) -> bool:
 
 
 def run_cascade(
-    *, renderer: Renderer, player: Player, config: CascadeConfig, deps: CascadeDeps
+    *,
+    renderer: Renderer,
+    player: Player,
+    config: CascadeConfig,
+    deps: CascadeDeps,
+    on_session: Callable[[CascadeSession], None] | None = None,
 ) -> None:
     """Run one terminal cascade conversation until STT closes or the user stops.
 
     Greets, then pumps STT turns through the LLM+TTS reply path. A recorded leg
-    failure is re-raised here so the command exits with the right code.
+    failure is re-raised here so the command exits with the right code. ``on_session`` is
+    handed the freshly built session before the conversation starts, so a front-end (the
+    live TUI) can grab a handle to it — e.g. to wire a keyboard interrupt to
+    :meth:`CascadeSession.interrupt_reply`.
     """
     session = CascadeSession(deps=deps, renderer=renderer, player=player, config=config)
+    if on_session is not None:
+        on_session(session)
     player.start()
     try:
         session.greet()
