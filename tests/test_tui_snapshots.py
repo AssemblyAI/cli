@@ -19,12 +19,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from textual.widgets import Static
 
 from aai_cli.agent_cascade.tui import LiveAgentApp
-from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult
+from aai_cli.code_agent.events import AssistantDelta, AssistantText, ErrorText, ToolCall, ToolResult
 from aai_cli.code_agent.messages import UserMessage
 from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
-from aai_cli.code_agent.tui import CodeAgentApp
+from aai_cli.code_agent.tui import _SPIN_FRAMES, CodeAgentApp
+from aai_cli.code_agent.tui_status import _spinner_text
 from tests import _tui_snapshot as h
 
 if TYPE_CHECKING:
@@ -176,6 +178,72 @@ def test_code_tool_output_expanded(snap_compare, tmp_path, monkeypatch) -> None:
     )
 
 
+def test_code_working_spinner(snap_compare, tmp_path, monkeypatch) -> None:
+    """The working indicator: a spinner glyph + elapsed seconds, docked just above the prompt."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, CodeAgentApp)
+        h.freeze_animation(app)
+        app._mount(UserMessage("build a web scraper"))
+        spinner = app.query_one("#spinner", Static)
+        spinner.display = True
+        # Render a fixed elapsed/frame through the real formatter — driving the live _tick
+        # would tie the readout to wall-clock timing and flake.
+        spinner.update(_spinner_text(7, _SPIN_FRAMES[0]))
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_streaming_reply(snap_compare, tmp_path, monkeypatch) -> None:
+    """A reply mid-stream is plain text (literal markdown) before finalize swaps it to Markdown."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, CodeAgentApp)
+        h.freeze_animation(app)
+        app._mount(UserMessage("explain the plan"))
+        app._write_event(AssistantDelta("Here's the plan. First **scaffold** the project, "))
+        app._write_event(AssistantDelta("then wire up the tests."))
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_approval_modal_benign(snap_compare, tmp_path, monkeypatch) -> None:
+    """A benign command mounts no warning label — the no-warning variant of the approval prompt."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        h.freeze_animation(pilot.app)
+        pilot.app.push_screen(ApprovalScreen("execute", {"command": "ls -la"}))
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
+def test_code_error(snap_compare, tmp_path, monkeypatch) -> None:
+    """A failed turn renders as a red ✗ error line instead of crashing the UI."""
+    cwd = h.stable_workdir(tmp_path, monkeypatch)
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, CodeAgentApp)
+        h.freeze_animation(app)
+        app._mount(UserMessage("deploy to prod"))
+        app._write_event(ErrorText("gateway unreachable: connection refused"))
+
+    assert snap_compare(
+        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
+    )
+
+
 # --- assembly live -----------------------------------------------------------
 
 
@@ -212,5 +280,57 @@ def test_live_thinking(snap_compare) -> None:
         h.freeze_animation(app)
         app.show_user_final("what's the weather like in Boston?")
         h.freeze_animation(app)  # show_user_final switched the phase to thinking
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
+def test_live_user_partial(snap_compare) -> None:
+    """An interim (still-being-spoken) user transcript grows in place while listening."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_partial("what's the weather like in")
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
+def test_live_tool_call_note(snap_compare) -> None:
+    """A tool the agent uses mid-turn drops a dim progress note so the wait doesn't read as a hang."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_final("what's the weather like in Boston?")
+        app.show_tool_call("Searching the web")
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
+def test_live_interrupted(snap_compare) -> None:
+    """An interrupted reply is finalized and tagged `(interrupted)`, then returns to listening."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_final("tell me a long story")
+        app.begin_reply()
+        app.show_agent_sentence("Once upon a time, in a faraway land,")
+        app.end_reply(interrupted=True)
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
+def test_live_error(snap_compare) -> None:
+    """A cascade failure surfaces as a red ✗ error line in the transcript."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app._show_error("Streaming STT connection lost")
 
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
