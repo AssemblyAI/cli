@@ -72,7 +72,7 @@ def spoken_summary(text: str) -> str:
     readback still says *something* rather than going silent.
     """
     prose = _INLINE_CODE.sub(" ", _FENCED_CODE.sub(" ", text))
-    prose = " ".join(prose.split()).strip()
+    prose = " ".join(prose.split())
     if not prose:
         return _ALL_CODE_READBACK
     if len(prose) > _MAX_SPOKEN_CHARS:
