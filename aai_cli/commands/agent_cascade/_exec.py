@@ -245,6 +245,11 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
         web_note=_web_search_note(),
     )
     app.run(mouse=False)
+    # A fatal leg failure (STT/LLM/TTS) is caught on the TUI's worker thread; re-raise it now
+    # that the app has torn down so the command exits with the error's code (and renders it to
+    # stderr, which survives the restored screen) instead of a silent success.
+    if app.error is not None:
+        raise app.error
 
 
 def _launch_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig) -> None:

@@ -128,6 +128,15 @@ class LiveAgentApp(App[None]):
         self._user_partial: UserMessage | None = None  # the in-place "you: …" widget for a turn
         self._reply_msg: AssistantMessage | None = None  # the reply widget sentences stream into
         self._stopped = False  # guards on_stop against a double teardown (quit + unmount)
+        # A fatal cascade error caught on the worker thread, re-raised on the main thread (after
+        # app.run returns) so the command exits with the error's code instead of a silent 0 —
+        # the same record-then-re-raise the engine's CascadeSession.error uses across threads.
+        self._error: CLIError | None = None
+
+    @property
+    def error(self) -> CLIError | None:
+        """The fatal cascade error (if any), for the launcher to re-raise after ``run`` returns."""
+        return self._error
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="log")
@@ -154,6 +163,9 @@ class LiveAgentApp(App[None]):
         try:
             self._run_conversation(renderer)
         except CLIError as exc:
+            # Keep the error so the main thread can re-raise it for the right exit code, and show
+            # it inline too (the post-exit stderr render is the durable copy a torn-down TUI keeps).
+            self._error = exc
             self._safely(self._show_error, exc.message)
         # The cascade returned (STT closed, a leg failed, or a quit closed the audio) — exit.
         self._safely(self.exit)

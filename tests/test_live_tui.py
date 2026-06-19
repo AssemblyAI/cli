@@ -339,13 +339,18 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
 
 def test_worker_surfaces_a_leg_error_in_the_transcript() -> None:
     async def go() -> None:
+        boom_error = CLIError("gateway down", error_type="api_error", exit_code=1)
+
         def boom(renderer) -> None:
-            raise CLIError("gateway down", error_type="api_error", exit_code=1)
+            raise boom_error
 
         app = _app(run_conversation=boom)
         async with app.run_test(size=(100, 30)) as pilot:
             assert await _wait_until(pilot, lambda: bool(app.query(ErrorMessage)))
             assert "gateway down" in str(app.query_one(ErrorMessage).render())
+            # The error is also kept on the app so the launcher can re-raise it for the
+            # right exit code, not just shown inline (where a torn-down TUI would lose it).
+            assert app.error is boom_error
 
     _run(go())
 
@@ -401,6 +406,8 @@ def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     class FakeApp:
+        error = None  # no fatal leg failure -> the launcher re-raises nothing
+
         def __init__(self, *, run_conversation, on_stop, web_note):
             captured["run_conversation"] = run_conversation
             captured["on_stop"] = on_stop
@@ -447,6 +454,8 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
     monkeypatch.setattr(engine, "run_cascade", fake_run_cascade)
 
     class FakeApp:
+        error = None  # the conversation completes cleanly here
+
         def __init__(self, *, run_conversation, on_stop, web_note):
             self._rc = run_conversation
 
@@ -463,3 +472,25 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
     assert captured["renderer"] == "renderer-sentinel"
     # The session's interrupt_reply was wired onto the app (so Escape/Ctrl-C can use it).
     assert captured["interrupt"] == "session-interrupt"
+
+
+def test_tui_reraises_a_fatal_leg_error_for_the_exit_code(monkeypatch) -> None:
+    # A fatal leg failure is caught on the TUI worker thread and parked on app.error; the
+    # launcher must re-raise it after the app tears down so the command exits with the
+    # error's code (api_error -> exit 1) instead of a silent success.
+    _wire_tui(monkeypatch)
+    boom = CLIError("streaming STT closed", error_type="api_error", exit_code=1)
+
+    class FakeApp:
+        error = boom  # the worker thread recorded a fatal cascade error
+
+        def __init__(self, *, run_conversation, on_stop, web_note):
+            pass
+
+        def run(self, **kwargs):
+            pass
+
+    monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
+    with pytest.raises(CLIError) as exc:
+        run_agent_cascade(_opts(), AppState(), json_mode=False)
+    assert exc.value is boom
