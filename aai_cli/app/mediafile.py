@@ -106,6 +106,16 @@ def default_output(
     return Path.cwd() / chosen.name if downloaded else chosen
 
 
+def existing_output(source: str, namer: Callable[[Path], Path]) -> Path | None:
+    """The default output for a local ``source`` when it already exists (so a batch
+    run skips it), else ``None`` — a URL (the output name isn't known until download)
+    or a source with no prior output, both of which are processed."""
+    if "://" in source:
+        return None
+    out = namer(Path(source))
+    return out if out.exists() else None
+
+
 def validate_out(out: Path, media: Path) -> None:
     """An unwritable or self-overwriting output file must fail here, before the
     billed transcription/translation/synthesis pipeline runs.
@@ -223,6 +233,11 @@ def resolve_diarized_transcript(
         quiet=quiet,
         config=config,
     )
+
+
+def transcript_id(transcript: object) -> str:
+    """The transcript's id as a safe string (``""`` when the SDK object carries none)."""
+    return str(getattr(transcript, "id", ""))
 
 
 def _fetched_transcript(api_key: str, transcript_id: str) -> object:

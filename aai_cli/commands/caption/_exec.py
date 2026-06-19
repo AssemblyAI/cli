@@ -121,7 +121,7 @@ def _fetch_srt(transcript: object, opts: CaptionOptions, *, json_mode: bool, qui
             transcript, "srt", chars_per_caption=opts.chars_per_caption
         )
     if not srt.strip():
-        transcript_id = str(getattr(transcript, "id", ""))
+        transcript_id = mediafile.transcript_id(transcript)
         raise CLIError(
             f"Transcript {transcript_id} has no captions to burn in.",
             error_type="no_captions",
@@ -179,7 +179,10 @@ def _caption_worker(
     quiet_state = dataclasses.replace(state, quiet=True)
 
     def worker(source: str) -> batch.SourceResult:
-        if not force and (existing := _existing_output(source)) is not None:
+        if (
+            not force
+            and (existing := mediafile.existing_output(source, default_out_path)) is not None
+        ):
             return batch.SourceResult(
                 payload={"source": source, "out": str(existing)},
                 summary=f"{existing} exists",
@@ -190,16 +193,6 @@ def _caption_worker(
         )
 
     return worker
-
-
-def _existing_output(source: str) -> Path | None:
-    """The default output for a local ``source`` when it already exists (so batch mode
-    skips it), else ``None`` — a URL (output name isn't known until download) or a
-    source with no prior output, both of which are processed."""
-    if "://" in source:
-        return None
-    out = default_out_path(Path(source))
-    return out if out.exists() else None
 
 
 def _caption_one(opts: CaptionOptions, state: AppState, *, json_mode: bool) -> batch.SourceResult:
@@ -247,7 +240,7 @@ def _caption_build(
         quiet=state.quiet,
         config=aai.TranscriptionConfig(),
     )
-    transcript_id = str(getattr(transcript, "id", ""))
+    transcript_id = mediafile.transcript_id(transcript)
     srt = _fetch_srt(transcript, opts, json_mode=json_mode, quiet=state.quiet)
     captions = srt.count("-->")  # one arrow per SRT cue timing line
     with tempfile.TemporaryDirectory(prefix="aai-caption-") as tmp:

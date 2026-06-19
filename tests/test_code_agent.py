@@ -28,7 +28,7 @@ from aai_cli.code_agent import (
 from aai_cli.code_agent.agent import MUTATING_TOOLS, build_agent
 from aai_cli.code_agent.events import AssistantText, ErrorText, ToolCall, ToolResult
 from aai_cli.code_agent.prompt import build_system_prompt
-from aai_cli.code_agent.render import RichRenderer, make_approver
+from aai_cli.code_agent.render import RichRenderer
 from aai_cli.code_agent.session import QUIT_COMMANDS, CodeSession, run_repl
 
 
@@ -273,8 +273,6 @@ def test_rich_renderer_smoke(capsys: pytest.CaptureFixture[str]) -> None:
     renderer(AssistantText("hi"))
     renderer(ToolCall(name="write_file", args={"file_path": "a"}))
     renderer(ToolResult(name="write_file", content="Updated a"))
-    approver = make_approver(lambda name, args: True)
-    assert approver("write_file", {}) is True
     out = capsys.readouterr().out
     assert "hi" in out and "write_file" in out
 

@@ -18,15 +18,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from aai_cli.core import env
+from aai_cli.code_agent._config_root import claude_config_root
 
 if TYPE_CHECKING:
     from langchain.agents.middleware import AgentMiddleware
     from langchain_core.tools import BaseTool
-
-# Mirrors aai_cli.app.coding_agent.skills_root without importing the app layer (a
-# feature slice stays below it): the agent config root, overridable for tests/agents.
-_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR"
 
 READ_SKILL_TOOL_NAME = "read_skill"
 
@@ -53,9 +49,7 @@ working directory, so only `read_skill` can reach them."""
 
 def skills_root() -> Path:
     """Directory holding installed skills (one subdir per skill, each with SKILL.md)."""
-    config_dir = env.get(_CLAUDE_CONFIG_DIR)
-    root = Path(config_dir) if config_dir else Path.home() / ".claude"
-    return root / "skills"
+    return claude_config_root() / "skills"
 
 
 def _has_skills(root: Path) -> bool:

@@ -40,6 +40,19 @@ _TIP_LINE = "Use headphones — the mic stays open while the agent speaks."
 _STATUS_LINE = "Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
 
 
+def _call_on_ui_thread(app: App[None], fn: Callable[..., None], *args: object) -> None:
+    """Hop ``fn`` onto ``app``'s UI thread, dropping the error a torn-down app raises mid-call.
+
+    The cascade runs on a worker thread, so every render/teardown call crosses back via
+    ``call_from_thread``; once the app has stopped that raises ``RuntimeError`` and the call
+    is moot, so it's suppressed rather than surfaced as an unhandled worker-thread exception.
+    """
+    if not app.is_running:
+        return
+    with contextlib.suppress(RuntimeError):
+        app.call_from_thread(fn, *args)
+
+
 class _TuiRenderer:
     """Marshals cascade :class:`~aai_cli.agent_cascade.engine.Renderer` calls onto the UI thread.
 
@@ -76,10 +89,7 @@ class _TuiRenderer:
         self._dispatch(lambda: self._app.end_reply(interrupted=interrupted))
 
     def _dispatch(self, fn: Callable[..., None], *args: object) -> None:
-        if not self._app.is_running:
-            return
-        with contextlib.suppress(RuntimeError):
-            self._app.call_from_thread(fn, *args)
+        _call_on_ui_thread(self._app, fn, *args)
 
 
 class LiveAgentApp(App[None]):
@@ -172,11 +182,8 @@ class LiveAgentApp(App[None]):
         self._safely(self.exit)
 
     def _safely(self, fn: Callable[..., None], *args: object) -> None:
-        """Hop ``fn`` onto the UI thread, dropping the error a torn-down app raises mid-call."""
-        if not self.is_running:
-            return
-        with contextlib.suppress(RuntimeError):
-            self.call_from_thread(fn, *args)
+        """Hop ``fn`` onto this app's UI thread (see :func:`_call_on_ui_thread`)."""
+        _call_on_ui_thread(self, fn, *args)
 
     # --- transcript (always called on the UI thread) --------------------------
 

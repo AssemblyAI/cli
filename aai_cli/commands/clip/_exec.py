@@ -167,7 +167,7 @@ def _transcript_segments(
     if not _needs_transcript(opts):
         return [], None
     transcript = _resolve_transcript(opts, media, state, json_mode=json_mode)
-    transcript_id = str(getattr(transcript, "id", ""))
+    transcript_id = mediafile.transcript_id(transcript)
     utterances = jsonshape.object_list(getattr(transcript, "utterances", None))
     if not utterances:
         raise CLIError(
