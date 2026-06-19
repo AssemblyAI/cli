@@ -5,7 +5,8 @@ The command module (aai_cli/commands/clip/__init__.py) only parses argv — it b
 options/run split, see AGENTS.md), so tests drive transcript resolution and the
 ffmpeg orchestration by constructing options directly. The pure selection logic
 (range parsing, utterance filtering, LLM reply parsing, merging) lives in
-``clip_select``.
+``clip_select``; the ffmpeg cutting (silence detection + per-segment re-encode)
+lives in ``_cut``. This module is the orchestration that ties them together.
 
 Selection composes four sources: ``--speaker`` and ``--search`` filter the
 diarized utterances of a transcript (made on the fly, reused via
@@ -25,10 +26,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-from rich.markup import escape
-
 from aai_cli.app import batch, mediafile
 from aai_cli.app.context import AppState
+from aai_cli.commands.clip import _cut as clip_cut
 from aai_cli.commands.clip import _select as clip_select
 from aai_cli.commands.clip._select import Segment
 from aai_cli.core import jsonshape, llm, stdio, youtube
@@ -230,91 +230,6 @@ def _validate_selection(opts: ClipOptions) -> None:
         )
 
 
-# -30dB for at least 0.2s reads as a pause in normal speech recordings.
-_SILENCE_FILTER = "silencedetect=noise=-30dB:d=0.2"
-
-
-def _detect_silences(ffmpeg: str, media: Path) -> list[Segment]:
-    """The silence intervals ffmpeg hears in ``media`` (one decode pass).
-
-    Snapping is best-effort: a failed detection returns no silences (so the
-    cut proceeds at the selected times) rather than failing the command.
-    silencedetect logs at info level on stderr, so the usual ``-loglevel
-    error`` would silence the very lines this parses.
-    """
-    result = mediafile.run_ffmpeg(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-nostats",
-            "-i",
-            str(media),
-            "-af",
-            _SILENCE_FILTER,
-            "-f",
-            "null",
-            "-",
-        ]
-    )
-    if result.returncode != 0:
-        return []
-    return clip_select.parse_silences(result.stderr)
-
-
-def _cut_clip(ffmpeg: str, media: Path, segment: Segment, dest: Path) -> None:
-    """Re-encode one segment of ``media`` into ``dest``.
-
-    Re-encoding (no ``-c copy``) keeps cuts frame-accurate where stream copy
-    would snap to the nearest keyframe; ``-y`` makes a re-run overwrite its own
-    earlier output instead of stalling on ffmpeg's prompt.
-    """
-    result = mediafile.run_ffmpeg(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(media),
-            "-ss",
-            f"{segment.start:.3f}",
-            "-to",
-            f"{segment.end:.3f}",
-            mediafile.path_arg(dest),
-        ]
-    )
-    if result.returncode != 0:
-        raise mediafile.ffmpeg_failure(result, "cut", dest, error_type="clip_failed")
-
-
-def _clip_dest(media: Path, out_dir: Path | None, index: int) -> Path:
-    directory = out_dir if out_dir is not None else media.parent
-    return directory / f"{media.stem}.clip{index:02d}{media.suffix}"
-
-
-@dataclass(frozen=True)
-class WrittenClip:
-    """One output file and the source window it was cut from."""
-
-    path: Path
-    segment: Segment
-
-    def payload(self) -> dict[str, object]:
-        return {
-            "path": str(self.path),
-            "start": round(self.segment.start, 3),
-            "end": round(self.segment.end, 3),
-            "duration": round(self.segment.end - self.segment.start, 3),
-        }
-
-    def human_line(self) -> str:
-        start = clip_select.format_clock(self.segment.start)
-        end = clip_select.format_clock(self.segment.end)
-        duration = round(self.segment.end - self.segment.start, 3)
-        return output.success(f"{escape(str(self.path))}  {start} - {end}  ({duration}s)")
-
-
 def run_clip(opts: ClipOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute `assembly clip`: one source, or a stdin batch (`--from-stdin`)."""
     _validate_out_dir(opts.out_dir)
@@ -407,7 +322,7 @@ def _clip_one(
     state: AppState,
     *,
     json_mode: bool,
-) -> tuple[dict[str, object], list[WrittenClip]]:
+) -> tuple[dict[str, object], list[clip_cut.WrittenClip]]:
     """Resolve ``opts.media`` to a local file and cut its clips; the payload + clips.
 
     A media-page URL is downloaded once — the audio track by default, the full
@@ -443,21 +358,21 @@ def _cut(
     state: AppState,
     *,
     json_mode: bool,
-) -> tuple[dict[str, object], list[WrittenClip]]:
+) -> tuple[dict[str, object], list[clip_cut.WrittenClip]]:
     """Select and cut the clips for an already-local media file; the payload + clips."""
     matched, transcript_id = _transcript_segments(opts, media, state, json_mode=json_mode)
     segments = clip_select.merge_segments([*matched, *explicit], opts.padding)
     if opts.snap:
         with output.status("Detecting silence…", json_mode=json_mode, quiet=state.quiet):
-            silences = _detect_silences(ffmpeg, media)
+            silences = clip_cut.detect_silences(ffmpeg, media)
         segments = clip_select.snap_to_silences(segments, silences)
-    written: list[WrittenClip] = []
+    written: list[clip_cut.WrittenClip] = []
     cutting = f"Cutting {len(segments)} clip(s)…"
     with output.status(cutting, json_mode=json_mode, quiet=state.quiet):
         for index, segment in enumerate(segments, 1):
-            dest = _clip_dest(media, out_dir, index)
-            _cut_clip(ffmpeg, media, segment, dest)
-            written.append(WrittenClip(path=dest, segment=segment))
+            dest = clip_cut.clip_dest(media, out_dir, index)
+            clip_cut.cut_clip(ffmpeg, media, segment, dest)
+            written.append(clip_cut.WrittenClip(path=dest, segment=segment))
     payload: dict[str, object] = {
         "source": opts.media,
         "transcript_id": transcript_id,

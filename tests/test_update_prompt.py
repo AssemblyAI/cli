@@ -8,7 +8,7 @@ import types
 
 from rich.console import Console
 
-from aai_cli.core import config, procs, stdio
+from aai_cli.core import config, config_store, procs, stdio
 from aai_cli.ui import output, theme, update_check
 
 
@@ -61,7 +61,7 @@ def test_run_foreground_inherits_stdio_and_returns_status(monkeypatch):
 def _enable_prompt(tmp_path, monkeypatch) -> io.StringIO:
     """Cache a newer version, a tty stderr console, and an interactive stdin so the
     update notice renders and the upgrade prompt is reachable."""
-    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_store, "config_dir", lambda: tmp_path)
     config.set_update_cache(last_check=time.time(), latest_version="9.9.9")
     con, buf = _tty_console()
     monkeypatch.setattr(output, "error_console", con)

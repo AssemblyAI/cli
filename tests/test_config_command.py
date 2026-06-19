@@ -5,7 +5,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.core import config
+from aai_cli.core import config, config_store
 from aai_cli.core.errors import CLIError
 from aai_cli.main import app
 
@@ -51,9 +51,9 @@ def test_set_active_profile_with_no_profiles_says_none_yet():
 
 
 def test_config_file_path_is_the_toml_under_config_dir():
-    path = config.config_file_path()
+    path = config_store.config_file_path()
     assert path.name == "config.toml"
-    assert path.parent == config.config_dir()
+    assert path.parent == config_store.config_dir()
 
 
 def test_bare_config_shows_subcommand_help():
@@ -70,13 +70,13 @@ def test_bare_config_shows_subcommand_help():
 def test_config_path_prints_bare_path():
     result = runner.invoke(app, ["config", "path"])
     assert result.exit_code == 0
-    assert result.output.strip() == str(config.config_file_path())
+    assert result.output.strip() == str(config_store.config_file_path())
 
 
 def test_config_path_json():
     result = runner.invoke(app, ["config", "path", "--json"])
     assert result.exit_code == 0
-    assert json.loads(result.output) == {"path": str(config.config_file_path())}
+    assert json.loads(result.output) == {"path": str(config_store.config_file_path())}
 
 
 def test_config_path_works_even_when_config_is_corrupt(tmp_config):
@@ -85,7 +85,7 @@ def test_config_path_works_even_when_config_is_corrupt(tmp_config):
     (tmp_config / "config.toml").write_text("this is = = not toml [[[")
     result = runner.invoke(app, ["config", "path"])
     assert result.exit_code == 0
-    assert result.output.strip() == str(config.config_file_path())
+    assert result.output.strip() == str(config_store.config_file_path())
 
 
 def test_config_list_still_errors_when_config_is_corrupt(tmp_config):
@@ -113,7 +113,7 @@ def test_config_list_json_is_the_full_settings_object():
     result = runner.invoke(app, ["config", "list", "--json"])
     assert result.exit_code == 0
     assert json.loads(result.output) == {
-        "path": str(config.config_file_path()),
+        "path": str(config_store.config_file_path()),
         "active_profile": "staging",
         "profiles": {"staging": "sandbox000"},
         "telemetry_enabled": False,
