@@ -388,24 +388,23 @@ class CodeAgentApp(_VoiceLegs):
         self._note("cancelling…")
         return True
 
-    def _stop_voice_activity(self) -> bool:
-        """Stop in-flight voice; True if voice was active.
+    def _stop_voice_activity(self) -> None:
+        """Stop in-flight voice (a no-op when none is active).
 
         Interrupting the readback (speaking) stops it and resumes listening — the cancelled
         speak() returns and the loop captures the next turn. Interrupting while listening
         pauses voice to the text prompt, after which a second press falls through to quit.
         """
         if self._voice is None or not self._voice_active():
-            return False
+            return
         self._voice.cancel()
         if self._voice_phase == "speaking":  # stop talking, stay in voice mode -> re-listen
             self._note("stopped — listening…")
-            return True
+            return
         self._voice_paused = True
         self._refresh_status()
         self._sync_input_mode()  # active leg stopped -> bring the text prompt back
         self._note("voice interrupted (Ctrl-V to talk again)")
-        return True
 
     def action_interrupt(self) -> None:
         """Escape: interrupt a running agent turn or in-flight voice (a no-op when idle)."""
@@ -417,14 +416,13 @@ class CodeAgentApp(_VoiceLegs):
         if self._cancel_turn():
             self._quit_pending = False
             return
-        if self._stop_voice_activity():
-            if self._voice_paused:  # paused to text -> a 2nd Ctrl-C quits; re-listening doesn't
-                self._arm_quit_pending()
-            return
+        # A second press always quits — checked before stopping voice so a spoken turn can
+        # never trap you (the first press stops the readback and arms; the second exits).
         if self._quit_pending:
             self.exit()
-        else:
-            self._arm_quit_pending()
+            return
+        self._stop_voice_activity()  # stop a readback/listen if one's active (a no-op otherwise)
+        self._arm_quit_pending()
 
     def _arm_quit_pending(self) -> None:
         """Arm Ctrl-C double-press-to-quit, showing a hint that expires after a few seconds."""

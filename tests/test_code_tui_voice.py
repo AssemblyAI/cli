@@ -140,24 +140,26 @@ def test_finished_worker_is_ignored_once_the_app_stops_running():  # untyped: du
     assert calls == [True]  # running -> the finished turn is handled
 
 
-def test_interrupt_while_speaking_resumes_listening_not_text():  # untyped: probes app internals
-    # Ctrl-C during the readback (speaking) cancels it but stays in voice mode — the loop
-    # re-listens — and doesn't arm the quit. Interrupting while listening pauses to the text
-    # prompt and arms the double-press quit.
+def test_interrupt_during_speaking_stops_readback_and_ctrl_c_can_always_quit():  # untyped: internals
+    # Both Escape and Ctrl-C stop the readback and re-listen (not text); Ctrl-C also arms the
+    # quit, and a SECOND Ctrl-C exits even mid-speech — so a spoken turn can never trap you.
     async def go():
         app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        exited: list[bool] = []
+        app.exit = lambda *a, **k: exited.append(True)  # capture the quit without tearing down
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             app._voice_phase = "speaking"
-            app.action_quit_or_interrupt()
-            assert app._voice.cancels >= 1  # the readback was cancelled
-            assert app._voice_paused is False  # stayed in voice mode -> will re-listen
-            assert app._quit_pending is False  # stopping the readback isn't a quit step
+            app.action_interrupt()  # Escape
+            assert app._voice.cancels >= 1 and app._voice_paused is False  # stopped, re-listens
+            assert app._quit_pending is False  # Escape never quits
 
-            app._voice_phase = "listening"
-            app.action_quit_or_interrupt()
-            assert app._voice_paused is True  # listening-interrupt brings the text prompt back
-            assert app._quit_pending is True  # paused to text -> a 2nd Ctrl-C quits
+            app._voice_phase = "speaking"
+            app.action_quit_or_interrupt()  # Ctrl-C
+            assert app._voice.cancels >= 2 and app._quit_pending is True  # stopped + armed
+            assert exited == []
+            app.action_quit_or_interrupt()  # second Ctrl-C
+            assert exited == [True]  # quits even mid-speech — never trapped
 
     _run(go())
 
@@ -425,25 +427,22 @@ def test_ctrl_c_interrupts_active_voice_then_quits_on_second_press(
     _run(go())
 
 
-def test_ctrl_c_on_active_voice_interrupts_even_when_a_quit_was_pending(
+def test_ctrl_c_quits_when_a_quit_is_pending_even_with_active_voice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Stopping active voice takes priority over a pending quit: a Ctrl-C that lands while the
-    # agent is listening/speaking interrupts the voice and never quits, even if the quit hint
-    # was already armed from an earlier press.
+    # A pending quit takes priority over active voice: a second Ctrl-C (quit already armed)
+    # exits even while the agent is listening/speaking — otherwise a voice turn could trap
+    # the user with no way out.
     async def go() -> None:
-        voice = FakeVoice()
-        app = CodeAgentApp(agent=FakeAgent([]), voice=voice)
-        app._voice_paused = True
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             exited: list[bool] = []
             monkeypatch.setattr(app, "exit", lambda *a, **k: exited.append(True))
-            app._voice_paused = False  # voice active (listening)
-            app._quit_pending = True  # a quit hint was already armed
-            app.action_quit_or_interrupt()  # Ctrl-C: interrupt the voice, do NOT quit
-            assert voice.cancels == 1
-            assert exited == []  # active voice is interrupted, never quit
+            app._voice_paused = False  # voice active (listening/speaking)
+            app._quit_pending = True  # a quit hint was already armed by a prior press
+            app.action_quit_or_interrupt()  # Ctrl-C: with quit armed, exit
+            assert exited == [True]  # quits — never trapped
 
     _run(go())
 
@@ -466,20 +465,20 @@ def test_escape_interrupts_active_voice_without_arming_quit() -> None:
 
 
 def test_stop_voice_activity_is_a_noop_when_voice_inactive() -> None:
-    # No voice session, or a paused one, is not "active": the interrupt defers to the quit path
-    # rather than cancelling anything.
+    # No voice session, or a paused one, is not "active": _stop_voice_activity cancels nothing
+    # (and doesn't crash on the missing session), so the interrupt defers to the quit path.
     async def go() -> None:
         no_voice = CodeAgentApp(agent=FakeAgent([]))
         async with no_voice.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            assert no_voice._stop_voice_activity() is False  # nothing to stop
+            no_voice._stop_voice_activity()  # no voice session -> no-op, no error
 
         voice = FakeVoice()
         paused = CodeAgentApp(agent=FakeAgent([]), voice=voice)
         paused._voice_paused = True
         async with paused.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            assert paused._stop_voice_activity() is False  # paused -> inactive
+            paused._stop_voice_activity()  # paused -> inactive
             assert voice.cancels == 0  # a paused session is never cancelled
 
     _run(go())

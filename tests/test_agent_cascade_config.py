@@ -19,7 +19,7 @@ from aai_cli.core import llm
 def test_default_config_values():
     config = CascadeConfig()
     assert config.voice == DEFAULT_VOICE
-    assert config.model == DEFAULT_MODEL == "gemini-2.5-flash-lite"  # `assembly live` default
+    assert config.model == DEFAULT_MODEL == "claude-haiku-4-5-20251001"  # `assembly live` default
     assert config.greeting == DEFAULT_GREETING
     # The sliding-window default keeps the last 40 messages of context.
     assert config.max_history == 40
