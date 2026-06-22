@@ -502,7 +502,7 @@ skip = "./.venv,./dist,./docs,./node_modules,./.git,uv.lock,*.ambr,./tests/fixtu
 ignore-words-list = "unparseable,ist,expresso,notin,ans"
 
 [tool.deptry]
-exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]
+exclude = ["docs", "dist", ".venv", ".claude", "aai_cli/init/templates"]
 
 [tool.deptry.package_module_name_map]
 audioop-lts = "audioop"
