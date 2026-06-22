@@ -9,7 +9,7 @@ Turn the `assembly live` voice agent (the `agent-cascade` command) from a
 read-only assistant into one that can **cowork on the project in your current
 directory** — write/edit files, then actually run the project's tools
 (`pytest`, `git diff`, `npm run build`) against those edits — and **pick up
-where it left off across sessions**. Two capabilities:
+where it left off across sessions**. Three capabilities:
 
 1. **Sandboxed, gated `execute`.** Light up deepagents' built-in `execute` tool
    (today bound but inert, because `--files` uses a plain `FilesystemBackend`
@@ -20,6 +20,11 @@ where it left off across sessions**. Two capabilities:
 2. **Durable cross-session memory.** Use deepagents' built-in `MemoryMiddleware`
    to load and persist a per-project memory file, so the agent resumes knowing
    what it was working on.
+3. **Delegation via the `task` tool.** Wire up deepagents' subagents (available
+   but unwired — `create_deep_agent` only adds the `task` node when
+   `subagents=[…]` is passed) so the agent can hand a focused multi-step subtask
+   to a fresh-context helper, keeping the main voice turn lean. The subagent is
+   gateway-bound and its mutations are **gated by the same y/n**.
 
 ## Context
 
@@ -37,7 +42,11 @@ deepagents adds the `execute` tool automatically when the backend implements
 ("inert"). The shipped backends are `LocalShellBackend` (unrestricted host
 shell — deepagents explicitly warns against untrusted use) or a `BaseSandbox`
 subclass. `risk.py` already carries shell-risk scoring for `execute` (dormant
-today because `execute` isn't gated; this work makes it live).
+today because `execute` isn't gated; this work makes it live). Subagents are
+likewise *available but unwired*: `SubAgentMiddleware` raises "At least one
+subagent must be specified" and `create_deep_agent` only adds the `task` node
+when `subagents=[…]` is passed — `assembly live` passes none today, so enabling
+it is essentially one argument on the `create_deep_agent` call.
 
 There is **no first-class Python macOS-sandbox library**. The idiomatic
 mechanism is `sandbox-exec -p '<SBPL profile>'` (Apple Seatbelt — still shipping,
@@ -87,6 +96,17 @@ real filesystem.
    session. No new dependency. This is *durable working memory*, distinct from
    the in-session `InMemorySaver` (which still exists only to drive
    interrupt/resume within a session).
+7. **Subagents (`task`) — full tools, gated, gateway-bound.** Pass one
+   general-purpose subagent to `create_deep_agent(subagents=[…])` under
+   `--files`. It **omits `model`** (so it inherits the gateway-bound model —
+   `create_deep_agent` defaults `spec.get("model", model)` and `resolve_model`
+   passes instances through, keeping the live agent AssemblyAI-only) and
+   inherits the full toolset against the same sandboxed backend, with its own
+   `interrupt_on` mirroring `_WRITE_TOOLS` so its `write_file`/`edit_file`/
+   `execute` also prompt y/n. **Verification-gated (see Architecture): whether a
+   subagent's HITL interrupt surfaces through our approval loop is unverified;
+   if implementation can't prove it, the subagent falls back to a read-only
+   toolset (no mutation/execute) — never an ungated mutating subagent.**
 
 ### Why these, over the alternatives (rejected)
 
@@ -188,6 +208,39 @@ The entire sandbox concern in one focused, independently-testable module.
   the suite asserts *what argv/profile we'd run* with no real sandbox (CI
   reliably has neither binary).
 
+### Subagents (the `task` tool)
+
+One general-purpose subagent, passed to `create_deep_agent(subagents=[spec])`
+under `--files`. The spec (a deepagents `SubAgent` dict):
+
+- `name`: `"general-purpose"`; `description`: what `task()` is for (delegate a
+  focused multi-step subtask — research, gather context, or implement a
+  contained change — and get back a short summary).
+- `system_prompt`: the cowork rules + "return a concise spoken-length summary."
+- **`model`: omitted** — inherits the gateway-bound model
+  (`spec.get("model", model)` → our `ChatOpenAI` instance; `resolve_model`
+  passes it through). A test asserts the spec carries no `model` key so the
+  AssemblyAI-only invariant can't silently regress to a `provider:model` string.
+- **`tools`: omitted** in the full-tools path — inherits the main toolset
+  (`read_file`/`write_file`/`edit_file`/`ls`/`glob`/`grep`/`execute`) bound to
+  the same `SandboxedShellBackend`, so `execute` stays sandboxed inside the
+  subagent too.
+- **`interrupt_on`: `dict.fromkeys(_WRITE_TOOLS, True)`** — the subagent gets its
+  own `HumanInTheLoopMiddleware` so its `write_file`/`edit_file`/`execute` also
+  pause for y/n (deepagents adds this when `interrupt_on` is set; it "Requires a
+  checkpointer", which the `--files` graph already has).
+
+**The verification gate (the one genuine unknown).** A subagent's HITL interrupt
+is raised inside the subagent's sub-graph; our approval loop (`_stream_gated` →
+`_pending_writes`) reads `graph.get_state(config).interrupts` at the *parent*
+level. Whether a subagent interrupt surfaces there is **unverified**.
+Implementation MUST prove it with a focused test/spike *before* shipping the
+full-tools subagent. **If it does not surface, fall back to a read-only subagent
+`tools` list** (`read_file`/`ls`/`glob`/`grep` + the keyless live tools, no
+mutation/`execute`) — a researcher that can't bypass the gate. Shipping an
+ungated mutating subagent is **not** an acceptable outcome; the read-only
+fallback is the safety floor.
+
 ### Edits to `brain.py` (the one shared file, minimal + additive)
 
 - `_build_fs_backend()` returns `SandboxedShellBackend(root_dir=str(Path.cwd()),
@@ -203,9 +256,13 @@ The entire sandbox concern in one focused, independently-testable module.
   `backend`/`interrupt_on`/`checkpointer`) when `config.files` is on. The
   middleware reads through the cwd backend; the agent updates the file via
   `write_file` (which prompts, like any cwd write).
-- `_TOOL_LABELS["execute"] = "Running code"` — the live-UI affordance.
+- `_graph_kwargs` also passes `subagents=[<the general-purpose spec>]` when
+  `config.files` is on (see Subagents above), so the `task` tool/node is added.
+- `_TOOL_LABELS["execute"] = "Running code"` and
+  `_TOOL_LABELS["task"] = "Working on a subtask"` — the live-UI affordances.
 - The system-prompt capability phrasing advertises *"run code to solve problems
-  and operate on this project"* only when `execute` is in the bound toolset.
+  and operate on this project"* when `execute` is bound, and *"delegate a bigger
+  job to a helper"* when `task` is bound.
 
 ## Boundary / housekeeping
 
@@ -265,6 +322,17 @@ and capability seams — no real sandbox, no sockets.
   when `execute` is bound; `MemoryMiddleware` is attached with the per-project
   source when `--files` is on. Assert exact behavior/strings, not mere
   execution.
+- **subagent wiring:** with `--files`, `create_deep_agent` is called with a
+  `subagents` list (so the `task` node exists); the spec **carries no `model`
+  key** (guards the gateway-only invariant) and its `interrupt_on` includes
+  `execute`/`write_file`/`edit_file`; `_tool_label("task")` returns the new
+  label; the `task` capability phrase appears when bound.
+- **subagent HITL surfacing (the verification spike):** a focused test driving a
+  subagent `write_file`/`execute` and asserting it pauses through the parent
+  approval loop (an interrupt is visible to `_pending_writes`). **This test is
+  the go/no-go for the full-tools subagent** — if it can't be made to pass, the
+  implementation switches the subagent to the read-only `tools` list and the
+  test instead asserts the subagent has no mutating tools.
 - **`risk.py`:** the now-live `execute` branch asserts the dangerous-shell
   warning fires for a destructive command and is `None` for a benign one.
 
@@ -272,4 +340,4 @@ and capability seams — no real sandbox, no sockets.
 
 **Single feature PR.** No new dependency, so no separate `uv.lock` PR. The
 change is `sandbox.py` + the `brain.py` wiring (backend, `execute` gating,
-`MemoryMiddleware`) + comment/help/doc updates + the tests.
+`MemoryMiddleware`, `subagents`) + comment/help/doc updates + the tests.
