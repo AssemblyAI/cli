@@ -80,7 +80,9 @@
     },
     "filesystem": {
       "allowWrite": [
-        "~/.cache/uv"
+        "~/.cache/uv",
+        "~/.local/share/uv",
+        "~/.local/state/uv"
       ]
     }
   },
