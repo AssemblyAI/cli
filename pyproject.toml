@@ -280,12 +280,12 @@ include = ["aai_cli"]
 # (aai_cli.init.templates.<name>.api.*), the same bar as the rest of the package; only
 # generated/hidden dirs are skipped.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
-# The agent_cascade/brain.py wires the deeply-generic, only-partially-typed
-# deepagents/langchain/langgraph boundary, where pyright-strict floods on
+# agent_cascade/brain.py and model.py wire the deeply-generic, only-partially-typed
+# deepagents/langchain/ChatOpenAI boundary, where pyright-strict floods on
 # Unknown*/invariance diagnostics our precise signatures can't satisfy. mypy still
-# type-checks this module (with the targeted overrides above) as the safety net, so
+# type-checks these modules (with the targeted overrides above) as the safety net, so
 # we suppress pyright diagnostics here rather than littering per-line `# pyright: ignore`.
-ignore = ["aai_cli/agent_cascade/brain.py"]
+ignore = ["aai_cli/agent_cascade/brain.py", "aai_cli/agent_cascade/model.py"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.

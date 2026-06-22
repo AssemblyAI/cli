@@ -61,7 +61,7 @@ def full_args(args: Mapping[str, object]) -> str:
     Values are shown whole (newlines preserved) but each is capped at ``_EXPANDED_VALUE`` so a
     huge file can't make the modal unbounded; :func:`describe_args` is the collapsed view.
     """
-    lines = []
+    lines: list[str] = []
     for key, value in args.items():
         text = str(value)
         if len(text) > _EXPANDED_VALUE:
