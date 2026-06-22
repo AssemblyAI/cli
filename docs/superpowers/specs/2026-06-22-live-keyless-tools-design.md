@@ -1,4 +1,4 @@
-# Five keyless tools for `assembly live`
+# Eight keyless tools for `assembly live`
 
 **Date:** 2026-06-22
 **Status:** Approved design — ready for implementation plan
@@ -6,22 +6,23 @@
 ## Goal
 
 Broaden what the `assembly live` voice agent (the `agent-cascade` command) can
-do for everyday spoken requests by adding five new tools. All five are **always
-bound** (none needs an API key): three use keyless public APIs, `calculate` does
-offline computation via the bundled `simpleeval` library, and `convert_units`
-combines the bundled `pint` library (physical units) with keyless
-frankfurter.app (currency). Each returns
-output short enough to read aloud, extending the existing weather / read-url /
-datetime trio toward "talk to a multimodal assistant" parity — with no API-key
-setup for the user.
+do for everyday spoken requests by adding eight new tools. All eight are
+**always bound** (none needs an API key): they use keyless public APIs, offline
+local computation, or bundled offline-data libraries. Each returns output short
+enough to read aloud, extending the existing weather / read-url / datetime trio
+toward "talk to a multimodal assistant" parity — with no API-key setup for the
+user.
 
-The five tools:
+The eight tools:
 
 1. `look_up_topic` — Wikipedia REST summary ("who is…", "what is…", "tell me about…").
-2. `calculate` — pure, safe arithmetic ("what's 15% of 240", "split 87 three ways").
+2. `calculate` — safe arithmetic via `simpleeval` ("what's 15% of 240", "split 87 three ways").
 3. `convert_units` — physical units (via `pint`) + currency (via keyless frankfurter.app).
 4. `define_word` — dictionary definition + synonyms (dictionaryapi.dev, keyless).
 5. `get_time_in` — current local time in a named place (Open-Meteo geocode → `zoneinfo`).
+6. `date_math` — date arithmetic via `python-dateutil` ("days until Christmas", "what weekday is July 4").
+7. `check_holiday` — public-holiday lookup via the `holidays` library ("is Monday a holiday", "next US holiday").
+8. `sun_times` — sunrise/sunset + moon phase via `astral`, reusing the shared geocoder.
 
 ## Context
 
@@ -41,41 +42,50 @@ spoken apology so a single tool outage can't sink a live turn.
 
 ## Scope
 
-- **Live-only.** All five modules live in `aai_cli/agent_cascade/` and are bound
+- **Live-only.** All eight modules live in `aai_cli/agent_cascade/` and are bound
   only in the live voice agent. The coding agent's toolset is unchanged.
-- **Keyless-first.** `look_up_topic`, `define_word`, and `get_time_in` use
-  keyless public APIs; `calculate` needs no network; `convert_units` uses
-  keyless frankfurter.app for currency and the bundled `pint` library for
-  physical units. No new environment variables.
+- **Keyless-first.** `look_up_topic`, `define_word`, `get_time_in`, and
+  `sun_times` use keyless public APIs (the last two geocode via the shared
+  `geocode.py`); `calculate`, `date_math`, and `check_holiday` need no network
+  (offline libraries); `convert_units` uses keyless frankfurter.app for currency
+  and the bundled `pint` library for physical units. No new environment
+  variables.
 - **Speakable output.** Each tool returns one short string suitable for TTS.
 
 ### Out of scope (YAGNI)
 
 - No per-tool opt-out flags — the tools are read-only and cheap; they are always
   bound (no key gate, since none needs a key).
-- No disambiguation UI anywhere — `look_up_topic` and `get_time_in` take the top
-  match; ambiguity is handled in the spoken reply, not a prompt.
+- No disambiguation UI anywhere — `look_up_topic` and the geocoding tools
+  (`get_time_in`, `sun_times`, `convert_units`'s sibling `get_weather`) take the
+  top match; ambiguity is handled in the spoken reply, not a prompt.
 - No locale/units configuration — `convert_units` converts exactly the units the
   model names; `calculate` returns a plainly-formatted number.
 
-## Dependencies: `pint` + `simpleeval` (separate PR)
+## Dependencies (separate PR)
 
-Two new dependencies back this feature: `convert_units`'s physical-unit path
-uses [`pint`](https://pint.readthedocs.io/), and `calculate` uses
-[`simpleeval`](https://github.com/danthedeckie/simpleeval), a small pure-Python
-safe-expression evaluator. Per the repo rule that dependency/`uv.lock` changes
-ship in their own single-purpose PR, both are added in **PR-A** (dependencies
-only — one logical "add the libraries the new tools need" change), and the
-feature **PR-B** lands on top of it.
+Five new dependencies back this feature, all pure-Python and offline (no key, no
+service):
 
-- Add `pint` and `simpleeval` to `[project.dependencies]` in `pyproject.toml` +
-  regenerate `uv.lock`.
+- [`pint`](https://pint.readthedocs.io/) — physical-unit conversion (`convert_units`).
+- [`simpleeval`](https://github.com/danthedeckie/simpleeval) — safe arithmetic-expression evaluation (`calculate`).
+- [`python-dateutil`](https://dateutil.readthedocs.io/) — date arithmetic (`date_math`).
+- [`holidays`](https://github.com/vacanza/holidays) — offline public-holiday data (`check_holiday`).
+- [`astral`](https://astral.readthedocs.io/) — sunrise/sunset + moon phase computation (`sun_times`).
+
+Per the repo rule that dependency/`uv.lock` changes ship in their own
+single-purpose PR, all five are added in **PR-A** (dependencies only — one
+logical "add the libraries the new tools need" change), and the feature **PR-B**
+lands on top of it.
+
+- Add all five to `[project.dependencies]` in `pyproject.toml` + regenerate
+  `uv.lock`. **Declare each directly even if already present transitively**
+  (`python-dateutil` very likely is) — `deptry` flags using a transitive
+  dependency directly.
 - Heed the safe-chain version-floor caveat: pin each floor to the second-newest
   release, or resolution fails under the age gate.
-- Both are imported **lazily** inside their tool factories (`pint` is a
-  non-trivial import; `simpleeval` is small but the same discipline keeps the
-  import off CLI startup) — matching `webpage_tool`'s lazy `core.webpage`
-  import.
+- Each is imported **lazily** inside its tool factory (keeping the import off
+  CLI startup) — matching `webpage_tool`'s lazy `core.webpage` import.
 
 ## Shared component: `geocode.py` (refactor)
 
@@ -204,13 +214,77 @@ names: the `*_TOOL_NAME` constant and the `build_*_tool(...)` factory.
   - Bad/unknown timezone or fetch error → *"I couldn't get the time there right
     now."*
 
+### 6. `datemath_tool.py` — `date_math`
+
+- `DATEMATH_TOOL_NAME = "date_math"`.
+- Seam: `Clock` (`() -> datetime`, the `datetime_tool` shape) — supplies "today"
+  so signed "from now" deltas are computable; injected in tests. `python-dateutil`
+  is imported lazily.
+- Signature: `date_math(date: str, other_date: str | None = None) -> str`, dates
+  as ISO `YYYY-MM-DD`.
+- **Division of labor (in the tool docstring):** the model is good at *knowing*
+  calendar facts and bad at *counting* across them, so the docstring instructs
+  it to work out the relevant date(s) itself and pass them as ISO strings; the
+  tool does the exact day-counting and weekday. Worked examples in the docstring:
+  *"days until Christmas" → `date_math("2026-12-25")`*, *"what weekday is July
+  4th" → `date_math("2026-07-04")`*, *"days between March 1 and August 25" →
+  `date_math("2026-03-01", "2026-08-25")`*.
+- Behavior:
+  - One date → its weekday plus a signed distance from today via the `Clock`,
+    e.g. *"July 4, 2026 is a Saturday — 12 days from now."* / *"…— 8 days ago."*
+    / *"…— that's today."*
+  - Two dates → the total days between plus a human breakdown via
+    `dateutil.relativedelta`, e.g. *"There are 177 days between March 1 and
+    August 25, 2026 — about 5 months and 3 weeks."*
+- Failure → apology: an unparseable date (`ValueError` from `dateutil.parser`) →
+  *"I couldn't work out those dates."*
+
+### 7. `holiday_tool.py` — `check_holiday`
+
+- `HOLIDAY_TOOL_NAME = "check_holiday"`.
+- Seam: `Clock` — supplies "today" for the next-holiday mode; injected in tests.
+  The `holidays` library is offline data, imported lazily.
+- Signature: `check_holiday(country: str = "US", date: str | None = None) -> str`.
+  `country` is an ISO-3166 alpha-2 code (the `holidays` library's key, e.g.
+  `US`, `GB`, `DE`); the docstring says so and notes it defaults to the US when
+  the user names no country.
+- Behavior:
+  - With a date → name the holiday on it, or say there isn't one, e.g.
+    *"December 25, 2026 is Christmas Day in the US."* / *"March 3, 2026 is not a
+    public holiday in the US."*
+  - Without a date → the next upcoming public holiday from today (via the
+    `Clock`), e.g. *"The next US public holiday is Independence Day on July 4,
+    2026 — in 12 days."*
+- Failure → apology:
+  - Unknown country code (`holidays` raises `NotImplementedError`) → *"I don't
+    have holiday data for that country."*
+  - Unparseable date → *"I couldn't work out that date."*
+
+### 8. `suntimes_tool.py` — `sun_times`
+
+- `SUNTIMES_TOOL_NAME = "sun_times"`.
+- Seams: `Fetcher` (geocoding, via `geocode.geocode`) **and** `Clock` (today's
+  date in the target zone) — both injected in tests. `astral` is imported lazily.
+- `build_suntimes_tool(fetch=…, now=…)` exposes `sun_times(place: str) -> str`:
+  geocode the place → lat/lon + IANA `timezone` → `astral.sun.sun()` for today in
+  that zone → sunrise/sunset, plus `astral.moon.phase()` mapped to a phase name
+  (new / waxing crescent / first quarter / waxing gibbous / full / …). One
+  speakable string, e.g. *"In Paris today the sun rises at 6:01 AM and sets at
+  9:45 PM, and the moon is a waxing gibbous."*
+- Reuses the shared `geocode.py` — no second network call beyond geocoding;
+  astral computes the rest offline.
+- Failure → apology:
+  - No geocoding match → *"I couldn't find a place called '<place>'."*
+  - Astral/timezone error or fetch error → *"I couldn't get the sun times there
+    right now."*
+
 ## Wiring into `brain.py`
 
-All five tools converge on three additive edits (the one shared file, edited
+All eight tools converge on three additive edits (the one shared file, edited
 once):
 
-1. `build_live_tools()` appends all five. All are keyless ⇒ always present (no
-   `FIRECRAWL_API_KEY`-style gate); `pint` adds no key.
+1. `build_live_tools()` appends all eight. All are keyless ⇒ always present (no
+   `FIRECRAWL_API_KEY`-style gate); the new libraries add no key.
 2. `_tool_capabilities()` adds a spoken-capability phrase per tool, each gated on
    the tool's name being present in the bound set:
    - `look_up_topic` → *"look up facts about people, places, and topics"*
@@ -218,12 +292,18 @@ once):
    - `convert_units` → *"convert units and currencies"*
    - `define_word` → *"define words and give synonyms"*
    - `get_time_in` → *"tell the current time in a place"*
+   - `date_math` → *"do date math, like days until a date or the weekday of a date"*
+   - `check_holiday` → *"tell you about public holidays"*
+   - `sun_times` → *"tell you sunrise, sunset, and the moon phase for a place"*
 3. `_TOOL_LABELS` gains a present-tense affordance label per tool:
    - `look_up_topic` → *"Looking that up"*
    - `calculate` → *"Calculating"*
    - `convert_units` → *"Converting units"*
    - `define_word` → *"Looking up a definition"*
    - `get_time_in` → *"Checking the time there"*
+   - `date_math` → *"Working out dates"*
+   - `check_holiday` → *"Checking holidays"*
+   - `sun_times` → *"Checking sun times"*
 
 The existing `_NO_TOOLS_GUIDANCE` path is unaffected (reached only when
 `build_system_prompt` is handed an explicitly empty toolset, which tests do).
@@ -263,6 +343,14 @@ hermetic via injected seams — no real network/clock.
 - **`worldclock_tool`:** happy path with an injected clock + fake geocode
   (assert the place, weekday/date/time, and tz abbreviation), the no-match
   apology, and the bad-timezone/fetch-error apology.
+- **`datemath_tool`:** one-date mode (weekday + signed delta past/future/today,
+  via an injected clock), two-date mode (total days + `relativedelta`
+  breakdown), and the unparseable-date apology.
+- **`holiday_tool`:** date-on-a-holiday and date-not-a-holiday, next-holiday mode
+  (injected clock), the unknown-country apology, and the bad-date apology.
+- **`suntimes_tool`:** happy path with fake geocode + injected clock (assert
+  sunrise/sunset and the mapped moon-phase name), the no-match apology, and the
+  astral/fetch-error apology.
 - **`brain` wiring:** `build_live_tools()` includes each new `*_TOOL_NAME`;
   `_tool_capabilities()` / `build_system_prompt` advertises each; `_tool_label`
   returns each new label. These assert behavior (the exact phrase/label), not
@@ -273,8 +361,8 @@ during implementation).
 
 ## PR sequence
 
-- **PR-A (dependencies only):** add `pint` and `simpleeval` to `pyproject.toml`
-  + `uv.lock`. No feature code.
-- **PR-B (feature):** `geocode.py` + the five tool modules + the `weather_tool`
-  geocode refactor + the `brain.py` wiring + all tests. Lands after PR-A so
-  `pint` and `simpleeval` are available.
+- **PR-A (dependencies only):** add `pint`, `simpleeval`, `python-dateutil`,
+  `holidays`, and `astral` to `pyproject.toml` + `uv.lock`. No feature code.
+- **PR-B (feature):** `geocode.py` + the eight tool modules + the `weather_tool`
+  geocode refactor + the `brain.py` wiring + all tests. Lands after PR-A so the
+  new libraries are available.
