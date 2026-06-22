@@ -506,3 +506,79 @@ def test_streamer_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_s
         "tool result tavily_search -> rainy, 52F",
         "llm: It's rainy.",
     ]
+
+
+# --- build_streamer write approval (--files) ---------------------------------
+
+
+def _gated_graph(model: BaseChatModel, root: str):
+    """A real deepagents graph that gates write_file/edit_file, rooted at ``root``."""
+    from deepagents import create_deep_agent
+    from deepagents.backends import FilesystemBackend
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    return create_deep_agent(
+        model=model,
+        backend=FilesystemBackend(root_dir=root, virtual_mode=True),
+        interrupt_on={"write_file": True, "edit_file": True},
+        checkpointer=InMemorySaver(),
+        system_prompt="be a friendly live agent",
+    )
+
+
+def _write_then(reply: str) -> FakeChatModel:
+    """A model that calls write_file once, then (after resume) answers with ``reply``."""
+    call = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "write_file", "args": {"file_path": "/n.txt", "content": "hi"}, "id": "w1"}
+        ],
+    )
+    return FakeChatModel(responses=[call, AIMessage(content=reply)])
+
+
+def test_streamer_approves_write_then_resumes(tmp_path):
+    asked: list[tuple[str, dict]] = []
+
+    def approve(name, args):
+        asked.append((name, args))
+        return True
+
+    graph = _gated_graph(_write_then("Saved your note."), str(tmp_path))
+    streamer = brain.build_streamer("k", CascadeConfig(files=True), graph=graph, approver=approve)
+    events = list(streamer([{"role": "user", "content": "save a note"}]))
+    spoken = "".join(e.text for e in events if isinstance(e, brain.SpeechDelta))
+    assert spoken == "Saved your note."
+    # The approver was consulted for the write, and the approved write hit the rooted dir.
+    assert asked and asked[0][0] == "write_file"
+    assert (tmp_path / "n.txt").read_text() == "hi"
+
+
+def test_streamer_rejects_write_without_approval(tmp_path):
+    graph = _gated_graph(_write_then("Okay, I won't save it."), str(tmp_path))
+    streamer = brain.build_streamer(
+        "k", CascadeConfig(files=True), graph=graph, approver=lambda name, args: False
+    )
+    events = list(streamer([{"role": "user", "content": "save a note"}]))
+    spoken = "".join(e.text for e in events if isinstance(e, brain.SpeechDelta))
+    assert spoken == "Okay, I won't save it."
+    # Declined: nothing was written to the rooted directory.
+    assert not (tmp_path / "n.txt").exists()
+
+
+def test_streamer_brackets_write_approval_with_pause_events(tmp_path):
+    # The human-think wait is bracketed by ApprovalPause(active=True/False) so the engine can
+    # suspend its reply-timeout deadline for exactly that interval.
+    order: list[object] = []
+
+    def approve(name, args):
+        order.append("ask")
+        return True
+
+    graph = _gated_graph(_write_then("Done."), str(tmp_path))
+    streamer = brain.build_streamer("k", CascadeConfig(files=True), graph=graph, approver=approve)
+    for event in streamer([{"role": "user", "content": "save"}]):
+        if isinstance(event, brain.ApprovalPause):
+            order.append(("pause", event.active))
+    # The approver runs strictly between the pause-on and pause-off markers.
+    assert order == [("pause", True), "ask", ("pause", False)]

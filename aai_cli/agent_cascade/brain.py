@@ -17,6 +17,7 @@ same seam the rest of the cascade uses for its STT/LLM/TTS legs.
 
 from __future__ import annotations
 
+import itertools
 import logging
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -79,6 +80,25 @@ class ToolNotice:
     """A speakable affordance label emitted when the agent starts a tool call mid-turn."""
 
     label: str
+
+
+@dataclass(frozen=True)
+class ApprovalPause:
+    """Brackets a human write-approval wait (``--files``).
+
+    Emitted ``active=True`` just before the streamer blocks on the user's y/n decision and
+    ``active=False`` once it's answered, so the engine can suspend its reply-timeout deadline
+    for exactly the human-think interval (a slow keypress must not cut off the write).
+    """
+
+    active: bool
+
+
+# Decide whether a gated write may run (front-end supplied). Mirrors the code agent's Approver.
+Approver = Callable[[str, dict[str, object]], bool]
+
+# Message handed back to the model when the user declines a write (matches the code agent's copy).
+_DECLINED = "User declined to run this tool."
 
 
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
@@ -282,8 +302,12 @@ def build_graph(
 
 
 def build_streamer(
-    api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
-) -> Callable[..., Iterator[SpeechDelta | ToolNotice]]:
+    api_key: str,
+    config: CascadeConfig,
+    *,
+    graph: CompiledAgent | None = None,
+    approver: Approver | None = None,
+) -> Callable[..., Iterator[SpeechDelta | ToolNotice | ApprovalPause]]:
     """A streaming reply leg for the cascade engine, backed by the deepagents graph.
 
     The cascade prepends its own ``system`` message each turn; the graph owns the system
@@ -292,27 +316,44 @@ def build_streamer(
     :class:`SpeechDelta`, each started tool call as a :class:`ToolNotice` (the live UI's
     affordance). Under ``-v`` the flow is logged. ``graph`` is injected in tests so the
     per-turn wiring runs against a fake with no network.
+
+    With ``--files`` on (``config.files``) the graph gates ``write_file``/``edit_file``: a
+    pending write pauses the stream, ``approver`` decides, and the turn resumes (see
+    :func:`_stream_gated`). Each turn uses a fresh ``thread_id`` so the checkpointer never
+    accumulates the cascade's full-history-per-turn input across turns.
     """
     resolved = build_graph(api_key, config) if graph is None else graph
+    turn_ids = itertools.count()
 
     def stream_reply(
         messages: list[ChatCompletionMessageParam],
-    ) -> Iterator[SpeechDelta | ToolNotice]:
+    ) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
         conversation = [message for message in messages if message.get("role") != "system"]
-        return _stream_graph(resolved, conversation)
+        run_config = (
+            {"configurable": {"thread_id": f"live-{next(turn_ids)}"}} if config.files else None
+        )
+        return _stream_graph(
+            resolved, conversation, approver=approver, config=run_config, gated=config.files
+        )
 
     return stream_reply
 
 
 def _stream_graph(
-    graph: CompiledAgent, conversation: list[ChatCompletionMessageParam]
-) -> Iterator[SpeechDelta | ToolNotice]:
+    graph: CompiledAgent,
+    conversation: list[ChatCompletionMessageParam],
+    *,
+    approver: Approver | None = None,
+    config: dict[str, object] | None = None,
+    gated: bool = False,
+) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
     """Stream one turn through the graph token-by-token, yielding speech/tool events.
 
     Wraps any graph failure as a CLIError (a clean ``CLIError`` passes through) so the
     cascade surfaces it instead of the reply worker dying silently. Under ``-v`` the
     accumulated assistant text, each tool call, and each tool result are logged to
-    ``_FLOW_LOG``.
+    ``_FLOW_LOG``. When ``gated`` (``--files``), writes pause for ``approver`` (see
+    :func:`_stream_gated`); otherwise it is a single uninterrupted stream pass.
     """
     verbose = debuglog.active()
     pending: list[str] = []  # assistant deltas accumulated for one verbose "llm:" line
@@ -328,17 +369,89 @@ def _stream_graph(
             error_type="agent_brain_error",
         )
     try:
-        for chunk, _meta in graph.stream({"messages": conversation}, None, stream_mode="messages"):
-            yield from _events_from_chunk(
-                chunk, verbose=verbose, pending=pending, flush_log=flush_log
+        if gated:
+            yield from _stream_gated(
+                graph, conversation, approver, config, verbose, pending, flush_log
             )
-        flush_log()
+        else:
+            for chunk, _m in graph.stream(
+                {"messages": conversation}, config, stream_mode="messages"
+            ):
+                yield from _events_from_chunk(
+                    chunk, verbose=verbose, pending=pending, flush_log=flush_log
+                )
+            flush_log()
     except CLIError:
         raise
     except Exception as exc:
         raise CLIError(
             f"the agent couldn't complete the turn: {exc}", error_type="agent_brain_error"
         ) from exc
+
+
+def _stream_gated(
+    graph: CompiledAgent,
+    conversation: list[ChatCompletionMessageParam],
+    approver: Approver | None,
+    config: dict[str, object] | None,
+    verbose: bool,
+    pending: list[str],
+    flush_log: Callable[[], None],
+) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
+    """Stream a write-gated turn: each pause on a write asks ``approver`` and resumes.
+
+    The graph pauses (before executing a gated write) by ending the ``messages`` stream with
+    a pending interrupt on the checkpointed state. We surface its action requests, bracket the
+    human decision with :class:`ApprovalPause` events, and resume with the approve/reject
+    ``Command`` — looping until the turn finishes without pausing.
+    """
+    from langgraph.types import Command
+
+    graph_input: object = {"messages": conversation}
+    while True:
+        for chunk, _m in graph.stream(graph_input, config, stream_mode="messages"):
+            yield from _events_from_chunk(
+                chunk, verbose=verbose, pending=pending, flush_log=flush_log
+            )
+        flush_log()
+        requests = _pending_writes(graph, config)
+        if not requests:
+            return
+        decisions: list[dict[str, object]] = []
+        for request in requests:
+            yield ApprovalPause(active=True)
+            decisions.append(_decide(request, approver))
+            yield ApprovalPause(active=False)
+        graph_input = Command(resume={"decisions": decisions})
+
+
+def _pending_writes(
+    graph: CompiledAgent, config: dict[str, object] | None
+) -> list[dict[str, object]]:
+    """The action requests of a paused gated write (empty when the turn isn't paused).
+
+    deepagents surfaces an approval pause as ``interrupts`` on the checkpointed state, each
+    interrupt's ``.value`` carrying the ``action_requests`` (the gated tool calls).
+    """
+    state = graph.get_state(config)
+    requests: list[dict[str, object]] = []
+    for interrupt in getattr(state, "interrupts", ()) or ():
+        value = getattr(interrupt, "value", None)
+        actions = value.get("action_requests") if isinstance(value, dict) else None
+        if isinstance(actions, list):
+            requests.extend(action for action in actions if isinstance(action, dict))
+    return requests
+
+
+def _decide(action: dict[str, object], approver: Approver | None) -> dict[str, object]:
+    """Ask the approver about one pending write and shape the resume decision (reject if none)."""
+    name = str(action.get("name", ""))
+    args = action.get("args") or {}
+    if not isinstance(args, dict):
+        args = {}
+    if approver is not None and approver(name, args):
+        return {"type": "approve"}
+    return {"type": "reject", "message": _DECLINED}
 
 
 def _events_from_chunk(
