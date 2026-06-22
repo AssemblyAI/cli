@@ -636,8 +636,11 @@
   │                                            persona)                          │
   │                                            [default: You are a friendly,     │
   │                                            concise voice assistant. Keep     │
-  │                                            replies short and conversational. │
-  │                                            Your reply is read aloud by a     │
+  │                                            replies as short as possible —    │
+  │                                            usually a single sentence, never  │
+  │                                            more than two. Answer directly    │
+  │                                            without preamble or filler. Your  │
+  │                                            reply is read aloud by a          │
   │                                            text-to-speech engine, so write   │
   │                                            plain spoken prose — no markdown, │
   │                                            emoji, bullet lists, or code.]    │
@@ -699,6 +702,8 @@
   ╭─ Tools ──────────────────────────────────────────────────────────────────────╮
   │ --mcp-config        FILE  MCP servers config JSON ({"mcpServers": {…}}) to   │
   │                           add (repeatable; none load by default)             │
+  │ --files                   Let the agent read and write files in the current  │
+  │                           directory (writes need confirmation)               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -710,6 +715,8 @@
    $ assembly --sandbox live --system-prompt "You are a terse pirate."
    Add your own MCP servers (none load by default)
    $ assembly --sandbox live --mcp-config ~/.config/mcp/servers.json
+   Let the agent read and write files in the current directory
+   $ assembly --sandbox live --files
    See available voices
    $ assembly --sandbox live --list-voices
    Print equivalent Python instead of running

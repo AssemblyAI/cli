@@ -12,7 +12,14 @@ import queue
 from aai_cli.agent_cascade import engine
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
 from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.commands.agent_cascade import _exec
 from tests._cascade_fakes import make_session
+
+
+def test_deny_writes_always_rejects():
+    # The non-interactive approver declines every write (no channel to confirm one).
+    assert _exec._deny_writes("write_file", {"file_path": "/x"}) is False
+    assert _exec._deny_writes("edit_file", {"file_path": "/y"}) is False
 
 
 def test_real_passes_approver_to_streamer(monkeypatch):

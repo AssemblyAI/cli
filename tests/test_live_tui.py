@@ -570,3 +570,32 @@ def test_approve_write_auto_latches_and_skips_later_prompts():
     # "a" (auto) approves this write and latches, so a later write needs no modal at all.
     assert _drive_approval(app, ["a"]) is True
     assert app.approve_write("edit_file", {"file_path": "b.txt"}) is True
+
+
+def test_tui_path_wires_app_approve_write(monkeypatch) -> None:
+    # The TUI launch must hand CascadeDeps.real an approver that delegates to the live app's
+    # approve_write (the y/n modal), so a gated --files write is confirmed by keypress.
+    _wire_tui(monkeypatch)
+    captured: dict[str, object] = {}
+
+    def capture_real(*_a, approver=None, **_k):
+        captured["approver"] = approver
+        return "deps"
+
+    monkeypatch.setattr(engine.CascadeDeps, "real", capture_real)
+
+    class FakeApp:
+        error = None
+
+        def __init__(self, **_kw):
+            self.approve_write = lambda name, args: ("routed", name)
+
+        def run(self, **_kw):
+            pass
+
+    monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
+    run_agent_cascade(_opts(files=True), AppState(), json_mode=False)
+    # The approver routes straight to the app's approve_write.
+    approver = captured["approver"]
+    assert callable(approver)
+    assert approver("write_file", {}) == ("routed", "write_file")
