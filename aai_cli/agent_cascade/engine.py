@@ -11,17 +11,48 @@ fakes with no sockets, microphone, or speaker.
 
 from __future__ import annotations
 
-import concurrent.futures.thread as cf_thread
 import contextlib
 import queue
 import threading
 import time
-from abc import abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade._runtime import (
+    REPLY_TIMEOUT_SECONDS as _REPLY_TIMEOUT_SECONDS,
+)
+from aai_cli.agent_cascade._runtime import (
+    Done as _Done,
+)
+from aai_cli.agent_cascade._runtime import (
+    Failure as _Failure,
+)
+from aai_cli.agent_cascade._runtime import (
+    ReplyEvent as _ReplyEvent,
+)
+from aai_cli.agent_cascade._runtime import (
+    Timeout as _Timeout,
+)
+from aai_cli.agent_cascade._runtime import (
+    Worker as _Worker,
+)
+from aai_cli.agent_cascade._runtime import (
+    detach_executor_threads_since as _detach_executor_threads_since,
+)
+from aai_cli.agent_cascade._runtime import (
+    executor_threads as _executor_threads,
+)
+from aai_cli.agent_cascade._runtime import (
+    new_history as _new_history,
+)
+from aai_cli.agent_cascade._runtime import (
+    spawn_thread as _spawn_thread,
+)
+from aai_cli.agent_cascade._runtime import (
+    timeout_error as _timeout_error,
+)
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.text import pop_clauses, trim_history
 from aai_cli.core import client
@@ -37,56 +68,9 @@ if TYPE_CHECKING:
 # Streaming TTS synthesizes at 24 kHz, the rate the live player is opened at.
 TTS_SAMPLE_RATE = 24000
 
-# Wall-clock backstop for one reply turn. The reply is streamed on a throwaway producer
-# thread feeding a queue; a stalled gateway can block inside a token read the worker can't
-# observe, so the consumer's queue.get is bounded by a monotonic deadline. After this long
-# we stop waiting and surface a timeout so the session stays usable. Generous on purpose.
-_REPLY_TIMEOUT_SECONDS = 60.0  # pragma: no mutate
-
 # A clause is flushed to TTS on a soft separator (comma/semicolon/colon) only once it is at
 # least this long, so we don't synthesize a choppy two-word fragment. Pinned by a text test.
 _MIN_CLAUSE_CHARS = 25
-
-
-@dataclass(frozen=True)
-class _Done:
-    """Producer sentinel: the reply stream finished normally."""
-
-
-@dataclass(frozen=True)
-class _Failure:
-    """Producer sentinel: the reply leg raised a (clean) CLIError."""
-
-    error: CLIError
-
-
-@dataclass(frozen=True)
-class _Timeout:
-    """Consumer sentinel: the wall-clock deadline elapsed before the next event arrived."""
-
-
-# What the producer thread puts on the consumer's queue: a speech/tool event from the
-# streaming leg, an approval-pause marker (--files write gating), or a terminal sentinel.
-type _ReplyEvent = brain.SpeechDelta | brain.ToolNotice | brain.ApprovalPause | _Done | _Failure
-
-
-def _timeout_error() -> CLIError:
-    """The backstop error raised when a reply overruns the wall-clock deadline."""
-    return CLIError(
-        f"the agent took longer than {_REPLY_TIMEOUT_SECONDS:.0f}s to respond and was cut off",
-        error_type="agent_timeout",
-    )
-
-
-class _Worker(Protocol):
-    """The slice of a thread the session drives: started already, queryable, joinable."""
-
-    @abstractmethod
-    def is_alive(self) -> bool:
-        """Whether the reply worker is still running."""
-
-    def join(self) -> None:
-        """Block until the reply worker finishes."""
 
 
 class Renderer(Protocol):
@@ -132,52 +116,6 @@ class Player(Protocol):
 
     def close(self) -> None:
         """Close the output stream."""
-
-
-def _new_history() -> list[ChatCompletionMessageParam]:
-    """Typed empty-history factory (ChatCompletionMessageParam is import-time-only)."""
-    return []
-
-
-def _executor_threads() -> set[threading.Thread]:
-    """A snapshot of every live ThreadPoolExecutor worker concurrent.futures tracks for its
-    interpreter-exit join. Empty if a future Python drops the internal registry."""
-    return set(getattr(cf_thread, "_threads_queues", ()))
-
-
-def _detach_executor_threads_since(before: set[threading.Thread]) -> None:
-    """Drop executor workers spawned since ``before`` from concurrent.futures' exit-join list,
-    so an abandoned (timed-out) graph leg can't wedge process exit.
-
-    ``complete_reply`` runs the deepagents graph, which drives each node through a langchain
-    ``ThreadPoolExecutor``. Abandoning a timed-out call leaves that executor's worker blocked on
-    the network leg, and concurrent.futures registers an interpreter-exit hook (``_python_exit``)
-    that joins *every* executor worker unconditionally — even daemons — by putting a shutdown
-    sentinel on its queue and waiting. A worker mid-call never reads that sentinel, so the join
-    (and the whole process exit) hangs until the user Ctrl-Cs — the threading-shutdown traceback
-    this prevents. The worker was created on our own daemon thread so it inherits ``daemon=True``;
-    once it's off this registry neither ``_python_exit`` nor ``threading._shutdown`` waits on it,
-    and the orphaned network call dies with the process as a daemon should. Best-effort: a future
-    Python that renames the internals simply skips the detach (regressing to the old hang, not
-    crashing). The diff is scoped to threads that appeared during the call, so a co-running
-    executor elsewhere keeps its normal exit-time join.
-    """
-    registry = getattr(cf_thread, "_threads_queues", None)
-    if registry is None:
-        return
-    # Mutate under the same lock concurrent.futures holds for the registry, so a concurrent
-    # submit (or _python_exit itself) never sees a torn dict.
-    with getattr(cf_thread, "_global_shutdown_lock", contextlib.nullcontext()):
-        for thread in _executor_threads() - before:
-            registry.pop(thread, None)
-
-
-def _spawn_thread(target: Callable[[], None]) -> _Worker:
-    """Start ``target`` on a daemon thread so a reply is generated without blocking
-    the STT reader (which must stay free to detect a barge-in)."""
-    thread = threading.Thread(target=target, daemon=True)  # pragma: no mutate
-    thread.start()
-    return thread
 
 
 @dataclass
