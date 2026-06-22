@@ -33,9 +33,15 @@ session.
    reuses `assembly code`'s interrupt/resume `Approver`. (Spoken yes/no was
    considered and rejected as fragile and a larger change to the turn flow.)
 4. **Files, not a shell.** Use `FilesystemBackend` (read/write/edit/ls/glob/grep),
-   **not** `LocalShellBackend` — so no `execute` tool is exposed. **Search/`grep`
-   is a required capability** and is one of the backend's built-in tools, so it
-   comes with the backend at no extra cost (ungated, like the other reads).
+   **not** `LocalShellBackend`. deepagents' filesystem middleware *always* binds an
+   `execute` tool, but with a non-sandbox backend (`FilesystemBackend`) `execute` is
+   **inert** — it returns "provide a backend that implements SandboxBackendProtocol"
+   and physically cannot run a shell command. So "files, not a shell" holds: we do
+   not use a sandbox backend, we do not advertise `execute` in the system prompt, and
+   we do not gate it (an inert tool needs no gate). This matches today's behavior —
+   the current live graph already binds an inert `execute`. **Search/`grep` is a
+   required capability** and is one of the backend's built-in tools, so it comes for
+   free (ungated, like the other reads).
 5. **Rooted at the launch directory (cwd)**, with `virtual_mode=True` blocking
    traversal escapes — identical containment to `assembly code`.
 
@@ -49,19 +55,31 @@ session.
 
 ## Architecture
 
-### Toolset (reuse from `assembly code`)
+### Toolset — what actually changes
 
-`assembly code` builds its graph over
-`LocalShellBackend(root_dir=cwd, virtual_mode=True)`, which exposes both filesystem
-tools **and** the `execute` shell tool. We instead use
-`FilesystemBackend(root_dir=cwd, virtual_mode=True)` from `deepagents.backends`,
-which provides `read`/`write`/`edit`/`ls`/`glob`/`grep` and **no** `execute`. Same
-`virtual_mode` rooting: the model's `/`-rooted paths map under cwd and traversal
-escapes are blocked.
+A key fact discovered during design: `create_deep_agent` **always** installs
+deepagents' filesystem middleware, so the **current** live graph already binds
+`ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep` (+ `write_todos`/`task`/inert
+`execute`). Today these run against deepagents' default *in-memory* backend, so file
+ops touch ephemeral graph state — **not** the launch directory — and the system
+prompt never advertises them. They are harmless and unused.
 
-`aai_cli/agent_cascade/brain.py::build_graph` gains the backend when the feature is
-enabled. Currently `build_graph` calls `create_deep_agent` with no backend (an
-in-memory virtual filesystem); enabling files passes the real `FilesystemBackend`.
+So the feature is **not** "add file tools." It is three focused changes, gated on the
+new flag:
+
+1. **Point the backend at the real cwd.** `aai_cli/agent_cascade/brain.py::build_graph`
+   passes `FilesystemBackend(root_dir=str(Path.cwd()), virtual_mode=True)` (from
+   `deepagents.backends`) instead of relying on the default in-memory backend. Now
+   `read_file`/`write_file`/`edit_file`/`grep`/… operate on the launch directory.
+   `virtual_mode=True` maps the model's `/`-rooted paths under cwd and blocks
+   traversal escapes — identical containment to `assembly code`'s
+   `LocalShellBackend`.
+2. **Gate writes** (below) — because they now touch real disk.
+3. **Advertise the capability** in the system prompt (below).
+
+`execute` stays bound but inert (no sandbox backend); it is neither advertised nor
+gated. When the flag is **off**, `build_graph` is unchanged from today (default
+in-memory backend, no gating, nothing advertised).
 
 ### Approval (reuse `assembly code`'s interrupt/resume)
 
@@ -151,9 +169,10 @@ labels (`_TOOL_LABELS`, shown as the live "…" affordance) get speakable entrie
 All against fakes — no mic, socket, or real disk-escape.
 
 - **Brain (`tests/test_agent_cascade_*`):**
-  - File tools bound **only** when the feature is enabled; absent otherwise.
-    Assert the bound set includes the read tools (`read_file`/`ls`/`glob`/`grep`)
-    and the write tools (`write_file`/`edit_file`), and excludes `execute`.
+  - With the flag on, `build_graph` constructs a real-cwd `FilesystemBackend`
+    (`root_dir == str(Path.cwd())`, `virtual_mode=True`); with the flag off it does
+    not (default in-memory backend, as today). Assert by injecting/patching the
+    backend factory seam rather than introspecting langgraph internals.
   - `FilesystemBackend` is constructed rooted at cwd with `virtual_mode=True`.
   - A write interrupt invokes the `Approver`; resume with approve runs the write,
     resume with reject relays the decline and does not write.
