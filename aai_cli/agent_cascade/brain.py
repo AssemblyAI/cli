@@ -21,6 +21,7 @@ import logging
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
+from aai_cli.agent_cascade import weather_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
@@ -44,7 +45,10 @@ _RESULT_LOG_CAP = 500  # pragma: no mutate
 
 # Human, speakable labels for the tool affordance the live UI shows while a tool runs (so a
 # spoken turn that pauses to use a tool says *why* it's working, not just spin silently).
-_TOOL_LABELS = {WEB_SEARCH_TOOL_NAME: "Searching the web"}
+_TOOL_LABELS = {
+    WEB_SEARCH_TOOL_NAME: "Searching the web",
+    weather_tool.WEATHER_TOOL_NAME: "Checking the weather",
+}
 
 
 def _tool_label(name: str) -> str:
@@ -81,17 +85,20 @@ def _join_clause(parts: list[str]) -> str:
 
 
 def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
-    """The spoken-capability phrase backed by a present built-in tool.
+    """The spoken-capability phrases backed by present built-in tools.
 
-    The live agent's only built-in tool is Firecrawl web search, bound just when a
-    ``FIRECRAWL_API_KEY`` is set — so the prompt advertises web search only when the agent
-    can really do it. Advertising a tool it doesn't have made it announce an action ("I'll
-    search…") it then couldn't take, leaving the turn with no answer.
+    The live agent's built-in legs are the keyless Open-Meteo weather tool (always
+    present) and Firecrawl web search (only when ``FIRECRAWL_API_KEY`` is set) — so the
+    prompt advertises each only when the agent can really do it. Advertising a missing
+    tool made it announce an action ("I'll search…") it then couldn't take.
     """
     names = {tool.name for tool in tools}
+    capabilities: list[str] = []
     if WEB_SEARCH_TOOL_NAME in names:
-        return ["search the web for current or unfamiliar facts"]
-    return []
+        capabilities.append("search the web for current or unfamiliar facts")
+    if weather_tool.WEATHER_TOOL_NAME in names:
+        capabilities.append("tell someone the current weather and short forecast for a place")
+    return capabilities
 
 
 def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
@@ -135,20 +142,23 @@ def build_system_prompt(
 
 
 def build_live_tools() -> list[BaseTool]:
-    """The live agent's single read-only tool: Firecrawl web search (only when keyed).
+    """The live agent's built-in tools: the keyless weather tool, plus Firecrawl web
+    search when ``FIRECRAWL_API_KEY`` is set.
 
-    Deliberately minimal. A low-latency spoken turn does best with one obvious tool rather
-    than a large menu it has to choose among — a big toolset made the model narrate "I'll
-    search…" without ever calling anything, and bloated every request with tool schemas.
-    Web search is the one capability worth the round-trip; everything else the agent answers
-    from its own knowledge. The tool is reused (un-approval-gated) from the coding agent and
-    is present only when ``FIRECRAWL_API_KEY`` is set, so an unkeyed session simply runs
-    tool-free. Extra tools remain strictly opt-in via ``--mcp-config``.
+    Deliberately minimal. A low-latency spoken turn does best with a few obvious tools
+    rather than a large menu it must choose among. Open-Meteo needs no key, so the
+    weather tool is always present (every session has at least one real capability);
+    web search is reused (un-approval-gated) from the coding agent and added only when
+    keyed. Extra tools remain strictly opt-in via ``--mcp-config``.
     """
+    from aai_cli.agent_cascade.weather_tool import build_weather_tool
     from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
+    tools: list[BaseTool] = [build_weather_tool()]
     search = build_web_search_tool()
-    return [search] if search is not None else []
+    if search is not None:
+        tools.append(search)
+    return tools
 
 
 def build_graph(
