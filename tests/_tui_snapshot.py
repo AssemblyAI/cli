@@ -2,12 +2,11 @@
 
 ``pytest-textual-snapshot``'s ``snap_compare`` fixture renders a Textual ``App`` to an
 SVG and diffs it against a committed golden, catching the CSS / layout / docking
-regressions the behavioral pilot tests (``test_code_tui.py`` / ``test_live_tui.py``)
-can't see — those assert on one widget at a time, never the whole painted frame.
+regressions the behavioral pilot tests (``test_live_tui.py``) can't see — those assert
+on one widget at a time, never the whole painted frame.
 
-Four things make our two apps (:class:`~aai_cli.code_agent.tui.CodeAgentApp` and
-:class:`~aai_cli.agent_cascade.tui.LiveAgentApp`) non-deterministic under a raw render,
-so the goldens would churn or flake without neutralising them here:
+Two things make :class:`~aai_cli.agent_cascade.tui.LiveAgentApp` non-deterministic under
+a raw render, so the goldens would churn or flake without neutralising them here:
 
 * **The splash prints ``banner.version()``**, which hatch-vcs derives from the git tag
   (``v0.1.devN+g<sha>``) — a different string on every commit. ``pin_banner_version``
@@ -19,21 +18,15 @@ so the goldens would churn or flake without neutralising them here:
   worker returns it exits the app before the screenshot. :func:`build_live_app` returns a
   subclass whose ``_start`` is a no-op, so a snapshot drives the transcript directly with
   no thread.
-* **The code TUI status line renders the cwd, its git branch, and a ``~``-abbreviated
-  home** — all environment- and platform-specific. :func:`stable_workdir` builds a fixed
-  cwd (with a fake ``.git/HEAD``) and pins ``Path.home`` so the line is identical on every
-  machine the suite runs on.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.app import App
 
 from aai_cli.agent_cascade.tui import LiveAgentApp
-from aai_cli.code_agent.tui import CodeAgentApp
 
 if TYPE_CHECKING:
     import pytest
@@ -57,23 +50,6 @@ class FakeAgent:
         return {}
 
 
-class FakeVoice:
-    """A no-op ``_VoiceIO``; voice-mode snapshots never reach the capture/readback legs.
-
-    The capture leg is stubbed in :class:`_SnapshotCodeApp`, so these are unreached by any
-    render and are covered by ``test_fake_voice_is_inert`` instead.
-    """
-
-    def listen(self) -> str | None:
-        return None
-
-    def speak(self, text: str) -> None:
-        pass
-
-    def cancel(self) -> None:
-        pass
-
-
 class _SnapshotLiveApp(LiveAgentApp):
     """``LiveAgentApp`` whose cascade worker never starts, so the app stays up for a render.
 
@@ -84,29 +60,6 @@ class _SnapshotLiveApp(LiveAgentApp):
 
     def _start(self) -> None:
         pass
-
-
-class _SnapshotCodeApp(CodeAgentApp):
-    """``CodeAgentApp`` whose background voice-capture leg never starts.
-
-    In voice mode ``on_mount`` spawns a daemon thread that blocks on ``voice.listen()`` and
-    marshals phase changes back onto the UI thread — which would race the screenshot and make
-    the bar frame non-deterministic. Stubbing ``_begin_listening`` keeps the app in the
-    synchronously-rendered listening state (voice bar shown, prompt hidden) with no thread.
-    """
-
-    def _begin_listening(self) -> None:
-        pass
-
-
-def build_code_app(*, cwd: Path, auto_approve: bool = False) -> CodeAgentApp:
-    """A ``CodeAgentApp`` wired to a fake agent for a visual snapshot."""
-    return CodeAgentApp(agent=FakeAgent(), cwd=cwd, auto_approve=auto_approve)
-
-
-def build_code_voice_app(*, cwd: Path) -> _SnapshotCodeApp:
-    """A ``CodeAgentApp`` in voice mode (listening), with the mic-capture leg stubbed out."""
-    return _SnapshotCodeApp(agent=FakeAgent(), cwd=cwd, voice=FakeVoice())
 
 
 def build_live_app() -> _SnapshotLiveApp:
@@ -123,37 +76,15 @@ def freeze_animation(app: App[None]) -> None:
 
     The voice bar's meter advances on a 0.3s ``set_interval``; left running, the number of
     ticks by screenshot time depends on wall-clock scheduling, so the frame would flake. Stop
-    that timer (and the code TUI's spinner timer) — ``run_before`` is the first thing the
-    screenshot harness runs, before any pause, so no tick fires before the stop, and the bar
-    then holds the frame from its last explicit render (a fixed count per test). Accepts the
-    broad ``App`` that ``Pilot.app`` exposes and narrows to our two apps.
+    that timer — ``run_before`` is the first thing the screenshot harness runs, before any
+    pause, so no tick fires before the stop, and the bar then holds the frame from its last
+    explicit render (a fixed count per test).
     """
-    assert isinstance(app, (CodeAgentApp, LiveAgentApp))
+    assert isinstance(app, LiveAgentApp)
     if app._voice_timer is not None:
         app._voice_timer.stop()
-    if isinstance(app, CodeAgentApp) and app._spin_timer is not None:
-        app._spin_timer.stop()
 
 
 def pin_banner_version(monkeypatch: pytest.MonkeyPatch) -> None:
     """Freeze the splash version string (otherwise it changes on every commit)."""
     monkeypatch.setattr("aai_cli.agent_cascade.banner.version", lambda: _PINNED_VERSION)
-
-
-def stable_workdir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, branch: str = "main"
-) -> Path:
-    """A fixed cwd whose status line renders identically on every machine.
-
-    Pins ``Path.home`` to ``tmp_path`` and returns a ``tmp_path/demo`` cwd, so
-    ``_abbrev_home`` collapses it to ``~/demo`` regardless of the real home directory, and
-    writes a fake ``.git/HEAD`` so ``_git_branch`` reports a deterministic ``branch`` rather
-    than whatever branch the suite happens to run on.
-    """
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    demo = tmp_path / "demo"
-    demo.mkdir()
-    git_dir = demo / ".git"
-    git_dir.mkdir()
-    (git_dir / "HEAD").write_text(f"ref: refs/heads/{branch}\n", encoding="utf-8")
-    return demo
