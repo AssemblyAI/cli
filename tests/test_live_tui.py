@@ -532,3 +532,41 @@ def test_tui_reraises_a_fatal_leg_error_for_the_exit_code(monkeypatch) -> None:
     with pytest.raises(CLIError) as exc:
         run_agent_cascade(_opts(), AppState(), json_mode=False)
     assert exc.value is boom
+
+
+def _drive_approval(app, keys):
+    """Run app.approve_write on a thread and dismiss the pushed modal with ``keys``."""
+    box: dict[str, object] = {}
+
+    async def go():
+        thread = threading.Thread(
+            target=lambda: box.update(
+                result=app.approve_write("write_file", {"file_path": "n.txt"})
+            )
+        )
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            thread.start()
+            for _ in range(200):
+                await pilot.pause(0.01)
+                if len(app.screen_stack) > 1:  # the ApprovalScreen mounted
+                    break
+            await pilot.press(*keys)
+            thread.join(timeout=3)
+            await pilot.pause()
+        return box.get("result")
+
+    return asyncio.run(go())
+
+
+def test_approve_write_modal_y_approves_and_n_rejects():
+    # The --files write gate pauses the turn on a bottom-docked modal; y allows, n declines.
+    assert _drive_approval(_app(), ["y"]) is True
+    assert _drive_approval(_app(), ["n"]) is False
+
+
+def test_approve_write_auto_latches_and_skips_later_prompts():
+    app = _app()
+    # "a" (auto) approves this write and latches, so a later write needs no modal at all.
+    assert _drive_approval(app, ["a"]) is True
+    assert app.approve_write("edit_file", {"file_path": "b.txt"}) is True

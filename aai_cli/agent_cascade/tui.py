@@ -15,15 +15,18 @@ from __future__ import annotations
 
 import contextlib
 import itertools
+import threading
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.css.query import NoMatches
+from textual.screen import ModalScreen
 from textual.widgets import Static
 
 from aai_cli.code_agent import banner, tui_status
 from aai_cli.code_agent.messages import AssistantMessage, ErrorMessage, Note, UserMessage
+from aai_cli.code_agent.modals import ApprovalScreen
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
@@ -105,6 +108,9 @@ class LiveAgentApp(App[None]):
     #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
     /* Blank line above each agent reply (and the greeting), so turns don't run together. */
     AssistantMessage {{ margin-top: 1; }}
+    /* The --files write-approval modal docks at the bottom and stays see-through, so the
+       transcript shows above it (overriding ModalScreen's opaque DEFAULT_CSS). */
+    ModalScreen {{ background: transparent; }}
     """
     TITLE = "AssemblyAI Live"
     ENABLE_COMMAND_PALETTE = False
@@ -138,6 +144,8 @@ class LiveAgentApp(App[None]):
         # The cascade's reply-interrupt, wired once its session exists (see set_interrupt);
         # None until then, so an early keypress is a harmless no-op.
         self._interrupt: Callable[[], bool] | None = None
+        # Set once the user picks "auto" on a --files write prompt; later writes then skip the modal.
+        self._auto_approve_writes = False
         self._voice_phase = "listening"
         self._voice_frames = itertools.cycle(tui_status.VOICE_FRAMES)
         self._voice_timer: Timer | None = None
@@ -306,6 +314,35 @@ class LiveAgentApp(App[None]):
         self.query_one("#log", VerticalScroll).scroll_end(animate=False)  # pragma: no mutate
 
     # --- interrupt / quit -----------------------------------------------------
+
+    def _modal_result[T](self, screen: ModalScreen[T], default: T) -> T:
+        """Push a modal from the cascade worker thread and block until it's dismissed."""
+        done = threading.Event()
+        box: dict[str, T] = {"value": default}
+
+        def _store(result: T | None) -> None:
+            if result is not None:
+                box["value"] = result
+            done.set()
+
+        self.call_from_thread(self.push_screen, screen, _store)
+        done.wait()
+        return box["value"]
+
+    def approve_write(self, name: str, args: dict[str, object]) -> bool:
+        """Decide a gated --files write by a y/n keypress; True to allow.
+
+        Called on the cascade worker thread (via the brain's approver). Blocks on a bottom-docked
+        approval modal — the one place the hands-free session pauses for the keyboard. "Auto"
+        approves every later write this session, so a multi-file edit isn't a y per file.
+        """
+        if self._auto_approve_writes:
+            return True
+        decision = self._modal_result(ApprovalScreen(name, args), default="reject")
+        if decision == "auto":
+            self._auto_approve_writes = True
+            return True
+        return decision == "approve"
 
     def set_interrupt(self, interrupt: Callable[[], bool]) -> None:
         """Wire the session's reply-interrupt once the cascade has built its session.
