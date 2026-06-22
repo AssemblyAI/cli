@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import itertools
 import logging
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
@@ -92,6 +92,23 @@ class ApprovalPause:
     """
 
     active: bool
+
+
+@runtime_checkable
+class _GatedGraph(Protocol):
+    """The graph surface the --files write-approval loop drives beyond ``invoke``.
+
+    ``CompiledAgent`` deliberately declares only ``invoke`` (mirroring the code agent), so the
+    gated path narrows to this protocol for the ``stream``/``get_state`` it additionally needs.
+    """
+
+    def stream(
+        self, input: object, config: Mapping[str, object] | None, *, stream_mode: str
+    ) -> Iterator[tuple[object, object]]:
+        """Yield ``(message_chunk, metadata)`` pairs for one streamed segment."""
+
+    def get_state(self, config: Mapping[str, object] | None) -> object:
+        """The checkpointed state snapshot (its ``.interrupts`` carry any pending write)."""
 
 
 # Decide whether a gated write may run (front-end supplied). Mirrors the code agent's Approver.
@@ -370,6 +387,9 @@ def _stream_graph(
         )
     try:
         if gated:
+            # The gated path needs stream + get_state (built with a checkpointer); narrow to the
+            # protocol that declares them. A gated graph always satisfies this by construction.
+            assert isinstance(graph, _GatedGraph)
             yield from _stream_gated(
                 graph,
                 conversation,
@@ -396,7 +416,7 @@ def _stream_graph(
 
 
 def _stream_gated(
-    graph: CompiledAgent,
+    graph: _GatedGraph,
     conversation: list[ChatCompletionMessageParam],
     approver: Approver | None,
     config: dict[str, object] | None,
@@ -433,7 +453,7 @@ def _stream_gated(
 
 
 def _pending_writes(
-    graph: CompiledAgent, config: dict[str, object] | None
+    graph: _GatedGraph, config: dict[str, object] | None
 ) -> list[dict[str, object]]:
     """The action requests of a paused gated write (empty when the turn isn't paused).
 
