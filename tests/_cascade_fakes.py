@@ -94,16 +94,25 @@ def turn(text, *, end_of_turn=True, turn_is_formatted=True):
     )
 
 
+def _default_stream_reply(messages):
+    from aai_cli.agent_cascade.brain import SpeechDelta
+
+    return [SpeechDelta("Hello there.")]
+
+
 def make_session(
     *,
-    complete_reply=lambda messages, on_tool=None: "Hello there.",
-    synthesize=lambda text: b"pcm:" + text.encode(),
+    stream_reply=None,
+    synthesize=lambda text, sink: sink(b"pcm:" + text.encode()),
     spawn=sync_spawn,
     run_stt=lambda on_turn: None,
     config=None,
 ):
     deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=complete_reply, synthesize=synthesize, spawn=spawn
+        run_stt=run_stt,
+        stream_reply=stream_reply or _default_stream_reply,
+        synthesize=synthesize,
+        spawn=spawn,
     )
     renderer = FakeRenderer()
     player = FakePlayer()
@@ -111,3 +120,10 @@ def make_session(
         deps=deps, renderer=renderer, player=player, config=config or CascadeConfig()
     )
     return session, renderer, player
+
+
+def deltas(*texts):
+    """A stream_reply that yields the given strings as SpeechDelta events."""
+    from aai_cli.agent_cascade.brain import SpeechDelta
+
+    return lambda messages: [SpeechDelta(t) for t in texts]

@@ -12,10 +12,12 @@ import types
 import pytest
 
 from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade.brain import SpeechDelta, ToolNotice
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
 from aai_cli.core.errors import APIError, CLIError
 from tests._cascade_fakes import FakePlayer, FakeRenderer, FakeWorker, make_session
+from tests._cascade_fakes import deltas as _deltas
 from tests._cascade_fakes import sync_spawn as _sync_spawn
 from tests._cascade_fakes import turn as _turn
 
@@ -39,7 +41,7 @@ def test_greet_empty_greeting_is_silent():
 
 
 def test_greet_records_tts_failure():
-    def boom(text):
+    def boom(text, sink):
         raise APIError("tts down")
 
     session, _renderer, player = make_session(synthesize=boom)
@@ -60,7 +62,7 @@ def test_on_turn_blank_transcript_ignored():
 
 
 def test_on_turn_final_renders_and_replies():
-    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "Sure thing.")
+    session, renderer, player = make_session(stream_reply=_deltas("Sure thing."))
     session.on_turn(_turn("what time is it"))
     assert ("user_final", "what time is it") in renderer.calls
     assert {"role": "user", "content": "what time is it"} in session.history
@@ -70,25 +72,23 @@ def test_on_turn_final_renders_and_replies():
 
 
 def test_reply_forwards_tool_calls_to_the_renderer():
-    # The reply worker hands complete_reply an on_tool sink; a tool call it makes surfaces on
-    # the renderer, so the live UI can show a "Searching the web…" affordance mid-turn.
-    def reply(messages, on_tool):
-        on_tool("Searching the web")
-        return "Found it."
+    def stream(messages):
+        yield ToolNotice("Searching the web")
+        yield SpeechDelta("Found it.")
 
-    session, renderer, _player = make_session(complete_reply=reply)
+    session, renderer, _player = make_session(stream_reply=stream)
     session.on_turn(_turn("what's the news"))
     assert ("tool_call", "Searching the web") in renderer.calls
 
 
 def test_on_turn_interim_shows_partial_and_does_not_reply():
-    replies = []
+    streamed = []
     session, renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: replies.append(m) or "x"
+        stream_reply=lambda m: streamed.append(m) or [SpeechDelta("x")]
     )
     session.on_turn(_turn("partial words", end_of_turn=False))
     assert ("user_partial", "partial words") in renderer.calls
-    assert replies == []  # no reply generated for an interim turn
+    assert streamed == []  # no reply generated for an interim turn
     assert session.history == []
 
 
@@ -103,11 +103,11 @@ def test_on_turn_interim_barges_in_on_live_reply():
 # --- reply generation --------------------------------------------------------
 
 
-def test_generate_reply_speaks_each_sentence():
+def test_generate_reply_speaks_each_clause_as_it_streams():
     spoken = []
     session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "One. Two! Three?",
-        synthesize=lambda text: spoken.append(text) or text.encode(),
+        stream_reply=_deltas("One. ", "Two! ", "Three?"),
+        synthesize=lambda text, sink: spoken.append(text) or sink(text.encode()),
     )
     session._generate_reply()
     assert spoken == ["One.", "Two!", "Three?"]
@@ -118,27 +118,44 @@ def test_generate_reply_speaks_each_sentence():
     assert ("reply_done", False) in renderer.calls
 
 
-def test_generate_reply_marks_speaking_during_playback_then_clears():
-    # The reply is "speaking" only while it enqueues sentences — so a UI interrupt cuts it then,
-    # but the prior thinking phase (and the idle window after) is not interruptible. The flag is
-    # set before the first sentence and cleared once the turn is done.
-    observed = []
-    session, _renderer, _player = make_session(complete_reply=lambda m, on_tool=None: "Hi. Yes.")
-    session.deps.synthesize = lambda text: observed.append(session._speaking.is_set()) or b""
+def test_generate_reply_forwards_tool_notice_and_drops_unspoken_preamble():
+    # A ToolNotice surfaces the affordance AND clears any buffered-but-unspoken text, so a
+    # half-streamed preamble before a tool call is never spoken.
+    spoken = []
+
+    def stream(messages):
+        yield SpeechDelta("Let me check")  # incomplete clause, not yet flushed
+        yield ToolNotice("Searching the web")
+        yield SpeechDelta("It is sunny today.")
+
+    session, renderer, _player = make_session(
+        stream_reply=stream,
+        synthesize=lambda text, sink: spoken.append(text) or sink(b""),
+    )
     session._generate_reply()
-    assert observed == [True, True]  # speaking while each sentence plays
-    assert not session._speaking.is_set()  # cleared once the reply is done
+    assert ("tool_call", "Searching the web") in renderer.calls
+    assert spoken == ["It is sunny today."]  # the preamble was dropped, never synthesized
+    assert session.history[-1] == {"role": "assistant", "content": "It is sunny today."}
+
+
+def test_generate_reply_marks_speaking_on_first_delta_then_clears():
+    observed = []
+    session, _renderer, _player = make_session(stream_reply=_deltas("Hi. ", "Yes."))
+    session.deps.synthesize = lambda text, sink: observed.append(session._speaking.is_set())
+    session._generate_reply()
+    assert observed == [True, True]
+    assert not session._speaking.is_set()
 
 
 def test_generate_reply_threads_system_prompt_and_history():
     captured = {}
 
-    def capture(messages, on_tool=None):
+    def capture(messages):
         captured["messages"] = messages
-        return "Ok."
+        return [SpeechDelta("Ok.")]
 
     session, _renderer, _player = make_session(
-        complete_reply=capture, config=CascadeConfig(system_prompt="be terse")
+        stream_reply=capture, config=CascadeConfig(system_prompt="be terse")
     )
     session.history.append({"role": "user", "content": "prior"})
     session._generate_reply()
@@ -148,131 +165,91 @@ def test_generate_reply_threads_system_prompt_and_history():
 
 def test_generate_reply_trims_history_window():
     session, _renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: "a. b.", config=CascadeConfig(max_history=1)
+        stream_reply=_deltas("a. b."), config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "user", "content": "hi"})
     session._generate_reply()
-    # user + assistant would be 2; the window caps it to the most recent 1.
     assert session.history == [{"role": "assistant", "content": "a. b."}]
 
 
 def test_on_turn_trims_history_window():
-    # An empty reply adds no assistant turn, so only on_turn's own trim caps the list.
     session, _renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: "", config=CascadeConfig(max_history=1)
+        stream_reply=_deltas(""), config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "assistant", "content": "old"})
     session.on_turn(_turn("newest"))
     assert session.history == [{"role": "user", "content": "newest"}]
 
 
-def test_generate_reply_stop_after_first_sentence_records_partial():
-    def synth(text):
+def test_generate_reply_stop_during_a_clause_drops_it_from_the_record():
+    # A barge-in lands *while* "Two." is synthesizing: its audio is flushed and the clause is NOT
+    # recorded as spoken (the user never heard it whole), so only the finished "One." survives —
+    # the post-synthesis stop check is what keeps the half-spoken clause out of the history.
+    def synth(text, sink):
         if text == "Two.":
-            session._stop.set()
-        return text.encode()
+            session._stop.set()  # barge-in mid-clause: its frames are dropped by _feed
+        sink(text.encode())
 
-    session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "One. Two. Three."
-    )
+    session, renderer, player = make_session(stream_reply=_deltas("One. Two. Three."))
     session.deps.synthesize = synth
     session._generate_reply()
-    # Only the first sentence finished enqueuing before the barge-in stop landed.
-    assert player.enqueued == [b"One."]
+    assert player.enqueued == [b"One."]  # Two.'s frames are dropped once the stop lands
     assert session.history[-1] == {"role": "assistant", "content": "One."}
     assert ("reply_done", True) in renderer.calls
 
 
-def test_generate_reply_stop_before_first_sentence_speaks_nothing():
-    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "One. Two.")
+def test_generate_reply_flushes_the_unterminated_tail_at_end_of_stream():
+    # A reply that never ends on a terminator still gets spoken: the trailing buffer is
+    # flushed as one final clause when the stream finishes.
+    spoken = []
+    session, _renderer, player = make_session(
+        stream_reply=_deltas("no terminator here"),
+        synthesize=lambda text, sink: spoken.append(text) or sink(text.encode()),
+    )
+    session._generate_reply()
+    assert spoken == ["no terminator here"]
+    assert player.enqueued == [b"no terminator here"]
+    assert session.history[-1] == {"role": "assistant", "content": "no terminator here"}
+
+
+def test_generate_reply_leg_failure_after_speaking_keeps_the_spoken_text():
+    # A leg error that arrives *after* a clause was spoken is recorded but not shown inline
+    # (the spoken text already explains the turn); the spoken part stays in the history.
+    def stream(messages):
+        yield SpeechDelta("First clause. ")
+        raise APIError("gateway died midway")
+
+    session, renderer, player = make_session(
+        stream_reply=stream,
+        synthesize=lambda text, sink: sink(text.encode()),
+    )
+    session._generate_reply()
+    assert isinstance(session.error, APIError)
+    assert player.enqueued == [b"First clause."]
+    assert session.history[-1] == {"role": "assistant", "content": "First clause."}
+    # The error is NOT surfaced inline once speech has started (no "(error: ...)" line).
+    assert not any(c[0] == "agent_transcript" and "(error:" in c[1] for c in renderer.calls)
+    assert ("reply_done", False) in renderer.calls
+
+
+def test_generate_reply_stop_before_first_clause_speaks_nothing():
+    session, renderer, player = make_session(stream_reply=_deltas("One. Two."))
     session._stop.set()
     session._generate_reply()
     assert player.enqueued == []
-    # nothing spoken -> no assistant turn recorded
     assert all(item.get("role") != "assistant" for item in session.history)
     assert ("reply_done", True) in renderer.calls
 
 
-def test_complete_within_returns_reply_before_the_deadline():
-    # The fast path: the leg finishes well inside the deadline, so its text is returned as-is.
-    session, _renderer, _player = make_session(complete_reply=lambda m, on_tool=None: "quick")
-    assert session._complete_within([{"role": "user", "content": "hi"}], timeout=5.0) == "quick"
-
-
-def test_complete_within_raises_a_timeout_when_the_leg_overruns_the_deadline():
-    # The backstop: a leg that blocks past the deadline is cut off with an agent_timeout CLIError
-    # (rather than hanging the turn forever), which the reply path surfaces like any leg failure.
-    release = threading.Event()
-
-    def hang(messages, on_tool=None):
-        release.wait(timeout=2.0)  # self-releases so no mutated deadline can wedge the suite
-        return "late"
-
-    session, _renderer, _player = make_session(complete_reply=hang)
-    try:
-        with pytest.raises(CLIError) as excinfo:
-            session._complete_within([], timeout=0.05)
-        assert excinfo.value.error_type == "agent_timeout"
-    finally:
-        release.set()  # unblock the abandoned worker so it exits promptly
-
-
-def test_complete_within_detaches_the_orphaned_executor_on_timeout():
-    # Regression: complete_reply runs the deepagents graph, which drives each node through a
-    # langchain ThreadPoolExecutor. A timed-out call is abandoned with that executor's worker
-    # still blocked on the network leg — and concurrent.futures joins *every* executor worker at
-    # interpreter exit, so a blocked one wedges shutdown (the threading-shutdown traceback users
-    # hit, needing Ctrl-C). _complete_within must unregister that orphan so the process can exit.
-    import concurrent.futures.thread as cf_thread
-    from concurrent.futures import ThreadPoolExecutor
-
-    release = threading.Event()
-    executors: list[ThreadPoolExecutor] = []
-
-    def hang(messages, on_tool=None):
-        # Mimic langgraph driving a node through a ThreadPoolExecutor: a worker thread blocks on
-        # the (cleanup-released) leg, registering itself in concurrent.futures' exit-join list.
-        executor = ThreadPoolExecutor(max_workers=1)
-        executors.append(executor)
-        executor.submit(lambda: release.wait(timeout=2.0)).result()
-        return "late"
-
-    session, _renderer, _player = make_session(complete_reply=hang)
-    before = set(cf_thread._threads_queues)
-    try:
-        with pytest.raises(CLIError) as excinfo:
-            session._complete_within([], timeout=0.2)
-        assert excinfo.value.error_type == "agent_timeout"
-        # The executor worker the abandoned call spawned must be gone from the exit-join list,
-        # so neither _python_exit nor threading._shutdown waits on the stuck network call.
-        assert set(cf_thread._threads_queues) - before == set()
-    finally:
-        release.set()  # unblock the abandoned worker so the executor shuts down promptly
-        for executor in executors:
-            executor.shutdown(wait=True)
-
-
-def test_complete_within_reraises_a_leg_failure_unchanged():
-    # A failure the leg raises within the deadline propagates as-is — not masked as a timeout.
-    def boom(messages, on_tool=None):
-        raise APIError("gateway down")
-
-    session, _renderer, _player = make_session(complete_reply=boom)
-    with pytest.raises(APIError, match="gateway down"):
-        session._complete_within([], timeout=5.0)
-
-
 def test_generate_reply_times_out_via_the_backstop(monkeypatch):
-    # End-to-end: _generate_reply applies the module deadline, so a stuck thinking leg surfaces
-    # an error inline and returns to listening (nothing spoken) instead of hanging the session.
     release = threading.Event()
 
-    def hang(messages, on_tool=None):
-        release.wait(timeout=2.0)
-        return "late"
+    def hang(messages):
+        release.wait(timeout=2.0)  # self-releases so no mutated deadline can wedge the suite
+        yield SpeechDelta("late")
 
     monkeypatch.setattr(engine, "_REPLY_TIMEOUT_SECONDS", 0.05)
-    session, renderer, player = make_session(complete_reply=hang)
+    session, renderer, player = make_session(stream_reply=hang)
     try:
         session._generate_reply()
         assert isinstance(session.error, CLIError)
@@ -284,32 +261,107 @@ def test_generate_reply_times_out_via_the_backstop(monkeypatch):
         release.set()
 
 
+def test_generate_reply_with_an_already_elapsed_deadline_times_out_at_once(monkeypatch):
+    # A non-positive remaining budget (the deadline is already in the past on the first wait)
+    # surfaces the timeout immediately without ever blocking on the event queue.
+    monkeypatch.setattr(engine, "_REPLY_TIMEOUT_SECONDS", 0.0)
+    session, renderer, player = make_session(stream_reply=_deltas("would have spoken."))
+    session._generate_reply()
+    assert isinstance(session.error, CLIError)
+    assert session.error.error_type == "agent_timeout"
+    assert player.enqueued == []  # nothing is ever pulled off the queue
+    assert ("reply_done", False) in renderer.calls
+
+
+def test_generate_reply_detaches_the_orphaned_executor_on_timeout(monkeypatch):
+    # Regression: the streamed graph drives each node through a langchain ThreadPoolExecutor.
+    # A timed-out turn abandons the producer with that worker still blocked on the leg, and
+    # concurrent.futures joins every executor worker at interpreter exit — a blocked one wedges
+    # shutdown. _generate_reply's timeout path must unregister that orphan.
+    import concurrent.futures.thread as cf_thread
+    from concurrent.futures import ThreadPoolExecutor
+
+    from aai_cli.agent_cascade.brain import SpeechDelta
+
+    release = threading.Event()
+    executors: list[ThreadPoolExecutor] = []
+
+    def hang(messages):
+        executor = ThreadPoolExecutor(max_workers=1)
+        executors.append(executor)
+        executor.submit(lambda: release.wait(timeout=2.0)).result()
+        yield SpeechDelta("late")
+
+    monkeypatch.setattr(engine, "_REPLY_TIMEOUT_SECONDS", 0.2)
+    session, _renderer, _player = make_session(stream_reply=hang)
+    before = set(cf_thread._threads_queues)
+    try:
+        session._generate_reply()
+        assert isinstance(session.error, CLIError)
+        assert session.error.error_type == "agent_timeout"
+        assert set(cf_thread._threads_queues) - before == set()
+    finally:
+        release.set()
+        for executor in executors:
+            executor.shutdown(wait=True)
+
+
 def test_generate_reply_llm_failure_is_recorded_and_surfaced():
-    def boom(messages, on_tool=None):
-        del messages
+    def boom(messages):
         raise APIError("gateway down")
 
-    session, renderer, player = make_session(complete_reply=boom)
+    session, renderer, player = make_session(stream_reply=boom)
     session._generate_reply()
-    assert isinstance(session.error, APIError)  # recorded for the exit path
-    # Surfaced in the transcript (not swallowed) but nothing is spoken — the turn aborts.
+    assert isinstance(session.error, APIError)
     assert ("agent_transcript", "(error: gateway down)", False) in renderer.calls
-    assert ("reply_done", False) in renderer.calls  # the error line is closed off cleanly
+    assert ("reply_done", False) in renderer.calls
     assert player.enqueued == []
 
 
 def test_generate_reply_tts_failure_midway_is_recorded():
-    def boom(text):
+    def boom(text, sink):
         raise APIError("tts down")
 
-    session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "Hi.", synthesize=boom
-    )
+    session, renderer, player = make_session(stream_reply=_deltas("Hi."), synthesize=boom)
     session._generate_reply()
     assert isinstance(session.error, APIError)
     assert player.enqueued == []
     assert ("reply_started",) in renderer.calls
     assert ("reply_done", False) in renderer.calls
+
+
+def test_generate_reply_tts_failure_aborts_the_rest_of_the_turn():
+    # A TTS failure cuts the turn: the leg is down, so a *later* streamed delta ("After.") is
+    # never synthesized — the turn aborts on the failure rather than speaking on.
+    spoken = []
+
+    def stream(messages):
+        yield SpeechDelta("Boom. ")
+        yield SpeechDelta("After.")
+
+    def synth(text, sink):
+        if text == "Boom.":
+            raise APIError("tts down")
+        spoken.append(text)
+        sink(text.encode())
+
+    session, _renderer, player = make_session(stream_reply=stream)
+    session.deps.synthesize = synth
+    session._generate_reply()
+    assert spoken == []  # After. is never reached once Boom. fails the leg
+    assert player.enqueued == []
+    assert all(item.get("role") != "assistant" for item in session.history)
+
+
+def test_generate_reply_succeeds_within_a_short_deadline(monkeypatch):
+    # A reply that lands inside a tight (sub-second) deadline is spoken normally — the deadline
+    # only fires on a genuine stall, not on every turn.
+    monkeypatch.setattr(engine, "_REPLY_TIMEOUT_SECONDS", 0.5)
+    session, _renderer, player = make_session(stream_reply=_deltas("Quick reply."))
+    session._generate_reply()
+    assert session.error is None
+    assert player.enqueued == [b"pcm:Quick reply."]
+    assert session.history[-1] == {"role": "assistant", "content": "Quick reply."}
 
 
 def test_record_error_keeps_first_and_warns(monkeypatch):
@@ -476,17 +528,17 @@ def test_run_cascade_greets_then_pumps_turns():
 
     session_box = {}
 
-    def complete_reply(messages, on_tool=None):
+    def stream_reply(messages):
         session_box["messages"] = messages
-        return "Hi back."
+        return [SpeechDelta("Hi back.")]
 
     renderer = FakeRenderer()
     player = FakePlayer()
     config = CascadeConfig(greeting="Welcome.")
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=complete_reply,
-        synthesize=lambda text: text.encode(),
+        stream_reply=stream_reply,
+        synthesize=lambda text, sink: sink(text.encode()),
         spawn=_sync_spawn,
     )
     run_cascade(renderer=renderer, player=player, config=config, deps=deps)
@@ -505,8 +557,8 @@ def test_run_cascade_hands_the_session_to_on_session_before_greeting():
     player = FakePlayer()
     deps = CascadeDeps(
         run_stt=lambda on_turn: None,
-        complete_reply=lambda m, on_tool=None: "hi",
-        synthesize=lambda text: b"",
+        stream_reply=_deltas("hi"),
+        synthesize=lambda text, sink: sink(b""),
         spawn=_sync_spawn,
     )
     run_cascade(
@@ -532,8 +584,8 @@ def test_run_cascade_shuts_down_inflight_worker():
 
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=lambda m, on_tool=None: "hi",
-        synthesize=lambda t: b"",
+        stream_reply=_deltas("hi"),
+        synthesize=lambda text, sink: sink(b""),
         spawn=lazy_spawn,
     )
     run_cascade(
@@ -546,11 +598,14 @@ def test_run_cascade_reraises_recorded_leg_error():
     def run_stt(on_turn):
         on_turn(_turn("hi"))
 
-    def boom(messages, on_tool=None):
+    def boom(messages):
         raise APIError("gateway down")
 
     deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=boom, synthesize=lambda t: b"", spawn=_sync_spawn
+        run_stt=run_stt,
+        stream_reply=boom,
+        synthesize=lambda text, sink: sink(b""),
+        spawn=_sync_spawn,
     )
     with pytest.raises(APIError, match="gateway down"):
         run_cascade(
@@ -568,8 +623,8 @@ def test_run_cascade_closes_player_when_stt_raises():
     player = FakePlayer()
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=lambda m, on_tool=None: "",
-        synthesize=lambda t: b"",
+        stream_reply=_deltas(""),
+        synthesize=lambda text, sink: sink(b""),
         spawn=_sync_spawn,
     )
     with pytest.raises(APIError, match="stt failed"):

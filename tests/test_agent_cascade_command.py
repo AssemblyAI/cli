@@ -244,8 +244,8 @@ def test_run_wires_deps_and_invokes_cascade(monkeypatch):
     monkeypatch.setattr(_exec, "FileSource", lambda src: fake_source)
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
     # CascadeDeps.real builds the brain graph (which would launch the default MCP servers);
-    # stub the completer so deps still wire up without spawning any npx/uvx subprocess.
-    monkeypatch.setattr(_exec.engine.brain, "build_completer", lambda api_key, config: lambda m: "")
+    # stub the streamer so deps still wire up without spawning any npx/uvx subprocess.
+    monkeypatch.setattr(_exec.engine.brain, "build_streamer", lambda api_key, config: lambda m: [])
     captured = {}
 
     def fake_run_cascade(*, renderer, player, config, deps):
@@ -284,8 +284,8 @@ def _wire_run(monkeypatch, run_cascade):
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
     monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
-    # Stub the brain completer so CascadeDeps.real never launches the default MCP servers.
-    monkeypatch.setattr(_exec.engine.brain, "build_completer", lambda api_key, config: lambda m: "")
+    # Stub the brain streamer so CascadeDeps.real never launches the default MCP servers.
+    monkeypatch.setattr(_exec.engine.brain, "build_streamer", lambda api_key, config: lambda m: [])
     monkeypatch.setattr(_exec.engine, "run_cascade", run_cascade)
     rendered = {}
     monkeypatch.setattr(
@@ -400,7 +400,9 @@ def test_run_threads_all_leg_options_into_config_and_params(monkeypatch):
         captured["config"] = config
         captured["stt_params"] = stt_params
         return CascadeDeps(
-            run_stt=lambda _o: None, complete_reply=lambda _m: "", synthesize=lambda _t: b""
+            run_stt=lambda _o: None,
+            stream_reply=lambda _m: [],
+            synthesize=lambda _t, _sink: None,
         )
 
     monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
@@ -457,44 +459,34 @@ def test_deps_real_run_stt_passes_prebuilt_params_through(monkeypatch):
     assert captured["params"] is params
 
 
-def test_deps_real_complete_reply_is_built_by_the_deepagents_brain(monkeypatch):
-    # The LLM leg is now a deepagents graph: .real delegates to brain.build_completer,
-    # passing the api key + config, and uses whatever completer it returns. We assert the
-    # exact wiring so the brain swap (not a plain llm.complete) can't silently regress.
-    captured = {}
+def test_deps_real_stream_reply_is_built_by_the_deepagents_brain(monkeypatch):
+    from aai_cli.agent_cascade.brain import SpeechDelta
 
-    def fake_build_completer(api_key, config):
-        captured["api_key"] = api_key
-        captured["config"] = config
-        return lambda messages: f"reply to {messages[-1]['content']}"
+    def fake_build_streamer(api_key, config):
+        del api_key, config
+        return lambda messages: [SpeechDelta("reply to " + messages[-1]["content"])]
 
-    monkeypatch.setattr(engine.brain, "build_completer", fake_build_completer)
-    cfg = CascadeConfig(model="m", max_tokens=222, llm_extra={"temperature": 0.5})
+    monkeypatch.setattr(engine.brain, "build_streamer", fake_build_streamer)
+    cfg = CascadeConfig()
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
-    assert deps.complete_reply([{"role": "user", "content": "hi"}]) == "reply to hi"
-    assert captured["api_key"] == "k"
-    assert captured["config"] is cfg
+    events = list(deps.stream_reply([{"role": "user", "content": "hi"}]))
+    assert [e.text for e in events] == ["reply to hi"]
 
 
-def test_deps_real_synthesize_threads_voice_language_and_extra(monkeypatch):
+def test_deps_real_synthesize_streams_frames_and_threads_voice(monkeypatch):
     captured = {}
 
-    def fake_synth(api_key, spec):
+    def fake_synth(api_key, spec, *, on_audio):
         captured["voice"] = spec.voice
-        captured["language"] = spec.language
-        captured["text"] = spec.text
         captured["sample_rate"] = spec.sample_rate
-        captured["params"] = spec.query_params()
-        return types.SimpleNamespace(pcm=b"AUDIO")
+        on_audio(b"AUDIO", spec.sample_rate or 0)
+        return engine.tts_session.SpeakResult(b"AUDIO", spec.sample_rate or 0, 0.0)
 
     monkeypatch.setattr(engine.tts_session, "synthesize", fake_synth)
-    cfg = CascadeConfig(voice="vera", language="en", tts_extra={"chunk_size_ms": "100"})
+    cfg = CascadeConfig(voice="luna")
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
-    assert deps.synthesize("say this") == b"AUDIO"
-    assert captured["voice"] == "vera"
-    assert captured["language"] == "en"
-    assert captured["text"] == "say this"
-    # TTS always synthesizes at the 24 kHz the live player is opened at.
-    assert captured["sample_rate"] == engine.TTS_SAMPLE_RATE == 24000
-    # The --tts-config escape hatch rides along as an extra query param.
-    assert captured["params"]["chunk_size_ms"] == "100"
+    frames = []
+    deps.synthesize("say this", frames.append)
+    assert frames == [b"AUDIO"]
+    assert captured["voice"] == "luna"
+    assert captured["sample_rate"] == 24000  # TTS always synthesizes at the live player's rate
