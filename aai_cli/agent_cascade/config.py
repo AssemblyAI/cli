@@ -16,14 +16,15 @@ from aai_cli.core import llm
 # `assembly live` defaults to a fast, low-latency gateway model (override with --model) —
 # a literal rather than llm.DEFAULT_MODEL so the live agent's default is independent of the
 # one-shot `assembly llm` default. Latency matters most for a spoken back-and-forth.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = "kimi-k2.5"
 DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
 # The realtime model the cascade transcribes with (same as the agent-cascade template).
 DEFAULT_SPEECH_MODEL = "u3-rt-pro"
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a friendly, concise voice assistant. Keep replies short and "
-    "conversational. Your reply is read aloud by a text-to-speech engine, so "
-    "write plain spoken prose — no markdown, emoji, bullet lists, or code."
+    "You are a friendly, concise voice assistant. Keep replies as short as "
+    "possible — usually a single sentence, never more than two. Answer directly "
+    "without preamble or filler. Your reply is read aloud by a text-to-speech "
+    "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
 )
 DEFAULT_GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 # Sliding-window size: keep the last N messages of conversation as LLM context.

@@ -51,6 +51,13 @@ def test_voicebar_markup_per_phase_carries_label_meter_accent_and_hint() -> None
     assert "Thinking" in thinking and "#f59e0b" in thinking  # amber, no hint
     speaking = tui_status.voicebar_markup("speaking", "▅▇▆")
     assert "Speaking" in speaking and "#22c55e" in speaking  # green
+    # `live`'s muted-mic state (Space stops listening): a dim grey "Paused" with a resume hint.
+    paused = tui_status.voicebar_markup("paused", "▁▃▅")
+    assert "Paused" in paused and "resume listening" in paused and "#6b7280" in paused
+    # A paused mic shows a flat at-rest meter, not the animated frame it was handed. Assert the
+    # literal "▁▁▁" (not tui_status.VOICE_FLAT, which would mutate in lockstep) so the override
+    # and the constant are both pinned.
+    assert "▁▁▁" in paused and "▁▃▅" not in paused
 
 
 def test_copy_note_copies_and_confirms() -> None:

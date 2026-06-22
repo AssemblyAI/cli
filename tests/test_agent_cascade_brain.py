@@ -15,7 +15,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, weather_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent import model as model_mod
 from aai_cli.core.errors import CLIError
@@ -375,17 +375,20 @@ def test_reply_text_is_empty_without_an_assistant_message():
 # --- build_live_tools --------------------------------------------------------
 
 
-def test_build_live_tools_is_just_web_search_when_keyed(monkeypatch):
-    search = object()
+def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
+    search = _NamedTool(brain.WEB_SEARCH_TOOL_NAME)
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
-    # The live agent's sole built-in tool is Firecrawl web search — no URL fetch, no docs.
-    assert brain.build_live_tools() == [search]
+    names = [tool.name for tool in brain.build_live_tools()]
+    # Web search is the optional keyed leg; the keyless weather tool is always present.
+    assert brain.WEB_SEARCH_TOOL_NAME in names
+    assert weather_tool.WEATHER_TOOL_NAME in names
 
 
-def test_build_live_tools_is_empty_without_firecrawl_key(monkeypatch):
+def test_build_live_tools_is_just_weather_without_firecrawl_key(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
-    # No FIRECRAWL_API_KEY -> no tool at all; the agent then runs tool-free.
-    assert brain.build_live_tools() == []
+    # No FIRECRAWL_API_KEY -> no web search, but the keyless weather tool still loads.
+    names = [tool.name for tool in brain.build_live_tools()]
+    assert names == [weather_tool.WEATHER_TOOL_NAME]
 
 
 # --- build_graph (model construction + compile, with the docs probe skipped) -
@@ -469,3 +472,16 @@ def test_build_model_defaults_have_no_extra():
     model = model_mod.build_model("k", model="claude-x")
     assert model.max_tokens is None
     assert model.extra_body is None
+
+
+def test_weather_tool_advertised_in_system_prompt():
+    prompt = brain.build_system_prompt(
+        "persona", tools=[_NamedTool(weather_tool.WEATHER_TOOL_NAME)]
+    )
+    assert "current weather and short forecast" in prompt
+    # And it isn't the no-tools fallback.
+    assert "no external tools" not in prompt
+
+
+def test_tool_label_maps_weather():
+    assert brain._tool_label(weather_tool.WEATHER_TOOL_NAME) == "Checking the weather"

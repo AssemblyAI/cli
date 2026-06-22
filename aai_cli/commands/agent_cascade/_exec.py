@@ -242,6 +242,7 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
     app = LiveAgentApp(
         run_conversation=run_conversation,
         on_stop=duplex.close,
+        on_toggle_listen=duplex.toggle_listening,
         web_note=_web_search_note(),
     )
     app.run(mouse=False)

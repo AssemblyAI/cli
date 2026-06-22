@@ -14,7 +14,7 @@ import pytest
 from aai_cli.agent_cascade import engine
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
-from aai_cli.core.errors import APIError
+from aai_cli.core.errors import APIError, CLIError
 from tests._cascade_fakes import FakePlayer, FakeRenderer, FakeWorker, make_session
 from tests._cascade_fakes import sync_spawn as _sync_spawn
 from tests._cascade_fakes import turn as _turn
@@ -118,6 +118,18 @@ def test_generate_reply_speaks_each_sentence():
     assert ("reply_done", False) in renderer.calls
 
 
+def test_generate_reply_marks_speaking_during_playback_then_clears():
+    # The reply is "speaking" only while it enqueues sentences — so a UI interrupt cuts it then,
+    # but the prior thinking phase (and the idle window after) is not interruptible. The flag is
+    # set before the first sentence and cleared once the turn is done.
+    observed = []
+    session, _renderer, _player = make_session(complete_reply=lambda m, on_tool=None: "Hi. Yes.")
+    session.deps.synthesize = lambda text: observed.append(session._speaking.is_set()) or b""
+    session._generate_reply()
+    assert observed == [True, True]  # speaking while each sentence plays
+    assert not session._speaking.is_set()  # cleared once the reply is done
+
+
 def test_generate_reply_threads_system_prompt_and_history():
     captured = {}
 
@@ -181,6 +193,62 @@ def test_generate_reply_stop_before_first_sentence_speaks_nothing():
     assert ("reply_done", True) in renderer.calls
 
 
+def test_complete_within_returns_reply_before_the_deadline():
+    # The fast path: the leg finishes well inside the deadline, so its text is returned as-is.
+    session, _renderer, _player = make_session(complete_reply=lambda m, on_tool=None: "quick")
+    assert session._complete_within([{"role": "user", "content": "hi"}], timeout=5.0) == "quick"
+
+
+def test_complete_within_raises_a_timeout_when_the_leg_overruns_the_deadline():
+    # The backstop: a leg that blocks past the deadline is cut off with an agent_timeout CLIError
+    # (rather than hanging the turn forever), which the reply path surfaces like any leg failure.
+    release = threading.Event()
+
+    def hang(messages, on_tool=None):
+        release.wait(timeout=2.0)  # self-releases so no mutated deadline can wedge the suite
+        return "late"
+
+    session, _renderer, _player = make_session(complete_reply=hang)
+    try:
+        with pytest.raises(CLIError) as excinfo:
+            session._complete_within([], timeout=0.05)
+        assert excinfo.value.error_type == "agent_timeout"
+    finally:
+        release.set()  # unblock the abandoned worker so it exits promptly
+
+
+def test_complete_within_reraises_a_leg_failure_unchanged():
+    # A failure the leg raises within the deadline propagates as-is — not masked as a timeout.
+    def boom(messages, on_tool=None):
+        raise APIError("gateway down")
+
+    session, _renderer, _player = make_session(complete_reply=boom)
+    with pytest.raises(APIError, match="gateway down"):
+        session._complete_within([], timeout=5.0)
+
+
+def test_generate_reply_times_out_via_the_backstop(monkeypatch):
+    # End-to-end: _generate_reply applies the module deadline, so a stuck thinking leg surfaces
+    # an error inline and returns to listening (nothing spoken) instead of hanging the session.
+    release = threading.Event()
+
+    def hang(messages, on_tool=None):
+        release.wait(timeout=2.0)
+        return "late"
+
+    monkeypatch.setattr(engine, "_REPLY_TIMEOUT_SECONDS", 0.05)
+    session, renderer, player = make_session(complete_reply=hang)
+    try:
+        session._generate_reply()
+        assert isinstance(session.error, CLIError)
+        assert session.error.error_type == "agent_timeout"
+        assert any(c[0] == "agent_transcript" and "longer than" in c[1] for c in renderer.calls)
+        assert ("reply_done", False) in renderer.calls
+        assert player.enqueued == []
+    finally:
+        release.set()
+
+
 def test_generate_reply_llm_failure_is_recorded_and_surfaced():
     def boom(messages, on_tool=None):
         del messages
@@ -224,6 +292,8 @@ def test_record_error_keeps_first_and_warns(monkeypatch):
 
 
 def test_barge_in_cancels_and_flushes_live_worker():
+    # A new spoken turn supersedes a reply that is still *thinking* (alive, not yet speaking):
+    # unlike a UI interrupt, a barge-in must cancel it so it never speaks over the new turn.
     session, _renderer, player = make_session()
     worker = FakeWorker(alive=True)
     session._reply = worker
@@ -245,15 +315,28 @@ def test_barge_in_without_a_live_worker_does_not_flush():
 
 
 def test_interrupt_reply_signals_stop_and_flushes_without_joining():
-    # Live TUI Escape/Ctrl-C silences a playing reply: stop flag + flush, but NO join.
+    # Live TUI Escape/Ctrl-C silences a *speaking* reply: stop flag + flush, but NO join.
     session, _renderer, player = make_session()
     worker = FakeWorker(alive=True)
     session._reply = worker
+    session._speaking.set()  # the reply has reached its speak-and-enqueue phase
     assert session.interrupt_reply() is True
     assert session._stop.is_set()
     assert player.flushed == 1
     assert worker.joined == 0  # not joined — the worker unwinds on its own
     assert session._reply is worker  # still tracked; the next turn's barge-in joins it
+
+
+def test_interrupt_reply_while_thinking_returns_false_so_ctrl_c_can_quit():
+    # The reply worker is alive but still *thinking* (generating, no audio yet): there's nothing
+    # audible to cut and the blocking graph can't observe the stop flag, so a UI interrupt is a
+    # no-op. It must report False (not the bare is_alive() True) so the TUI's Ctrl-C falls
+    # through to quit instead of being swallowed — otherwise you can't Ctrl-C while it thinks.
+    session, _renderer, player = make_session()
+    session._reply = FakeWorker(alive=True)  # thinking: alive, but _speaking is not set
+    assert session.interrupt_reply() is False
+    assert not session._stop.is_set()  # nothing cancelled — the keypress is free to quit
+    assert player.flushed == 0
 
 
 def test_interrupt_reply_is_a_noop_when_nothing_is_playing():

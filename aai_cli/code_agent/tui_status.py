@@ -20,12 +20,17 @@ if TYPE_CHECKING:
 # Animated meter for the voice bar — a 3-cell block-char pulse (BMP, single-width, no emoji).
 # Public: both the `code` and `live` TUIs cycle it for their bar animation.
 VOICE_FRAMES = ("▁▃▅", "▃▅▇", "▅▇▆", "▆▇▅", "▇▅▃", "▅▃▁")  # pragma: no mutate
+# The at-rest meter shown while paused: a flat, non-animating frame (same width/alphabet as
+# VOICE_FRAMES) so a muted mic reads as idle rather than as an active, pulsing meter.
+VOICE_FLAT = "▁▁▁"
 # The voice phases the bar distinguishes, each (label, accent color). Shared by the `code`
 # and `live` TUIs so both read the same: blue while listening, amber thinking, green speaking.
 _VOICE_PHASES: dict[str, tuple[str, str]] = {
     "listening": ("Listening — speak your request", theme.BRAND),
     "thinking": ("Thinking…", "#f59e0b"),
     "speaking": ("Speaking…", "#22c55e"),
+    # `live`'s mic is muted (start/stop listening) — dimmed so a paused session reads as idle.
+    "paused": ("Paused — press space to resume listening", "#6b7280"),
 }
 
 
@@ -36,6 +41,8 @@ def voicebar_markup(phase: str, frame: str, *, hint: str = "") -> str:
     label is escaped so a phase string can't inject styling.
     """
     label, color = _VOICE_PHASES[phase]
+    if phase == "paused":
+        frame = VOICE_FLAT  # a muted mic shows a flat meter, not the animated pulse it was handed
     return f"[{color}]{frame}[/] {escape(label)}{hint}"
 
 

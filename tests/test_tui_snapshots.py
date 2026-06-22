@@ -317,6 +317,20 @@ def test_live_user_partial(snap_compare) -> None:
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
 
 
+def test_live_paused(snap_compare) -> None:
+    """A muted mic (Space stops listening) shows a flat, non-animating meter and a grey
+    `Paused` label, so a paused session reads as idle rather than actively listening."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app._listening = False  # Space muted the mic while idle -> the paused phase
+        app._render_voicebar()
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
 def test_live_tool_call_note(snap_compare) -> None:
     """A tool the agent uses mid-turn drops a dim progress note so the wait doesn't read as a hang."""
 

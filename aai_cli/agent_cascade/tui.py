@@ -36,8 +36,8 @@ if TYPE_CHECKING:
 # Splash intro copy (the code agent's banner copy is code-specific, so `live` carries its own).
 _READY_LINE = "Listening… start talking when you're ready."
 _TIP_LINE = "Use headphones — the mic stays open while the agent speaks."
-# The one-line footer: a hands-free session, so the controls are interrupt-and-quit.
-_STATUS_LINE = "Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
+# The one-line footer: Space starts/stops listening (mutes the mic), Esc/Ctrl-C interrupts.
+_STATUS_LINE = "Space to start/stop listening · Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
 
 
 def _call_on_ui_thread(app: App[None], fn: Callable[..., None], *args: object) -> None:
@@ -114,6 +114,7 @@ class LiveAgentApp(App[None]):
     # hatch, so a stuck reply can never trap the session). Quitting closes the audio, which
     # unblocks the cascade worker.
     BINDINGS: ClassVar = [
+        ("space", "toggle_listen", "Start / stop listening"),
         ("escape", "interrupt", "Interrupt"),
         ("ctrl+c", "interrupt_or_quit", "Interrupt / Quit"),
         ("ctrl+q", "stop", "Quit"),
@@ -124,11 +125,15 @@ class LiveAgentApp(App[None]):
         *,
         run_conversation: Callable[[Renderer], None],
         on_stop: Callable[[], None],
+        on_toggle_listen: Callable[[], bool],
         web_note: str | None = None,
     ) -> None:
         super().__init__()
         self._run_conversation = run_conversation  # blocking; runs the cascade given a Renderer
         self._on_stop = on_stop  # closes the audio so a quit unblocks the cascade worker
+        # Mutes/unmutes the mic in place (returns the new listening state); Space toggles it.
+        self._on_toggle_listen = on_toggle_listen
+        self._listening = True  # mic open by default; muted shows the bar as "paused"
         self._web_note = web_note
         # The cascade's reply-interrupt, wired once its session exists (see set_interrupt);
         # None until then, so an early keypress is a harmless no-op.
@@ -263,7 +268,18 @@ class LiveAgentApp(App[None]):
             bar = self.query_one("#voicebar", Static)
         except NoMatches:
             return
-        bar.update(tui_status.voicebar_markup(self._voice_phase, next(self._voice_frames)))
+        bar.update(tui_status.voicebar_markup(self._display_phase(), next(self._voice_frames)))
+
+    def _display_phase(self) -> str:
+        """The phase the voice bar shows: ``paused`` when the mic is muted while idle.
+
+        A muted mic would otherwise sit on ``listening`` hearing nothing, so it reads as
+        paused instead. A reply still in flight keeps ``speaking``/``thinking`` — muting
+        gates the user's input, never the agent's voice.
+        """
+        if self._voice_phase == "listening" and not self._listening:
+            return "paused"
+        return self._voice_phase
 
     def _tick_voice(self) -> None:
         """Advance the voice-bar meter one frame (the animation timer's callback)."""
@@ -298,6 +314,15 @@ class LiveAgentApp(App[None]):
         stores a callable reference, so no UI hop is needed.
         """
         self._interrupt = interrupt
+
+    def action_toggle_listen(self) -> None:
+        """Space: start/stop listening by muting the mic in place, keeping the session live.
+
+        The cascade stays connected while muted (the agent can still finish a reply), so
+        resuming is instant — no reconnect. Repaints the voice bar to reflect the new state.
+        """
+        self._listening = self._on_toggle_listen()
+        self._render_voicebar()
 
     def action_interrupt(self) -> None:
         """Escape: silence a playing reply and return to listening (a no-op when idle)."""

@@ -276,6 +276,24 @@ def test_voice_mode_swaps_text_input_for_listening_affordance() -> None:
     _run(go())
 
 
+def test_voice_bar_does_not_overlap_status_footer() -> None:
+    # The voice bar replaces the prompt in the same docked slot, so it inherits the same
+    # bottom-margin reservation: the two-row status footer must not paint over the box's
+    # bottom border. region.bottom is exclusive, so "no overlap" is bar.bottom <= status.y.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]), voice=FakeVoice())
+        app._voice_paused = True  # start paused so on_mount doesn't race a capture thread
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.action_toggle_voice()  # voice on -> the voice bar takes the docked slot
+            await pilot.pause()
+            bar = app.query_one("#voicebar", Static).region
+            status = app.query_one("#status", Static).region
+            assert bar.bottom <= status.y
+
+    _run(go())
+
+
 def test_voice_capture_failure_restores_the_text_input() -> None:
     # When the mic is ruled out mid-session, the listening bar is replaced by the text box.
     async def go() -> None:

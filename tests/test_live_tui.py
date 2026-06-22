@@ -44,7 +44,7 @@ def _wait_until(pilot, predicate):
     return loop()
 
 
-def _app(run_conversation=None, on_stop=None, web_note=None):
+def _app(run_conversation=None, on_stop=None, on_toggle_listen=None, web_note=None):
     """A LiveAgentApp whose worker stays alive for the test, releasing on teardown.
 
     The real ``run_conversation`` blocks on the live mic; the default here blocks on an event
@@ -64,6 +64,7 @@ def _app(run_conversation=None, on_stop=None, web_note=None):
     return LiveAgentApp(
         run_conversation=run_conversation or block,
         on_stop=stop,
+        on_toggle_listen=on_toggle_listen or (lambda: True),
         web_note=web_note,
     )
 
@@ -236,6 +237,34 @@ def test_escape_interrupts_a_playing_reply_via_the_session_hook() -> None:
     _run(go())
 
 
+def test_space_toggles_listening_and_paints_paused() -> None:
+    # Space starts/stops listening: it drives the duplex mic mute (the returned state) and
+    # repaints the voice bar to "Paused" while muted, then back to "Listening" on resume.
+    async def go() -> None:
+        state = {"on": True}
+
+        def toggle() -> bool:
+            state["on"] = not state["on"]
+            return state["on"]
+
+        app = _app(on_toggle_listen=toggle)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert "Listening" in _voicebar(app)  # opens listening
+            await pilot.press("space")  # the Space binding -> action_toggle_listen -> stop
+            assert state["on"] is False and app._listening is False  # mic muted
+            assert "Paused" in _voicebar(app)  # muted shows paused, not listening
+            # Muting only gates the user's input: a reply still in flight keeps "Speaking".
+            app._set_phase("speaking")
+            assert "Speaking" in _voicebar(app) and "Paused" not in _voicebar(app)
+            app._set_phase("listening")
+            await pilot.press("space")  # resume listening
+            assert state["on"] is True and app._listening is True
+            assert "Listening" in _voicebar(app)
+
+    _run(go())
+
+
 def test_ctrl_c_interrupts_a_playing_reply_without_quitting(monkeypatch) -> None:
     # While a reply is playing (the hook returns True), Ctrl-C interrupts it and stays — it
     # must NOT quit, so a long answer can be cut off without ending the session.
@@ -398,7 +427,9 @@ def _wire_tui(monkeypatch):
     monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
     monkeypatch.setattr(stdio, "stdout_is_tty", lambda: True)
     monkeypatch.setattr(stdio, "stdin_is_tty", lambda: True)
-    fake_duplex = types.SimpleNamespace(mic=object(), player=object(), close=lambda: None)
+    fake_duplex = types.SimpleNamespace(
+        mic=object(), player=object(), close=lambda: None, toggle_listening=lambda: True
+    )
     monkeypatch.setattr(_exec, "DuplexAudio", lambda **kwargs: fake_duplex)
     monkeypatch.setattr(engine.CascadeDeps, "real", lambda *a, **k: "deps")
     return fake_duplex
@@ -412,9 +443,10 @@ def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
     class FakeApp:
         error = None  # no fatal leg failure -> the launcher re-raises nothing
 
-        def __init__(self, *, run_conversation, on_stop, web_note):
+        def __init__(self, *, run_conversation, on_stop, on_toggle_listen, web_note):
             captured["run_conversation"] = run_conversation
             captured["on_stop"] = on_stop
+            captured["on_toggle_listen"] = on_toggle_listen
 
         def run(self, **kwargs):
             captured["ran"] = kwargs
@@ -427,6 +459,8 @@ def test_interactive_human_run_launches_the_tui(monkeypatch) -> None:
     run_agent_cascade(_opts(), AppState(), json_mode=False)
     assert callable(captured["run_conversation"])  # the TUI was launched with a cascade closure
     assert captured["on_stop"] is fake_duplex.close  # quit closes the audio
+    # Space toggles listening through the duplex's in-place mic mute (no reconnect).
+    assert captured["on_toggle_listen"] is fake_duplex.toggle_listening
     assert captured["ran"] == {"mouse": False}  # mouse off so transcript text stays selectable
 
 
@@ -460,7 +494,7 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
     class FakeApp:
         error = None  # the conversation completes cleanly here
 
-        def __init__(self, *, run_conversation, on_stop, web_note):
+        def __init__(self, *, run_conversation, on_stop, on_toggle_listen, web_note):
             self._rc = run_conversation
 
         def run(self, **kwargs):
@@ -488,7 +522,7 @@ def test_tui_reraises_a_fatal_leg_error_for_the_exit_code(monkeypatch) -> None:
     class FakeApp:
         error = boom  # the worker thread recorded a fatal cascade error
 
-        def __init__(self, *, run_conversation, on_stop, web_note):
+        def __init__(self, *, run_conversation, on_stop, on_toggle_listen, web_note):
             pass
 
         def run(self, **kwargs):

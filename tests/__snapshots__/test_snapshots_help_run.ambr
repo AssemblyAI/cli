@@ -668,8 +668,7 @@
   ╭─ Language model ─────────────────────────────────────────────────────────────╮
   │ --model             TEXT                  LLM Gateway model that powers the  │
   │                                           agent's replies                    │
-  │                                           [default:                          │
-  │                                           claude-haiku-4-5-20251001]         │
+  │                                           [default: kimi-k2.5]               │
   │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
   │                                           [default: 8192]                    │
   │ --llm-config        TEXT                  Set any LLM Gateway request field  │

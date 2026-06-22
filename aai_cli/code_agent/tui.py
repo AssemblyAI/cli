@@ -78,12 +78,16 @@ class CodeAgentApp(_VoiceLegs):
        reply streams in place and tool output can expand/collapse. */
     #log {{ height: 1fr; border: none; background: #000000; padding: 1 2; }}
     /* width: 100% (not the 1fr default) so the bordered box fits inside its 1-col side margins;
-       a docked 1fr container ignores horizontal margin and overflows, clipping the right border. */
-    #promptbar {{ dock: bottom; height: 3; width: 100%; background: #000000; border: round #3a3f55; margin: 1 1; }}
+       a docked 1fr container ignores horizontal margin and overflows, clipping the right border.
+       The bottom margin must equal #status's height (2): docked siblings overlay rather than
+       stack, so the margin is what reserves the footer's rows — a margin shorter than the footer
+       lets its top row paint over the box's bottom border, leaving the rounded box open below. */
+    #promptbar {{ dock: bottom; height: 3; width: 100%; background: #000000; border: round #3a3f55; margin: 1 1 2 1; }}
     #promptmark {{ width: 3; color: {banner.BRAND_HEX}; content-align: center middle; }}
     #prompt {{ border: none; background: #000000; padding: 0; }}
-    /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back). */
-    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX}; margin: 1 1; content-align: center middle; display: none; }}
+    /* Shown in place of the prompt while voice capture is on (Ctrl-V brings the prompt back);
+       same docked slot as #promptbar, so it carries the same status-height bottom margin. */
+    #voicebar {{ dock: bottom; height: 3; background: #000000; border: round {banner.BRAND_HEX}; margin: 1 1 2 1; content-align: center middle; display: none; }}
     /* In normal flow below the 1fr log, so it sits just above the docked prompt bar. */
     #spinner {{ height: 1; background: #000000; padding: 0 2; color: {banner.BRAND_HEX}; display: none; }}
     /* Two rows: the mode/cwd/branch/voice line and the dim key-legend below it. */

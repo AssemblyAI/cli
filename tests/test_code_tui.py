@@ -63,6 +63,23 @@ def test_mount_renders_splash_and_focuses_input() -> None:
     _run(go())
 
 
+def test_prompt_bar_does_not_overlap_status_footer() -> None:
+    # The prompt bar and the two-row status footer both dock to the bottom, so docked
+    # siblings overlay rather than stack: the bar's bottom margin must reserve the full
+    # status height or the footer's top row paints over the box's bottom border (which
+    # left the rounded box looking open at the bottom). region.bottom is exclusive, so
+    # "no overlap" is bar.bottom <= status.y.
+    async def go() -> None:
+        app = CodeAgentApp(agent=FakeAgent([]))
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            bar = app.query_one("#promptbar", Horizontal).region
+            status = app.query_one("#status", Static).region
+            assert bar.bottom <= status.y
+
+    _run(go())
+
+
 def test_voicebar_render_after_the_bar_is_gone_is_a_safe_noop() -> None:
     # The 0.3s animation timer drives _render_voicebar and can fire one last tick during teardown,
     # after #voicebar is removed but before the interval is cancelled; it must no-op, not raise the

@@ -137,6 +137,37 @@ def test_duplex_mic_ends_after_close():
     assert list(d.mic) == []  # capture loop returns on the close sentinel
 
 
+def test_toggle_listening_gates_capture_to_silence_without_dropping_the_stream():
+    # Start/stop listening (the live TUI's Space) mutes the mic in place: muted frames become
+    # silence of the same length so STT keeps receiving audio (the socket stays alive) but hears
+    # nothing, and resuming is instant on the same stream — no reconnect.
+    cb = {}
+
+    def factory(*, rate, blocksize, callback, device):
+        cb["fn"] = callback
+        return FakeStream()
+
+    d = DuplexAudio(target_rate=16000, device_rate=16000, stream_factory=factory)  # no resample
+    d.player.start()
+    loud = b"\x11\x11" * 8  # non-silent device input
+    mic = iter(d.mic)
+
+    assert d.listening is True  # mic open by default
+    cb["fn"](loud, bytearray(4), 8, None, None)
+    assert next(mic) == loud  # listening: real audio passes through
+
+    assert d.toggle_listening() is False  # stop listening -> returns the new (muted) state
+    assert d.listening is False
+    cb["fn"](loud, bytearray(4), 8, None, None)
+    assert next(mic) == b"\x00" * len(loud)  # muted: same length of frames, but silence
+
+    assert d.toggle_listening() is True  # resume on the same stream
+    assert d.listening is True
+    cb["fn"](loud, bytearray(4), 8, None, None)
+    assert next(mic) == loud  # listening again: real audio
+    d.close()
+
+
 def test_duplex_start_is_idempotent():
     calls = {"n": 0}
 

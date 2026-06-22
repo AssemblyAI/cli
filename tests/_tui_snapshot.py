@@ -111,7 +111,11 @@ def build_code_voice_app(*, cwd: Path) -> _SnapshotCodeApp:
 
 def build_live_app() -> _SnapshotLiveApp:
     """A ``LiveAgentApp`` whose cascade worker is stubbed out so a snapshot can drive it."""
-    return _SnapshotLiveApp(run_conversation=lambda renderer: None, on_stop=lambda: None)
+    return _SnapshotLiveApp(
+        run_conversation=lambda renderer: None,
+        on_stop=lambda: None,
+        on_toggle_listen=lambda: True,
+    )
 
 
 def freeze_animation(app: App[None]) -> None:

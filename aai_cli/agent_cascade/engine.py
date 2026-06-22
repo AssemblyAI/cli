@@ -34,6 +34,14 @@ if TYPE_CHECKING:
 # Streaming TTS synthesizes at 24 kHz, the rate the live player is opened at.
 TTS_SAMPLE_RATE = 24000
 
+# Wall-clock backstop for one reply turn. complete_reply drives the whole deepagents graph — an
+# LLM round-trip plus any tool calls — as a single blocking call with no internal deadline, so a
+# stuck leg (an unresponsive gateway, a web-search tool with no timeout of its own) would hang
+# the turn forever, with the worker unable to observe the stop flag. After this long we stop
+# waiting and surface a timeout so the session stays usable. Generous on purpose: well above a
+# normal tool-using turn, so it only fires on a genuine stall. The exact value is a tuning knob.
+_REPLY_TIMEOUT_SECONDS = 60.0  # pragma: no mutate
+
 
 class _Worker(Protocol):
     """The slice of a thread the session drives: started already, queryable, joinable."""
@@ -162,6 +170,12 @@ class CascadeSession:
     error: CLIError | None = None
     _reply: _Worker | None = field(default=None, init=False)  # pragma: no mutate
     _stop: threading.Event = field(default_factory=threading.Event, init=False)  # pragma: no mutate
+    # Set only while a reply is in its audible speak-and-enqueue phase (not while it's still
+    # *thinking* — generating in a blocking graph call). A UI interrupt keys off this so Ctrl-C
+    # can quit while the agent thinks instead of being swallowed by a no-op "interrupt".
+    _speaking: threading.Event = field(
+        default_factory=threading.Event, init=False
+    )  # pragma: no mutate
 
     def greet(self) -> None:
         """Speak the opening greeting (if any) and seed it into the history so the
@@ -195,30 +209,39 @@ class CascadeSession:
             self.renderer.user_partial(text)
             self._barge_in()
 
-    def _silence_if_speaking(self) -> bool:
-        """Cut the agent off if it's currently audible: signal the worker and flush audio.
+    def _silence(self, *, audible_only: bool) -> bool:
+        """Cancel an in-flight reply — signal the worker and flush queued audio — and report
+        whether anything was cancelled.
 
-        "Speaking" is broader than a live reply worker: it also covers the greeting (enqueued
-        with no worker) and the *tail* of a reply whose worker has already finished enqueuing
-        but whose audio is still draining from the player. In every case there is sound to
-        silence, so a barge-in or an interrupt should cut it — a bare ``_reply.is_alive()``
-        check would leave the greeting (and a reply's last sentence) un-interruptible. Setting
-        the stop flag is harmless when no worker is running (the next ``_start_reply`` clears
-        it). Returns whether anything was silenced.
+        The audible cases are always cancelled: the greeting (enqueued with no worker), a reply
+        in its speak-and-enqueue phase (``_speaking``), and the *tail* of a reply whose worker
+        has finished enqueuing but whose audio is still draining (``pending() > 0``).
+
+        ``audible_only`` decides whether the *thinking* phase counts too. A spoken barge-in
+        passes ``False`` to cancel even a reply still being generated — the user has moved on,
+        so it must not speak once it lands. A UI interrupt passes ``True`` to leave thinking
+        alone: there's no audio to cut and the blocking graph call can't observe the stop flag,
+        so cancelling would be a no-op — and crucially, returning False there lets the TUI's
+        Ctrl-C fall through to *quit* rather than be swallowed (you could otherwise never
+        Ctrl-C while the agent thinks). Setting the stop flag is harmless when nothing runs (the
+        next ``_start_reply`` clears it).
         """
-        speaking = (self._reply is not None and self._reply.is_alive()) or self.player.pending() > 0
-        if speaking:
+        in_flight = self._speaking.is_set() or self.player.pending() > 0
+        if not audible_only:
+            in_flight = in_flight or (self._reply is not None and self._reply.is_alive())
+        if in_flight:
             self._stop.set()
             self.player.flush()
-        return speaking
+        return in_flight
 
     def _barge_in(self) -> None:
-        """Stop whatever the agent is saying (reply, greeting, or a draining tail) and join."""
-        self._silence_if_speaking()
+        """Stop whatever the agent is doing (a thinking or speaking reply, the greeting, or a
+        draining tail) and join — a new spoken turn supersedes it, thinking included."""
+        self._silence(audible_only=False)
         self._join_reply()
 
     def interrupt_reply(self) -> bool:
-        """Signal an in-flight reply to stop, without waiting for it; True if one was playing.
+        """Silence a *speaking* reply without waiting for it; True if one was audible.
 
         The UI-thread-safe counterpart to a spoken barge-in: the live TUI's Escape/Ctrl-C
         calls this to silence the agent mid-reply (or mid-greeting) without the user having to
@@ -227,8 +250,11 @@ class CascadeSession:
         listening (the STT loop keeps running, so the next spoken turn is handled normally).
         It deliberately does *not* join the worker — a join from the UI thread would deadlock
         against the worker's own ``call_from_thread`` render hops.
+
+        It reports False (and does nothing) while the reply is merely *thinking*, so the TUI's
+        Ctrl-C falls through to quit instead of being swallowed by a no-op interrupt.
         """
-        return self._silence_if_speaking()
+        return self._silence(audible_only=True)
 
     def _join_reply(self) -> None:
         """Wait for the current reply worker (if any) to unwind, then drop the handle."""
@@ -241,6 +267,41 @@ class CascadeSession:
         self._stop.clear()
         self._reply = self.deps.spawn(self._generate_reply)
 
+    def _complete_within(self, messages: list[ChatCompletionMessageParam], timeout: float) -> str:
+        """Run the blocking reply leg with a wall-clock backstop, returning the spoken text.
+
+        ``complete_reply`` runs the whole deepagents graph as one uninterruptible call, so a
+        stuck leg would hang the reply worker forever. Drive it on a throwaway daemon thread and
+        stop waiting after ``timeout`` — raising a ``CLIError`` the caller surfaces like any
+        other leg failure (inline in the transcript, then back to listening). The abandoned
+        thread is a network call we can't cancel; as a daemon it dies with the process and its
+        late result is discarded. A failure the leg itself raises is re-raised here unchanged.
+        """
+        # List holders (not closure locals) so the worker thread's result is visible here after
+        # the join, and so the static checkers don't misread a nonlocal mutation as unreachable.
+        replies: list[str] = []
+        failures: list[CLIError] = []
+
+        def run() -> None:
+            # complete_reply (brain._run_graph) wraps every leg/tool/graph failure as a CLIError,
+            # so capturing that is enough; it's re-raised on the waiting thread below.
+            try:
+                replies.append(self.deps.complete_reply(messages, on_tool=self.renderer.tool_call))
+            except CLIError as exc:
+                failures.append(exc)
+
+        worker = threading.Thread(target=run, daemon=True)  # pragma: no mutate
+        worker.start()
+        worker.join(timeout)
+        if worker.is_alive():
+            raise CLIError(
+                f"the agent took longer than {timeout:.0f}s to respond and was cut off",
+                error_type="agent_timeout",
+            )
+        if failures:
+            raise failures[0]
+        return replies[0]
+
     def _generate_reply(self) -> None:
         """Stream the LLM reply, speak it sentence-by-sentence, and record what was
         actually spoken (so a barge-in still leaves the history alternating)."""
@@ -249,7 +310,7 @@ class CascadeSession:
             *self.history,
         ]
         try:
-            reply = self.deps.complete_reply(messages, on_tool=self.renderer.tool_call)
+            reply = self._complete_within(messages, _REPLY_TIMEOUT_SECONDS)
         except CLIError as exc:
             # The reply leg failed (gateway/tool/graph error, now converted to a CLIError in
             # brain._run_graph). Show it in the transcript so the turn doesn't just vanish —
@@ -259,6 +320,9 @@ class CascadeSession:
             self.renderer.agent_transcript(f"(error: {exc.message})", interrupted=False)
             self.renderer.reply_done(interrupted=False)
             return
+        # The reply text is in hand — the turn moves from thinking to its audible speaking phase,
+        # so a UI interrupt can now cut it (see _silence / interrupt_reply).
+        self._speaking.set()
         self.renderer.reply_started()
         spoken: list[str] = []
         for sentence in split_sentences(reply):
@@ -278,6 +342,8 @@ class CascadeSession:
         if spoken_text:
             self.history.append({"role": "assistant", "content": spoken_text})
             trim_history(self.history, self.config.max_history)
+        # Done speaking; only a draining tail (player.pending) is still interruptible now.
+        self._speaking.clear()
         self.renderer.reply_done(interrupted=self._stop.is_set())
 
     def _record_error(self, exc: CLIError) -> None:
