@@ -123,6 +123,20 @@ def test_system_prompt_advertises_mcp_extra_tools():
     assert "use your connected tools (get_time)" in prompt
 
 
+def test_system_prompt_advertises_files_when_enabled():
+    # With --files on, the model must be told it can read/write files in the working dir,
+    # so it knows the capability is real (and the no-tools guidance must not apply).
+    prompt = brain.build_system_prompt("persona", tools=[], files=True)
+    assert "read, write, and search files in your working directory" in prompt
+    assert "your own knowledge" not in prompt
+
+
+def test_system_prompt_omits_files_when_disabled():
+    # Default: no file capability advertised (the model shouldn't promise file access it lacks).
+    prompt = brain.build_system_prompt("persona", tools=[], files=False)
+    assert "working directory" not in prompt
+
+
 def test_join_clause_grammar():
     # One/two/three capability phrases each render with natural conjunctions.
     assert brain._join_clause(["a"]) == "a"
@@ -151,6 +165,14 @@ def test_web_search_absent_without_firecrawl_key(monkeypatch):
 def test_tool_label_maps_web_search_and_falls_back_for_others():
     assert brain._tool_label(brain.WEB_SEARCH_TOOL_NAME) == "Searching the web"
     assert brain._tool_label("get_time") == "Using get_time"
+
+
+def test_tool_label_for_file_ops_is_speakable():
+    # The file tools get speakable affordance labels so a write/search turn reads as progress.
+    assert brain._tool_label("write_file") == "Writing a file"
+    assert brain._tool_label("edit_file") == "Editing a file"
+    assert brain._tool_label("read_file") == "Reading a file"
+    assert brain._tool_label("grep") == "Searching files"
 
 
 def test_clip_passes_short_text_and_truncates_long_text():

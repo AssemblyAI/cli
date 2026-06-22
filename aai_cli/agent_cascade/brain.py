@@ -52,6 +52,13 @@ _TOOL_LABELS = {
     weather_tool.WEATHER_TOOL_NAME: "Checking the weather",
     webpage_tool.READ_URL_TOOL_NAME: "Reading the page",
     datetime_tool.DATETIME_TOOL_NAME: "Checking the time",
+    # The --files filesystem tools (deepagents' built-in names).
+    "read_file": "Reading a file",
+    "write_file": "Writing a file",
+    "edit_file": "Editing a file",
+    "ls": "Listing files",
+    "glob": "Finding files",
+    "grep": "Searching files",
 }
 
 
@@ -78,6 +85,10 @@ class ToolNotice:
 _SPOKEN_TAIL = (
     "Your reply is read aloud, so keep it short and spoken — no markdown, lists, code, or raw URLs."
 )
+
+# Advertised when --files is on, so the model knows it can touch the launch directory (and the
+# spoken tail still keeps replies short). Writes pause for the user's y/n; reads are immediate.
+_FILE_CAPABILITY = "read, write, and search files in your working directory"
 
 # When the session has *no* tools wired (e.g. no web search and the docs host is
 # unreachable), the model must answer from its own knowledge — and crucially must not
@@ -138,7 +149,11 @@ def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
 
 
 def build_system_prompt(
-    persona: str, *, tools: Sequence[BaseTool], extra_tools: Sequence[BaseTool] = ()
+    persona: str,
+    *,
+    tools: Sequence[BaseTool],
+    extra_tools: Sequence[BaseTool] = (),
+    files: bool = False,
 ) -> str:
     """The live agent's system prompt: the user's persona plus tool guidance.
 
@@ -147,12 +162,16 @@ def build_system_prompt(
     ``FIRECRAWL_API_KEY``) made the agent announce an action it then couldn't take, leaving
     the turn hanging with no answer. ``tools`` are the built-in legs (web search, URL
     fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
-    generically by name. With no tools at all the model answers from its own knowledge.
+    generically by name. ``files`` advertises the launch-directory read/write capability
+    (the ``--files`` filesystem tools). With no capabilities at all the model answers from
+    its own knowledge.
     """
     capabilities = _tool_capabilities(tools)
     extra = _extra_capability(extra_tools)
     if extra is not None:
         capabilities.append(extra)
+    if files:
+        capabilities.append(_FILE_CAPABILITY)
     if not capabilities:
         return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
     guidance = (
@@ -255,7 +274,10 @@ def build_graph(
     return create_deep_agent(
         model=model,
         tools=builtin + extra,
-        system_prompt=build_system_prompt(config.system_prompt, tools=builtin, extra_tools=extra),
+        system_prompt=build_system_prompt(
+            config.system_prompt, tools=builtin, extra_tools=extra, files=config.files
+        ),
+        **_graph_kwargs(config),
     )
 
 
