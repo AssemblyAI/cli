@@ -1,6 +1,6 @@
-"""Unit tests for the `assembly code` gateway model wiring (code_agent/model.py).
+"""Unit tests for the `assembly live` gateway model wiring (agent_cascade/model.py).
 
-Split out of test_code_agent.py to stay under the 500-line file gate. These cover the
+Split out to stay under the 500-line file gate. These cover the
 ``_GatewayChatOpenAI`` subclass and its helpers that paper over the LLM Gateway's
 OpenAI-incompatible quirks: content flattening, streamed tool-call id hoisting, dropping
 the gateway's spurious blank tool-call deltas, and filling empty tool-call arguments.

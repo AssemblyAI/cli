@@ -1,4 +1,4 @@
-"""Tests for the approval-prompt risk heuristics (`aai_cli.code_agent.risk`)."""
+"""Tests for the approval-prompt risk heuristics (`aai_cli.agent_cascade.risk`)."""
 
 from __future__ import annotations
 

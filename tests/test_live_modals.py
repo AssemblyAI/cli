@@ -2,7 +2,7 @@
 
 The ``ApprovalScreen`` keyboard path is driven through the real Textual app headless.
 The voice-answerable path (``approval_from_speech``, ``AskScreen``) lives in
-``code_agent/modals.py`` (the ``assembly code`` command's shim) and is tested there.
+``agent_cascade/modals.py`` and is tested there.
 """
 
 from __future__ import annotations

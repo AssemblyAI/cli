@@ -1,6 +1,6 @@
-"""Tests for the shared tool-activity summarizers (`aai_cli.code_agent.summarize`).
+"""Tests for the shared tool-activity summarizers (`aai_cli.agent_cascade.summarize`).
 
-These keep the coding-agent transcript scannable: a tool call shows its identifying arg
+These keep the live-agent transcript scannable: a tool call shows its identifying arg
 (not the whole file being written), and tool output is previewed with a hidden-line tail.
 """
 
