@@ -7,9 +7,10 @@
 
 Broaden what the `assembly live` voice agent (the `agent-cascade` command) can
 do for everyday spoken requests by adding five new tools. All five are **always
-bound** (none needs an API key): four use keyless public APIs or pure local
-computation, and `convert_units` additionally leans on the bundled `pint`
-library for physical units (keyless frankfurter.app for currency). Each returns
+bound** (none needs an API key): three use keyless public APIs, `calculate` does
+offline computation via the bundled `simpleeval` library, and `convert_units`
+combines the bundled `pint` library (physical units) with keyless
+frankfurter.app (currency). Each returns
 output short enough to read aloud, extending the existing weather / read-url /
 datetime trio toward "talk to a multimodal assistant" parity — with no API-key
 setup for the user.
@@ -57,20 +58,24 @@ spoken apology so a single tool outage can't sink a live turn.
 - No locale/units configuration — `convert_units` converts exactly the units the
   model names; `calculate` returns a plainly-formatted number.
 
-## Dependency: `pint` (separate PR)
+## Dependencies: `pint` + `simpleeval` (separate PR)
 
-`convert_units`'s physical-unit path uses [`pint`](https://pint.readthedocs.io/).
-Per the repo rule that dependency/`uv.lock` changes ship in their own
-single-purpose PR, `pint` is added in **PR-A** (dependency only), and the feature
-**PR-B** lands on top of it.
+Two new dependencies back this feature: `convert_units`'s physical-unit path
+uses [`pint`](https://pint.readthedocs.io/), and `calculate` uses
+[`simpleeval`](https://github.com/danthedeckie/simpleeval), a small pure-Python
+safe-expression evaluator. Per the repo rule that dependency/`uv.lock` changes
+ship in their own single-purpose PR, both are added in **PR-A** (dependencies
+only — one logical "add the libraries the new tools need" change), and the
+feature **PR-B** lands on top of it.
 
-- Add `pint` to `[project.dependencies]` in `pyproject.toml` + regenerate
-  `uv.lock`.
-- Heed the safe-chain version-floor caveat: pin the floor to the second-newest
+- Add `pint` and `simpleeval` to `[project.dependencies]` in `pyproject.toml` +
+  regenerate `uv.lock`.
+- Heed the safe-chain version-floor caveat: pin each floor to the second-newest
   release, or resolution fails under the age gate.
-- `pint` is imported **lazily** inside `convert_units` (it is a non-trivial
-  import) so it never slows CLI startup — matching `webpage_tool`'s lazy
-  `core.webpage` import.
+- Both are imported **lazily** inside their tool factories (`pint` is a
+  non-trivial import; `simpleeval` is small but the same discipline keeps the
+  import off CLI startup) — matching `webpage_tool`'s lazy `core.webpage`
+  import.
 
 ## Shared component: `geocode.py` (refactor)
 
@@ -120,19 +125,32 @@ names: the `*_TOOL_NAME` constant and the `build_*_tool(...)` factory.
 - `CALC_TOOL_NAME = "calculate"`.
 - **No seam — fully deterministic and offline** (the only tool with no
   non-determinism, so no injected callable).
-- A safe `ast`-based evaluator: `ast.parse(expr, mode="eval")`, then a recursive
-  walk that permits only `Expression`, `BinOp` over `+ - * / // % **`,
-  `UnaryOp` over `+ -`, parentheses (implicit in the AST), and numeric
-  constants. Any other node (`Name`, `Call`, `Attribute`, `Subscript`, …) is
-  rejected. The `**` exponent is bounded (reject an exponent above a small cap)
-  so `2 ** 99999999` can't wedge a turn.
-- `build_calc_tool()` exposes `calculate(expression: str) -> str`. The model
-  translates word problems ("15% of 240" → `0.15 * 240`, "split 87 three ways" →
-  `87 / 3`) into an arithmetic expression itself; the tool only evaluates.
-- Output: the result formatted plainly (integer when integral, else a rounded
-  float).
-- Failure → apology: a `SyntaxError`, a disallowed node, division by zero, or an
-  over-cap exponent → *"I couldn't compute that."*
+- Evaluates with **`simpleeval`** (lazily imported): a `SimpleEval` instance with
+  `names`/`functions` left empty so only arithmetic over numeric literals is
+  allowed (no variables, no function calls). `simpleeval` already guards the
+  resource-exhaustion cases — `MAX_POWER` against exponent bombs (`9 ** 9 ** 9`)
+  and string-length limits — so the tool keeps no hand-rolled AST walker.
+- `build_calc_tool()` exposes `calculate(expression: str) -> str`. The model is
+  responsible for turning a spoken word-problem into a plain arithmetic
+  expression; **the tool's docstring tells it how** (see below). The tool only
+  evaluates and formats.
+- **Tool docstring (the model-facing usage guidance):** the `@tool` docstring
+  states that `expression` must be a plain arithmetic expression using only
+  numbers and the operators `+ - * / // % ** ( )`, with no words, units, or
+  variable names, and gives worked examples so the model rewrites speech into a
+  valid expression — e.g. *"15% of 240" → `0.15 * 240`*, *"split 87 three ways"
+  → `87 / 3`*, *"3 plus 4 times 5" → `3 + 4 * 5`*. This is the deliverable the
+  user called out: the formatting contract lives in the tool definition, not in
+  `brain.py`'s prompt.
+- **Output formatting (the real fiddly part):** render the result so it reads
+  aloud cleanly — integers print without a decimal (`36`, not `36.0`), and
+  non-integers are rounded to a sensible precision so float artifacts never leak
+  (`87 / 3` reads as `29` after rounding, not `28.999999999999996`). This
+  rounding requirement is explicit because it, not parsing safety, is the
+  tool's genuine risk.
+- Failure → apology: any `simpleeval` error (invalid syntax, a disallowed
+  name/call, an over-`MAX_POWER` exponent) or `ZeroDivisionError` → *"I couldn't
+  compute that."*
 
 ### 3. `units_tool.py` — `convert_units`
 
@@ -232,9 +250,11 @@ hermetic via injected seams — no real network/clock.
   disambiguation/empty-extract apology, and the fetch-error apology; truncation
   at `_MAX_CHARS`.
 - **`calc_tool`:** correct evaluation for several expressions incl. precedence
-  and unary minus; the integer-vs-float formatting; **adversarial** rejection of
-  a `Name`/`Call`/`Attribute` node, a syntax error, division by zero, and an
-  over-cap exponent — each → the apology.
+  and unary minus; the integer-vs-float **output formatting** (`36` not `36.0`;
+  `87 / 3` → `29`, asserting no float artifact leaks); and the apology for each
+  failure mode — invalid syntax, a disallowed name (e.g. `foo + 1`), division by
+  zero, and an over-`MAX_POWER` exponent. The `simpleeval` instance is asserted
+  to expose no names/functions (the safe-configuration contract).
 - **`units_tool`:** a physical conversion via `pint` (e.g. miles→km, °F→°C), a
   currency conversion via a fake `fetch`, the unit-error apology, and the
   currency-fetch-error apology; the currency-vs-unit path selection.
@@ -253,8 +273,8 @@ during implementation).
 
 ## PR sequence
 
-- **PR-A (dependency only):** add `pint` to `pyproject.toml` + `uv.lock`. No
-  feature code.
+- **PR-A (dependencies only):** add `pint` and `simpleeval` to `pyproject.toml`
+  + `uv.lock`. No feature code.
 - **PR-B (feature):** `geocode.py` + the five tool modules + the `weather_tool`
   geocode refactor + the `brain.py` wiring + all tests. Lands after PR-A so
-  `pint` is available.
+  `pint` and `simpleeval` are available.
