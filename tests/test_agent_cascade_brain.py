@@ -15,7 +15,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from aai_cli.agent_cascade import brain, weather_tool
+from aai_cli.agent_cascade import brain, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent import model as model_mod
 from aai_cli.core.errors import CLIError
@@ -379,16 +379,21 @@ def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
     search = _NamedTool(brain.WEB_SEARCH_TOOL_NAME)
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
     names = [tool.name for tool in brain.build_live_tools()]
-    # Web search is the optional keyed leg; the keyless weather tool is always present.
-    # Exact set assertion kills duplicated/extra tools a loose `in` check would miss.
-    assert sorted(names) == sorted([brain.WEB_SEARCH_TOOL_NAME, weather_tool.WEATHER_TOOL_NAME])
+    # Web search is the optional keyed leg; the keyless weather + read-url tools are always present.
+    assert sorted(names) == sorted(
+        [
+            brain.WEB_SEARCH_TOOL_NAME,
+            weather_tool.WEATHER_TOOL_NAME,
+            webpage_tool.READ_URL_TOOL_NAME,
+        ]
+    )
 
 
-def test_build_live_tools_is_just_weather_without_firecrawl_key(monkeypatch):
+def test_build_live_tools_has_weather_and_read_url_without_firecrawl_key(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
-    # No FIRECRAWL_API_KEY -> no web search, but the keyless weather tool still loads.
+    # No FIRECRAWL_API_KEY -> no web search, but the keyless weather + read-url tools still load.
     names = [tool.name for tool in brain.build_live_tools()]
-    assert names == [weather_tool.WEATHER_TOOL_NAME]
+    assert names == [weather_tool.WEATHER_TOOL_NAME, webpage_tool.READ_URL_TOOL_NAME]
 
 
 def test_tool_capabilities_lists_web_search_then_weather_when_both_present():
@@ -400,6 +405,17 @@ def test_tool_capabilities_lists_web_search_then_weather_when_both_present():
         "search the web for current or unfamiliar facts",
         "tell someone the current weather and short forecast for a place",
     ]
+
+
+def test_read_url_tool_advertised_in_system_prompt():
+    prompt = brain.build_system_prompt(
+        "persona", tools=[_NamedTool(webpage_tool.READ_URL_TOOL_NAME)]
+    )
+    assert "read a web page or PDF" in prompt
+
+
+def test_tool_label_maps_read_url():
+    assert brain._tool_label(webpage_tool.READ_URL_TOOL_NAME) == "Reading the page"
 
 
 # --- build_graph (model construction + compile, with the docs probe skipped) -

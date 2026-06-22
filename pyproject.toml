@@ -460,6 +460,10 @@ max-statements = 40
 # bubble into brain's "couldn't complete the turn" path — speak a short apology instead
 # so an Open-Meteo outage can't sink a live session turn.
 "aai_cli/agent_cascade/weather_tool.py" = ["BLE001"]
+# BLE001: a page/PDF fetch failure (network error, bad URL, no readable text) must never
+# bubble into brain's "couldn't complete the turn" path — speak a short apology instead so
+# a fetch outage can't sink a live session turn (mirrors weather_tool).
+"aai_cli/agent_cascade/webpage_tool.py" = ["BLE001"]
 # BLE001: a turn must never crash the TUI/REPL — any agent/gateway failure is caught and
 # surfaced as an ErrorText event so the user can simply retry.
 "aai_cli/code_agent/session.py" = ["BLE001"]
