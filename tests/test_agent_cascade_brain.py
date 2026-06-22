@@ -515,9 +515,9 @@ class _MessageStreamGraph:
         yield from self._items
 
 
-def _collect(graph, messages, **kwargs):
+def _collect(graph, messages):
     streamer = brain.build_streamer("k", CascadeConfig(), graph=graph)
-    return list(streamer(messages, **kwargs)) if kwargs else list(streamer(messages))
+    return list(streamer(messages))
 
 
 def test_streamer_yields_speech_deltas_for_assistant_tokens():
@@ -577,7 +577,6 @@ def test_streamer_wraps_graph_errors_in_cli_error():
         def stream(self, graph_input, config, *, stream_mode):
             del graph_input, config, stream_mode
             raise ValueError("gateway said no")
-            yield  # pragma: no cover  (make it a generator)
 
     streamer = brain.build_streamer("k", CascadeConfig(), graph=_Boom())
     with pytest.raises(CLIError) as excinfo:
@@ -591,7 +590,6 @@ def test_streamer_passes_cli_error_through():
         def stream(self, graph_input, config, *, stream_mode):
             del graph_input, config, stream_mode
             raise CLIError("already clean", error_type="x")
-            yield  # pragma: no cover
 
     streamer = brain.build_streamer("k", CascadeConfig(), graph=_CliBoom())
     with pytest.raises(CLIError, match="already clean"):
