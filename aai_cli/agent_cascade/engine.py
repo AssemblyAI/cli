@@ -66,8 +66,8 @@ class _Timeout:
 
 
 # What the producer thread puts on the consumer's queue: a speech/tool event from the
-# streaming leg, or a terminal sentinel (clean finish / clean failure).
-type _ReplyEvent = brain.SpeechDelta | brain.ToolNotice | _Done | _Failure
+# streaming leg, an approval-pause marker (--files write gating), or a terminal sentinel.
+type _ReplyEvent = brain.SpeechDelta | brain.ToolNotice | brain.ApprovalPause | _Done | _Failure
 
 
 def _timeout_error() -> CLIError:
@@ -189,10 +189,13 @@ class CascadeDeps:
     """
 
     run_stt: Callable[[Callable[[object], None]], None]
-    # stream_reply(messages) -> iterable of SpeechDelta/ToolNotice events. The reply is
-    # streamed token-by-token so the engine can speak each clause as it lands; a ToolNotice
-    # surfaces the "Searching the web…" affordance (brain.build_streamer).
-    stream_reply: Callable[..., Iterable[brain.SpeechDelta | brain.ToolNotice]]
+    # stream_reply(messages) -> iterable of SpeechDelta/ToolNotice events (plus ApprovalPause
+    # markers under --files write gating). The reply is streamed token-by-token so the engine
+    # can speak each clause as it lands; a ToolNotice surfaces the "Searching the web…"
+    # affordance (brain.build_streamer).
+    stream_reply: Callable[
+        ..., Iterable[brain.SpeechDelta | brain.ToolNotice | brain.ApprovalPause]
+    ]
     # synthesize(text, sink): streaming TTS — sink is called with each PCM frame as it
     # arrives so playback starts on the first frame instead of after the whole clause.
     synthesize: Callable[[str, Callable[[bytes], None]], None]
@@ -206,13 +209,15 @@ class CascadeDeps:
         *,
         audio: Iterable[bytes],
         stt_params: StreamingParameters,
+        approver: brain.Approver | None = None,
     ) -> CascadeDeps:
         def run_stt(on_turn: Callable[[object], None]) -> None:
             client.stream_audio(api_key, audio, params=stt_params, on_turn=on_turn)
 
         # The LLM leg is a deepagents graph (web search / MCP tools), streamed token-by-token
-        # so a spoken turn can transparently use tools and start speaking sooner.
-        stream_reply = brain.build_streamer(api_key, config)
+        # so a spoken turn can transparently use tools and start speaking sooner. ``approver``
+        # gates --files writes (None on the non-files path, where the graph never pauses).
+        stream_reply = brain.build_streamer(api_key, config, approver=approver)
 
         def synthesize(text: str, sink: Callable[[bytes], None]) -> None:
             spec = SpeakConfig(
@@ -371,7 +376,7 @@ class CascadeSession:
         """Drain the event queue, speaking each completed clause. Returns the unspoken tail to
         flush on a clean finish, or ``None`` if the turn was cut short (a barge-in stop, a TTS
         failure, or a leg failure/timeout — which also surfaces the error)."""
-        deadline = time.monotonic() + _REPLY_TIMEOUT_SECONDS
+        deadline: float | None = time.monotonic() + _REPLY_TIMEOUT_SECONDS
         buffer = ""
         started = False
         while True:
@@ -384,6 +389,11 @@ class CascadeSession:
                 return None
             if isinstance(item, _Done):
                 return buffer
+            if isinstance(item, brain.ApprovalPause):
+                # Suspend the wall-clock deadline while the user decides on a gated write (a
+                # slow y/n keypress must not trip the reply timeout); restore it once answered.
+                deadline = None if item.active else time.monotonic() + _REPLY_TIMEOUT_SECONDS
+                continue
             if isinstance(item, brain.ToolNotice):
                 self.renderer.tool_call(item.label)
                 buffer = ""  # drop any unspoken preamble — the answer comes after the tool
@@ -400,11 +410,19 @@ class CascadeSession:
                 return None
 
     def _next_event(
-        self, events: queue.Queue[_ReplyEvent], deadline: float, before: set[threading.Thread]
+        self,
+        events: queue.Queue[_ReplyEvent],
+        deadline: float | None,
+        before: set[threading.Thread],
     ) -> _ReplyEvent | _Timeout:
         """Block for the next streamed event until ``deadline`` (monotonic). Returns a
         :class:`_Timeout` once the deadline has passed with nothing more arriving, detaching the
-        orphaned graph executor first so the abandoned producer can't wedge interpreter exit."""
+        orphaned graph executor first so the abandoned producer can't wedge interpreter exit.
+
+        ``deadline is None`` means the turn is paused awaiting human write-approval, so block
+        with no timeout until the next event (the approval answer) arrives."""
+        if deadline is None:
+            return events.get()
         remaining = deadline - time.monotonic()
         if remaining > 0:
             try:
