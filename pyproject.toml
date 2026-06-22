@@ -488,8 +488,8 @@ paths = ["aai_cli", "tests"]
 exclude = ["aai_cli/_version.py"]
 min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
-ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
-                "org", "preserve_logging_state", "refresh", "rpath"]
+ignore_names = ["app", "capture_output", "download", "healthy", "input", "ist", "lpath",
+                "memory_keyring", "org", "preserve_logging_state", "refresh", "rpath"]
 
 [tool.codespell]
 # Spell-check code, comments, and docs (Kubernetes' verify-spelling, generalized). Run via

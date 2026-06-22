@@ -347,6 +347,7 @@ def test_build_stt_params_threads_named_flags():
     params = _exec._build_stt_params(_opts(speech_model="u3-rt-pro", format_turns=False), 8000)
     assert params.sample_rate == 8000  # fixed by the audio source, not a flag
     assert params.format_turns is False
+    assert params.speech_model is not None
     assert params.speech_model.value == "u3-rt-pro"
 
 
