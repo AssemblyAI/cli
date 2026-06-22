@@ -103,6 +103,24 @@ def test_on_turn_interim_barges_in_on_live_reply():
 # --- reply generation --------------------------------------------------------
 
 
+def test_generate_reply_pins_min_clause_chars_for_soft_separators():
+    # _MIN_CLAUSE_CHARS gates SOFT separators only: a pre-comma clause whose length equals the
+    # threshold flushes on the comma (two spoken clauses). If the constant were larger, that clause
+    # would be held and the whole reply would speak as a single clause via the trailing period.
+    # The hardcoded 25 is the expected value; a mutation (25→26) makes the 25-char clause fall
+    # below the threshold, so it is not flushed at the comma and only one clause is spoken.
+    assert engine._MIN_CLAUSE_CHARS == 25  # pin the exact value
+    spoken = []
+    text = ("a" * 24) + ", and the rest is here."  # comma-clause is exactly 25 chars -> flushes
+    session, _renderer, _player = make_session(
+        stream_reply=_deltas(text),
+        synthesize=lambda t, sink: spoken.append(t) or sink(b""),
+    )
+    session._generate_reply()
+    assert len(spoken) == 2
+    assert spoken[0].endswith(",")  # the soft clause flushed at the comma because len >= 25
+
+
 def test_generate_reply_speaks_each_clause_as_it_streams():
     spoken = []
     session, renderer, player = make_session(
