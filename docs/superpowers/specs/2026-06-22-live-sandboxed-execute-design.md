@@ -47,9 +47,13 @@ controlled subprocesses; `S603/S607` are ignored project-wide for this).
 2. **Scope:** general shell — deepagents' native `execute(command)`.
 3. **Activation:** folded into the existing `--files` flag (no new flag).
 4. **Workspace:** file tools stay rooted at the **real cwd** (unchanged from
-   today); `execute` runs in an **ephemeral `/tmp/aai-live-XXXX`**, fully
-   isolated — it cannot read the cwd, has no network, is time-bounded, and is
-   deleted on session exit.
+   today); `execute` runs in an **ephemeral `/tmp/aai-live-XXXX`**, time-bounded
+   and deleted on session exit. **Read posture (cribbed from
+   `@anthropic-ai/sandbox-runtime`): reads allowed by default so interpreters
+   work, with cwd, `$HOME`, and a secrets denylist explicitly blocked**; writes
+   permitted **only** under scratch; **no network**. So executed code can see
+   system libraries and its own scratch, but never the user's project or
+   credentials.
 5. **Gating:** keep today's TUI approval for `write_file`/`edit_file` (they
    touch real files); `execute` runs **unprompted** — the sandbox is the
    boundary.
@@ -61,10 +65,22 @@ controlled subprocesses; `S603/S607` are ignored project-wide for this).
   the backend gives no isolation. The sandbox lets us drop the friction safely.
 - **Docker / container sandbox** — rejected: a heavy daemon dependency and slow
   per-session cold start for a keyless CLI voice agent.
-- **`execute` reads the real cwd (read-only)** — rejected in favor of full
-  isolation: a read-only cwd would expose the user's project (including `.env`
-  / secrets) to executed code. The model copies any needed data into the
-  scratch workspace instead.
+- **`execute` reads the real cwd (read-only)** — rejected: the executed code
+  must not see the user's project or credentials. Note the read posture is
+  still *default-allow* (so interpreters find their system libraries without us
+  enumerating them), but cwd / `$HOME` / a secrets denylist are explicitly
+  blocked. The model copies any needed data into the scratch workspace instead.
+- **Enumerate-the-allowed-system-read-paths (deny reads by default)** —
+  rejected after comparing to `@anthropic-ai/sandbox-runtime`: hand-maintaining
+  the exact `/usr` / `/System` / `/Library` set a Python install needs is the
+  most fragile part of a macOS sandbox and breaks across interpreters. srt
+  (Anthropic's own Seatbelt/bwrap sandbox) is default-allow-reads +
+  deny-the-sensitive-paths for exactly this reason; we adopt that posture.
+- **Depend on `@anthropic-ai/sandbox-runtime` directly** — rejected: it is
+  Node/TypeScript (CLI + JS library only, no Python binding), so using it adds
+  a Node + `npx` runtime dependency for `execute`, cutting against the agent's
+  keyless/no-setup ethos. We borrow its *posture* and profile lessons but keep
+  a dependency-free pure-`subprocess` implementation over `sandbox-exec`/`bwrap`.
 
 ## Scope
 
@@ -102,16 +118,28 @@ The entire sandbox concern in one focused, independently-testable module.
     shell). When capability is `none` it returns a refusal and does not run
     anything.
 
+- **The secrets denylist (one shared constant):** the paths blocked from reads
+  even under the default-allow posture, cribbed from srt's auto-protected set —
+  the cwd, `$HOME` (broadly), `~/.ssh`, `~/.aws`, `~/.config`, `.env` files,
+  `.git/`, `.claude/`, and shell rc files (`.bashrc`/`.zshrc`/`.profile`). One
+  module-level tuple feeds both renderers so the two platforms stay in lockstep
+  (a test asserts parity).
+
 - **Policy rendering (pure functions — the security core):**
-  - `render_seatbelt_profile(scratch: str) -> str` — SBPL string: `(deny
-    default)`; allow `process-exec` and `file-read*` of the system/interpreter
-    paths an interpreter needs (`/usr`, `/System`, `/bin`, `/Library` as
-    required); allow `file-read*` **and** `file-write*` **only** under
-    `scratch`; `(deny network*)`. Grants **no** access to cwd or `$HOME`.
-  - `build_bwrap_argv(scratch: str, command: str) -> list[str]` —
-    `bwrap --unshare-all --die-with-parent`, read-only binds of `/usr`,
-    `/bin`, `/lib*`, a tmpfs root, `scratch` bind-mounted read-write as the
-    working directory, network unshared.
+  - `render_seatbelt_profile(scratch: str, *, deny_read: Sequence[str]) -> str`
+    — SBPL string with a **default-allow-reads** posture: `(version 1)`,
+    `(deny default)`, `(allow process-exec*)`, `(allow file-read*)` then
+    `(deny file-read* (subpath …))` for each denylist entry (last-match-wins, so
+    the denies override the blanket allow), `(allow file-write* (subpath
+    "<scratch>"))`, and network left denied by `(deny default)`. cwd / `$HOME`
+    / secrets appear **only** in the deny rules.
+  - `build_bwrap_argv(scratch, command, *, deny_read) -> list[str]` —
+    `bwrap --unshare-all --die-with-parent`, `--ro-bind / /` (the whole FS
+    read-only, the Linux equivalent of default-allow-reads), then a `--tmpfs`
+    mask over each denylist path (cwd, `$HOME`, …) so they read as empty,
+    `--bind <scratch> <scratch>` read-write as the working dir, network
+    unshared. The tmpfs-masking is how "read everything except these" is
+    expressed in bubblewrap's bind-mount model.
   - **Optional hardening:** wrap the inner command with `ulimit -t` (CPU
     seconds) and `ulimit -v` (address space) so a runaway computation can't peg
     the machine even inside the wall-clock timeout. Mark the literal caps
@@ -178,11 +206,14 @@ assertions must *fail* if a changed line breaks, not merely execute it. One
 `tests/test_agent_cascade_sandbox.py`, fully hermetic via the injected `Runner`
 and capability seams — no real sandbox, no sockets.
 
-- **Policy renderers:** `render_seatbelt_profile` asserts `(deny default)`
-  present, `(deny network*)` present, `scratch` is the **only** writable
-  subpath, and cwd/`$HOME` are **absent**; `build_bwrap_argv` asserts
-  `--unshare-all`, the scratch rw bind as workdir, and no cwd bind. Mutating any
-  allow/deny token must fail a test.
+- **Policy renderers:** `render_seatbelt_profile` asserts `(deny default)` +
+  `(allow file-read*)` present (default-allow reads), every denylist path emits
+  a `(deny file-read* (subpath …))`, `scratch` is the **only** `file-write*`
+  subpath, and no network allow rule exists; `build_bwrap_argv` asserts
+  `--unshare-all`, `--ro-bind / /`, a `--tmpfs` mask for each denylist path, and
+  the scratch rw bind as workdir. A **parity test** asserts both renderers cover
+  the same denylist constant. Mutating any allow/deny token, or dropping a
+  denylist entry, must fail a test.
 - **`execute()` happy path:** a fake `Runner` asserts the command is wrapped in
   `sandbox-exec -p <profile>` (seatbelt) / `bwrap …` (bwrap) with `cwd=scratch`;
   timeout passthrough; combined output + exit-code shaping into
