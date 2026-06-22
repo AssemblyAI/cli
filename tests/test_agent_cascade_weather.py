@@ -9,10 +9,10 @@ from __future__ import annotations
 from aai_cli.agent_cascade import weather_tool
 
 # Canned Open-Meteo payloads keyed by URL prefix, replayed through the fetch seam.
-_GEOCODE = {
+_GEOCODE: dict[str, object] = {
     "results": [{"name": "Paris", "latitude": 48.85, "longitude": 2.35, "country": "France"}]
 }
-_FORECAST = {
+_FORECAST: dict[str, object] = {
     "current": {"temperature_2m": 14.3, "weather_code": 2},
     "daily": {
         "time": ["2026-06-22", "2026-06-23", "2026-06-24"],
