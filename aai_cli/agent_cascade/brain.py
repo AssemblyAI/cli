@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
@@ -184,6 +185,44 @@ def build_live_tools() -> list[BaseTool]:
     if search is not None:
         tools.append(search)
     return tools
+
+
+# The mutating file tools gated behind human approval when --files is on (reads — incl. grep —
+# stay ungated, and the always-bound `execute` is inert with a non-sandbox backend so it needs
+# no gate). Matches the code agent's write-tool names so the same approval flow applies.
+_WRITE_TOOLS = ("write_file", "edit_file")
+
+
+def _build_fs_backend() -> object:
+    """A deepagents filesystem backend rooted at the launch directory.
+
+    ``virtual_mode=True`` maps the model's ``/``-rooted paths under cwd and blocks traversal
+    escapes — the same containment ``assembly code`` gets from its ``LocalShellBackend``. This
+    is a filesystem (not sandbox) backend, so the always-bound ``execute`` tool stays inert.
+    """
+    from deepagents.backends import FilesystemBackend
+
+    return FilesystemBackend(root_dir=str(Path.cwd()), virtual_mode=True)
+
+
+def _graph_kwargs(
+    config: CascadeConfig, *, backend_factory: Callable[[], object] = _build_fs_backend
+) -> dict[str, object]:
+    """Extra ``create_deep_agent`` kwargs that turn on real-cwd files + write-gating.
+
+    Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
+    backend, ``interrupt_on`` pausing only the mutating tools for human approval, and an
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam.
+    """
+    if not config.files:
+        return {}
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    return {
+        "backend": backend_factory(),
+        "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
+        "checkpointer": InMemorySaver(),
+    }
 
 
 def build_graph(

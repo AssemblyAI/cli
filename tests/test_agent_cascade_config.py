@@ -44,6 +44,11 @@ def test_default_config_values():
     assert dict(config.tts_extra) == {}
 
 
+def test_files_defaults_off():
+    # File read/write is opt-in (--files); default behavior is unchanged and disk-free.
+    assert CascadeConfig().files is False
+
+
 def test_config_is_frozen():
     # Frozen so a parsed run config can't be mutated mid-conversation.
     config = CascadeConfig()

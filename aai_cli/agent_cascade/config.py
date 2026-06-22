@@ -56,3 +56,7 @@ class CascadeConfig:
     # Whether STT formats finalized turns. The reply trigger waits for the formatted
     # turn when on; with it off, an unformatted end-of-turn is the cue instead.
     format_turns: bool = True
+    # Opt-in: let the agent read/write files in the launch directory. Off by default keeps
+    # behavior unchanged (the default in-memory backend, no gating, nothing advertised); on
+    # swaps to a real-cwd FilesystemBackend and gates writes behind human approval.
+    files: bool = False

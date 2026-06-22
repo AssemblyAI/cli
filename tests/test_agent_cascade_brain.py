@@ -42,6 +42,32 @@ class FakeChatModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 
+# --- _graph_kwargs (real-cwd backend + write-gating when --files is on) -------
+
+
+def test_graph_kwargs_empty_when_files_off():
+    # With files off the graph is built exactly as before: no backend swap, no gating.
+    assert brain._graph_kwargs(CascadeConfig(files=False)) == {}
+
+
+def test_graph_kwargs_gates_writes_and_roots_backend_at_cwd(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from deepagents.backends import FilesystemBackend
+
+    monkeypatch.chdir(tmp_path)
+    kwargs = brain._graph_kwargs(CascadeConfig(files=True))
+
+    backend = kwargs["backend"]
+    assert isinstance(backend, FilesystemBackend)
+    # Rooted at the launch directory; virtual_mode blocks traversal escapes.
+    assert Path(backend.cwd) == tmp_path.resolve()
+    assert backend.virtual_mode is True
+    # Only the mutating file tools are gated — reads (incl. grep) and the inert execute aren't.
+    assert kwargs["interrupt_on"] == {"write_file": True, "edit_file": True}
+    assert kwargs["checkpointer"] is not None
+
+
 # --- build_system_prompt -----------------------------------------------------
 
 
