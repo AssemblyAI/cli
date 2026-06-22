@@ -33,7 +33,9 @@ session.
    reuses `assembly code`'s interrupt/resume `Approver`. (Spoken yes/no was
    considered and rejected as fragile and a larger change to the turn flow.)
 4. **Files, not a shell.** Use `FilesystemBackend` (read/write/edit/ls/glob/grep),
-   **not** `LocalShellBackend` — so no `execute` tool is exposed.
+   **not** `LocalShellBackend` — so no `execute` tool is exposed. **Search/`grep`
+   is a required capability** and is one of the backend's built-in tools, so it
+   comes with the backend at no extra cost (ungated, like the other reads).
 5. **Rooted at the launch directory (cwd)**, with `virtual_mode=True` blocking
    traversal escapes — identical containment to `assembly code`.
 
@@ -42,7 +44,8 @@ session.
 - **Flag name:** proposed `--files` (boolean). Alternatives: `--workdir`,
   `--allow-files`. The root is always cwd for now (no path argument — YAGNI).
 - **Read-tool gating:** reads ungated (`read_file` / `ls` / `glob` / `grep`
-  auto-approve). Only `write_file` / `edit_file` are confirmed.
+  auto-approve — including content search via `grep`). Only `write_file` /
+  `edit_file` are confirmed.
 
 ## Architecture
 
@@ -149,6 +152,8 @@ All against fakes — no mic, socket, or real disk-escape.
 
 - **Brain (`tests/test_agent_cascade_*`):**
   - File tools bound **only** when the feature is enabled; absent otherwise.
+    Assert the bound set includes the read tools (`read_file`/`ls`/`glob`/`grep`)
+    and the write tools (`write_file`/`edit_file`), and excludes `execute`.
   - `FilesystemBackend` is constructed rooted at cwd with `virtual_mode=True`.
   - A write interrupt invokes the `Approver`; resume with approve runs the write,
     resume with reject relays the decline and does not write.
