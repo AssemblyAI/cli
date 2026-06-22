@@ -1,12 +1,9 @@
-"""Bottom-docked modal screens for the coding-agent TUI: tool approval and agent questions.
+"""Compatibility shim — modals.py has moved to aai_cli.agent_cascade.modals.
 
-Split out of `tui.py` to keep each module under the file-length gate. Both are transparent
-``ModalScreen``s docked at the bottom, so the transcript stays visible above them (see the
-``ModalScreen { background: transparent }`` rule in :class:`~aai_cli.code_agent.tui.CodeAgentApp`).
-
-In voice mode each modal is also **spoken and voice-answerable**: when constructed with a
-``voice`` IO it speaks the prompt and listens for a spoken reply (approve / auto / reject, or a
-free-text answer), off the UI thread. The keyboard path always stays available as a fallback.
+The ``ApprovalScreen`` keyboard path re-exports from its new home; the voice-capable
+wrapper (``voice=`` parameter), ``AskScreen``, and ``approval_from_speech`` remain here
+for the ``assembly code`` command until it is removed in the next task. Do not add new
+code here.
 """
 
 from __future__ import annotations
@@ -21,8 +18,8 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label
 
-from aai_cli.code_agent import banner, risk
-from aai_cli.code_agent.summarize import describe_args, full_args
+from aai_cli.agent_cascade import banner, risk
+from aai_cli.agent_cascade.summarize import describe_args, full_args
 from aai_cli.core import errors
 
 if TYPE_CHECKING:
@@ -30,14 +27,8 @@ if TYPE_CHECKING:
 
     from aai_cli.code_agent.voice_ui import _VoiceIO
 
-
-def _spawn(target: Callable[[], None]) -> None:
-    """Run ``target`` on a daemon thread — the voice legs block, so they stay off the UI thread."""
-    threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
-
-
-# Spoken-answer vocabulary. "auto" wins first (it implies approval); an unclear answer falls
-# back to "reject" — the same safe default as the keyboard, so a tool never runs on a guess.
+# Re-export for tests that import approval_from_speech from here.
+# Spoken-answer vocabulary. "auto" wins first; an unclear answer falls back to "reject".
 _REJECT_WORDS = frozenset({"no", "reject", "deny", "stop", "cancel", "nope", "nah"})
 _APPROVE_WORDS = frozenset({"yes", "approve", "yeah", "yep", "yup", "sure", "ok", "okay"})
 
@@ -55,18 +46,20 @@ def approval_from_speech(text: str) -> str:
     return "reject"
 
 
-class ApprovalScreen(ModalScreen[str]):
-    """A compact, bottom-docked prompt to approve/auto-approve/reject one tool call.
+def _spawn(target: Callable[[], None]) -> None:
+    """Run ``target`` on a daemon thread — the voice legs block, so they stay off the UI thread."""
+    threading.Thread(target=target, daemon=True).start()  # pragma: no mutate
 
-    Keyboard ``y / a / n`` (and ``e`` to expand the args); in voice mode it also speaks the
-    prompt and accepts a spoken approve/auto/reject. The transparent background leaves the
-    transcript visible, and a risky call (``rm -rf``, an internal fetch) carries a warning.
+
+class ApprovalScreen(ModalScreen[str]):
+    """Voice-capable approval screen for the ``assembly code`` command (code-only path).
+
+    Wraps the live agent's keyboard-only ``ApprovalScreen`` and adds the ``voice=``
+    parameter for the spoken-answer path the code TUI uses.
     """
 
     DEFAULT_CSS = """
     ApprovalScreen { align: center bottom; background: transparent; }
-    /* width: 100% (not 1fr) so the box honors its 1-col side margins — a docked 1fr container
-       ignores horizontal margin and overflows the screen, clipping the right border off-edge. */
     ApprovalScreen #approvalbox {
         dock: bottom; width: 100%; height: auto;
         border: round #f59e0b; background: #000000; padding: 0 1; margin: 0 1 1 1;
@@ -78,7 +71,6 @@ class ApprovalScreen(ModalScreen[str]):
         ("a", "auto", "Auto-approve"),
         ("n", "reject", "Reject"),
         ("e", "expand", "Expand"),
-        # Escape / Ctrl-C dismiss the modal — declining the tool is the safe cancel.
         ("escape,ctrl+c", "reject", "Cancel"),
     ]
 
@@ -86,11 +78,11 @@ class ApprovalScreen(ModalScreen[str]):
         self, name: str, args: Mapping[str, object], *, voice: _VoiceIO | None = None
     ) -> None:
         super().__init__()
-        self._tool_name = name  # not _name: that shadows Textual Widget's str|None attr
+        self._tool_name = name
         self._args = args
-        self._expanded = False  # toggled by `e`; collapsed (one-line) by default
-        self._voice = voice  # when set, the prompt is spoken and a spoken answer is accepted
-        self._answered = False  # guards against a voice answer and a keypress both dismissing
+        self._expanded = False
+        self._voice = voice
+        self._answered = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approvalbox"):
@@ -104,7 +96,7 @@ class ApprovalScreen(ModalScreen[str]):
             )
 
     def on_mount(self) -> None:
-        if (voice := self._voice) is not None:  # drive the decision by voice, off the UI thread
+        if (voice := self._voice) is not None:
             _spawn(lambda: self._drive_by_voice(voice))
 
     def _drive_by_voice(self, voice: _VoiceIO) -> None:
@@ -113,8 +105,8 @@ class ApprovalScreen(ModalScreen[str]):
             voice.speak(self._spoken_prompt())
             transcript = voice.listen()
         except errors.CLIError:
-            return  # mic/STT failed: leave the keyboard hint as the way to answer
-        if transcript:  # silence (None) must not auto-reject a tool — wait for speech or a key
+            return
+        if transcript:
             self.app.call_from_thread(self._decide, approval_from_speech(transcript))
 
     def _spoken_prompt(self) -> str:
@@ -160,6 +152,7 @@ class AskScreen(ModalScreen[str]):
     """A bottom-docked prompt that relays a question from the agent and returns the answer.
 
     In voice mode it speaks the question and takes a spoken answer; otherwise the user types.
+    Code-only: retained here for the ``assembly code`` TUI until the command is removed.
     """
 
     DEFAULT_CSS = """
@@ -169,7 +162,6 @@ class AskScreen(ModalScreen[str]):
         border: round #3a3f55; background: #000000; padding: 0 1; margin: 0 1 1 1;
     }
     """
-    # Escape / Ctrl-C dismiss the question with no answer.
     BINDINGS: ClassVar = [("escape,ctrl+c", "cancel", "Cancel")]
 
     def __init__(self, question: str, *, voice: _VoiceIO | None = None) -> None:

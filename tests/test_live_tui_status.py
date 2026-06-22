@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pyperclip
 
-from aai_cli.code_agent import tui_status
+from aai_cli.agent_cascade import tui_status
 from aai_cli.ui import theme
 
 

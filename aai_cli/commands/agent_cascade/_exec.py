@@ -18,12 +18,11 @@ import typer
 from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import engine, mcp_tools, voices
+from aai_cli.agent_cascade import engine, firecrawl_search, mcp_tools, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
-from aai_cli.code_agent import firecrawl_search
 from aai_cli.core import choices, client, config_builder, env, errors, llm, signals, stdio
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets

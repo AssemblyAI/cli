@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli.code_agent.risk import risk_warning
+from aai_cli.agent_cascade.risk import risk_warning
 
 
 @pytest.mark.parametrize(

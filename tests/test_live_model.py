@@ -8,7 +8,7 @@ the gateway's spurious blank tool-call deltas, and filling empty tool-call argum
 
 from __future__ import annotations
 
-from aai_cli.code_agent import model as model_mod
+from aai_cli.agent_cascade import model as model_mod
 from aai_cli.core import environments
 
 

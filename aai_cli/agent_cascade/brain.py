@@ -26,15 +26,28 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.agent_cascade.prompt import build_system_prompt
-from aai_cli.code_agent.agent import CompiledAgent
-from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
+
+
+class CompiledAgent(Protocol):
+    """The slice of the compiled langgraph graph the live reply leg drives.
+
+    A structural type so we needn't name langgraph's deeply-generic
+    ``CompiledStateGraph`` (and don't drag its type params through our code).
+    """
+
+    def invoke(
+        self, input: object, config: Mapping[str, object] | None = None
+    ) -> dict[str, object]:
+        """Run one step of the graph, returning the updated state (incl. messages)."""
+
 
 # Verbose (`-v`) flow logging for the agent's tool loop. `invoke` runs the whole loop
 # internally, so without this `-v` only shows the httpx request lines and never which
@@ -131,9 +144,9 @@ def build_live_tools() -> list[BaseTool]:
     ``--mcp-config``.
     """
     from aai_cli.agent_cascade.datetime_tool import build_datetime_tool
+    from aai_cli.agent_cascade.firecrawl_search import build_web_search_tool
     from aai_cli.agent_cascade.weather_tool import build_weather_tool
     from aai_cli.agent_cascade.webpage_tool import build_read_url_tool
-    from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
     tools: list[BaseTool] = [build_weather_tool(), build_read_url_tool(), build_datetime_tool()]
     search = build_web_search_tool()
@@ -200,7 +213,7 @@ def build_graph(
     from deepagents import create_deep_agent
 
     from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
-    from aai_cli.code_agent.model import build_model
+    from aai_cli.agent_cascade.model import build_model
 
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra

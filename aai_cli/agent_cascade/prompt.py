@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
-from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool

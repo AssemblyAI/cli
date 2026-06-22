@@ -17,9 +17,9 @@ import typer
 from textual.widgets import Static
 
 from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade.messages import AssistantMessage, ErrorMessage, Note, UserMessage
 from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
 from aai_cli.app.context import AppState
-from aai_cli.code_agent.messages import AssistantMessage, ErrorMessage, Note, UserMessage
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import run_agent_cascade
 from aai_cli.core import config, stdio

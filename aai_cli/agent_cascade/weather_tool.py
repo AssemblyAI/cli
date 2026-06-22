@@ -7,7 +7,7 @@ a short daily outlook) -> a single short string the agent reads aloud.
 
 The only network seam is :data:`Fetcher` (a ``url -> parsed JSON`` callable),
 injected in tests so the whole flow runs with no sockets — the same shape
-``code_agent.fetch_tool`` uses. Everything else (the WMO-code text, the spoken
+other URL-fetch tools in the live agent use. Everything else (the WMO-code text, the spoken
 formatting) is pure and tested directly. Failures never raise out to the graph:
 ``get_weather`` catches them and returns a short spoken apology so a weather
 outage can't sink a live turn.
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 WEATHER_TOOL_NAME = "get_weather"
 
 # A fetcher GETs a URL and returns parsed JSON. Injected in tests (the only net seam).
+# This is the same pattern used by the URL-fetch tools in the live agent.
 Fetcher = Callable[[str], object]
 
 _GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"

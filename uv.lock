@@ -86,7 +86,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "assemblyai", specifier = ">=0.64.4" },
+    { name = "assemblyai", specifier = ">=0.64.21" },
     { name = "audioop-lts", marker = "python_full_version >= '3.13'", specifier = ">=0.2" },
     { name = "deepagents", specifier = ">=0.6.10" },
     { name = "feedparser", specifier = ">=6.0.11" },
@@ -333,7 +333,7 @@ wheels = [
 
 [[package]]
 name = "assemblyai"
-version = "0.64.4"
+version = "0.64.21"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -342,9 +342,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/b7/e3e515476c3589cbf18b3b935fc869ba4e7c4fddde1bf697d8f27440dae2/assemblyai-0.64.4.tar.gz", hash = "sha256:f0d8d17d083bed93fc90e5494e8bd7546fdab3c3c96092761495fecd53c25ed2", size = 71630, upload-time = "2026-05-28T18:45:22.094Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/2e/51726cb411af2972336c754742234a8113401d5e047afbe9395bb414378c/assemblyai-0.64.21.tar.gz", hash = "sha256:51c650c601c8be4bad8a20f3bbc3619f6f914fb6bc66ed6b867eb7c80b341873", size = 93156, upload-time = "2026-06-16T22:13:43.301Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/60/218ccc68b665a64b876507bf926179aff07f46091c1db9f63fdc902e86c7/assemblyai-0.64.4-py3-none-any.whl", hash = "sha256:ba5c1eba9e5b9aa87c99e4be12eee0a2f81ae56bb9798f3d36a30fec99cc5205", size = 63127, upload-time = "2026-05-28T18:45:20.722Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/e1/a107d6824dc80894fcc1b6c5324a638994509955d50d2ca92c107cc02b8c/assemblyai-0.64.21-py3-none-any.whl", hash = "sha256:3604635990ec4d95878879e816d4300df13e6507c566054d2cee39a6c595ebae", size = 81832, upload-time = "2026-06-16T22:13:41.937Z" },
 ]
 
 [[package]]

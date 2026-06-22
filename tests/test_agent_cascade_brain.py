@@ -16,8 +16,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from aai_cli.agent_cascade import brain, datetime_tool, weather_tool, webpage_tool
+from aai_cli.agent_cascade import model as model_mod
 from aai_cli.agent_cascade.config import CascadeConfig
-from aai_cli.code_agent import model as model_mod
 from aai_cli.core.errors import CLIError
 
 
@@ -81,7 +81,7 @@ class _NamedTool:
 def test_web_search_tool_name_matches_built_tool(monkeypatch):
     # The prompt builder detects search by WEB_SEARCH_TOOL_NAME, so pin it against the real
     # Firecrawl tool's registered name — if it renames, detection would silently break.
-    from aai_cli.code_agent import firecrawl_search
+    from aai_cli.agent_cascade import firecrawl_search
 
     monkeypatch.setenv(firecrawl_search.FIRECRAWL_API_KEY_ENV, "fc-x")
     tool = firecrawl_search.build_web_search_tool()
@@ -90,7 +90,7 @@ def test_web_search_tool_name_matches_built_tool(monkeypatch):
 
 
 def test_web_search_absent_without_firecrawl_key(monkeypatch):
-    from aai_cli.code_agent import firecrawl_search
+    from aai_cli.agent_cascade import firecrawl_search
 
     monkeypatch.delenv(firecrawl_search.FIRECRAWL_API_KEY_ENV, raising=False)
     assert firecrawl_search.build_web_search_tool() is None
@@ -149,7 +149,9 @@ def test_content_text_joins_list_content_blocks():
 
 def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
     search = _NamedTool(brain.WEB_SEARCH_TOOL_NAME)
-    monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
+    monkeypatch.setattr(
+        "aai_cli.agent_cascade.firecrawl_search.build_web_search_tool", lambda: search
+    )
     names = [tool.name for tool in brain.build_live_tools()]
     # Web search is the optional keyed leg; the keyless weather, read-url, and datetime tools
     # are always present. Exact set assertion kills duplicated/extra tools a loose `in` check would miss.
@@ -164,7 +166,9 @@ def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
 
 
 def test_build_live_tools_has_keyless_tools_without_firecrawl_key(monkeypatch):
-    monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
+    monkeypatch.setattr(
+        "aai_cli.agent_cascade.firecrawl_search.build_web_search_tool", lambda: None
+    )
     # No FIRECRAWL_API_KEY -> no web search, but the keyless weather, read-url, and datetime tools load.
     names = [tool.name for tool in brain.build_live_tools()]
     assert names == [

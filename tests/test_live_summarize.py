@@ -6,7 +6,7 @@ These keep the coding-agent transcript scannable: a tool call shows its identify
 
 from __future__ import annotations
 
-from aai_cli.code_agent.summarize import (
+from aai_cli.agent_cascade.summarize import (
     describe_args,
     full_args,
     summarize_call,

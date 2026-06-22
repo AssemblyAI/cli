@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING
 import pytest
 from textual.widgets import Static
 
+from aai_cli.agent_cascade.messages import UserMessage
+from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.agent_cascade.tui import LiveAgentApp
+from aai_cli.agent_cascade.tui_status import _spinner_text
 from aai_cli.code_agent.events import AssistantDelta, AssistantText, ErrorText, ToolCall, ToolResult
-from aai_cli.code_agent.messages import UserMessage
-from aai_cli.code_agent.modals import ApprovalScreen, AskScreen
 from aai_cli.code_agent.tui import _SPIN_FRAMES, CodeAgentApp
-from aai_cli.code_agent.tui_status import _spinner_text
 from tests import _tui_snapshot as h
 
 if TYPE_CHECKING:
@@ -110,19 +110,6 @@ def test_code_approval_modal(snap_compare, tmp_path, monkeypatch) -> None:
     async def run_before(pilot: Pilot[None]) -> None:
         h.freeze_animation(pilot.app)
         pilot.app.push_screen(ApprovalScreen("execute", {"command": "rm -rf build/"}))
-
-    assert snap_compare(
-        h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before
-    )
-
-
-def test_code_ask_modal(snap_compare, tmp_path, monkeypatch) -> None:
-    """The bottom-docked ask prompt: the agent's question above a text input."""
-    cwd = h.stable_workdir(tmp_path, monkeypatch)
-
-    async def run_before(pilot: Pilot[None]) -> None:
-        h.freeze_animation(pilot.app)
-        pilot.app.push_screen(AskScreen("Which port should the dev server use?"))
 
     assert snap_compare(
         h.build_code_app(cwd=cwd), terminal_size=h.TERMINAL_SIZE, run_before=run_before

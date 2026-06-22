@@ -24,9 +24,9 @@ from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from aai_cli.code_agent import banner, tui_status
-from aai_cli.code_agent.messages import AssistantMessage, ErrorMessage, Note, UserMessage
-from aai_cli.code_agent.modals import ApprovalScreen
+from aai_cli.agent_cascade import banner, tui_status
+from aai_cli.agent_cascade.messages import AssistantMessage, ErrorMessage, Note, UserMessage
+from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:

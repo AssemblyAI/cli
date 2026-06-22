@@ -137,7 +137,7 @@ def freeze_animation(app: App[None]) -> None:
 
 def pin_banner_version(monkeypatch: pytest.MonkeyPatch) -> None:
     """Freeze the splash version string (otherwise it changes on every commit)."""
-    monkeypatch.setattr("aai_cli.code_agent.banner.version", lambda: _PINNED_VERSION)
+    monkeypatch.setattr("aai_cli.agent_cascade.banner.version", lambda: _PINNED_VERSION)
 
 
 def stable_workdir(
