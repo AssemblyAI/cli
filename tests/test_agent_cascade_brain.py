@@ -15,7 +15,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from aai_cli.agent_cascade import brain, weather_tool
+from aai_cli.agent_cascade import brain, datetime_tool, weather_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent import model as model_mod
 from aai_cli.core.errors import CLIError
@@ -379,16 +379,22 @@ def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
     search = _NamedTool(brain.WEB_SEARCH_TOOL_NAME)
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
     names = [tool.name for tool in brain.build_live_tools()]
-    # Web search is the optional keyed leg; the keyless weather tool is always present.
+    # Web search is the optional keyed leg; the keyless weather + datetime tools are always present.
     # Exact set assertion kills duplicated/extra tools a loose `in` check would miss.
-    assert sorted(names) == sorted([brain.WEB_SEARCH_TOOL_NAME, weather_tool.WEATHER_TOOL_NAME])
+    assert sorted(names) == sorted(
+        [
+            brain.WEB_SEARCH_TOOL_NAME,
+            weather_tool.WEATHER_TOOL_NAME,
+            datetime_tool.DATETIME_TOOL_NAME,
+        ]
+    )
 
 
-def test_build_live_tools_is_just_weather_without_firecrawl_key(monkeypatch):
+def test_build_live_tools_has_weather_and_datetime_without_firecrawl_key(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: None)
-    # No FIRECRAWL_API_KEY -> no web search, but the keyless weather tool still loads.
+    # No FIRECRAWL_API_KEY -> no web search, but the keyless weather + datetime tools load.
     names = [tool.name for tool in brain.build_live_tools()]
-    assert names == [weather_tool.WEATHER_TOOL_NAME]
+    assert names == [weather_tool.WEATHER_TOOL_NAME, datetime_tool.DATETIME_TOOL_NAME]
 
 
 def test_tool_capabilities_lists_web_search_then_weather_when_both_present():
@@ -496,6 +502,17 @@ def test_weather_tool_advertised_in_system_prompt():
 
 def test_tool_label_maps_weather():
     assert brain._tool_label(weather_tool.WEATHER_TOOL_NAME) == "Checking the weather"
+
+
+def test_datetime_tool_advertised_in_system_prompt():
+    prompt = brain.build_system_prompt(
+        "persona", tools=[_NamedTool(datetime_tool.DATETIME_TOOL_NAME)]
+    )
+    assert "current date and time" in prompt
+
+
+def test_tool_label_maps_datetime():
+    assert brain._tool_label(datetime_tool.DATETIME_TOOL_NAME) == "Checking the time"
 
 
 # --- build_streamer (token streaming -> SpeechDelta / ToolNotice) ------------

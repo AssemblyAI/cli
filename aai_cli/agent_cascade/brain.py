@@ -22,7 +22,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aai_cli.agent_cascade import weather_tool
+from aai_cli.agent_cascade import datetime_tool, weather_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
@@ -49,6 +49,7 @@ _RESULT_LOG_CAP = 500  # pragma: no mutate
 _TOOL_LABELS = {
     WEB_SEARCH_TOOL_NAME: "Searching the web",
     weather_tool.WEATHER_TOOL_NAME: "Checking the weather",
+    datetime_tool.DATETIME_TOOL_NAME: "Checking the time",
 }
 
 
@@ -102,10 +103,11 @@ def _join_clause(parts: list[str]) -> str:
 def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     """The spoken-capability phrases backed by present built-in tools.
 
-    The live agent's built-in legs are the keyless Open-Meteo weather tool (always
-    present) and Firecrawl web search (only when ``FIRECRAWL_API_KEY`` is set) — so the
-    prompt advertises each only when the agent can really do it. Advertising a missing
-    tool made it announce an action ("I'll search…") it then couldn't take.
+    The live agent's built-in legs are the keyless Open-Meteo weather tool and the
+    system-clock date/time tool (both always present) plus Firecrawl web search (only
+    when ``FIRECRAWL_API_KEY`` is set) — so the prompt advertises each only when the
+    agent can really do it. Advertising a missing tool made it announce an action
+    ("I'll search…") it then couldn't take.
     """
     names = {tool.name for tool in tools}
     capabilities: list[str] = []
@@ -113,6 +115,8 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
         capabilities.append("search the web for current or unfamiliar facts")
     if weather_tool.WEATHER_TOOL_NAME in names:
         capabilities.append("tell someone the current weather and short forecast for a place")
+    if datetime_tool.DATETIME_TOOL_NAME in names:
+        capabilities.append("tell you the current date and time")
     return capabilities
 
 
@@ -157,19 +161,21 @@ def build_system_prompt(
 
 
 def build_live_tools() -> list[BaseTool]:
-    """The live agent's built-in tools: the keyless weather tool, plus Firecrawl web
-    search when ``FIRECRAWL_API_KEY`` is set.
+    """The live agent's built-in tools: the keyless weather and date/time tools, plus
+    Firecrawl web search when ``FIRECRAWL_API_KEY`` is set.
 
     Deliberately minimal. A low-latency spoken turn does best with a few obvious tools
-    rather than a large menu it must choose among. Open-Meteo needs no key, so the
-    weather tool is always present (every session has at least one real capability);
-    web search is reused (un-approval-gated) from the coding agent and added only when
-    keyed. Extra tools remain strictly opt-in via ``--mcp-config``.
+    rather than a large menu it must choose among. Open-Meteo and the system clock need
+    no key, so the weather and datetime tools are always present (every session has at
+    least two real capabilities); web search is reused (un-approval-gated) from the
+    coding agent and added only when keyed. Extra tools remain strictly opt-in via
+    ``--mcp-config``.
     """
+    from aai_cli.agent_cascade.datetime_tool import build_datetime_tool
     from aai_cli.agent_cascade.weather_tool import build_weather_tool
     from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
-    tools: list[BaseTool] = [build_weather_tool()]
+    tools: list[BaseTool] = [build_weather_tool(), build_datetime_tool()]
     search = build_web_search_tool()
     if search is not None:
         tools.append(search)
