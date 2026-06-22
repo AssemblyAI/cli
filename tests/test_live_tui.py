@@ -252,14 +252,19 @@ def test_space_toggles_listening_and_paints_paused() -> None:
             await pilot.pause()
             assert "Listening" in _voicebar(app)  # opens listening
             await pilot.press("space")  # the Space binding -> action_toggle_listen -> stop
-            assert state["on"] is False and app._listening is False  # mic muted
+            # Read into locals: `state` is mutated opaquely through the Textual binding, which
+            # mypy can't see, so asserting `state["on"] is …` directly narrows it for the rest
+            # of the scope and makes the later resume assertions look unreachable.
+            muted, muted_flag = state["on"], app._listening
+            assert muted is False and muted_flag is False  # mic muted
             assert "Paused" in _voicebar(app)  # muted shows paused, not listening
             # Muting only gates the user's input: a reply still in flight keeps "Speaking".
             app._set_phase("speaking")
             assert "Speaking" in _voicebar(app) and "Paused" not in _voicebar(app)
             app._set_phase("listening")
             await pilot.press("space")  # resume listening
-            assert state["on"] is True and app._listening is True
+            resumed, resumed_flag = state["on"], app._listening
+            assert resumed is True and resumed_flag is True
             assert "Listening" in _voicebar(app)
 
     _run(go())
