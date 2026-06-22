@@ -470,7 +470,7 @@ def test_deps_real_stream_reply_is_built_by_the_deepagents_brain(monkeypatch):
     cfg = CascadeConfig()
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
     events = list(deps.stream_reply([{"role": "user", "content": "hi"}]))
-    assert [e.text for e in events] == ["reply to hi"]
+    assert [e.text for e in events if isinstance(e, SpeechDelta)] == ["reply to hi"]
 
 
 def test_deps_real_synthesize_streams_frames_and_threads_voice(monkeypatch):
