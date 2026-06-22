@@ -159,3 +159,10 @@ Each server is launched independently and best-effort: one that won't start (a
 missing `npx`/`uvx`, an offline host) drops only its own tools, so a single broken
 tool never sinks the session. MCP tools are a live-run feature and are not
 reflected in `--show-code` output.
+
+`--files` lets the agent read, write, and search files in the directory you launch
+it from (off by default). Reads run immediately; a write or edit pauses the turn for
+a `y`/`n` confirmation in the voice TUI (`a` approves the rest of the session). Access
+is rooted at the launch directory — the agent can't escape it — and there is no
+shell. A non-interactive run (a file/URL source, `--json`, `-o text`, or a non-TTY)
+has no way to confirm a write, so writes are declined there while reads still work.

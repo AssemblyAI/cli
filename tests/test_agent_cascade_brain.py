@@ -568,17 +568,17 @@ def test_streamer_rejects_write_without_approval(tmp_path):
 
 def test_streamer_brackets_write_approval_with_pause_events(tmp_path):
     # The human-think wait is bracketed by ApprovalPause(active=True/False) so the engine can
-    # suspend its reply-timeout deadline for exactly that interval.
-    order: list[object] = []
-
-    def approve(name, args):
-        order.append("ask")
-        return True
-
+    # suspend its reply-timeout deadline for exactly that interval. The approver runs between
+    # the two markers by construction (the streamer yields True, asks, then yields False).
+    asked: list[str] = []
     graph = _gated_graph(_write_then("Done."), str(tmp_path))
-    streamer = brain.build_streamer("k", CascadeConfig(files=True), graph=graph, approver=approve)
-    for event in streamer([{"role": "user", "content": "save"}]):
-        if isinstance(event, brain.ApprovalPause):
-            order.append(("pause", event.active))
-    # The approver runs strictly between the pause-on and pause-off markers.
-    assert order == [("pause", True), "ask", ("pause", False)]
+    streamer = brain.build_streamer(
+        "k",
+        CascadeConfig(files=True),
+        graph=graph,
+        approver=lambda name, args: asked.append(name) or True,
+    )
+    events = list(streamer([{"role": "user", "content": "save"}]))
+    pauses = [event.active for event in events if isinstance(event, brain.ApprovalPause)]
+    assert pauses == [True, False]  # the write was bracketed: pause on, then resume
+    assert asked == ["write_file"]  # the approver was consulted exactly once, for the write

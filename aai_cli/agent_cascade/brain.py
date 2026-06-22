@@ -371,7 +371,13 @@ def _stream_graph(
     try:
         if gated:
             yield from _stream_gated(
-                graph, conversation, approver, config, verbose, pending, flush_log
+                graph,
+                conversation,
+                approver,
+                config,
+                verbose=verbose,
+                pending=pending,
+                flush_log=flush_log,
             )
         else:
             for chunk, _m in graph.stream(
@@ -394,6 +400,7 @@ def _stream_gated(
     conversation: list[ChatCompletionMessageParam],
     approver: Approver | None,
     config: dict[str, object] | None,
+    *,
     verbose: bool,
     pending: list[str],
     flush_log: Callable[[], None],

@@ -1,26 +1,19 @@
 # `assembly live` File Read/Write Implementation Plan
 
-> **⛔ BLOCKED — DO NOT IMPLEMENT AS WRITTEN (decided 2026-06-22).**
-> This plan targets the blocking reply path (`build_completer` / `_run_graph` /
-> `_drive_graph` / `_complete_within`). The in-flight **Live Streaming Reply
-> Pipeline** plan (`2026-06-22-live-streaming-reply-pipeline.md`) **deletes** that
-> entire cluster (its Task 4) and replaces the engine seam with a streaming
-> `stream_reply: Iterable[event]` built on `brain.build_streamer` (`stream_mode="messages"`).
-> Implementing this now would build on code being torn out.
+> **✅ REBASED onto the streaming reply architecture (2026-06-22).** The streaming
+> pipeline has landed: `build_completer`/`_run_graph`/`_complete_within` are gone;
+> the reply leg is now `brain.build_streamer` → `stream_reply` yielding
+> `SpeechDelta`/`ToolNotice`, consumed by the engine on a producer thread + `queue.Queue`
+> with a monotonic deadline (`CascadeSession._consume`/`_next_event`/`_pump`). Tasks 3
+> and 4 below have been rewritten for it; Tasks 1, 2, 5, 6, 7 carry over.
 >
-> **Decision:** pause until the streaming pipeline merges to `main`, then **revise this
-> plan against the new architecture** before executing. The revision must rework:
-> - **Task 3** — there is no `build_completer`/`_run_graph` to add the approval loop to.
->   Resolve write interrupts in the new streaming path: determine how a gated
->   `interrupt_on` write surfaces under `stream_mode="messages"` (it may *not* appear as
->   a token delta — likely a `__interrupt__` on the post-stream graph state), and add the
->   `Approver` + `Command(resume=...)` loop around `build_streamer`'s graph iteration.
-> - **Task 4** — `_complete_within` is removed by the streaming work; its
->   "skip the timeout while awaiting approval" requirement must move to the streaming
->   engine's producer-thread/`queue.Queue` timeout (the human-approval wait must not count
->   against the wall-clock deadline there).
-> - Tasks 1, 2, 5, 6, 7 (backend swap, capability/labels, TUI modal, flag wiring, docs)
->   are largely architecture-independent and should carry over with minor edits.
+> **Verified mechanism (the basis for Task 3):** with a gated graph
+> (`interrupt_on={"write_file": True, "edit_file": True}` + `InMemorySaver`), streaming
+> `stream_mode="messages"` yields the tool-call AIMessage and then the stream **ends** —
+> the write does not run. `graph.get_state(config).interrupts[0].value["action_requests"]`
+> then holds `[{"name", "args", …}]`. Resuming via
+> `graph.stream(Command(resume={"decisions": [{"type": "approve"}]}), config, stream_mode="messages")`
+> executes the write and continues the turn; `get_state(config).next` empties when done.
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
