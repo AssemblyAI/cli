@@ -48,7 +48,7 @@ The 8 modules used by live move out of `code_agent/` into `agent_cascade/`. This
 
 **Files:**
 - Move (`git mv aai_cli/code_agent/X.py aai_cli/agent_cascade/X.py`): `model.py`, `firecrawl_search.py`, `banner.py`, `tui_status.py`, `summarize.py`, `risk.py`, `messages.py`, `modals.py`
-- Modify: `aai_cli/agent_cascade/brain.py`, `aai_cli/agent_cascade/tui.py`, `aai_cli/agent_cascade/weather_tool.py`, `aai_cli/commands/agent_cascade/_exec.py`
+- Modify: `aai_cli/agent_cascade/brain.py`, `aai_cli/agent_cascade/tui.py`, `aai_cli/agent_cascade/prompt.py`, `aai_cli/agent_cascade/weather_tool.py`, `aai_cli/commands/agent_cascade/_exec.py`
 - Modify (after move): the moved `risk.py`, `messages.py`, `modals.py`, `brain.py` (intra-import re-points + surgeries)
 
 **Interfaces:**
@@ -190,6 +190,12 @@ In `aai_cli/commands/agent_cascade/_exec.py`:
 
 ```python
 from aai_cli.agent_cascade import firecrawl_search
+```
+
+In `aai_cli/agent_cascade/prompt.py` (extracted from brain.py in a recent commit; it imports the tool name):
+
+```python
+from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
 ```
 
 In `aai_cli/agent_cascade/weather_tool.py`: change the comment mentioning `code_agent.fetch_tool` to reference the behavior generically (no `code_agent` path).
