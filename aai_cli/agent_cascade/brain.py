@@ -22,7 +22,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aai_cli.agent_cascade import weather_tool, webpage_tool
+from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
@@ -50,6 +50,7 @@ _TOOL_LABELS = {
     WEB_SEARCH_TOOL_NAME: "Searching the web",
     weather_tool.WEATHER_TOOL_NAME: "Checking the weather",
     webpage_tool.READ_URL_TOOL_NAME: "Reading the page",
+    datetime_tool.DATETIME_TOOL_NAME: "Checking the time",
 }
 
 
@@ -103,11 +104,11 @@ def _join_clause(parts: list[str]) -> str:
 def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
     """The spoken-capability phrases backed by present built-in tools.
 
-    The live agent's built-in legs are the keyless Open-Meteo weather tool (always
-    present) and Firecrawl web search (only when ``FIRECRAWL_API_KEY`` is set) — so the
-    prompt advertises each only when the agent can really do it. Advertising a missing
-    tool made it announce an action ("I'll search…") it then couldn't take. A read-url
-    leg is also always present, advertising reading a web page or PDF by URL.
+    The live agent's built-in legs are the keyless Open-Meteo weather tool, the read-a-URL
+    tool (web page or PDF), and the system-clock date/time tool (all always present) plus
+    Firecrawl web search (only when ``FIRECRAWL_API_KEY`` is set) — so the prompt advertises
+    each only when the agent can really do it. Advertising a missing tool made it announce
+    an action ("I'll search…") it then couldn't take.
     """
     names = {tool.name for tool in tools}
     capabilities: list[str] = []
@@ -117,6 +118,8 @@ def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
         capabilities.append("tell someone the current weather and short forecast for a place")
     if webpage_tool.READ_URL_TOOL_NAME in names:
         capabilities.append("read a web page or PDF you have the URL for")
+    if datetime_tool.DATETIME_TOOL_NAME in names:
+        capabilities.append("tell you the current date and time")
     return capabilities
 
 
@@ -161,20 +164,22 @@ def build_system_prompt(
 
 
 def build_live_tools() -> list[BaseTool]:
-    """The live agent's built-in tools: the keyless weather and read-a-URL tools, plus
-    Firecrawl web search when ``FIRECRAWL_API_KEY`` is set.
+    """The live agent's built-in tools: the keyless weather, read-a-URL, and date/time
+    tools, plus Firecrawl web search when ``FIRECRAWL_API_KEY`` is set.
 
     Deliberately minimal. A low-latency spoken turn does best with a few obvious tools
-    rather than a large menu it must choose among. Open-Meteo and the URL reader need no
-    key, so they are always present (every session has real capabilities); web search is
-    reused (un-approval-gated) from the coding agent and added only when keyed. Extra
-    tools remain strictly opt-in via ``--mcp-config``.
+    rather than a large menu it must choose among. Open-Meteo, the URL reader, and the
+    system clock need no key, so the weather, read-url, and datetime tools are always
+    present (every session has real capabilities); web search is reused (un-approval-gated)
+    from the coding agent and added only when keyed. Extra tools remain strictly opt-in via
+    ``--mcp-config``.
     """
+    from aai_cli.agent_cascade.datetime_tool import build_datetime_tool
     from aai_cli.agent_cascade.weather_tool import build_weather_tool
     from aai_cli.agent_cascade.webpage_tool import build_read_url_tool
     from aai_cli.code_agent.firecrawl_search import build_web_search_tool
 
-    tools: list[BaseTool] = [build_weather_tool(), build_read_url_tool()]
+    tools: list[BaseTool] = [build_weather_tool(), build_read_url_tool(), build_datetime_tool()]
     search = build_web_search_tool()
     if search is not None:
         tools.append(search)
