@@ -1,6 +1,6 @@
 """Tests for the deepagents reply brain behind `assembly live`.
 
-The brain's only network seam is the compiled graph, so `build_completer` is driven
+The brain's only network seam is the compiled graph, so `build_streamer` is driven
 against the *real* deepagents graph wired to a fake chat model (pytest-socket stays
 armed) — no sockets. `build_live_tools` and `build_model`'s new knobs are unit-tested
 directly.
@@ -40,12 +40,6 @@ class FakeChatModel(BaseChatModel):
         message = self.responses[self.index]
         self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
-
-
-def _graph(model: BaseChatModel):
-    from deepagents import create_deep_agent
-
-    return create_deep_agent(model=model, tools=[], system_prompt="be a friendly live agent")
 
 
 # --- build_system_prompt -----------------------------------------------------
@@ -128,181 +122,9 @@ def test_web_search_absent_without_firecrawl_key(monkeypatch):
     assert firecrawl_search.build_web_search_tool() is None
 
 
-# --- build_completer (driving the real graph with a fake model) --------------
-
-
-def test_completer_returns_final_spoken_text():
-    graph = _graph(FakeChatModel(responses=[AIMessage(content="Hello there.")]))
-    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
-    reply = completer([{"role": "system", "content": "x"}, {"role": "user", "content": "hi"}])
-    assert reply == "Hello there."
-
-
-def test_completer_strips_system_message_before_invoking():
-    # The cascade prepends its own system message each turn, but the graph already owns
-    # the system prompt — so the completer must drop it before invoking, leaving only the
-    # conversation. We capture what the graph received to prove the system line is gone.
-    captured = {}
-
-    class _CapturingGraph:
-        def invoke(self, value):
-            captured["messages"] = value["messages"]
-            return {"messages": [AIMessage(content="ok")]}
-
-    completer = brain.build_completer("k", CascadeConfig(), graph=_CapturingGraph())
-    completer([{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}])
-    roles = [m["role"] for m in captured["messages"]]
-    assert roles == ["user"]
-
-
-# --- _run_graph / _log_flow (verbose tool-call flow) -------------------------
-
-
-class _StreamingGraph:
-    """A graph that streams scripted state snapshots (the shape the real graph yields).
-
-    Records the kwargs it was streamed with so a test can prove ``_run_graph`` asked for
-    incremental value snapshots, and exposes an ``invoke`` that must never run on the
-    verbose path."""
-
-    def __init__(self, snapshots):
-        self.snapshots = snapshots
-        self.stream_kwargs = None
-        self.invoked = False
-
-    def stream(self, graph_input, config, *, stream_mode):
-        del graph_input, config
-        self.stream_kwargs = stream_mode
-        yield from self.snapshots
-
-    def invoke(self, graph_input):
-        del graph_input
-        self.invoked = True
-        return {"messages": []}
-
-
-def _search_call_message():
-    return AIMessage(
-        content="Let me search.",
-        tool_calls=[{"name": "tavily_search", "args": {"query": "weather"}, "id": "c1"}],
-    )
-
-
-def test_run_graph_streams_and_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_state):
-    # Verbose mode streams the loop and logs each step — the assistant's interim line, the
-    # tool call (name + args), and the tool result — so a stalled spoken turn is debuggable.
-    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
-    call = _search_call_message()
-    snapshots = [
-        {"messages": [call]},
-        {
-            "messages": [
-                call,
-                ToolMessage(content="rainy, 52F", name="tavily_search", tool_call_id="c1"),
-            ]
-        },
-        {
-            "messages": [
-                call,
-                ToolMessage(content="rainy, 52F", name="tavily_search", tool_call_id="c1"),
-                AIMessage(content="It's rainy and 52 degrees in Portland."),
-            ]
-        },
-    ]
-    graph = _StreamingGraph(snapshots)
-    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
-    with caplog.at_level(logging.INFO, logger="aai_cli.agent_cascade.brain"):
-        reply = completer([{"role": "user", "content": "weather?"}])
-    # The streamed final state still yields the spoken reply, and the graph was streamed
-    # for incremental value snapshots (not invoked).
-    assert reply == "It's rainy and 52 degrees in Portland."
-    assert graph.stream_kwargs == "values"
-    assert graph.invoked is False
-    # The flow log carries the tool call (with its args), the tool result, and the interim
-    # assistant line — each logged exactly once despite the growing snapshots.
-    messages = [record.getMessage() for record in caplog.records]
-    assert messages == [
-        "llm: Let me search.",
-        "tool call tavily_search args={'query': 'weather'}",
-        "tool result tavily_search -> rainy, 52F",
-        "llm: It's rainy and 52 degrees in Portland.",
-    ]
-
-
-def test_run_graph_invokes_when_not_verbose():
-    # Default (non-verbose, no tool sink): invoked once, never streamed, nothing logged.
-    graph = _StreamingGraph([{"messages": [AIMessage(content="hi")]}])
-    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
-    assert completer([{"role": "user", "content": "hi"}]) == ""
-    assert graph.invoked is True
-    assert graph.stream_kwargs is None
-
-
-def test_on_tool_sink_streams_and_reports_each_tool_call_by_label():
-    # A wired tool sink (the live UI affordance) streams the graph — even without -v — and
-    # reports each tool call by its speakable label, while still returning the final reply.
-    labels: list[str] = []
-    call = AIMessage(
-        content="", tool_calls=[{"name": brain.WEB_SEARCH_TOOL_NAME, "args": {}, "id": "c1"}]
-    )
-    snapshots = [{"messages": [call]}, {"messages": [call, AIMessage(content="Here's the news.")]}]
-    graph = _StreamingGraph(snapshots)
-    completer = brain.build_completer("k", CascadeConfig(), graph=graph)
-    reply = completer([{"role": "user", "content": "news?"}], on_tool=labels.append)
-    assert reply == "Here's the news."
-    assert labels == ["Searching the web"]
-    assert graph.stream_kwargs == "values" and graph.invoked is False  # streamed, not invoked
-
-
 def test_tool_label_maps_web_search_and_falls_back_for_others():
     assert brain._tool_label(brain.WEB_SEARCH_TOOL_NAME) == "Searching the web"
     assert brain._tool_label("get_time") == "Using get_time"
-
-
-def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
-    # Verbose but the (test) graph only implements invoke: fall back to invoke rather than
-    # crashing on a missing .stream — the fakes and any non-streaming graph stay supported.
-    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
-
-    class _InvokeOnly:
-        def invoke(self, graph_input):
-            del graph_input
-            return {"messages": [AIMessage(content="from invoke")]}
-
-    completer = brain.build_completer("k", CascadeConfig(), graph=_InvokeOnly())
-    assert completer([{"role": "user", "content": "hi"}]) == "from invoke"
-
-
-def test_run_graph_converts_graph_errors_to_cli_error():
-    # A graph failure (gateway 4xx/5xx, a tool raising, a recursion limit) must become a
-    # CLIError so the cascade surfaces it instead of the reply worker dying silently.
-    class _Boom:
-        def invoke(self, graph_input):
-            del graph_input
-            raise ValueError("bedrock said no")
-
-    completer = brain.build_completer("k", CascadeConfig(), graph=_Boom())
-    with pytest.raises(CLIError) as excinfo:
-        completer([{"role": "user", "content": "hi"}])
-    assert "couldn't complete the turn" in excinfo.value.message
-    assert "bedrock said no" in excinfo.value.message  # the cause is preserved for diagnosis
-
-
-def test_run_graph_passes_cli_error_through():
-    # A CLIError from the graph is already user-facing -> propagate as-is, not re-wrapped.
-    class _CliBoom:
-        def invoke(self, graph_input):
-            del graph_input
-            raise CLIError("already clean", error_type="x")
-
-    completer = brain.build_completer("k", CascadeConfig(), graph=_CliBoom())
-    with pytest.raises(CLIError, match="already clean"):
-        completer([{"role": "user", "content": "hi"}])
-
-
-def test_log_flow_ignores_non_list_messages():
-    # Defensive: a snapshot without a messages list logs nothing and reports no progress.
-    assert brain._log_flow({"messages": None}, 3) == 3
 
 
 def test_clip_passes_short_text_and_truncates_long_text():
@@ -328,38 +150,7 @@ def test_clip_flattens_whitespace_so_tool_output_cant_forge_log_lines():
     assert "\r" not in brain._clip(forged)
 
 
-# --- _reply_text / _content_text ---------------------------------------------
-
-
-def test_reply_text_skips_empty_ai_messages_and_takes_last_text():
-    # Scanning from the end, a trailing empty AIMessage (a tool-call request with no
-    # spoken text) is skipped so the reply falls back to the prior AIMessage's text,
-    # rather than coming back blank.
-    result = {
-        "messages": [
-            AIMessage(content="The answer is 42."),
-            AIMessage(content=""),
-        ]
-    }
-    assert brain._reply_text(result) == "The answer is 42."
-
-
-def test_reply_text_joins_list_content_blocks():
-    result = {"messages": [AIMessage(content=[{"type": "text", "text": "Hello "}, "world"])]}
-    assert brain._reply_text(result) == "Hello world"
-
-
-def test_reply_text_skips_non_assistant_messages():
-
-    # Scanning from the end, a trailing non-assistant message (e.g. a tool result) is
-    # skipped — the spoken reply is the AIMessage before it.
-    result = {
-        "messages": [
-            AIMessage(content="hello there"),
-            ToolMessage(content="tool output", tool_call_id="c1"),
-        ]
-    }
-    assert brain._reply_text(result) == "hello there"
+# --- _content_text -----------------------------------------------------------
 
 
 def test_content_text_coerces_unexpected_content():
@@ -367,9 +158,8 @@ def test_content_text_coerces_unexpected_content():
     assert brain._content_text(123) == "123"
 
 
-def test_reply_text_is_empty_without_an_assistant_message():
-    assert brain._reply_text({"messages": []}) == ""
-    assert brain._reply_text({}) == ""
+def test_content_text_joins_list_content_blocks():
+    assert brain._content_text([{"type": "text", "text": "Hello "}, "world"]) == "Hello world"
 
 
 # --- build_live_tools --------------------------------------------------------
@@ -442,8 +232,9 @@ def test_build_graph_uses_gateway_model_and_runs_offline(monkeypatch):
     # The cascade's model + knobs are threaded into the gateway model build.
     assert captured == {"model": "claude-x", "max_tokens": 128, "extra": {"temperature": 0.2}}
     # The compiled graph is a real deepagents graph that answers offline via the fake model.
-    completer = brain.build_completer("k", cfg, graph=graph)
-    assert completer([{"role": "user", "content": "hi"}]) == "hi from the agent"
+    streamer = brain.build_streamer("k", cfg, graph=graph)
+    spoken = "".join(e.text for e in streamer([{"role": "user", "content": "hi"}]))
+    assert spoken == "hi from the agent"
 
 
 # --- build_graph MCP tool wiring ---------------------------------------------

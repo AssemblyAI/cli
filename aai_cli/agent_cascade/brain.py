@@ -5,14 +5,14 @@ LLM completion, so the agent can transparently reach for a tool — web search �
 mid-conversation, mimicking a live multimodal assistant (the "talk to Gemini Live"
 experience). The toolset is deliberately minimal: a low-latency spoken turn does best
 with one obvious tool rather than a menu it has to choose among. The graph is built once per session
-(:func:`build_graph`) and invoked statelessly per turn with the running history the
-cascade already keeps (:func:`build_completer`); tools are read-only and auto-approved,
+(:func:`build_graph`) and driven turn-by-turn with the running history the
+cascade already keeps (:func:`build_streamer`); tools are read-only and auto-approved,
 because a spoken turn can't pause for a keyboard confirmation, and the system prompt
 keeps every reply short and speakable.
 
-The graph is the only network seam: :func:`build_completer` accepts an injected graph,
-so the per-turn orchestration is unit-tested against a fake with no sockets — the same
-seam the rest of the cascade uses for its STT/LLM/TTS legs.
+The graph is the only network seam: :func:`build_streamer` accepts an injected graph,
+so the per-turn streaming reply leg is unit-tested against a fake with no sockets — the
+same seam the rest of the cascade uses for its STT/LLM/TTS legs.
 """
 
 from __future__ import annotations
@@ -220,31 +220,6 @@ def build_graph(
     )
 
 
-def build_completer(
-    api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
-) -> Callable[..., str]:
-    """A ``complete_reply`` for the cascade engine backed by the deepagents graph.
-
-    The cascade prepends its own ``system`` message to the history each turn; the graph
-    already owns the system prompt, so we drop it before invoking. The graph runs the full
-    tool loop and we return its final spoken text. ``on_tool`` (when given) is called with a
-    short label as each tool call lands, so the front-end can show a "Searching the web…"
-    affordance instead of sitting silent while the agent works; the loop is also streamed —
-    rather than ``invoke``-d — whenever a sink is wired or under ``-v`` (see :func:`_run_graph`).
-    ``graph`` is injected in tests so the per-turn wiring runs against a fake with no network.
-    """
-    resolved = build_graph(api_key, config) if graph is None else graph
-
-    def complete_reply(
-        messages: list[ChatCompletionMessageParam],
-        on_tool: Callable[[str], None] | None = None,
-    ) -> str:
-        conversation = [message for message in messages if message.get("role") != "system"]
-        return _reply_text(_run_graph(resolved, conversation, on_tool))
-
-    return complete_reply
-
-
 def build_streamer(
     api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
 ) -> Callable[..., Iterator[SpeechDelta | ToolNotice]]:
@@ -274,9 +249,9 @@ def _stream_graph(
     """Stream one turn through the graph token-by-token, yielding speech/tool events.
 
     Wraps any graph failure as a CLIError (a clean ``CLIError`` passes through) so the
-    cascade surfaces it instead of the reply worker dying silently — the same contract the
-    old ``_run_graph`` had. Under ``-v`` the accumulated assistant text, each tool call,
-    and each tool result are logged to ``_FLOW_LOG``.
+    cascade surfaces it instead of the reply worker dying silently. Under ``-v`` the
+    accumulated assistant text, each tool call, and each tool result are logged to
+    ``_FLOW_LOG``.
     """
     verbose = debuglog.active()
     pending: list[str] = []  # assistant deltas accumulated for one verbose "llm:" line
@@ -328,89 +303,6 @@ def _events_from_chunk(
         yield SpeechDelta(text)
 
 
-def _run_graph(
-    graph: CompiledAgent,
-    conversation: list[ChatCompletionMessageParam],
-    on_tool: Callable[[str], None] | None = None,
-) -> dict[str, object]:
-    """Run one turn through the graph, returning its end state.
-
-    Normally a single ``invoke`` (the whole tool loop runs internally). When a tool sink is
-    wired (the live UI's affordance) or under verbose mode, and the graph can stream, drive
-    it as incremental state snapshots instead so :func:`_log_flow` surfaces each tool call as
-    it happens. The test fakes only implement ``invoke``, so they (and the plain path with no
-    sink) take the invoke branch.
-    """
-    try:
-        return _drive_graph(graph, {"messages": conversation}, on_tool)
-    except CLIError:
-        raise
-    except Exception as exc:
-        # The graph can fail anywhere in the tool loop — a gateway 4xx/5xx, a tool raising,
-        # a langgraph recursion limit. Convert it to a CLIError so the cascade records and
-        # *surfaces* it (the engine shows it in the transcript) instead of the reply worker
-        # dying silently and the user getting no answer with no clue why.
-        raise CLIError(
-            f"the agent couldn't complete the turn: {exc}", error_type="agent_brain_error"
-        ) from exc
-
-
-def _drive_graph(
-    graph: CompiledAgent,
-    graph_input: dict[str, object],
-    on_tool: Callable[[str], None] | None = None,
-) -> dict[str, object]:
-    """Invoke the graph, or stream it (when a tool sink is wired or under ``-v``) so
-    :func:`_log_flow` can surface each tool call as it lands."""
-    if (on_tool is not None or debuglog.active()) and hasattr(graph, "stream"):
-        last: dict[str, object] = {}
-        seen = 0
-        for chunk in graph.stream(graph_input, None, stream_mode="values"):
-            seen = _log_flow(chunk, seen, on_tool)
-            last = chunk
-        return last
-    return graph.invoke(graph_input)
-
-
-def _log_flow(
-    state: dict[str, object], seen: int, on_tool: Callable[[str], None] | None = None
-) -> int:
-    """Surface the tool calls/results added to ``state`` since the first ``seen`` messages.
-
-    Feeds ``on_tool`` a speakable label as each tool call lands (the live UI's affordance) and,
-    under ``-v``, logs the call/result/interim line to stderr. Reuses the coding agent's
-    message→event vocabulary so it reads the same AIMessage/ToolMessage shapes the TUI does.
-    Returns the new high-water message count so the next snapshot only re-surfaces what it added.
-    """
-    from aai_cli.code_agent.events import message_events
-
-    messages = state.get("messages")
-    if not isinstance(messages, list):
-        return seen
-    verbose = debuglog.active()
-    for message in messages[seen:]:
-        for event in message_events(message, announce_calls=True):
-            _surface_event(event, on_tool, verbose=verbose)
-    return len(messages)
-
-
-def _surface_event(event: object, on_tool: Callable[[str], None] | None, *, verbose: bool) -> None:
-    """Surface one flow event: feed a tool call's label to ``on_tool``, and (under ``-v``)
-    log the call/result/interim line to stderr."""
-    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult
-
-    if isinstance(event, ToolCall) and on_tool is not None:
-        on_tool(_tool_label(event.name))
-    if not verbose:
-        return
-    if isinstance(event, ToolCall):
-        _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
-    elif isinstance(event, ToolResult):
-        _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
-    elif isinstance(event, AssistantText):
-        _FLOW_LOG.info("llm: %s", event.text)
-
-
 def _clip(text: str) -> str:
     """Flatten a tool result onto one line and truncate it for the flow log.
 
@@ -424,25 +316,6 @@ def _clip(text: str) -> str:
     if len(flattened) <= _RESULT_LOG_CAP:
         return flattened
     return f"{flattened[:_RESULT_LOG_CAP]}… ({len(flattened)} chars)"
-
-
-def _reply_text(result: dict[str, object]) -> str:
-    """The agent's final spoken reply: the last assistant message that carries text.
-
-    A tool-using turn ends in an ``AIMessage`` whose ``content`` is the spoken answer,
-    but earlier ``AIMessage``\\s in the same turn (the tool-call requests) have empty
-    text — so we scan from the end for the last one with non-empty content.
-    """
-    messages = result.get("messages")
-    if not isinstance(messages, list):
-        return ""
-    for message in reversed(messages):
-        if type(message).__name__ != "AIMessage":
-            continue
-        text = _content_text(getattr(message, "content", "")).strip()
-        if text:
-            return text
-    return ""
 
 
 def _content_text(content: object) -> str:
