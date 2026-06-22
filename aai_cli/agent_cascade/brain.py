@@ -103,7 +103,7 @@ class _GatedGraph(Protocol):
     """
 
     def stream(
-        self, input: object, config: Mapping[str, object] | None, *, stream_mode: str
+        self, graph_input: object, config: Mapping[str, object] | None, *, stream_mode: str
     ) -> Iterator[tuple[object, object]]:
         """Yield ``(message_chunk, metadata)`` pairs for one streamed segment."""
 
@@ -386,10 +386,10 @@ def _stream_graph(
             error_type="agent_brain_error",
         )
     try:
-        if gated:
-            # The gated path needs stream + get_state (built with a checkpointer); narrow to the
-            # protocol that declares them. A gated graph always satisfies this by construction.
-            assert isinstance(graph, _GatedGraph)
+        # The gated path needs stream + get_state (the graph is built with a checkpointer, so it
+        # always satisfies _GatedGraph); the isinstance both narrows for mypy and falls back to a
+        # plain stream for the impossible non-gated-graph case.
+        if gated and isinstance(graph, _GatedGraph):
             yield from _stream_gated(
                 graph,
                 conversation,
