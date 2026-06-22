@@ -16,7 +16,7 @@ user.
 The eight tools:
 
 1. `look_up_topic` — Wikipedia REST summary ("who is…", "what is…", "tell me about…").
-2. `calculate` — safe arithmetic via `simpleeval` ("what's 15% of 240", "split 87 three ways").
+2. `calculate` — safe arithmetic + curated math/statistics functions via `simpleeval` ("15% of 240", "square root of 150", "standard deviation of these numbers").
 3. `convert_units` — physical units (via `pint`) + currency (via keyless frankfurter.app).
 4. `define_word` — dictionary definition + synonyms (dictionaryapi.dev, keyless).
 5. `get_time_in` — current local time in a named place (Open-Meteo geocode → `zoneinfo`).
@@ -135,23 +135,32 @@ names: the `*_TOOL_NAME` constant and the `build_*_tool(...)` factory.
 - `CALC_TOOL_NAME = "calculate"`.
 - **No seam — fully deterministic and offline** (the only tool with no
   non-determinism, so no injected callable).
-- Evaluates with **`simpleeval`** (lazily imported): a `SimpleEval` instance with
-  `names`/`functions` left empty so only arithmetic over numeric literals is
-  allowed (no variables, no function calls). `simpleeval` already guards the
-  resource-exhaustion cases — `MAX_POWER` against exponent bombs (`9 ** 9 ** 9`)
-  and string-length limits — so the tool keeps no hand-rolled AST walker.
-- `build_calc_tool()` exposes `calculate(expression: str) -> str`. The model is
-  responsible for turning a spoken word-problem into a plain arithmetic
-  expression; **the tool's docstring tells it how** (see below). The tool only
-  evaluates and formats.
+- Evaluates with **`simpleeval`** (lazily imported), seeded with a **curated
+  whitelist** of pure functions and constants so the agent can "run code to get
+  an answer" without any shell. The `SimpleEval` instance is built with an
+  explicit `functions` table and `names` table (which *replace* simpleeval's
+  defaults, dropping `rand`/`randint` and leaving no variables):
+  - **functions:** `abs`, `round`, `min`, `max`, `sum` (builtins); `sqrt`,
+    `floor`, `ceil`, `log`, `log10`, `hypot`, `gcd` (`math`); `mean`, `median`,
+    `stdev` (`statistics`).
+  - **constants (`names`):** `pi`, `e`.
+- **Resource-exhaustion guarantee preserved.** `simpleeval` bounds the `**`
+  operator via `MAX_POWER`, but it does **not** bound function arguments — so
+  the whitelist deliberately **excludes** anything that can explode from small
+  inputs (`factorial`, `pow`, `perm`, `comb`). Everything exposed is O(n) on its
+  input and can't grow a giant number from a small one, so there is no
+  unguarded-exponentiation backdoor. (Trig and a few others are easy to add
+  later; the set is intentionally tight to bound the test surface.)
+- `build_calc_tool()` exposes `calculate(expression: str) -> str`. The model
+  turns the spoken question into an expression over that vocabulary; **the
+  tool's docstring tells it how** (see below). The tool only evaluates + formats.
 - **Tool docstring (the model-facing usage guidance):** the `@tool` docstring
-  states that `expression` must be a plain arithmetic expression using only
-  numbers and the operators `+ - * / // % ** ( )`, with no words, units, or
-  variable names, and gives worked examples so the model rewrites speech into a
-  valid expression — e.g. *"15% of 240" → `0.15 * 240`*, *"split 87 three ways"
-  → `87 / 3`*, *"3 plus 4 times 5" → `3 + 4 * 5`*. This is the deliverable the
-  user called out: the formatting contract lives in the tool definition, not in
-  `brain.py`'s prompt.
+  lists the allowed operators (`+ - * / // % **` and parentheses), the constants
+  (`pi`, `e`), and the functions by name, notes that aggregate functions take a
+  list (`mean([2,4,9])`), and gives worked examples — *"15% of 240" → `0.15 *
+  240`*, *"square root of 150" → `sqrt(150)`*, *"standard deviation of 2, 4, 4,
+  4, 5" → `stdev([2,4,4,4,5])`*, *"split 87 three ways" → `87 / 3`*. The usage
+  contract lives in the tool definition, not in `brain.py`'s prompt.
 - **Output formatting (the real fiddly part):** render the result so it reads
   aloud cleanly — integers print without a decimal (`36`, not `36.0`), and
   non-integers are rounded to a sensible precision so float artifacts never leak
@@ -288,7 +297,7 @@ once):
 2. `_tool_capabilities()` adds a spoken-capability phrase per tool, each gated on
    the tool's name being present in the bound set:
    - `look_up_topic` → *"look up facts about people, places, and topics"*
-   - `calculate` → *"do arithmetic and percentages"*
+   - `calculate` → *"do arithmetic, percentages, and math like square roots and averages"*
    - `convert_units` → *"convert units and currencies"*
    - `define_word` → *"define words and give synonyms"*
    - `get_time_in` → *"tell the current time in a place"*
@@ -331,10 +340,11 @@ hermetic via injected seams — no real network/clock.
   at `_MAX_CHARS`.
 - **`calc_tool`:** correct evaluation for several expressions incl. precedence
   and unary minus; the integer-vs-float **output formatting** (`36` not `36.0`;
-  `87 / 3` → `29`, asserting no float artifact leaks); and the apology for each
-  failure mode — invalid syntax, a disallowed name (e.g. `foo + 1`), division by
-  zero, and an over-`MAX_POWER` exponent. The `simpleeval` instance is asserted
-  to expose no names/functions (the safe-configuration contract).
+  `87 / 3` → `29`, asserting no float artifact leaks); a **parametrized case per
+  whitelisted function and constant** (so a mutated function-table name is
+  caught); and the apology for each failure mode — invalid syntax, a disallowed
+  name (`foo + 1`), an **un-whitelisted function** (`factorial(5)` — proving the
+  DoS exclusion holds), division by zero, and an over-`MAX_POWER` exponent.
 - **`units_tool`:** a physical conversion via `pint` (e.g. miles→km, °F→°C), a
   currency conversion via a fake `fetch`, the unit-error apology, and the
   currency-fetch-error apology; the currency-vs-unit path selection.

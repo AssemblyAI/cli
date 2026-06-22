@@ -420,12 +420,39 @@ def test_non_integer_keeps_decimals(calc) -> None:
     assert calc.invoke({"expression": "10 / 3"}) == "3.3333"
 
 
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("abs(-7)", "7"),
+        ("round(3.14159, 2)", "3.14"),
+        ("min(3, 9, 2)", "2"),
+        ("max(3, 9, 2)", "9"),
+        ("sum([1, 2, 3])", "6"),
+        ("sqrt(16)", "4"),
+        ("floor(2.9)", "2"),
+        ("ceil(2.1)", "3"),
+        ("log(1)", "0"),
+        ("log10(1000)", "3"),
+        ("hypot(3, 4)", "5"),
+        ("gcd(12, 18)", "6"),
+        ("mean([2, 4, 9])", "5"),
+        ("median([1, 5, 2])", "2"),
+        ("stdev([1, 1, 1])", "0"),
+        ("round(pi, 2)", "3.14"),
+        ("round(e, 2)", "2.72"),
+    ],
+)
+def test_whitelisted_functions_and_constants(calc, expression, expected) -> None:
+    assert calc.invoke({"expression": expression}) == expected
+
+
 def test_rejects_names(calc) -> None:
     assert calc.invoke({"expression": "foo + 1"}) == "I couldn't compute that."
 
 
-def test_rejects_function_calls(calc) -> None:
-    assert calc.invoke({"expression": "sqrt(4)"}) == "I couldn't compute that."
+def test_rejects_unwhitelisted_function(calc) -> None:
+    # factorial is deliberately NOT exposed (it explodes from small inputs).
+    assert calc.invoke({"expression": "factorial(5)"}) == "I couldn't compute that."
 
 
 def test_rejects_syntax_error(calc) -> None:
@@ -454,13 +481,15 @@ Expected: FAIL — `ModuleNotFoundError`.
 
 ```python
 # aai_cli/agent_cascade/calc_tool.py
-"""A pure, offline arithmetic tool for the `assembly live` voice agent.
+"""A pure, offline math tool for the `assembly live` voice agent.
 
-The LLM does mental math unreliably; this tool evaluates an arithmetic expression exactly.
-It uses ``simpleeval`` with no names or functions registered, so only arithmetic over
-numeric literals is allowed — ``simpleeval`` itself guards the resource-exhaustion cases
-(an exponent bomb via ``MAX_POWER``, oversized strings). There is no network seam: the
-only non-determinism would be I/O, and there is none. Failures never raise out to the graph.
+The LLM does mental math unreliably; this tool evaluates an expression exactly. It uses
+``simpleeval`` seeded with a curated whitelist of pure ``math``/``statistics`` functions and
+the constants ``pi``/``e`` — so the agent can "run code to get an answer" (square roots,
+logs, averages, standard deviation) with no shell and no network. ``simpleeval`` bounds the
+``**`` operator via ``MAX_POWER`` but does NOT bound function arguments, so the whitelist
+deliberately excludes anything that explodes from small inputs (factorial, pow, perm, comb).
+There is no network seam. Failures never raise out to the graph.
 """
 
 from __future__ import annotations
@@ -489,24 +518,60 @@ def _format(value: float) -> str:
     return str(number)
 
 
+def _functions() -> dict[str, object]:
+    """The curated, pure functions exposed to the evaluator.
+
+    Replaces simpleeval's defaults (dropping ``rand``/``randint``). Deliberately excludes
+    ``factorial``/``pow``/``perm``/``comb`` — simpleeval bounds ``**`` via ``MAX_POWER`` but
+    NOT function arguments, so an unguarded one would reopen the resource-exhaustion hole.
+    Everything here is O(n) on its input and can't grow a giant number from a small one.
+    """
+    import math
+    import statistics
+
+    return {
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "sum": sum,
+        "sqrt": math.sqrt,
+        "floor": math.floor,
+        "ceil": math.ceil,
+        "log": math.log,
+        "log10": math.log10,
+        "hypot": math.hypot,
+        "gcd": math.gcd,
+        "mean": statistics.mean,
+        "median": statistics.median,
+        "stdev": statistics.stdev,
+    }
+
+
+def _names() -> dict[str, float]:
+    """Math constants exposed to the evaluator (replaces simpleeval's True/False/None names)."""
+    import math
+
+    return {"pi": math.pi, "e": math.e}
+
+
 def build_calc_tool() -> BaseTool:
-    """Wrap a no-names/no-functions ``simpleeval`` evaluator as the ``calculate`` tool."""
+    """Wrap a whitelisted ``simpleeval`` evaluator as the ``calculate`` tool."""
     from langchain_core.tools import tool
 
     @tool(CALC_TOOL_NAME)
     def calculate(expression: str) -> str:
-        """Evaluate an arithmetic expression and return the result. ``expression`` must be a
-        plain arithmetic expression using only numbers and the operators + - * / // % ** and
-        parentheses — no words, units, or variable names. Translate the spoken question into
-        such an expression yourself first. Examples: "15% of 240" -> "0.15 * 240"; "split 87
-        three ways" -> "87 / 3"; "3 plus 4 times 5" -> "3 + 4 * 5"."""
+        """Evaluate a math expression and return the result. Use numbers, the operators
+        + - * / // % ** and parentheses, the constants pi and e, and these functions: abs,
+        round, min, max, sum, sqrt, floor, ceil, log, log10, hypot, gcd, mean, median, stdev.
+        Pass a list to the aggregate functions, e.g. mean([2, 4, 9]). Translate the spoken
+        question into such an expression yourself. Examples: "15% of 240" -> "0.15 * 240";
+        "square root of 150" -> "sqrt(150)"; "standard deviation of 2, 4, 4, 4, 5" ->
+        "stdev([2, 4, 4, 4, 5])"; "split 87 three ways" -> "87 / 3"."""
         from simpleeval import SimpleEval
 
         try:
-            evaluator = SimpleEval()
-            evaluator.names = {}
-            evaluator.functions = {}
-            return _format(evaluator.eval(expression))
+            return _format(SimpleEval(functions=_functions(), names=_names()).eval(expression))
         except Exception:
             return "I couldn't compute that."
 
@@ -516,7 +581,7 @@ def build_calc_tool() -> BaseTool:
 - [ ] **Step 4: Run the tests to confirm they pass**
 
 Run: `uv run pytest tests/test_agent_cascade_calc.py -q`
-Expected: PASS (10 tests). If `-2 ** 2` surprises you, the assertion accepts both — it only checks no crash.
+Expected: PASS (the fixed tests plus 17 parametrized function/constant cases). If `-2 ** 2` surprises you, the assertion accepts both — it only checks no crash. If `statistics.mean`/`median` return a type that formats unexpectedly, `_format` normalizes both int and float, so the expected strings hold.
 
 - [ ] **Step 5: Commit (WIP)**
 
@@ -1574,7 +1639,7 @@ In `_tool_capabilities`, after the existing `datetime_tool` check, add one gated
     if topic_tool.LOOKUP_TOOL_NAME in names:
         capabilities.append("look up facts about people, places, and topics")
     if calc_tool.CALC_TOOL_NAME in names:
-        capabilities.append("do arithmetic and percentages")
+        capabilities.append("do arithmetic, percentages, and math like square roots and averages")
     if units_tool.CONVERT_TOOL_NAME in names:
         capabilities.append("convert units and currencies")
     if define_tool.DEFINE_TOOL_NAME in names:
