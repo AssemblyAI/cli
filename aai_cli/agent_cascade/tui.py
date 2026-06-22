@@ -23,7 +23,13 @@ from textual.css.query import NoMatches
 from textual.widgets import Static
 
 from aai_cli.code_agent import banner, tui_status
-from aai_cli.code_agent.messages import AssistantMessage, ErrorMessage, Note, UserMessage
+from aai_cli.code_agent.messages import (
+    AssistantMessage,
+    ErrorMessage,
+    Note,
+    ToolAffordance,
+    UserMessage,
+)
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
@@ -105,6 +111,10 @@ class LiveAgentApp(App[None]):
     #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
     /* Blank line above each agent reply (and the greeting), so turns don't run together. */
     AssistantMessage {{ margin-top: 1; }}
+    /* First tool line of a turn keeps a top margin (lifts the block off the prompt); a
+       consecutive call adds `-tight` to drop it, so a multi-tool turn stays compact. */
+    ToolAffordance {{ margin-top: 1; }}
+    ToolAffordance.-tight {{ margin-top: 0; }}
     """
     TITLE = "AssemblyAI Live"
     ENABLE_COMMAND_PALETTE = False
@@ -214,10 +224,13 @@ class LiveAgentApp(App[None]):
     def show_tool_call(self, label: str) -> None:
         """Surface the agent's tool use inline as it happens (the live tool affordance).
 
-        A spoken turn that pauses to use a tool would otherwise sit silent on "thinking…";
-        this drops a dim "Searching the web…" line so the wait reads as progress, not a hang.
+        A spoken turn that pauses to use a tool would otherwise sit silent on "thinking…"; this
+        drops a dim "Searching the web · …" line so the wait reads as progress, not a hang. The
+        first such line of a turn is spaced off the prompt; a consecutive call mounts tight.
         """
-        self._mount(Note(f"{label}…"))
+        log = self.query_one("#log", VerticalScroll)
+        tight = isinstance(log.children[-1], ToolAffordance)
+        self._mount(ToolAffordance(f"{label}…", tight=tight))
         self._scroll_end()
 
     def begin_reply(self) -> None:

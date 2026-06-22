@@ -30,6 +30,19 @@ class Note(Static):
         super().__init__(Text(text, style=_DIM))
 
 
+class ToolAffordance(Static):
+    """A dim live tool-call line: the friendly label plus its identifying arg.
+
+    ``Searching the web · ai house Seattle…``. Distinct from :class:`ToolCallLine` (the coding
+    agent's ``→ name(args)`` form) — this is the voice TUI's progress affordance, spaced by
+    ``LiveAgentApp``: ``tight`` adds the ``-tight`` class so a consecutive call drops the top
+    margin the first call of a turn keeps.
+    """
+
+    def __init__(self, text: str, *, tight: bool) -> None:
+        super().__init__(Text(text, style=_DIM), classes="-tight" if tight else None)
+
+
 def _user_markup(text: str) -> Text:
     """The styled `» …` prompt echo, built in one place for the constructor and set_text."""
     return Text(f"» {text}", style="bold #38bdf8")
