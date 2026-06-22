@@ -34,10 +34,6 @@
   ╭─ Quick Start ────────────────────────────────────────────────────────────────╮
   │ onboard      Guided setup: sign in and run your first transcription          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Coding Agent ───────────────────────────────────────────────────────────────╮
-  │ code         Run a terminal coding agent backed by the AssemblyAI LLM        │
-  │              Gateway                                                         │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Build an App ───────────────────────────────────────────────────────────────╮
   │ init         Scaffold a new app from a template and launch it                │
   │ dev          Run the dev server for the app in the current directory         │
