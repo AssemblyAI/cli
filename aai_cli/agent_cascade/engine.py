@@ -11,6 +11,7 @@ fakes with no sockets, microphone, or speaker.
 
 from __future__ import annotations
 
+import concurrent.futures.thread as cf_thread
 import contextlib
 import threading
 from abc import abstractmethod
@@ -102,6 +103,39 @@ class Player(Protocol):
 def _new_history() -> list[ChatCompletionMessageParam]:
     """Typed empty-history factory (ChatCompletionMessageParam is import-time-only)."""
     return []
+
+
+def _executor_threads() -> set[threading.Thread]:
+    """A snapshot of every live ThreadPoolExecutor worker concurrent.futures tracks for its
+    interpreter-exit join. Empty if a future Python drops the internal registry."""
+    return set(getattr(cf_thread, "_threads_queues", ()))
+
+
+def _detach_executor_threads_since(before: set[threading.Thread]) -> None:
+    """Drop executor workers spawned since ``before`` from concurrent.futures' exit-join list,
+    so an abandoned (timed-out) graph leg can't wedge process exit.
+
+    ``complete_reply`` runs the deepagents graph, which drives each node through a langchain
+    ``ThreadPoolExecutor``. Abandoning a timed-out call leaves that executor's worker blocked on
+    the network leg, and concurrent.futures registers an interpreter-exit hook (``_python_exit``)
+    that joins *every* executor worker unconditionally — even daemons — by putting a shutdown
+    sentinel on its queue and waiting. A worker mid-call never reads that sentinel, so the join
+    (and the whole process exit) hangs until the user Ctrl-Cs — the threading-shutdown traceback
+    this prevents. The worker was created on our own daemon thread so it inherits ``daemon=True``;
+    once it's off this registry neither ``_python_exit`` nor ``threading._shutdown`` waits on it,
+    and the orphaned network call dies with the process as a daemon should. Best-effort: a future
+    Python that renames the internals simply skips the detach (regressing to the old hang, not
+    crashing). The diff is scoped to threads that appeared during the call, so a co-running
+    executor elsewhere keeps its normal exit-time join.
+    """
+    registry = getattr(cf_thread, "_threads_queues", None)
+    if registry is None:
+        return
+    # Mutate under the same lock concurrent.futures holds for the registry, so a concurrent
+    # submit (or _python_exit itself) never sees a torn dict.
+    with getattr(cf_thread, "_global_shutdown_lock", contextlib.nullcontext()):
+        for thread in _executor_threads() - before:
+            registry.pop(thread, None)
 
 
 def _spawn_thread(target: Callable[[], None]) -> _Worker:
@@ -275,7 +309,10 @@ class CascadeSession:
         stop waiting after ``timeout`` — raising a ``CLIError`` the caller surfaces like any
         other leg failure (inline in the transcript, then back to listening). The abandoned
         thread is a network call we can't cancel; as a daemon it dies with the process and its
-        late result is discarded. A failure the leg itself raises is re-raised here unchanged.
+        late result is discarded — but the graph runs each node through a langchain
+        ``ThreadPoolExecutor`` whose worker concurrent.futures *does* join at interpreter exit,
+        so we detach that orphan (:func:`_detach_executor_threads_since`) to keep the process
+        exitable. A failure the leg itself raises is re-raised here unchanged.
         """
         # List holders (not closure locals) so the worker thread's result is visible here after
         # the join, and so the static checkers don't misread a nonlocal mutation as unreachable.
@@ -290,10 +327,14 @@ class CascadeSession:
             except CLIError as exc:
                 failures.append(exc)
 
+        before = _executor_threads()
         worker = threading.Thread(target=run, daemon=True)  # pragma: no mutate
         worker.start()
         worker.join(timeout)
         if worker.is_alive():
+            # The graph leg is still running inside a langchain ThreadPoolExecutor; unregister
+            # that orphaned worker so it can't wedge interpreter exit (see the helper's docstring).
+            _detach_executor_threads_since(before)
             raise CLIError(
                 f"the agent took longer than {timeout:.0f}s to respond and was cut off",
                 error_type="agent_timeout",

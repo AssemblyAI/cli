@@ -217,6 +217,41 @@ def test_complete_within_raises_a_timeout_when_the_leg_overruns_the_deadline():
         release.set()  # unblock the abandoned worker so it exits promptly
 
 
+def test_complete_within_detaches_the_orphaned_executor_on_timeout():
+    # Regression: complete_reply runs the deepagents graph, which drives each node through a
+    # langchain ThreadPoolExecutor. A timed-out call is abandoned with that executor's worker
+    # still blocked on the network leg — and concurrent.futures joins *every* executor worker at
+    # interpreter exit, so a blocked one wedges shutdown (the threading-shutdown traceback users
+    # hit, needing Ctrl-C). _complete_within must unregister that orphan so the process can exit.
+    import concurrent.futures.thread as cf_thread
+    from concurrent.futures import ThreadPoolExecutor
+
+    release = threading.Event()
+    executors: list[ThreadPoolExecutor] = []
+
+    def hang(messages, on_tool=None):
+        # Mimic langgraph driving a node through a ThreadPoolExecutor: a worker thread blocks on
+        # the (cleanup-released) leg, registering itself in concurrent.futures' exit-join list.
+        executor = ThreadPoolExecutor(max_workers=1)
+        executors.append(executor)
+        executor.submit(lambda: release.wait(timeout=2.0)).result()
+        return "late"
+
+    session, _renderer, _player = make_session(complete_reply=hang)
+    before = set(cf_thread._threads_queues)
+    try:
+        with pytest.raises(CLIError) as excinfo:
+            session._complete_within([], timeout=0.2)
+        assert excinfo.value.error_type == "agent_timeout"
+        # The executor worker the abandoned call spawned must be gone from the exit-join list,
+        # so neither _python_exit nor threading._shutdown waits on the stuck network call.
+        assert set(cf_thread._threads_queues) - before == set()
+    finally:
+        release.set()  # unblock the abandoned worker so the executor shuts down promptly
+        for executor in executors:
+            executor.shutdown(wait=True)
+
+
 def test_complete_within_reraises_a_leg_failure_unchanged():
     # A failure the leg raises within the deadline propagates as-is — not masked as a timeout.
     def boom(messages, on_tool=None):
