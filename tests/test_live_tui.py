@@ -13,7 +13,13 @@ import threading
 
 from textual.widgets import Static
 
-from aai_cli.agent_cascade.messages import AssistantMessage, ErrorMessage, Note, UserMessage
+from aai_cli.agent_cascade.messages import (
+    AssistantMessage,
+    ErrorMessage,
+    Note,
+    ToolAffordance,
+    UserMessage,
+)
 from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
 from aai_cli.core.errors import CLIError
 
@@ -129,16 +135,21 @@ def test_reply_streams_sentences_and_finalizes_back_to_listening() -> None:
     _run(go())
 
 
-def test_show_tool_call_mounts_an_inline_affordance() -> None:
-    # A tool call mid-turn drops a dim "Searching the web…" note, so the thinking pause reads
-    # as progress rather than a hang (the live tool affordance).
+def test_show_tool_call_mounts_a_spaced_affordance() -> None:
+    # A tool call mounts a dim ToolAffordance carrying the composed label; the first call of a
+    # turn keeps its top margin (lifts the block off the prompt) and a consecutive call adds the
+    # `-tight` class so the two lines don't sprawl.
     async def go() -> None:
         app = _app()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.show_tool_call("Searching the web")
-            notes = [str(n.render()) for n in app.query(Note)]
-            assert any("Searching the web" in n for n in notes)
+            app.show_tool_call("Searching the web · Boston weather")
+            app.show_tool_call("Using read_file · notes.md")
+            lines = list(app.query(ToolAffordance))
+            assert len(lines) == 2
+            assert "Searching the web · Boston weather" in str(lines[0].render())
+            assert lines[0].has_class("-tight") is False  # first of the turn -> margin lifts it
+            assert lines[1].has_class("-tight") is True  # consecutive -> tight, no extra gap
 
     _run(go())
 
@@ -360,7 +371,7 @@ def test_worker_drives_the_renderer_and_unmount_closes_audio() -> None:
             assert "» turn it up" in str(app.query_one(UserMessage).render())
             assert app.query_one(AssistantMessage).text == "Done. "
             # The tool_call leg hopped to the UI thread and surfaced the affordance note.
-            assert any("Searching the web" in str(n.render()) for n in app.query(Note))
+            assert any("Searching the web" in str(t.render()) for t in app.query(ToolAffordance))
         assert done.is_set()  # leaving the run_test context unmounted -> on_stop released it
 
     _run(go())

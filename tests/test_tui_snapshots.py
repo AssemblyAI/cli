@@ -103,14 +103,16 @@ def test_live_paused(snap_compare) -> None:
 
 
 def test_live_tool_call_note(snap_compare) -> None:
-    """A tool the agent uses mid-turn drops a dim progress note so the wait doesn't read as a hang."""
+    """Tool calls mid-turn show the friendly label plus its identifying detail; the block is
+    lifted off the prompt by a blank line, and a consecutive call stays tight beneath it."""
 
     async def run_before(pilot: Pilot[None]) -> None:
         app = pilot.app
         assert isinstance(app, LiveAgentApp)
         h.freeze_animation(app)
         app.show_user_final("what's the weather like in Boston?")
-        app.show_tool_call("Searching the web")
+        app.show_tool_call("Searching the web · Boston weather")
+        app.show_tool_call("Using read_file · forecast.md")
 
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
 
