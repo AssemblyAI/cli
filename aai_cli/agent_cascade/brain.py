@@ -18,12 +18,13 @@ seam the rest of the cascade uses for its STT/LLM/TTS legs.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.code_agent.agent import CompiledAgent
 from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.code_agent.summarize import describe_args
 from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
 
@@ -50,6 +51,19 @@ _TOOL_LABELS = {WEB_SEARCH_TOOL_NAME: "Searching the web"}
 def _tool_label(name: str) -> str:
     """A short present-tense label for a tool call, shown as the live UI's tool affordance."""
     return _TOOL_LABELS.get(name, f"Using {name}")
+
+
+def _tool_affordance(name: str, args: Mapping[str, object]) -> str:
+    """The live UI's tool-affordance string: the label plus its identifying arg.
+
+    Joins the friendly present-tense label (``Searching the web`` / ``Using read_file``) with
+    the one identifying argument :func:`describe_args` picks out (a query, path, or URL), so a
+    paused turn reads as ``Searching the web · ai house Seattle`` rather than a bare verb. Falls
+    back to the bare label when the call carries no arguments.
+    """
+    label = _tool_label(name)
+    detail = describe_args(args)
+    return f"{label} · {detail}" if detail else label
 
 
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
@@ -282,7 +296,7 @@ def _surface_event(event: object, on_tool: Callable[[str], None] | None, *, verb
     from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult
 
     if isinstance(event, ToolCall) and on_tool is not None:
-        on_tool(_tool_label(event.name))
+        on_tool(_tool_affordance(event.name, event.args))
     if not verbose:
         return
     if isinstance(event, ToolCall):
