@@ -59,6 +59,7 @@ def test_geocode_returns_top_match_and_hits_geocoding_host():
     assert result == ("Paris", 48.85, 2.35)
     assert "geocoding-api.open-meteo.com" in seen["url"]
     assert "name=Paris" in seen["url"]
+    assert "count=1" in seen["url"]
 
 
 def test_geocode_no_results_is_none():
@@ -125,3 +126,60 @@ def test_tool_network_error_is_graceful():
 
     tool = weather_tool.build_weather_tool(fetch=boom)
     assert tool.invoke({"location": "Paris"}) == "I couldn't get the weather right now."
+
+
+# --- _forecast_lines length guard -------------------------------------------
+
+
+def test_format_report_skips_a_day_when_a_daily_array_is_short():
+    # weather_code shorter than the temp arrays: the length guard must skip the
+    # missing days rather than IndexError. Kills the `and`->`or` guard mutation.
+    data: dict[str, object] = {
+        "current": {"temperature_2m": 10.0, "weather_code": 0},
+        "daily": {
+            "temperature_2m_max": [12.0, 13.0, 14.0],
+            "temperature_2m_min": [5.0, 6.0, 7.0],
+            "weather_code": [0],  # only today's code present
+        },
+    }
+    report = weather_tool.format_report("Testville", data)
+    assert "In Testville it's 10°C" in report
+    assert "Tomorrow" not in report
+    assert "Then" not in report
+
+
+# --- _WMO_DESCRIPTIONS table pin --------------------------------------------
+
+
+def test_wmo_descriptions_table_is_exact():
+    # Pin the whole code->phrase table: a mutated integer key makes the dict differ
+    # from this literal, failing the test. (The table is only import-time evaluated,
+    # so the mutation gate reruns the full suite and relies on this test to kill it.)
+    assert weather_tool._WMO_DESCRIPTIONS == {
+        0: "clear sky",
+        1: "mainly clear",
+        2: "partly cloudy",
+        3: "overcast",
+        45: "fog",
+        48: "freezing fog",
+        51: "light drizzle",
+        53: "drizzle",
+        55: "heavy drizzle",
+        61: "light rain",
+        63: "rain",
+        65: "heavy rain",
+        66: "freezing rain",
+        67: "heavy freezing rain",
+        71: "light snow",
+        73: "snow",
+        75: "heavy snow",
+        77: "snow grains",
+        80: "light showers",
+        81: "showers",
+        82: "heavy showers",
+        85: "light snow showers",
+        86: "heavy snow showers",
+        95: "thunderstorms",
+        96: "thunderstorms with hail",
+        99: "severe thunderstorms with hail",
+    }
