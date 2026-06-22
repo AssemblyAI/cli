@@ -277,8 +277,13 @@ def _stream_graph(
         pending.clear()
 
     try:
-        for chunk, _meta in graph.stream({"messages": conversation}, None, stream_mode="messages"):
-            yield from _events_from_chunk(chunk, verbose, pending, flush_log)
+        for item in graph.stream({"messages": conversation}, None, stream_mode="messages"):
+            if not isinstance(item, tuple) or len(item) != 2:
+                continue  # defensive: messages mode yields (chunk, metadata) pairs
+            chunk, _meta = item
+            yield from _events_from_chunk(
+                chunk, verbose=verbose, pending=pending, flush_log=flush_log
+            )
         flush_log()
     except CLIError:
         raise
@@ -289,7 +294,7 @@ def _stream_graph(
 
 
 def _events_from_chunk(
-    chunk: object, verbose: bool, pending: list[str], flush_log: Callable[[], None]
+    chunk: object, *, verbose: bool, pending: list[str], flush_log: Callable[[], None]
 ) -> Iterator[SpeechDelta | ToolNotice]:
     """Translate one streamed message chunk into speech/tool events (and verbose logs)."""
     if type(chunk).__name__ == "ToolMessage":
@@ -349,8 +354,9 @@ def _drive_graph(
         last: dict[str, object] = {}
         seen = 0
         for chunk in graph.stream(graph_input, None, stream_mode="values"):
-            seen = _log_flow(chunk, seen, on_tool)
-            last = chunk
+            if isinstance(chunk, dict):
+                seen = _log_flow(chunk, seen, on_tool)
+                last = chunk
         return last
     return graph.invoke(graph_input)
 
