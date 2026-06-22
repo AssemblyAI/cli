@@ -380,8 +380,8 @@ def test_build_live_tools_has_weather_and_web_search_when_keyed(monkeypatch):
     monkeypatch.setattr("aai_cli.code_agent.firecrawl_search.build_web_search_tool", lambda: search)
     names = [tool.name for tool in brain.build_live_tools()]
     # Web search is the optional keyed leg; the keyless weather tool is always present.
-    assert brain.WEB_SEARCH_TOOL_NAME in names
-    assert weather_tool.WEATHER_TOOL_NAME in names
+    # Exact set assertion kills duplicated/extra tools a loose `in` check would miss.
+    assert sorted(names) == sorted([brain.WEB_SEARCH_TOOL_NAME, weather_tool.WEATHER_TOOL_NAME])
 
 
 def test_build_live_tools_is_just_weather_without_firecrawl_key(monkeypatch):
@@ -389,6 +389,17 @@ def test_build_live_tools_is_just_weather_without_firecrawl_key(monkeypatch):
     # No FIRECRAWL_API_KEY -> no web search, but the keyless weather tool still loads.
     names = [tool.name for tool in brain.build_live_tools()]
     assert names == [weather_tool.WEATHER_TOOL_NAME]
+
+
+def test_tool_capabilities_lists_web_search_then_weather_when_both_present():
+    caps = brain._tool_capabilities(
+        [_NamedTool(brain.WEB_SEARCH_TOOL_NAME), _NamedTool(weather_tool.WEATHER_TOOL_NAME)]
+    )
+    # Exact list pins BOTH phrases and their order, killing a drop/swap of either block.
+    assert caps == [
+        "search the web for current or unfamiliar facts",
+        "tell someone the current weather and short forecast for a place",
+    ]
 
 
 # --- build_graph (model construction + compile, with the docs probe skipped) -
