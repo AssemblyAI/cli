@@ -10,7 +10,7 @@ interrupt/resume the approval flow needs.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -42,12 +42,6 @@ class CompiledAgent(Protocol):
         self, input: object, config: Mapping[str, object] | None = None
     ) -> dict[str, object]:
         """Run one step of the graph, returning the updated state (incl. messages)."""
-
-    def stream(
-        self, input: object, config: Mapping[str, object] | None = None, *, stream_mode: str
-    ) -> Iterator[object]:
-        """Stream the graph's execution; yields per-step values (or (chunk, metadata)
-        tuples in messages mode), depending on stream_mode."""
 
 
 def _interrupt_config(*, auto_approve: bool) -> dict[str, bool] | None:

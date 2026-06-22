@@ -276,11 +276,13 @@ def _stream_graph(
             _FLOW_LOG.info("llm: %s", "".join(pending))
         pending.clear()
 
+    if not hasattr(graph, "stream"):
+        raise CLIError(
+            "the agent couldn't complete the turn: the agent graph cannot stream",
+            error_type="agent_brain_error",
+        )
     try:
-        for item in graph.stream({"messages": conversation}, None, stream_mode="messages"):
-            if not isinstance(item, tuple) or len(item) != 2:
-                continue  # defensive: messages mode yields (chunk, metadata) pairs
-            chunk, _meta = item
+        for chunk, _meta in graph.stream({"messages": conversation}, None, stream_mode="messages"):
             yield from _events_from_chunk(
                 chunk, verbose=verbose, pending=pending, flush_log=flush_log
             )
@@ -354,9 +356,8 @@ def _drive_graph(
         last: dict[str, object] = {}
         seen = 0
         for chunk in graph.stream(graph_input, None, stream_mode="values"):
-            if isinstance(chunk, dict):
-                seen = _log_flow(chunk, seen, on_tool)
-                last = chunk
+            seen = _log_flow(chunk, seen, on_tool)
+            last = chunk
         return last
     return graph.invoke(graph_input)
 

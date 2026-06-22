@@ -598,6 +598,20 @@ def test_streamer_passes_cli_error_through():
         list(streamer([{"role": "user", "content": "hi"}]))
 
 
+def test_streamer_errors_when_graph_cannot_stream():
+    # A graph that only implements invoke (no .stream) can't be streamed — the streamer
+    # must surface a clean CLIError rather than AttributeError-ing mid-turn.
+    class _InvokeOnly:
+        def invoke(self, graph_input):
+            del graph_input
+            return {"messages": []}
+
+    streamer = brain.build_streamer("k", CascadeConfig(), graph=_InvokeOnly())
+    with pytest.raises(CLIError) as excinfo:
+        list(streamer([{"role": "user", "content": "hi"}]))
+    assert "cannot stream" in excinfo.value.message
+
+
 def test_streamer_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_state):
     monkeypatch.setattr(brain.debuglog, "active", lambda: True)
     call_chunk = AIMessageChunk(
