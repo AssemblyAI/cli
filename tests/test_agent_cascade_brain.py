@@ -12,7 +12,7 @@ import logging
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from aai_cli.agent_cascade import brain, weather_tool
@@ -485,3 +485,129 @@ def test_weather_tool_advertised_in_system_prompt():
 
 def test_tool_label_maps_weather():
     assert brain._tool_label(weather_tool.WEATHER_TOOL_NAME) == "Checking the weather"
+
+
+# --- build_streamer (token streaming -> SpeechDelta / ToolNotice) ------------
+
+
+class _MessageStreamGraph:
+    """A graph whose .stream yields (message_chunk, metadata) pairs — the shape
+    langgraph emits under stream_mode='messages'. Records the stream_mode it saw."""
+
+    def __init__(self, items):
+        self._items = items
+        self.stream_mode = None
+
+    def stream(self, graph_input, config, *, stream_mode):
+        del graph_input, config
+        self.stream_mode = stream_mode
+        yield from self._items
+
+
+def _collect(graph, messages, **kwargs):
+    streamer = brain.build_streamer("k", CascadeConfig(), graph=graph)
+    return list(streamer(messages, **kwargs)) if kwargs else list(streamer(messages))
+
+
+def test_streamer_yields_speech_deltas_for_assistant_tokens():
+    graph = _MessageStreamGraph(
+        [
+            (AIMessageChunk(content="Hello "), {}),
+            (AIMessageChunk(content="there."), {}),
+        ]
+    )
+    events = _collect(graph, [{"role": "user", "content": "hi"}])
+    assert [e.text for e in events if isinstance(e, brain.SpeechDelta)] == ["Hello ", "there."]
+    assert graph.stream_mode == "messages"
+
+
+def test_streamer_strips_system_message_before_streaming():
+    captured = {}
+
+    class _Capture(_MessageStreamGraph):
+        def stream(self, graph_input, config, *, stream_mode):
+            captured["roles"] = [m["role"] for m in graph_input["messages"]]
+            return super().stream(graph_input, config, stream_mode=stream_mode)
+
+    graph = _Capture([(AIMessageChunk(content="ok"), {})])
+    _collect(graph, [{"role": "system", "content": "p"}, {"role": "user", "content": "hi"}])
+    assert captured["roles"] == ["user"]
+
+
+def test_streamer_emits_a_tool_notice_when_a_tool_call_starts():
+    call_chunk = AIMessageChunk(
+        content="",
+        tool_call_chunks=[{"name": brain.WEB_SEARCH_TOOL_NAME, "args": "", "id": "c1", "index": 0}],
+    )
+    graph = _MessageStreamGraph([(call_chunk, {}), (AIMessageChunk(content="Here it is."), {})])
+    events = _collect(graph, [{"role": "user", "content": "news?"}])
+    notices = [e.label for e in events if isinstance(e, brain.ToolNotice)]
+    deltas = [e.text for e in events if isinstance(e, brain.SpeechDelta)]
+    assert notices == ["Searching the web"]
+    assert deltas == ["Here it is."]
+
+
+def test_streamer_emits_one_notice_per_call_ignoring_arg_only_chunks():
+    # The first tool-call chunk carries the name; later arg-only chunks (name=None) must NOT
+    # re-fire the affordance.
+    first = AIMessageChunk(
+        content="", tool_call_chunks=[{"name": "get_time", "args": "", "id": "c1", "index": 0}]
+    )
+    rest = AIMessageChunk(
+        content="", tool_call_chunks=[{"name": None, "args": '{"tz":1}', "id": "c1", "index": 0}]
+    )
+    graph = _MessageStreamGraph([(first, {}), (rest, {})])
+    events = _collect(graph, [{"role": "user", "content": "time?"}])
+    assert [e.label for e in events if isinstance(e, brain.ToolNotice)] == ["Using get_time"]
+
+
+def test_streamer_wraps_graph_errors_in_cli_error():
+    class _Boom:
+        def stream(self, graph_input, config, *, stream_mode):
+            del graph_input, config, stream_mode
+            raise ValueError("gateway said no")
+            yield  # pragma: no cover  (make it a generator)
+
+    streamer = brain.build_streamer("k", CascadeConfig(), graph=_Boom())
+    with pytest.raises(CLIError) as excinfo:
+        list(streamer([{"role": "user", "content": "hi"}]))
+    assert "couldn't complete the turn" in excinfo.value.message
+    assert "gateway said no" in excinfo.value.message
+
+
+def test_streamer_passes_cli_error_through():
+    class _CliBoom:
+        def stream(self, graph_input, config, *, stream_mode):
+            del graph_input, config, stream_mode
+            raise CLIError("already clean", error_type="x")
+            yield  # pragma: no cover
+
+    streamer = brain.build_streamer("k", CascadeConfig(), graph=_CliBoom())
+    with pytest.raises(CLIError, match="already clean"):
+        list(streamer([{"role": "user", "content": "hi"}]))
+
+
+def test_streamer_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_state):
+    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
+    call_chunk = AIMessageChunk(
+        content="", tool_call_chunks=[{"name": "tavily_search", "args": "", "id": "c1", "index": 0}]
+    )
+    items = [
+        (AIMessageChunk(content="Let me "), {}),
+        (AIMessageChunk(content="search."), {}),
+        (call_chunk, {}),
+        (ToolMessage(content="rainy, 52F", name="tavily_search", tool_call_id="c1"), {}),
+        (AIMessageChunk(content="It's rainy."), {}),
+    ]
+    graph = _MessageStreamGraph(items)
+    with caplog.at_level(logging.INFO, logger="aai_cli.agent_cascade.brain"):
+        _collect(graph, [{"role": "user", "content": "weather?"}])
+    messages = [r.getMessage() for r in caplog.records]
+    # Accumulated assistant text is logged as one line per assistant turn, around the
+    # tool call and its result.
+    assert messages == [
+        "llm: Let me search.",
+        "tool call tavily_search",
+        "tool result tavily_search -> rainy, 52F",
+        "llm: It's rainy.",
+    ]

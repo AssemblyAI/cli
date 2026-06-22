@@ -18,7 +18,8 @@ seam the rest of the cascade uses for its STT/LLM/TTS legs.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aai_cli.agent_cascade import weather_tool
@@ -54,6 +55,20 @@ _TOOL_LABELS = {
 def _tool_label(name: str) -> str:
     """A short present-tense label for a tool call, shown as the live UI's tool affordance."""
     return _TOOL_LABELS.get(name, f"Using {name}")
+
+
+@dataclass(frozen=True)
+class SpeechDelta:
+    """A top-level assistant-text token delta to be spoken (one piece of the reply)."""
+
+    text: str
+
+
+@dataclass(frozen=True)
+class ToolNotice:
+    """A speakable affordance label emitted when the agent starts a tool call mid-turn."""
+
+    label: str
 
 
 # Closes every guidance variant: the reply is spoken, so it must stay short and plain.
@@ -218,6 +233,82 @@ def build_completer(
         return _reply_text(_run_graph(resolved, conversation, on_tool))
 
     return complete_reply
+
+
+def build_streamer(
+    api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
+) -> Callable[..., Iterator[SpeechDelta | ToolNotice]]:
+    """A streaming reply leg for the cascade engine, backed by the deepagents graph.
+
+    The cascade prepends its own ``system`` message each turn; the graph owns the system
+    prompt, so it is dropped before streaming. The graph is driven with
+    ``stream_mode="messages"`` and each top-level assistant token delta is yielded as a
+    :class:`SpeechDelta`, each started tool call as a :class:`ToolNotice` (the live UI's
+    affordance). Under ``-v`` the flow is logged. ``graph`` is injected in tests so the
+    per-turn wiring runs against a fake with no network.
+    """
+    resolved = build_graph(api_key, config) if graph is None else graph
+
+    def stream_reply(
+        messages: list[ChatCompletionMessageParam],
+    ) -> Iterator[SpeechDelta | ToolNotice]:
+        conversation = [message for message in messages if message.get("role") != "system"]
+        return _stream_graph(resolved, conversation)
+
+    return stream_reply
+
+
+def _stream_graph(
+    graph: CompiledAgent, conversation: list[ChatCompletionMessageParam]
+) -> Iterator[SpeechDelta | ToolNotice]:
+    """Stream one turn through the graph token-by-token, yielding speech/tool events.
+
+    Wraps any graph failure as a CLIError (a clean ``CLIError`` passes through) so the
+    cascade surfaces it instead of the reply worker dying silently — the same contract the
+    old ``_run_graph`` had. Under ``-v`` the accumulated assistant text, each tool call,
+    and each tool result are logged to ``_FLOW_LOG``.
+    """
+    verbose = debuglog.active()
+    pending: list[str] = []  # assistant deltas accumulated for one verbose "llm:" line
+
+    def flush_log() -> None:
+        if verbose and pending:
+            _FLOW_LOG.info("llm: %s", "".join(pending))
+        pending.clear()
+
+    try:
+        for chunk, _meta in graph.stream({"messages": conversation}, None, stream_mode="messages"):
+            yield from _events_from_chunk(chunk, verbose, pending, flush_log)
+        flush_log()
+    except CLIError:
+        raise
+    except Exception as exc:
+        raise CLIError(
+            f"the agent couldn't complete the turn: {exc}", error_type="agent_brain_error"
+        ) from exc
+
+
+def _events_from_chunk(
+    chunk: object, verbose: bool, pending: list[str], flush_log: Callable[[], None]
+) -> Iterator[SpeechDelta | ToolNotice]:
+    """Translate one streamed message chunk into speech/tool events (and verbose logs)."""
+    if type(chunk).__name__ == "ToolMessage":
+        flush_log()
+        if verbose:
+            content = _content_text(getattr(chunk, "content", ""))
+            _FLOW_LOG.info("tool result %s -> %s", getattr(chunk, "name", ""), _clip(content))
+        return
+    for call in getattr(chunk, "tool_call_chunks", None) or []:
+        name = call.get("name")
+        if name:
+            flush_log()
+            if verbose:
+                _FLOW_LOG.info("tool call %s", name)
+            yield ToolNotice(_tool_label(name))
+    text = _content_text(getattr(chunk, "content", ""))
+    if text:
+        pending.append(text)
+        yield SpeechDelta(text)
 
 
 def _run_graph(
