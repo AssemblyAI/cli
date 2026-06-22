@@ -19,7 +19,7 @@ from aai_cli.core import llm
 DEFAULT_MODEL = "kimi-k2.5"
 DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
 # The realtime model the cascade transcribes with (same as the agent-cascade template).
-DEFAULT_SPEECH_MODEL = "u3-rt-pro"
+DEFAULT_SPEECH_MODEL = "universal-3-5-pro"
 DEFAULT_SYSTEM_PROMPT = (
     "You are a friendly, concise voice assistant. Keep replies as short as "
     "possible — usually a single sentence, never more than two. Answer directly "

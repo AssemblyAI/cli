@@ -26,6 +26,12 @@ from aai_cli.core import choices, client, config_builder, jsonshape, llm, remote
 from aai_cli.core.errors import UsageError
 from aai_cli.ui import output
 
+# The default batch model when no `--speech-model` (or `--config speech_model(s)=…`)
+# is given. `universal-3-5-pro` is not a member of the SDK's `SpeechModel` enum
+# (which backs `--speech-model`), so it's delivered through the plural `speech_models`
+# list field, which takes raw model-id strings.
+DEFAULT_BATCH_SPEECH_MODELS = ("universal-3-5-pro",)
+
 
 def out_payload(
     transcript: aai.Transcript,
@@ -355,6 +361,10 @@ def run_transcribe(opts: TranscribeOptions, state: AppState, *, json_mode: bool)
     merged = config_builder.merge_transcribe_config(
         flags=flags, overrides=opts.config_kv, config_file=opts.config_file
     )
+    # Apply the default model only when the request specifies none, so an explicit
+    # `--speech-model`, `--config speech_model(s)=…`, or config file still wins.
+    if "speech_model" not in merged and "speech_models" not in merged:
+        merged["speech_models"] = list(DEFAULT_BATCH_SPEECH_MODELS)
     transcribe_validate.validate_speakers_expected(merged)
 
     batch_sources = transcribe_sources.expand_sources(

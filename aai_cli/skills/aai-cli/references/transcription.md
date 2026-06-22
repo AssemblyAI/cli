@@ -56,7 +56,7 @@ channel (`<stem>-you.wav`, `<stem>-system.wav`) beside the shared transcript.
 High-value flags (run `assembly stream --help` for the full set):
 
 - Capture: `--device N`, `--sample-rate HZ`, `--encoding pcm_s16le|pcm_mulaw`.
-- Model/turns: `--speech-model` (default `u3-rt-pro`), `--format-turns`,
+- Model/turns: `--speech-model` (default `universal-3-5-pro`), `--format-turns`,
   `--include-partial-turns`, `--end-of-turn-confidence`, `--min-turn-silence`,
   `--max-turn-silence`, `--vad-threshold`.
 - Features: `--speaker-labels`, `--max-speakers`, `--keyterms-prompt`,

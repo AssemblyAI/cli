@@ -21,7 +21,7 @@ SPEC = command_registry.CommandModuleSpec(
     commands=("stream",),
 )
 
-DEFAULT_SPEECH_MODEL = SpeechModel.u3_rt_pro
+DEFAULT_SPEECH_MODEL = SpeechModel.universal_3_5_pro
 
 
 @app.command(

@@ -681,7 +681,7 @@
   │ --speech-model                            TEXT              Streaming speech │
   │                                                             model            │
   │                                                             [default:        │
-  │                                                             u3-rt-pro]       │
+  │                                                             universal-3-5-p… │
   │ --format-turns       --no-format-turns                      Format           │
   │                                                             (punctuate)      │
   │                                                             finalized turns  │
@@ -924,10 +924,11 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
-  │                             ultilingual|universal-  [default: u3-rt-pro]     │
-  │                             streaming-english|u3-r                           │
-  │                             t-pro|whisper-rt|u3-pr                           │
-  │                             o]                                               │
+  │                             ultilingual|universal-  [default:                │
+  │                             streaming-english|u3-r  universal-3-5-pro]       │
+  │                             t-pro|u3-rt-pro-beta-1                           │
+  │                             |whisper-rt|universal-                           │
+  │                             3-5-pro|u3-pro]                                  │
   │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding           │
   │ --language-detection                                Auto-detect the spoken   │
   │                                                     language                 │
