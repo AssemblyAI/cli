@@ -8,18 +8,44 @@ the shared cascade fakes — no sockets, mic, or speaker.
 from __future__ import annotations
 
 import queue
+import types
 
 from aai_cli.agent_cascade import engine
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
 from aai_cli.agent_cascade.config import CascadeConfig
+from aai_cli.app.context import AppState
 from aai_cli.commands.agent_cascade import _exec
+from aai_cli.commands.agent_cascade._exec import run_agent_cascade
+from aai_cli.core import config
 from tests._cascade_fakes import make_session
+from tests.test_agent_cascade_command import _opts
 
 
 def test_deny_writes_always_rejects():
     # The non-interactive approver declines every write (no channel to confirm one).
     assert _exec._deny_writes("write_file", {"file_path": "/x"}) is False
     assert _exec._deny_writes("edit_file", {"file_path": "/y"}) is False
+
+
+def test_files_flag_threads_into_config_with_deny_approver_on_headless_path(monkeypatch):
+    # --files reaches CascadeConfig.files, and the non-interactive (file source) path wires the
+    # deny-writes approver since there's no keyboard channel to confirm a write.
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
+    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    captured = {}
+
+    def fake_real(api_key, cfg, *, audio, stt_params, approver=None):
+        captured["files"] = cfg.files
+        captured["approver"] = approver
+        return "deps"
+
+    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
+    run_agent_cascade(_opts(source="clip.wav", files=True), AppState(), json_mode=False)
+    assert captured["files"] is True
+    assert captured["approver"] is _exec._deny_writes
 
 
 def test_real_passes_approver_to_streamer(monkeypatch):

@@ -235,27 +235,6 @@ def test_no_mcp_servers_load_by_default(monkeypatch):
     assert captured["config"].mcp_servers == {}
 
 
-def test_files_flag_threads_into_config_with_deny_approver_on_headless_path(monkeypatch):
-    # --files reaches CascadeConfig.files, and the non-interactive (file source) path wires the
-    # deny-writes approver since there's no keyboard channel to confirm a write.
-    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
-    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
-    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
-    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
-    captured = {}
-
-    def fake_real(api_key, config, *, audio, stt_params, approver=None):
-        captured["files"] = config.files
-        captured["approver"] = approver
-        return "deps"
-
-    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
-    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
-    run_agent_cascade(_opts(source="clip.wav", files=True), AppState(), json_mode=False)
-    assert captured["files"] is True
-    assert captured["approver"] is _exec._deny_writes
-
-
 # --- run_agent_cascade wiring ----------------------------------------------
 
 

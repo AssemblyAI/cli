@@ -78,72 +78,6 @@ class _NamedTool:
         self.name = name
 
 
-def test_system_prompt_advertises_web_search_when_present():
-    prompt = brain.build_system_prompt(
-        "You are a pirate.", tools=[_NamedTool(brain.WEB_SEARCH_TOOL_NAME)]
-    )
-    # The persona is preserved, and the guidance advertises the web-search capability the
-    # present tool backs (the plain cascade persona never mentions tools).
-    assert prompt.startswith("You are a pirate.")
-    assert "search the web" in prompt
-
-
-def test_system_prompt_omits_web_search_when_search_tool_absent():
-    # Without the Firecrawl search tool the guidance must NOT promise web search — announcing
-    # a missing tool makes the agent narrate "I'll search…" and then stall with no answer. A
-    # non-search tool name must not falsely trigger the web-search capability.
-    prompt = brain.build_system_prompt("persona", tools=[_NamedTool("some_other_tool")])
-    assert "search the web for current or unfamiliar facts" not in prompt
-
-
-def test_system_prompt_tells_model_not_to_promise_tools_when_none():
-    # No tools at all: the model must answer from its own knowledge and explicitly not
-    # promise to search or look anything up (the bug that left replies never coming back).
-    prompt = brain.build_system_prompt("persona", tools=[])
-    assert "search the web for current or unfamiliar facts" not in prompt
-    assert "your own knowledge" in prompt
-    assert "Never say" in prompt
-
-
-def test_extra_capability_lists_sorted_tool_names():
-    # MCP tools are advertised generically, by name, alphabetically.
-    phrase = brain._extra_capability([_NamedTool("zeta"), _NamedTool("alpha")])
-    assert phrase == "use your connected tools (alpha, zeta)"
-
-
-def test_extra_capability_is_none_without_extra_tools():
-    assert brain._extra_capability([]) is None
-
-
-def test_system_prompt_advertises_mcp_extra_tools():
-    # With MCP tools bound (but no built-in legs), the model must be told it HAS tools —
-    # not handed the "no external tools" guidance — and the tools are named.
-    prompt = brain.build_system_prompt("persona", tools=[], extra_tools=[_NamedTool("get_time")])
-    assert "your own knowledge" not in prompt
-    assert "use your connected tools (get_time)" in prompt
-
-
-def test_system_prompt_advertises_files_when_enabled():
-    # With --files on, the model must be told it can read/write files in the working dir,
-    # so it knows the capability is real (and the no-tools guidance must not apply).
-    prompt = brain.build_system_prompt("persona", tools=[], files=True)
-    assert "read, write, and search files in your working directory" in prompt
-    assert "your own knowledge" not in prompt
-
-
-def test_system_prompt_omits_files_when_disabled():
-    # Default: no file capability advertised (the model shouldn't promise file access it lacks).
-    prompt = brain.build_system_prompt("persona", tools=[], files=False)
-    assert "working directory" not in prompt
-
-
-def test_join_clause_grammar():
-    # One/two/three capability phrases each render with natural conjunctions.
-    assert brain._join_clause(["a"]) == "a"
-    assert brain._join_clause(["a", "b"]) == "a and b"
-    assert brain._join_clause(["a", "b", "c"]) == "a, b, and c"
-
-
 def test_web_search_tool_name_matches_built_tool(monkeypatch):
     # The prompt builder detects search by WEB_SEARCH_TOOL_NAME, so pin it against the real
     # Firecrawl tool's registered name — if it renames, detection would silently break.
@@ -240,24 +174,6 @@ def test_build_live_tools_has_keyless_tools_without_firecrawl_key(monkeypatch):
     ]
 
 
-def test_tool_capabilities_lists_web_search_then_weather_when_both_present():
-    caps = brain._tool_capabilities(
-        [_NamedTool(brain.WEB_SEARCH_TOOL_NAME), _NamedTool(weather_tool.WEATHER_TOOL_NAME)]
-    )
-    # Exact list pins BOTH phrases and their order, killing a drop/swap of either block.
-    assert caps == [
-        "search the web for current or unfamiliar facts",
-        "tell someone the current weather and short forecast for a place",
-    ]
-
-
-def test_read_url_tool_advertised_in_system_prompt():
-    prompt = brain.build_system_prompt(
-        "persona", tools=[_NamedTool(webpage_tool.READ_URL_TOOL_NAME)]
-    )
-    assert "read a web page or PDF" in prompt
-
-
 def test_tool_label_maps_read_url():
     assert brain._tool_label(webpage_tool.READ_URL_TOOL_NAME) == "Reading the page"
 
@@ -346,24 +262,8 @@ def test_build_model_defaults_have_no_extra():
     assert model.extra_body is None
 
 
-def test_weather_tool_advertised_in_system_prompt():
-    prompt = brain.build_system_prompt(
-        "persona", tools=[_NamedTool(weather_tool.WEATHER_TOOL_NAME)]
-    )
-    assert "current weather and short forecast" in prompt
-    # And it isn't the no-tools fallback.
-    assert "no external tools" not in prompt
-
-
 def test_tool_label_maps_weather():
     assert brain._tool_label(weather_tool.WEATHER_TOOL_NAME) == "Checking the weather"
-
-
-def test_datetime_tool_advertised_in_system_prompt():
-    prompt = brain.build_system_prompt(
-        "persona", tools=[_NamedTool(datetime_tool.DATETIME_TOOL_NAME)]
-    )
-    assert "current date and time" in prompt
 
 
 def test_tool_label_maps_datetime():

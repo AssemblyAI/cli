@@ -6,7 +6,8 @@
     "tests/test_code_command.py",
     "tests/test_code_tui.py",
     "tests/test_code_tui_voice.py",
-    "tests/test_agent_cascade_brain.py"
+    "tests/test_agent_cascade_brain.py",
+    "tests/test_agent_cascade_prompt.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "standard",
