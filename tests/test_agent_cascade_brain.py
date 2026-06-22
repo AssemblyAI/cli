@@ -240,23 +240,38 @@ def test_run_graph_invokes_when_not_verbose():
 
 def test_on_tool_sink_streams_and_reports_each_tool_call_by_label():
     # A wired tool sink (the live UI affordance) streams the graph — even without -v — and
-    # reports each tool call by its speakable label, while still returning the final reply.
+    # reports each tool call by its composed affordance (label · identifying arg), while still
+    # returning the final reply.
     labels: list[str] = []
     call = AIMessage(
-        content="", tool_calls=[{"name": brain.WEB_SEARCH_TOOL_NAME, "args": {}, "id": "c1"}]
+        content="",
+        tool_calls=[
+            {"name": brain.WEB_SEARCH_TOOL_NAME, "args": {"query": "today's news"}, "id": "c1"}
+        ],
     )
     snapshots = [{"messages": [call]}, {"messages": [call, AIMessage(content="Here's the news.")]}]
     graph = _StreamingGraph(snapshots)
     completer = brain.build_completer("k", CascadeConfig(), graph=graph)
     reply = completer([{"role": "user", "content": "news?"}], on_tool=labels.append)
     assert reply == "Here's the news."
-    assert labels == ["Searching the web"]
+    assert labels == ["Searching the web · today's news"]
     assert graph.stream_kwargs == "values" and graph.invoked is False  # streamed, not invoked
 
 
 def test_tool_label_maps_web_search_and_falls_back_for_others():
     assert brain._tool_label(brain.WEB_SEARCH_TOOL_NAME) == "Searching the web"
     assert brain._tool_label("get_time") == "Using get_time"
+
+
+def test_tool_affordance_appends_the_identifying_arg():
+    # The web-search query and a generic tool's identifying arg are appended after a middle dot;
+    # an argument-less call degrades to the bare label (no trailing separator).
+    assert (
+        brain._tool_affordance(brain.WEB_SEARCH_TOOL_NAME, {"query": "ai house Seattle"})
+        == "Searching the web · ai house Seattle"
+    )
+    assert brain._tool_affordance("read_file", {"path": "notes.md"}) == "Using read_file · notes.md"
+    assert brain._tool_affordance("get_time", {}) == "Using get_time"
 
 
 def test_run_graph_invokes_when_graph_cannot_stream(monkeypatch):
