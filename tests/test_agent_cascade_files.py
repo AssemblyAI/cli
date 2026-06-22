@@ -109,3 +109,14 @@ def test_consume_suspends_then_restores_deadline_across_approval(monkeypatch):
     assert seen[0] is not None  # initial deadline is finite
     assert seen[1] is None  # paused after ApprovalPause(active=True)
     assert seen[2] is not None  # restored after ApprovalPause(active=False)
+
+
+def test_approval_deadline_suspends_then_restores_into_the_future():
+    # active=True suspends the clock (None); active=False restores a deadline in the FUTURE —
+    # asserting it's ahead of now (not merely non-None) pins the + so the timeout actually fires.
+    import time
+
+    assert engine._approval_deadline(ApprovalPause(active=True)) is None
+    restored = engine._approval_deadline(ApprovalPause(active=False))
+    assert restored is not None
+    assert restored > time.monotonic()

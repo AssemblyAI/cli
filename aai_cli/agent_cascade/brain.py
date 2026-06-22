@@ -82,6 +82,35 @@ def _tool_label(name: str) -> str:
     return _TOOL_LABELS.get(name, f"Using {name}")
 
 
+# Spoken filler the agent says aloud when it pauses for a tool, so a hands-free turn fills the
+# silent tool round-trip with *why* it paused instead of dead air (the audible counterpart to the
+# visual `_TOOL_LABELS` affordance). Each tool gets a few short, speakable variants the engine
+# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS`. Spoken-style only — no
+# markdown, no trailing detail — since they're synthesized straight to TTS ahead of the answer.
+_GENERIC_FILLERS: tuple[str, ...] = ("One sec.", "Let me check.")
+
+_TOOL_FILLERS: dict[str, tuple[str, ...]] = {
+    WEB_SEARCH_TOOL_NAME: (
+        "Let me look that up.",
+        "Searching now.",
+        "One moment, checking the web.",
+    ),
+    weather_tool.WEATHER_TOOL_NAME: ("Let me check the weather.", "Checking the forecast now."),
+    webpage_tool.READ_URL_TOOL_NAME: ("Let me pull up that page.", "Reading it now."),
+    datetime_tool.DATETIME_TOOL_NAME: ("Let me check the time.", "One moment."),
+}
+
+
+def _tool_fillers(name: str) -> tuple[str, ...]:
+    """The spoken filler variants for a tool call, falling back to the generic tuple.
+
+    Mirrors :func:`_tool_label`: a known tool gets its own phrases, an unknown/MCP tool the
+    generic fallback. The tuple (not a single pre-chosen phrase) rides on :class:`ToolNotice`
+    so the engine owns rotation state and two notices for the same tool don't repeat.
+    """
+    return _TOOL_FILLERS.get(name, _GENERIC_FILLERS)
+
+
 @dataclass(frozen=True)
 class SpeechDelta:
     """A top-level assistant-text token delta to be spoken (one piece of the reply)."""
@@ -91,9 +120,15 @@ class SpeechDelta:
 
 @dataclass(frozen=True)
 class ToolNotice:
-    """A speakable affordance label emitted when the agent starts a tool call mid-turn."""
+    """A speakable affordance emitted when the agent starts a tool call mid-turn.
+
+    ``label`` is the visual affordance ("Searching the web"); ``fillers`` are the spoken
+    variants the engine may say aloud for the *first* tool call of a turn (it owns the
+    rotation), so a hands-free turn isn't dead air during the tool round-trip.
+    """
 
     label: str
+    fillers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -409,7 +444,7 @@ def _events_from_chunk(
             flush_log()
             if verbose:
                 _FLOW_LOG.info("tool call %s", name)
-            yield ToolNotice(_tool_label(name))
+            yield ToolNotice(_tool_label(name), _tool_fillers(name))
     text = _content_text(getattr(chunk, "content", ""))
     if text:
         pending.append(text)

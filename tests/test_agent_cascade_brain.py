@@ -101,6 +101,23 @@ def test_tool_label_maps_web_search_and_falls_back_for_others():
     assert brain._tool_label("get_time") == "Using get_time"
 
 
+def test_tool_fillers_maps_known_tools_and_falls_back_to_generic():
+    # Each known tool carries its own spoken filler variants; an unknown/MCP tool falls back to
+    # the generic tuple (mirrors how _tool_label falls back to "Using {name}").
+    assert brain._tool_fillers(brain.WEB_SEARCH_TOOL_NAME) == (
+        "Let me look that up.",
+        "Searching now.",
+        "One moment, checking the web.",
+    )
+    assert brain._tool_fillers(weather_tool.WEATHER_TOOL_NAME) == (
+        "Let me check the weather.",
+        "Checking the forecast now.",
+    )
+    assert brain._tool_fillers("totally_unknown_tool") == brain._GENERIC_FILLERS
+    # The engine rotates fillers[index % len(fillers)], so an empty fallback would divide by zero.
+    assert brain._GENERIC_FILLERS
+
+
 def test_tool_label_for_file_ops_is_speakable():
     # The file tools get speakable affordance labels so a write/search turn reads as progress.
     assert brain._tool_label("write_file") == "Writing a file"
@@ -332,6 +349,21 @@ def test_streamer_emits_a_tool_notice_when_a_tool_call_starts():
     deltas = [e.text for e in events if isinstance(e, brain.SpeechDelta)]
     assert notices == ["Searching the web"]
     assert deltas == ["Here it is."]
+
+
+def test_streamer_tool_notice_carries_the_tools_fillers():
+    # The notice carries the tool's filler variants (not a pre-chosen one) so the engine owns
+    # rotation; here the weather tool's tuple rides along with the affordance label.
+    call_chunk = AIMessageChunk(
+        content="",
+        tool_call_chunks=[
+            {"name": weather_tool.WEATHER_TOOL_NAME, "args": "", "id": "c1", "index": 0}
+        ],
+    )
+    graph = _MessageStreamGraph([(call_chunk, {})])
+    events = _collect(graph, [{"role": "user", "content": "weather?"}])
+    notices = [e for e in events if isinstance(e, brain.ToolNotice)]
+    assert notices[0].fillers == brain._tool_fillers(weather_tool.WEATHER_TOOL_NAME)
 
 
 def test_streamer_emits_one_notice_per_call_ignoring_arg_only_chunks():

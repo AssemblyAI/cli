@@ -190,6 +190,11 @@ class CascadeSession:
     _speaking: threading.Event = field(
         default_factory=threading.Event, init=False
     )  # pragma: no mutate
+    # Rotates the per-tool spoken fillers across turns (fillers[_filler_index % len]) so the same
+    # tool doesn't repeat one phrase. The rotation test pins the exact phrase sequence, so a shifted
+    # default or mutated increment is caught; the field's `init=` is equivalent (never constructed
+    # positionally), like the sibling fields, hence the pragma.
+    _filler_index: int = field(default=0, init=False)  # pragma: no mutate
 
     def greet(self) -> None:
         """Speak the opening greeting (if any) and seed it into the history so the
@@ -316,36 +321,93 @@ class CascadeSession:
         failure, or a leg failure/timeout — which also surfaces the error)."""
         deadline: float | None = time.monotonic() + _REPLY_TIMEOUT_SECONDS
         buffer = ""
-        started = False
+        spoke_filler = False  # only the FIRST tool call of a turn says a spoken filler
+        used_tool = False  # once a tool ran, hold text unspoken so only the final answer is read
         while True:
             item = self._next_event(events, deadline, before)
             if isinstance(item, _Timeout):
-                self._surface_error(_timeout_error(), started=started)
+                self._surface_error(_timeout_error(), started=self._speaking.is_set())
                 return None
             if isinstance(item, _Failure):
-                self._surface_error(item.error, started=started)
+                self._surface_error(item.error, started=self._speaking.is_set())
                 return None
             if isinstance(item, _Done):
                 return buffer
             if isinstance(item, brain.ApprovalPause):
-                # Suspend the wall-clock deadline while the user decides on a gated write (a
-                # slow y/n keypress must not trip the reply timeout); restore it once answered.
-                deadline = None if item.active else time.monotonic() + _REPLY_TIMEOUT_SECONDS
+                deadline = _approval_deadline(item)
                 continue
             if isinstance(item, brain.ToolNotice):
-                self.renderer.tool_call(item.label)
+                if not self._handle_tool_notice(item, spoke_filler=spoke_filler):
+                    return None
+                spoke_filler = True
+                used_tool = True
                 buffer = ""  # drop any unspoken preamble — the answer comes after the tool
                 continue
             if self._stop.is_set():
                 return None
-            if not started:
-                self._speaking.set()
-                self.renderer.reply_started()
-                started = True
-            buffer += item.text
-            chunks, buffer = pop_clauses(buffer, min_chars=_MIN_CLAUSE_CHARS)
-            if not self._speak(chunks, spoken):
+            # item is a streamed SpeechDelta (every other case returned or continued above).
+            tail = self._speak_delta(item, buffer, spoken, used_tool=used_tool)
+            if tail is None:
                 return None
+            buffer = tail
+
+    def _speak_delta(
+        self, item: brain.SpeechDelta, buffer: str, spoken: list[str], *, used_tool: bool
+    ) -> str | None:
+        """Fold one streamed delta into the running buffer and speak any completed clauses.
+
+        Before any tool call, clauses stream out as they land (low-latency speech). *After* a tool
+        call (``used_tool``) the deep agent tends to narrate verbose planning between tool calls;
+        that text is held in the buffer unspoken and discarded at the next tool call, so only the
+        final answer — whatever remains buffered when the stream finishes — is ever read aloud.
+
+        Marks the reply as speaking on the first spoken delta (so a UI interrupt can cut it).
+        Returns the new buffer, or ``None`` if a TTS failure cut the turn (the caller aborts)."""
+        if used_tool:
+            return buffer + item.text
+        self._mark_speaking()
+        buffer += item.text
+        chunks, buffer = pop_clauses(buffer, min_chars=_MIN_CLAUSE_CHARS)
+        if not self._speak(chunks, spoken):
+            return None
+        return buffer
+
+    def _handle_tool_notice(self, item: brain.ToolNotice, *, spoke_filler: bool) -> bool:
+        """Show the tool affordance and, for the *first* tool call of a turn only, say a spoken
+        filler so a hands-free turn isn't dead air. Chained tool calls (``spoke_filler``) stay
+        silent. Returns False if the filler failed to synthesize (the caller aborts the turn)."""
+        self.renderer.tool_call(item.label)
+        if spoke_filler:
+            return True
+        return self._speak_filler(item.fillers)
+
+    def _mark_speaking(self) -> None:
+        """Mark the reply as audibly speaking on its first audible output — a clause or a tool
+        filler. Sets ``_speaking`` (so a UI interrupt can cut it) and fires ``reply_started`` once."""
+        if not self._speaking.is_set():
+            self._speaking.set()
+            self.renderer.reply_started()
+
+    def _speak_filler(self, fillers: tuple[str, ...]) -> bool:
+        """Say a short spoken filler ("Let me check") for the first tool call of a turn, so a
+        hands-free turn isn't dead air while the tool runs.
+
+        Marks the reply speaking (the filler is the start of audible output, so a barge-in during
+        it is caught), picks the next variant — rotating across turns so the same tool doesn't
+        repeat one phrase — and feeds it to the player through the same ``_stop``-respecting path a
+        clause uses. Unlike :meth:`_speak`, the filler is conversational glue, not part of the
+        answer, so it is *never* recorded to ``spoken``/history. Returns False if synthesizing it
+        failed (the caller aborts the turn, same as a clause that can't synthesize), True otherwise.
+        """
+        self._mark_speaking()
+        text = fillers[self._filler_index % len(fillers)]
+        self._filler_index += 1
+        try:
+            self.deps.synthesize(text, self._feed)
+        except CLIError as exc:
+            self._record_error(exc)
+            return False
+        return True
 
     def _next_event(
         self,
@@ -434,6 +496,13 @@ class CascadeSession:
         """Stop and join any in-flight reply worker (run on every exit path)."""
         self._stop.set()
         self._join_reply()
+
+
+def _approval_deadline(pause: brain.ApprovalPause) -> float | None:
+    """The reply deadline across a write-approval pause: ``None`` (clock suspended) while the
+    user is deciding on a gated write — a slow y/n keypress must not trip the reply timeout — and
+    a fresh finite deadline once answered."""
+    return None if pause.active else time.monotonic() + _REPLY_TIMEOUT_SECONDS
 
 
 def _is_final_turn(event: object, *, format_turns: bool) -> bool:

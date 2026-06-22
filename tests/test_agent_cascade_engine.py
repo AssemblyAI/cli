@@ -73,7 +73,7 @@ def test_on_turn_final_renders_and_replies():
 
 def test_reply_forwards_tool_calls_to_the_renderer():
     def stream(messages):
-        yield ToolNotice("Searching the web")
+        yield ToolNotice("Searching the web", ("Searching now.",))
         yield SpeechDelta("Found it.")
 
     session, renderer, _player = make_session(stream_reply=stream)
