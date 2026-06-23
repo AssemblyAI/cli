@@ -162,8 +162,10 @@ reflected in `--show-code` output.
 
 `--files` lets the agent read, write, and run code in the directory you launch
 it from (off by default). Reads run immediately; a write, edit, or command run pauses
-the turn for a `y`/`n` confirmation in the voice TUI (`a` approves the rest of the
-session). Commands run OS-sandboxed in that directory — confined to it, with no network
+the turn for confirmation in the voice TUI — press `y`/`n` (`a` approves the rest of the
+session) or just say it ("approve" / "run it" / "go ahead"; anything unclear is treated as
+a no). Destructive commands (e.g. `rm -rf`, `sudo`) ignore the spoken answer and require a
+keypress. Commands run OS-sandboxed in that directory — confined to it, with no network
 access — on macOS (`sandbox-exec`) and Linux (`bwrap`); on any other platform, or if the
 sandbox tool is missing, running code is refused rather than run unconfined. Access is
 rooted at the launch directory — the agent can't escape it. It can also delegate a
