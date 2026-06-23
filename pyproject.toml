@@ -504,8 +504,9 @@ ignore_names = ["app", "capture_output", "download", "healthy", "input", "ist", 
 # are byte-pinned and must not be "corrected".
 skip = "./.venv,./dist,./docs,./node_modules,./.git,uv.lock,*.ambr,./tests/fixtures,./aai_cli/_version.py"
 # Domain words codespell misreads: "unparseable" (accepted variant), "ist" (an identifier),
-# "expresso" (a deliberate mis-transcription used as an eval/WER example).
-ignore-words-list = "unparseable,ist,expresso,notin,ans"
+# "expresso" (a deliberate mis-transcription used as an eval/WER example), "zar" (the ISO-4217
+# currency code for the South African rand, in the keyless-tools plan).
+ignore-words-list = "unparseable,ist,expresso,notin,ans,zar"
 
 [tool.deptry]
 exclude = ["docs", "dist", ".venv", ".claude", "aai_cli/init/templates"]
