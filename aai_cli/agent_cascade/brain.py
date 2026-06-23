@@ -217,11 +217,10 @@ def _graph_kwargs(
 ) -> dict[str, object]:
     """Extra ``create_deep_agent`` kwargs that turn on real-cwd files + write-gating.
 
-    Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
-    backend, ``interrupt_on`` pausing only the mutating tools for human approval, and an
-    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam. No
-    ``subagents`` key: deepagents auto-adds a general-purpose subagent that inherits this
-    ``interrupt_on`` (so a delegated write surfaces at the same parent gate — see ``subagents.py``).
+    Empty when ``--files`` is off, so the graph is built as before. When on: a real-cwd backend,
+    ``interrupt_on`` gating only the mutating tools, an in-memory checkpointer (interrupt/resume
+    needs one), and ``backend_factory`` as the test seam. No ``subagents`` key: deepagents
+    auto-adds a general-purpose subagent that inherits this ``interrupt_on`` (see ``subagents.py``).
     """
     if not config.files:
         return {}
