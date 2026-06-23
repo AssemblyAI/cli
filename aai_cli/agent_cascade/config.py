@@ -27,7 +27,11 @@ DEFAULT_SYSTEM_PROMPT = (
     "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
 )
 DEFAULT_GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
-# Sliding-window size: keep the last N messages of conversation as LLM context.
+# Sliding-window size for the standalone, hand-rolled cascade: keep the last N messages of
+# conversation as LLM context. Used by the `--show-code` generator and the `assembly init`
+# template, which talk to the gateway directly. The live `assembly live` brain does NOT window
+# client-side — it delegates context management to the deepagents `SummarizationMiddleware`
+# (summarize old turns, offload to a file), so this knob is inert on that path. See brain.py.
 DEFAULT_MAX_HISTORY = 40
 # Per-turn cap on how many tool calls the deepagents brain may make before it must answer.
 # Enforced by a ToolCallLimitMiddleware with exit_behavior="continue": once the budget is hit,

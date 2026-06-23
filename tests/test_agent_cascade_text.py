@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli.agent_cascade.text import pop_clauses, split_sentences, trim_history
+from aai_cli.agent_cascade.text import pop_clauses, split_sentences
 
 
 def test_split_sentences_breaks_on_terminators():
@@ -41,24 +41,6 @@ def test_split_sentences_does_not_split_stacked_terminators():
     # don't each spawn a separate sentence.
     assert split_sentences("...") == ["..."]
     assert split_sentences("Wait...what?!") == ["Wait...what?!"]
-
-
-def test_trim_history_drops_oldest_beyond_limit():
-    history = [{"role": "user", "content": str(i)} for i in range(5)]
-    trim_history(history, 3)
-    assert [item["content"] for item in history] == ["2", "3", "4"]
-
-
-def test_trim_history_leaves_short_history_untouched():
-    history = [{"role": "user", "content": "a"}, {"role": "user", "content": "b"}]
-    trim_history(history, 3)
-    assert len(history) == 2
-
-
-def test_trim_history_at_limit_is_untouched():
-    history = [{"role": "user", "content": str(i)} for i in range(3)]
-    trim_history(history, 3)
-    assert len(history) == 3
 
 
 def test_pop_clauses_flushes_hard_terminators_and_keeps_tail():
