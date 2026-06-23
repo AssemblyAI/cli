@@ -165,11 +165,11 @@ reads it into the agent's context — the same convention coding agents follow �
 spoken answers are grounded in the project at hand. `AGENTS.md` takes precedence
 (and identical content, e.g. a `CLAUDE.md` symlinked to it, is included once); an
 oversized file is truncated so it can't crowd out the conversation. This is
-independent of `--files` (it happens even when the agent can't touch the
-filesystem) and is not reflected in `--show-code` output.
+independent of `--files` (it happens even under `--no-files`, when the agent can't
+touch the filesystem) and is not reflected in `--show-code` output.
 
-`--files` lets the agent read, write, and run code in the directory you launch
-it from (off by default). Reads run immediately; a write, edit, or command run pauses
+The agent reads, writes, and runs code in the directory you launch it from (on by
+default; pass `--no-files` to disable). Reads run immediately; a write, edit, or command run pauses
 the turn for confirmation in the voice TUI — press `y`/`n` (`a` approves the rest of the
 session) or just say it ("approve" / "run it" / "go ahead"; anything unclear is treated as
 a no). Destructive commands (e.g. `rm -rf`, `sudo`) ignore the spoken answer and require a
