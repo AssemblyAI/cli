@@ -107,13 +107,34 @@ def test_write_interrupt_on_honors_multiple_auto_write_subtrees():
     assert _write_fires(interrupt_on, "write_file", "/src/c") is True
 
 
-def test_auto_write_rules_put_allow_before_the_catch_all_interrupt():
-    # First-match-wins, so each allow subtree must precede the trailing /** interrupt rule;
-    # the allow rule carries both the node and its subtree pattern.
-    rules = write_gate._auto_write_rules(("/scratch",))
-    assert [r.mode for r in rules] == ["allow", "interrupt"]
-    assert rules[0].paths == ["/scratch", "/scratch/**"]
-    assert rules[-1].paths == ["/**"] and rules[-1].mode == "interrupt"
+def test_write_interrupt_on_matches_whole_segments_not_string_prefix():
+    # A sibling that merely shares a name prefix (/scratchpad vs the root /scratch) is NOT under
+    # the auto-write subtree, so it still gates — a naive string-prefix check would wrongly skip it.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratchpad/x") is True
+    assert _write_fires(interrupt_on, "write_file", "/scratch") is False  # the root node itself
+
+
+def test_write_interrupt_on_roots_a_relative_target_like_an_absolute_one():
+    # A relative tool-call path is rooted under cwd the same way the model's /-rooted paths are,
+    # so `scratch/out.md` resolves under the /scratch auto-write subtree and auto-approves.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "scratch/out.md") is False
+    assert _write_fires(interrupt_on, "write_file", "other/out.md") is True
+
+
+def test_write_interrupt_on_fails_safe_to_gating_for_unlocatable_paths():
+    # A path the gate can't place — a non-string arg, or one with a `..` segment — must require
+    # approval rather than silently auto-approve, even inside an auto-write subtree.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/../etc/passwd") is True
+    # A non-string file_path arg also fails safe (drive the predicate directly).
+    import types
+
+    config = interrupt_on["write_file"]
+    assert isinstance(config, dict)
+    req = types.SimpleNamespace(tool_call={"name": "write_file", "args": {"file_path": 123}})
+    assert config["when"](req) is True
 
 
 def test_sandboxed_backend_implements_sandbox_protocol(monkeypatch, tmp_path):
