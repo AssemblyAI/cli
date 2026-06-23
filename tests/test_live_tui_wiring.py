@@ -230,3 +230,39 @@ def test_tui_path_wires_app_approve_write(monkeypatch) -> None:
     approver = captured["approver"]
     assert callable(approver)
     assert approver("write_file", {}) == ("routed", "write_file")
+
+
+def test_submit_voice_approval_routes_transcript_only_when_a_modal_is_open(monkeypatch) -> None:
+    # The engine routes the next final transcript here during a --files approval pause: an open
+    # ApprovalScreen receives it verbatim (hopped to the UI thread), while with none open it's a
+    # safe no-op. Driven off-thread because call_from_thread must run off the app's event loop.
+    from aai_cli.agent_cascade.modals import ApprovalScreen
+
+    app = _app()
+    seen: list[str] = []
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # No modal armed -> dropped (never hops to the UI thread).
+            no_modal = threading.Thread(target=lambda: app.submit_voice_approval("ignored"))
+            no_modal.start()
+            no_modal.join(timeout=3)
+            await pilot.pause()
+            assert seen == []
+
+            # Arm an open approval screen; the next transcript reaches its try_voice unchanged.
+            screen = ApprovalScreen("write_file", {"file_path": "n.txt"})
+            monkeypatch.setattr(screen, "try_voice", lambda transcript: seen.append(transcript))
+            app._approval_screen = screen
+            routed = threading.Thread(target=lambda: app.submit_voice_approval("yes do it"))
+            routed.start()
+            for _ in range(200):  # pump the loop so the UI-thread hop can land
+                await pilot.pause(0.01)
+                if seen:
+                    break
+            routed.join(timeout=3)
+            await pilot.pause()
+            assert seen == ["yes do it"]
+
+    asyncio.run(go())
