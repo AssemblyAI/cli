@@ -160,8 +160,8 @@ missing `npx`/`uvx`, an offline host) drops only its own tools, so a single brok
 tool never sinks the session. MCP tools are a live-run feature and are not
 reflected in `--show-code` output.
 
-`--files` lets the agent read, write, and run code in the directory you launch
-it from (off by default). Reads run immediately; a write, edit, or command run pauses
+The agent reads, writes, and runs code in the directory you launch it from (on by
+default; pass `--no-files` to disable). Reads run immediately; a write, edit, or command run pauses
 the turn for confirmation in the voice TUI — press `y`/`n` (`a` approves the rest of the
 session) or just say it ("approve" / "run it" / "go ahead"; anything unclear is treated as
 a no). Destructive commands (e.g. `rm -rf`, `sudo`) ignore the spoken answer and require a

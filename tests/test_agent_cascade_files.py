@@ -11,6 +11,7 @@ import queue
 import types
 
 import pytest
+from typer.testing import CliRunner
 
 from aai_cli.agent_cascade import brain, engine
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
@@ -19,8 +20,29 @@ from aai_cli.app.context import AppState
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import run_agent_cascade
 from aai_cli.core import config
+from aai_cli.main import app
 from tests._cascade_fakes import make_session
 from tests.test_agent_cascade_command import _opts
+
+runner = CliRunner()
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [([], True), (["--no-files"], False), (["--files"], True)],
+)
+def test_files_flag_resolves_into_options(monkeypatch, argv, expected):
+    # Filesystem access is on by default: omitting the flag yields files=True, and --no-files
+    # opts out. Pinned at the argv->options seam so the True default isn't a silent mutation.
+    captured = {}
+
+    def fake_run(opts, state, *, json_mode):
+        captured["opts"] = opts
+
+    monkeypatch.setattr(_exec, "run_agent_cascade", fake_run)
+    result = runner.invoke(app, ["live", *argv])
+    assert result.exit_code == 0
+    assert captured["opts"].files is expected
 
 
 def test_deny_writes_always_rejects():
