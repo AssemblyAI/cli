@@ -187,9 +187,9 @@ def test_wmo_descriptions_table_is_exact():
 
 def test_get_json_fetches_and_parses_via_httpx(monkeypatch):
     # Exercises the default network seam (httpx GET -> raise_for_status -> json), mocking
-    # httpx so no socket opens. Asserts the URL/timeout passthrough and that the response is
+    # httpx2 so no socket opens. Asserts the URL/timeout passthrough and that the response is
     # status-checked, so the mutation gate can't drop any of those lines silently.
-    import httpx
+    import httpx2 as httpx
 
     calls: dict[str, object] = {}
 
