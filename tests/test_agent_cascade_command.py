@@ -15,7 +15,7 @@ import typer
 from typer.testing import CliRunner
 
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade import _io, engine
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
@@ -455,7 +455,7 @@ def test_deps_real_run_stt_passes_prebuilt_params_through(monkeypatch):
         captured["source"] = source
         captured["params"] = params
 
-    monkeypatch.setattr(engine.client, "stream_audio", fake_stream_audio)
+    monkeypatch.setattr(_io.client, "stream_audio", fake_stream_audio)
     audio: list[bytes] = []
     params = _stt_params()
     deps = CascadeDeps.real("k", CascadeConfig(), audio=audio, stt_params=params)
@@ -487,9 +487,9 @@ def test_deps_real_synthesize_streams_frames_and_threads_voice(monkeypatch):
         captured["voice"] = spec.voice
         captured["sample_rate"] = spec.sample_rate
         on_audio(b"AUDIO", spec.sample_rate or 0)
-        return engine.tts_session.SpeakResult(b"AUDIO", spec.sample_rate or 0, 0.0)
+        return _io.tts_session.SpeakResult(b"AUDIO", spec.sample_rate or 0, 0.0)
 
-    monkeypatch.setattr(engine.tts_session, "synthesize", fake_synth)
+    monkeypatch.setattr(_io.tts_session, "synthesize", fake_synth)
     cfg = CascadeConfig(voice="luna")
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
     frames = []

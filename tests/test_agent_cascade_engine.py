@@ -11,7 +11,7 @@ import types
 
 import pytest
 
-from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade import _runtime, engine
 from aai_cli.agent_cascade.brain import SpeechDelta, ToolNotice
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
@@ -138,7 +138,7 @@ def test_is_final_turn_defaults_missing_attrs_to_not_final():
 
 def test_spawn_thread_runs_target():
     ran = threading.Event()
-    worker = engine._spawn_thread(ran.set)
+    worker = _runtime.spawn_thread(ran.set)
     worker.join()
     assert ran.is_set()
     assert worker.is_alive() is False
