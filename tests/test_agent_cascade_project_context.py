@@ -65,9 +65,10 @@ def test_oversized_content_is_truncated_to_the_budget(tmp_path):
     (tmp_path / "AGENTS.md").write_text(body, encoding="utf-8")
     loaded = project_context.load_project_context(tmp_path)
     assert loaded is not None
-    # Capped at the budget plus the truncation marker, so a huge file can't crowd out the chat.
+    # The marker is counted against the budget, so the total never exceeds the cap — it's a true
+    # upper bound, not a target the marker overshoots.
     assert loaded.endswith("[project context truncated]")
-    assert len(loaded) == project_context.MAX_CONTEXT_CHARS + len("\n\n[project context truncated]")
+    assert len(loaded) == project_context.MAX_CONTEXT_CHARS
     assert len(loaded) < len(body)
 
 

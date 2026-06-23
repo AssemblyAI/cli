@@ -33,9 +33,14 @@ def _read_instructions(path: Path) -> str | None:
 
 
 def _truncate(combined: str) -> str:
-    """Cap the combined context at :data:`MAX_CONTEXT_CHARS`, marking it when truncated."""
+    """Cap the combined context at :data:`MAX_CONTEXT_CHARS`, marking it when truncated.
+
+    The marker is counted against the budget (the slice leaves room for it), so the returned
+    string never exceeds :data:`MAX_CONTEXT_CHARS` — the cap is a true upper bound, not a target
+    the marker then overshoots.
+    """
     if len(combined) > MAX_CONTEXT_CHARS:
-        return combined[:MAX_CONTEXT_CHARS] + _TRUNCATION_MARKER
+        return combined[: MAX_CONTEXT_CHARS - len(_TRUNCATION_MARKER)] + _TRUNCATION_MARKER
     return combined
 
 
