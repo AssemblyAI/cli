@@ -13,6 +13,7 @@ real sandbox.
 from __future__ import annotations
 
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -33,6 +34,37 @@ CWD_READ_DENY: tuple[str, ...] = (".env", ".claude")
 CWD_WRITE_DENY: tuple[str, ...] = (".git/hooks",)
 # Shell rc files denied for writes (only inside the write region when cwd == $HOME).
 SHELL_RC: tuple[str, ...] = (".bashrc", ".zshrc", ".profile", ".bash_profile")
+# Which read-denied secret names are directories (the rest are plain files). bwrap masks a
+# directory with an empty tmpfs but a file with a /dev/null bind — a tmpfs mountpoint must be a
+# directory and a /dev/null bind must be a file — so the two kinds need different masks.
+_SECRET_DIRS: frozenset[str] = frozenset({".ssh", ".aws", ".gnupg", ".claude"})
+
+
+def _sbpl_str(path: str) -> str:
+    """Escape a path for embedding in an SBPL string literal (``"…"``): backslash and quote.
+
+    A launch directory can contain either, and an unescaped ``"`` would terminate the literal
+    early, producing a profile ``sandbox-exec`` rejects (so every ``execute`` would then fail).
+    """
+    return path.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _sbpl_regex(path: str) -> str:
+    """Escape a path for use as a literal inside an SBPL ``#"…"`` regex literal.
+
+    ``re.escape`` neutralizes regex metacharacters (``(``/``)``/``+``/``[``…) a path may contain —
+    without it ``/Users/me/My (Project)`` emits an invalid regex that breaks the whole profile —
+    and the lone ``"`` escape keeps the surrounding string literal intact.
+    """
+    return re.escape(path).replace('"', '\\"')
+
+
+def _mask_secret(target: str, name: str) -> list[str]:
+    """bwrap args to hide a secret ``target``: an empty tmpfs over a directory secret, a
+    ``/dev/null`` bind over a file secret (the two kinds need different bwrap directives)."""
+    if name in _SECRET_DIRS:
+        return ["--tmpfs", target]
+    return ["--ro-bind", "/dev/null", target]
 
 
 def render_seatbelt_profile(
@@ -47,6 +79,9 @@ def render_seatbelt_profile(
 ) -> str:
     """Render an Apple Seatbelt (SBPL) profile: default-allow reads, deny secrets, writes only
     in cwd + tmp, no network. Last-match-wins, so the denies override the broad allows."""
+    # Escape the interpolated paths once: a launch dir / tmp / home with regex or quote
+    # metacharacters would otherwise emit a profile sandbox-exec can't parse.
+    c, t, h = _sbpl_str(cwd), _sbpl_str(tmp), _sbpl_str(home)
     lines = [
         "(version 1)",
         "(deny default)",
@@ -54,15 +89,15 @@ def render_seatbelt_profile(
         "(allow process-fork)",
         "(allow file-read*)",
     ]
-    lines.extend(f'(deny file-read* (subpath "{home}/{name}"))' for name in home_secrets)
+    lines.extend(f'(deny file-read* (subpath "{h}/{name}"))' for name in home_secrets)
     # .env and .env.* under cwd, denied via regex; .claude/ via subpath.
-    lines.append(f'(deny file-read* (regex #"^{cwd}/\\.env($|\\.)"))')
+    lines.append(f'(deny file-read* (regex #"^{_sbpl_regex(cwd)}/\\.env($|\\.)"))')
     lines.extend(
-        f'(deny file-read* (subpath "{cwd}/{name}"))' for name in cwd_read_deny if name != ".env"
+        f'(deny file-read* (subpath "{c}/{name}"))' for name in cwd_read_deny if name != ".env"
     )
-    lines.append(f'(allow file-write* (subpath "{cwd}") (subpath "{tmp}"))')
-    lines.extend(f'(deny file-write* (subpath "{cwd}/{name}"))' for name in cwd_write_deny)
-    lines.extend(f'(deny file-write* (subpath "{home}/{name}"))' for name in shell_rc)
+    lines.append(f'(allow file-write* (subpath "{c}") (subpath "{t}"))')
+    lines.extend(f'(deny file-write* (subpath "{c}/{name}"))' for name in cwd_write_deny)
+    lines.extend(f'(deny file-write* (subpath "{h}/{name}"))' for name in shell_rc)
     return "\n".join(lines) + "\n"
 
 
@@ -94,12 +129,13 @@ def build_bwrap_argv(
         tmp,
         tmp,
     ]
-    # Mask credential stores under $HOME (tmpfs hides their contents).
+    # Mask credential stores under $HOME and the project-local secrets (best-effort; coarser than
+    # Seatbelt). Each path is masked by kind — an empty tmpfs over a directory, a /dev/null bind
+    # over a file — since bwrap can't tmpfs a file mountpoint or bind /dev/null onto a directory.
     for name in home_secrets:
-        argv += ["--tmpfs", f"{home}/{name}"]
-    # Project-local secrets: mask each path (best-effort; coarser than Seatbelt).
+        argv += _mask_secret(f"{home}/{name}", name)
     for name in cwd_read_deny:
-        argv += ["--ro-bind", "/dev/null", f"{cwd}/{name}"]
+        argv += _mask_secret(f"{cwd}/{name}", name)
     # Block writes to persistence paths inside cwd by re-binding them read-only.
     for name in cwd_write_deny:
         argv += ["--ro-bind", f"{cwd}/{name}", f"{cwd}/{name}"]
@@ -148,6 +184,31 @@ class _Result:
 
 Runner = Callable[[list[str], str, int], CompletedProcessLike]
 
+# The only environment variables the sandboxed command inherits. The OS sandbox blocks the
+# network and read-denies credential *files*, but secrets such as ASSEMBLYAI_API_KEY ride in the
+# *environment* too — an unrestricted env would hand the agent-run command every key to print into
+# output the model reads or write into a cwd file. So the child env is a minimal non-secret
+# allowlist, never a copy of the parent environment.
+_ENV_ALLOWLIST: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USER",
+    "SHELL",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "TMPDIR",
+    "TZ",
+)
+
+
+def _sandbox_env() -> dict[str, str]:
+    """A minimal child environment for the sandboxed command: only the non-secret basics in
+    :data:`_ENV_ALLOWLIST`, so no inherited API key or token leaks to agent-run code."""
+    parent = child_env()
+    return {name: parent[name] for name in _ENV_ALLOWLIST if name in parent}
+
 
 def default_runner(argv: list[str], cwd: str, timeout: int) -> CompletedProcessLike:
     """Run ``argv`` with combined output, in ``cwd``, time-bounded, with a minimal child env.
@@ -162,7 +223,7 @@ def default_runner(argv: list[str], cwd: str, timeout: int) -> CompletedProcessL
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            env=child_env(),
+            env=_sandbox_env(),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

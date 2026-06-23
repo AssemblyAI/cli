@@ -65,6 +65,21 @@ def test_bwrap_argv_masks_home_secrets_and_git_hooks():
     assert "/work/proj/.git/hooks" in joined  # write blocked via ro-bind
 
 
+def test_bwrap_masks_directories_with_tmpfs_and_files_with_dev_null():
+    # bwrap can't tmpfs a file mountpoint nor bind /dev/null onto a directory, so each secret is
+    # masked by kind: directory secrets get --tmpfs, file secrets get --ro-bind /dev/null.
+    argv = sandbox.build_bwrap_argv("/work/proj", "/tmp", "echo hi", "/home/u")
+    # .claude and .ssh are directories -> tmpfs (the old code wrongly bound /dev/null over .claude).
+    assert _adjacent(argv, "--tmpfs", "/work/proj/.claude")
+    assert _adjacent(argv, "--tmpfs", "/home/u/.ssh")
+    # .env and .netrc/.npmrc are files -> /dev/null bind (the old code wrongly tmpfs'd the files).
+    assert _has_pair(argv, "--ro-bind", "/dev/null", "/work/proj/.env")
+    assert _has_pair(argv, "--ro-bind", "/dev/null", "/home/u/.netrc")
+    # And never the wrong directive for either kind.
+    assert not _has_pair(argv, "--ro-bind", "/dev/null", "/work/proj/.claude")
+    assert not _adjacent(argv, "--tmpfs", "/home/u/.netrc")
+
+
 def _has_pair(argv, flag, a, b):
     return any(
         argv[i] == flag and argv[i + 1] == a and argv[i + 2] == b for i in range(len(argv) - 2)
@@ -85,6 +100,20 @@ def test_renderers_cover_the_same_denylists():
         assert f"/home/u/{name}" in bwrap
     assert "/work/proj/.git/hooks" in seatbelt
     assert "/work/proj/.git/hooks" in bwrap
+
+
+def test_seatbelt_profile_escapes_regex_metacharacters_in_cwd():
+    # A launch dir with regex metacharacters must not corrupt the .env-deny regex literal:
+    # parens are escaped so sandbox-exec gets a valid profile (else every execute would fail).
+    profile = sandbox.render_seatbelt_profile("/work/My (Proj)", "/tmp", "/home/u")
+    assert r"\(Proj\)/\.env" in profile  # parens neutralized inside the regex
+    assert "My (Proj)/\\.env" not in profile  # never the raw, unescaped paren form
+
+
+def test_seatbelt_profile_escapes_quotes_in_subpath():
+    # A double-quote in a path would terminate the SBPL string literal early; it must be escaped.
+    profile = sandbox.render_seatbelt_profile('/work/a"b', "/tmp", "/home/u")
+    assert '/work/a\\"b' in profile
 
 
 def test_detect_capability_seatbelt_on_macos_with_binary():
@@ -139,6 +168,43 @@ def test_default_runner_runs_and_shapes_result(monkeypatch):
     assert captured["text"] is True
     assert captured["stdout"] == subprocess.PIPE
     assert captured["stderr"] == subprocess.STDOUT
+
+
+def test_sandbox_env_allowlists_basics_and_drops_secrets(monkeypatch):
+    # The sandboxed command must not inherit secrets via the environment, even though the OS
+    # sandbox blocks the network and credential files.
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-secret")
+    monkeypatch.setenv("SOME_TOKEN", "tok")
+    env = sandbox._sandbox_env()
+    assert env["PATH"] == "/usr/bin"  # a non-secret basic is kept
+    assert "ASSEMBLYAI_API_KEY" not in env
+    assert "FIRECRAWL_API_KEY" not in env
+    assert "SOME_TOKEN" not in env
+
+
+def test_default_runner_passes_scrubbed_env(monkeypatch):
+    import subprocess
+
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "sk-secret")
+    captured: dict[str, object] = {}
+
+    class _Proc:
+        stdout = "out"
+        returncode = 0
+
+    def fake_run(argv: list[str], **kwargs: object) -> _Proc:
+        captured.update(kwargs)
+        return _Proc()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    sandbox.default_runner(["echo", "hi"], "/work", 5)
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert "ASSEMBLYAI_API_KEY" not in env  # the secret never reaches the sandboxed command
+    assert env.get("PATH") == "/usr/bin"
 
 
 def test_default_runner_handles_none_stdout(monkeypatch):

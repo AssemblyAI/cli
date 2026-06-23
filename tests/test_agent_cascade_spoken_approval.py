@@ -64,7 +64,14 @@ def test_spoken_decision_destructive_ignores_voice():
     assert spoken_decision("execute", {"command": "sudo make install"}, "yes, run it") is None
 
 
-def test_spoken_decision_benign_execute_honors_voice():
-    # A benign command (no risk warning) does take the spoken decision.
-    assert spoken_decision("execute", {"command": "pytest -q"}, "go ahead") is True
-    assert spoken_decision("execute", {"command": "pytest -q"}, "no") is False
+def test_spoken_decision_execute_is_always_keypress_only():
+    # Running code is never voice-approvable, even a benign command with an explicit affirmative:
+    # a misheard "go ahead" must not run arbitrary code, so execute always returns None.
+    assert spoken_decision("execute", {"command": "pytest -q"}, "go ahead") is None
+    assert spoken_decision("execute", {"command": "ls -la"}, "approve") is None
+
+
+def test_spoken_decision_benign_file_write_honors_voice():
+    # A non-execute write (sandbox-contained, git-recoverable) still takes the spoken decision.
+    assert spoken_decision("write_file", {"file_path": "n.txt"}, "go ahead") is True
+    assert spoken_decision("edit_file", {"file_path": "n.txt"}, "no") is False

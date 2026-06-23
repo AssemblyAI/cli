@@ -17,20 +17,25 @@ _SOFT_SEPARATORS = ",;:"
 
 
 def _is_boundary(text: str, index: int) -> bool:
-    """True when the char at ``index`` ends a clause: a terminator/separator that is the
-    last char or is followed by whitespace (so a '.' inside "$3.50" never splits)."""
-    return index + 1 == len(text) or text[index + 1].isspace()
+    """True when the char at ``index`` ends a clause: it is *followed by whitespace*.
+
+    End-of-buffer is deliberately NOT a boundary: :func:`pop_clauses` is fed partial streamed
+    chunks, so a terminator that merely sits at the current end may be mid-token ("$3." before
+    "50" streams in) — flushing it would split a number. The remainder is re-buffered and the
+    caller flushes the final tail at end-of-stream, so nothing is lost.
+    """
+    return index + 1 < len(text) and text[index + 1].isspace()
 
 
 def pop_clauses(buffer: str, *, min_chars: int) -> tuple[list[str], str]:
     """Pull complete speakable clauses off the front of ``buffer`` for incremental TTS.
 
-    A hard terminator (``.``/``!``/``?``) followed by whitespace (or end-of-buffer) always
-    ends a clause; a soft separator (``,``/``;``/``:``) ends one only when the clause built
-    since the last boundary is at least ``min_chars`` long, so a tiny fragment ("Yes,")
-    isn't synthesized on its own. Returns the flushed clauses (each stripped, never blank)
-    and the still-incomplete remainder to keep buffering. The caller flushes the final tail
-    at end-of-stream.
+    A hard terminator (``.``/``!``/``?``) followed by whitespace always ends a clause; a soft
+    separator (``,``/``;``/``:``) ends one only when the clause built since the last boundary is
+    at least ``min_chars`` long, so a tiny fragment ("Yes,") isn't synthesized on its own. A
+    terminator at the very end of ``buffer`` is held (it may be mid-token under streaming), so
+    returns the flushed clauses (each stripped, never blank) and the still-incomplete remainder
+    to keep buffering. The caller flushes the final tail at end-of-stream.
     """
     clauses: list[str] = []
     start = 0

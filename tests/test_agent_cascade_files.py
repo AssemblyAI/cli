@@ -113,6 +113,24 @@ def test_consume_suspends_then_restores_deadline_across_approval(monkeypatch):
     assert seen[2] is not None  # restored after ApprovalPause(active=False)
 
 
+def test_turn_aborting_mid_approval_clears_the_awaiting_gate():
+    # If the reply leg fails after ApprovalPause(active=True) but before the matching active=False
+    # (e.g. the approver/graph raises), the turn must still disarm the voice-approval gate — else
+    # on_turn would route every later transcript to the dead approval and wedge the session.
+    from aai_cli.core.errors import CLIError
+
+    def stream(messages):
+        yield ApprovalPause(active=True)
+        raise CLIError("graph blew up during approval", error_type="agent_brain_error")
+
+    session, renderer, _player = make_session(stream_reply=stream)
+    session._generate_reply()
+
+    assert not session._awaiting_approval.is_set()  # gate disarmed despite the mid-approval failure
+    assert ("reply_done", True) in renderer.calls or ("reply_done", False) in renderer.calls
+    assert session.error is not None  # the failure was still surfaced
+
+
 def test_approval_deadline_suspends_then_restores_into_the_future():
     # active=True suspends the clock (None); active=False restores a deadline in the FUTURE —
     # asserting it's ahead of now (not merely non-None) pins the + so the timeout actually fires.

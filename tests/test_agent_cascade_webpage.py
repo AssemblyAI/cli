@@ -85,3 +85,18 @@ def test_read_url_fetch_failure_returns_could_not_read_message():
 
     tool = webpage_tool.build_read_url_tool(read=read)
     assert tool.invoke({"url": "https://example.com"}) == ("I couldn't read that page right now.")
+
+
+def test_read_url_refuses_internal_addresses_without_fetching():
+    # SSRF guard: an agent-chosen internal/file URL is refused outright and the fetch seam is
+    # never reached (so it can't read cloud metadata or local files and speak them back).
+    fetched: list[str] = []
+
+    def read(url: str) -> Article:
+        fetched.append(url)
+        return _article(text="secret")
+
+    tool = webpage_tool.build_read_url_tool(read=read)
+    for url in ("http://169.254.169.254/latest/meta-data/", "file:///etc/passwd"):
+        assert tool.invoke({"url": url}) == "I can't open that address."
+    assert fetched == []  # the killer assertion: the fetch never ran
