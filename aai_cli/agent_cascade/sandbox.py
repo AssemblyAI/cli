@@ -15,8 +15,13 @@ from __future__ import annotations
 import platform
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Literal, Protocol
+
+from deepagents.backends.local_shell import LocalShellBackend
+from deepagents.backends.protocol import ExecuteResponse
 
 from aai_cli.core.env import child_env
 
@@ -165,3 +170,55 @@ def default_runner(argv: list[str], cwd: str, timeout: int) -> CompletedProcessL
         text = out.decode() if isinstance(out, bytes) else out
         return _Result(text + f"\n[timed out after {timeout}s]", _TIMEOUT_EXIT)
     return _Result(proc.stdout or "", proc.returncode)
+
+
+NO_SANDBOX_MESSAGE = "I can't run code on this system."
+LAUNCH_FAILURE_MESSAGE = "I couldn't start a sandbox to run that."
+
+
+def _ulimit_wrap(command: str) -> str:
+    """Cap CPU + address space so a runaway can't peg the box inside the timeout."""
+    return f"ulimit -t {CPU_LIMIT_SECONDS}; ulimit -v {ADDRESS_LIMIT_KB}; {command}"  # pragma: no mutate
+
+
+class SandboxedShellBackend(LocalShellBackend):
+    """A ``LocalShellBackend`` whose ``execute`` runs through an OS sandbox, never the host shell.
+
+    Inherits the cwd-rooted file operations (``read_file``/``write_file``/``edit_file``/``ls``/
+    ``glob``/``grep``) unchanged; implementing ``SandboxBackendProtocol`` (via the base) is what
+    makes deepagents auto-add the ``execute`` tool. The override confines every run to cwd, denies
+    the network, and refuses outright when no sandbox is available."""
+
+    def __init__(
+        self,
+        *,
+        root_dir: str,
+        virtual_mode: bool = True,
+        runner: Runner | None = None,
+        capability: Capability | None = None,
+        tmp: str | None = None,
+        home: str | None = None,
+    ) -> None:
+        super().__init__(root_dir=root_dir, virtual_mode=virtual_mode)
+        self._runner: Runner = runner or default_runner
+        self._capability: Capability = capability if capability is not None else detect_capability()
+        self._tmp = tmp if tmp is not None else tempfile.gettempdir()
+        self._home = home if home is not None else str(Path("~").expanduser())
+
+    def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        """Run ``command`` confined to cwd via the OS sandbox; refuse when none is available."""
+        if self._capability == "none":
+            return ExecuteResponse(output=NO_SANDBOX_MESSAGE, exit_code=None)
+        cwd = str(self.cwd)
+        wrapped = _ulimit_wrap(command)
+        if self._capability == "seatbelt":
+            profile = render_seatbelt_profile(cwd, self._tmp, self._home)
+            argv = ["sandbox-exec", "-p", profile, "/bin/sh", "-c", wrapped]
+        else:
+            argv = build_bwrap_argv(cwd, self._tmp, wrapped, self._home)
+        bounded = min(timeout or DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS)
+        try:
+            result = self._runner(argv, cwd, bounded)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return ExecuteResponse(output=LAUNCH_FAILURE_MESSAGE, exit_code=None)
+        return ExecuteResponse(output=result.output, exit_code=result.returncode)
