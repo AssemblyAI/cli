@@ -83,3 +83,25 @@ def test_renderers_cover_the_same_denylists():
         assert f"/home/u/{name}" in bwrap
     assert "/work/proj/.git/hooks" in seatbelt
     assert "/work/proj/.git/hooks" in bwrap
+
+
+def test_detect_capability_seatbelt_on_macos_with_binary():
+    cap = sandbox.detect_capability(
+        system=lambda: "Darwin", which=lambda _n: "/usr/bin/sandbox-exec"
+    )
+    assert cap == "seatbelt"
+
+
+def test_detect_capability_bwrap_on_linux_with_binary():
+    cap = sandbox.detect_capability(system=lambda: "Linux", which=lambda _n: "/usr/bin/bwrap")
+    assert cap == "bwrap"
+
+
+def test_detect_capability_none_when_binary_missing():
+    cap = sandbox.detect_capability(system=lambda: "Darwin", which=lambda _n: None)
+    assert cap == "none"
+
+
+def test_detect_capability_none_on_unsupported_platform():
+    cap = sandbox.detect_capability(system=lambda: "Windows", which=lambda _n: "anything")
+    assert cap == "none"

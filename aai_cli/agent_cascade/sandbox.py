@@ -12,7 +12,13 @@ real sandbox.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import platform
+import shutil
+import subprocess
+from collections.abc import Callable, Sequence
+from typing import Literal, Protocol
+
+from aai_cli.core.env import child_env
 
 # Credential dirs/files under $HOME, read-denied precisely on both platforms.
 HOME_SECRETS: tuple[str, ...] = (".ssh", ".aws", ".gnupg", ".netrc", ".npmrc")
@@ -94,3 +100,68 @@ def build_bwrap_argv(
         argv += ["--ro-bind", f"{cwd}/{name}", f"{cwd}/{name}"]
     argv += ["--chdir", cwd, "/bin/sh", "-c", command]
     return argv
+
+
+Capability = Literal["seatbelt", "bwrap", "none"]
+
+DEFAULT_TIMEOUT_SECONDS = 120  # pragma: no mutate
+MAX_TIMEOUT_SECONDS = 600  # pragma: no mutate
+CPU_LIMIT_SECONDS = 60  # pragma: no mutate
+ADDRESS_LIMIT_KB = 4_000_000  # pragma: no mutate
+_TIMEOUT_EXIT = 124  # conventional timeout exit code
+
+
+def detect_capability(
+    *,
+    system: Callable[[], str] = platform.system,
+    which: Callable[[str], str | None] = shutil.which,
+) -> Capability:
+    """Resolve the sandbox mechanism for this host: ``seatbelt`` (macOS + ``sandbox-exec``),
+    ``bwrap`` (Linux + ``bwrap``), else ``none`` — the refuse-don't-fall-back signal."""
+    name = system()
+    if name == "Darwin" and which("sandbox-exec"):
+        return "seatbelt"
+    if name == "Linux" and which("bwrap"):
+        return "bwrap"
+    return "none"
+
+
+class CompletedProcessLike(Protocol):
+    """The slice of a finished process the backend reads: combined output + exit code."""
+
+    output: str
+    returncode: int | None
+
+
+class _Result:
+    """Concrete :class:`CompletedProcessLike` the default runner returns."""
+
+    def __init__(self, output: str, returncode: int | None) -> None:
+        self.output = output
+        self.returncode = returncode
+
+
+Runner = Callable[[list[str], str, int], CompletedProcessLike]
+
+
+def default_runner(argv: list[str], cwd: str, timeout: int) -> CompletedProcessLike:
+    """Run ``argv`` with combined output, in ``cwd``, time-bounded, with a minimal child env.
+
+    A timeout returns the partial output + a sentinel exit code (information, not a crash); a
+    launch failure is left to raise so the caller turns it into an apology string."""
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=cwd,
+            timeout=timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=child_env(),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = exc.output or ""
+        text = out.decode() if isinstance(out, bytes) else out
+        return _Result(text + f"\n[timed out after {timeout}s]", _TIMEOUT_EXIT)
+    return _Result(proc.stdout or "", proc.returncode)

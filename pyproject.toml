@@ -482,6 +482,9 @@ max-statements = 40
 "aai_cli/init/tunnel.py" = ["TID251"]
 "aai_cli/streaming/macos.py" = ["TID251"]
 "aai_cli/streaming/sources.py" = ["TID251"]
+# Sandbox shell-out: launches the OS sandbox binary (sandbox-exec / bwrap) with controlled
+# argv; the whole module exists to confine that one subprocess call.
+"aai_cli/agent_cascade/sandbox.py" = ["TID251"]
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]
