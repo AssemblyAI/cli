@@ -12,6 +12,16 @@ in the engine, which consults ``risk.py`` before trusting a spoken yes.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping
+
+from aai_cli.agent_cascade import risk
+
+# One resolution of the race the engine runs during an approval pause: the keypress decision
+# (``"key"``, a bool), the next spoken transcript (``"voice"``, the text), or nothing in the
+# window (``"timeout"``). The engine supplies the racing implementation; tests inject outcomes.
+Outcome = tuple[str, object]
+AwaitOutcome = Callable[[], Outcome]
+Keyboard = Callable[[str, dict[str, object]], bool]
 
 # A negation anywhere flips the whole utterance to reject — so "no, don't run it" can't approve
 # just because it contains "run it". Checked first, before the affirmative patterns.
@@ -33,3 +43,29 @@ def interpret_spoken_approval(transcript: str) -> bool:
     if _NEGATION.search(text):
         return False
     return bool(_AFFIRMATIVE.search(text))
+
+
+def resolve_approval(
+    name: str,
+    args: Mapping[str, object],
+    *,
+    keyboard: Keyboard,
+    await_outcome: AwaitOutcome,
+    warn: Callable[[str, Mapping[str, object]], str | None] = risk.risk_warning,
+) -> bool:
+    """Resolve one ``--files`` approval, voice-or-keyboard, fail-safe to reject.
+
+    Destructive tier (``risk.risk_warning`` fires) → the spoken channel is ignored and the
+    keyboard is required, so an STT mishearing can never green-light an ``rm -rf``/``sudo``.
+    Otherwise the engine's race (``await_outcome``) resolves it: a keypress is taken verbatim, a
+    spoken transcript is run through :func:`interpret_spoken_approval`, and a timeout — like any
+    ambiguous or negative answer — rejects.
+    """
+    if warn(name, args) is not None:
+        return keyboard(name, dict(args))
+    kind, value = await_outcome()
+    if kind == "key":
+        return bool(value)
+    if kind == "voice":
+        return interpret_spoken_approval(str(value))
+    return False
