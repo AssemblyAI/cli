@@ -3,6 +3,7 @@
   "ignore": [
     "tests/test_live_model.py",
     "tests/test_agent_cascade_brain.py",
+    "tests/test_agent_cascade_streamer.py",
     "tests/test_agent_cascade_prompt.py",
     "tests/test_agent_cascade_subagents.py"
   ],

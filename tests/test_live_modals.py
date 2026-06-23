@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
+from textual.widgets import Label
+
 from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.agent_cascade.tui import LiveAgentApp
 
@@ -130,7 +132,8 @@ def test_decide_is_idempotent() -> None:
 
 
 def test_expand_toggles_detail_markup() -> None:
-    # ``e`` toggles between the compact identifying arg and the full args.
+    # The detail line starts collapsed (just the identifying arg, bulky siblings elided) and
+    # ``e`` toggles to the full args — so the modal opens compact by default.
     async def go() -> None:
         app = _app()
         async with app.run_test(size=(100, 30)) as pilot:
@@ -141,9 +144,14 @@ def test_expand_toggles_detail_markup() -> None:
                 )
             )
             await pilot.pause()
-            # Expanded view: pressing e reveals the full args.
+            detail = app.screen.query_one("#approvaldetail", Label)
+            # Collapsed by default: the identifying path shows, the file content is elided.
+            assert "app.py" in str(detail.render())
+            assert "PORT = 8080" not in str(detail.render())
+            # Pressing e reveals the full args, including the content.
             await pilot.press("e")
             await pilot.pause()
+            assert "PORT = 8080" in str(detail.render())
 
     _run(go())
 

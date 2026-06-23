@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage
 from aai_cli.agent_cascade import brain
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.subagents import general_purpose_subagent
-from tests.test_agent_cascade_brain import FakeChatModel
+from tests._cascade_fakes import FakeChatModel
 
 
 def test_spec_has_required_keys_and_omits_model_and_tools():

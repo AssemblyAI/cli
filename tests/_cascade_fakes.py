@@ -10,8 +10,33 @@ from __future__ import annotations
 
 import types
 
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession
+
+
+class FakeChatModel(BaseChatModel):
+    """A chat model that replays a scripted list of AIMessages (mirrors the code agent's)."""
+
+    responses: list[AIMessage]
+    index: int = 0
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake-live-model"
+
+    def bind_tools(self, tools, **kwargs):
+        del tools, kwargs
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        del messages, stop, run_manager, kwargs
+        message = self.responses[self.index]
+        self.index += 1
+        return ChatResult(generations=[ChatGeneration(message=message)])
 
 
 class FakeRenderer:

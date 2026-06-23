@@ -20,6 +20,7 @@ from aai_cli.agent_cascade.messages import (
     ToolAffordance,
     UserMessage,
 )
+from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
 from aai_cli.core.errors import CLIError
 
@@ -451,6 +452,37 @@ def test_worker_surfaces_a_leg_error_in_the_transcript() -> None:
             # The error is also kept on the app so the launcher can re-raise it for the
             # right exit code, not just shown inline (where a torn-down TUI would lose it).
             assert app.error is boom_error
+
+    _run(go())
+
+
+def test_submit_voice_approval_routes_an_open_modal_and_no_ops_otherwise() -> None:
+    # During a --files write pause the engine routes the next final transcript to
+    # submit_voice_approval (from the STT reader thread). With a modal open it hops to the UI
+    # thread and replays the transcript through the screen's try_voice; with none open it's a
+    # no-op (the spoken turn was just conversation).
+    async def go() -> None:
+        spoken: list[str] = []
+        gate = threading.Event()
+        done = threading.Event()
+
+        class _SpyScreen(ApprovalScreen):
+            def try_voice(self, transcript: str) -> None:
+                spoken.append(transcript)
+
+        def run_conversation(renderer) -> None:
+            gate.wait(30)
+            app.submit_voice_approval("no modal open")  # swallowed: no screen armed
+            app._approval_screen = _SpyScreen("write_file", {})  # arm an open approval modal
+            app.submit_voice_approval("yes, do it")  # routed to the screen on the UI thread
+            done.wait(30)
+
+        app = _app(run_conversation=run_conversation, on_stop=done.set)
+        async with app.run_test(size=(100, 30)) as pilot:
+            gate.set()
+            # Only the armed-modal transcript reaches try_voice; the no-modal call recorded nothing.
+            assert await _wait_until(pilot, lambda: spoken == ["yes, do it"])
+        assert done.is_set()
 
     _run(go())
 

@@ -89,14 +89,16 @@ class CascadeSession:
     # Set while a --files write/run awaits approval: the next final transcript answers the gate
     # (voice) instead of starting a new turn. Armed/cleared by _consume on the ApprovalPause events.
     _awaiting_approval: threading.Event = field(
-        default_factory=threading.Event, init=False
-    )  # pragma: no mutate
+        default_factory=threading.Event,
+        init=False,  # pragma: no mutate
+    )
     # Set only while a reply is in its audible speak-and-enqueue phase (not while it's still
     # *thinking* — generating in a blocking graph call). A UI interrupt keys off this so Ctrl-C
     # can quit while the agent thinks instead of being swallowed by a no-op "interrupt".
     _speaking: threading.Event = field(
-        default_factory=threading.Event, init=False
-    )  # pragma: no mutate
+        default_factory=threading.Event,
+        init=False,  # pragma: no mutate
+    )
     # Rotates the per-tool spoken fillers across turns (fillers[_filler_index % len]) so the same
     # tool doesn't repeat one phrase. The rotation test pins the exact phrase sequence, so a shifted
     # default or mutated increment is caught; the field's `init=` is equivalent (never constructed

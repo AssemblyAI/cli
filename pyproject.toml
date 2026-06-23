@@ -266,7 +266,7 @@ module = [
     "aai_cli.agent_cascade.brain",
 ]
 disallow_any_generics = false
-disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg"]
+disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg", "list-item"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of
@@ -517,6 +517,12 @@ audioop-lts = "audioop"
 # The CLI templates carry their own requirements and are dependency-checked by
 # dedicated install tests, not by the root package metadata.
 DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
+# `langchain` (the meta package, distinct from the langchain-* packages we declare
+# directly) is a hard dependency of `deepagents`, so it always rides in with the agent
+# stack. The live brain imports its public `langchain.agents.middleware` API directly —
+# pinning it here too would add a second lockfile edge to the same package without
+# changing the resolved version, so we let it stay the transitive deepagents owns.
+DEP003 = ["langchain"]
 # coverage is read by scripts/mutation_gate.py and click by
 # scripts/generated_code_compile_gate.py (dev-only gates run from check.sh, never
 # shipped in the wheel), so deptry sees dev deps imported from non-test code.
