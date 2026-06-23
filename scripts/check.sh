@@ -72,14 +72,16 @@ echo "==> xenon (cyclomatic complexity gate, src only)"
 # Tests are excluded (not shipped); only the aai_cli package is gated.
 uv run xenon --max-absolute B --max-modules A --max-average A aai_cli
 
-echo "==> swiftlint (macOS audio helper)"
+echo "==> swiftlint (macOS helpers)"
 if command -v swiftlint >/dev/null 2>&1; then
-  swiftlint lint --no-cache --strict aai_cli/streaming/macos_system_audio.swift
+  swiftlint lint --no-cache --strict \
+    aai_cli/streaming/macos_system_audio.swift \
+    aai_cli/control/macos_ui_control.swift
 else
   echo "   swiftlint not found; skipping (install with: brew install swiftlint)"
 fi
 
-echo "==> swift compile (macOS audio helper)"
+echo "==> swift compile (macOS helpers)"
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "   not macOS; skipping compile for macOS-only frameworks"
 elif command -v swiftc >/dev/null 2>&1; then
@@ -102,6 +104,16 @@ elif command -v swiftc >/dev/null 2>&1; then
     cat "$swift_error"
     exit 1
   fi
+  # The UI-control helper reads JSON requests on stdin (no argv to validate), so
+  # a clean compile is the gate — this is what guards against an SDK-unavailable
+  # API (e.g. CGDisplayCreateImage) slipping in unbuilt.
+  swiftc -parse-as-library aai_cli/control/macos_ui_control.swift \
+    -module-cache-path "$swift_module_cache" \
+    -O \
+    -framework AppKit \
+    -framework CoreGraphics \
+    -framework ApplicationServices \
+    -o "$swift_module_cache/aai-macos-ui-control-check"
   rm -rf "$swift_module_cache"
 else
   echo "   swiftc not found; skipping (macOS system audio builds on first use)"
