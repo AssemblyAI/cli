@@ -35,6 +35,7 @@ source_modules =
     aai_cli.agent_cascade
     aai_cli.auth
     aai_cli.code_gen
+    aai_cli.control
     aai_cli.init
     aai_cli.onboard
     aai_cli.streaming
