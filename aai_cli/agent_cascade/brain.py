@@ -73,6 +73,7 @@ _TOOL_LABELS = {
     "write_file": "Writing a file",
     "edit_file": "Editing a file",
     "execute": "Running code",
+    "task": "Working on a subtask",
     "ls": "Listing files",
     "glob": "Finding files",
     "grep": "Searching files",
@@ -223,11 +224,14 @@ def _graph_kwargs(
         return {}
     from langgraph.checkpoint.memory import InMemorySaver
 
+    from aai_cli.agent_cascade.subagents import general_purpose_subagent
+
     return {
         "backend": backend_factory(),
         "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
         "checkpointer": InMemorySaver(),
         "memory": ["./.deepagents/AGENTS.md"],
+        "subagents": [general_purpose_subagent(dict.fromkeys(_WRITE_TOOLS, True))],
     }
 
 

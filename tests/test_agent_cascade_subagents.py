@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.subagents import general_purpose_subagent
 
 
@@ -22,3 +24,22 @@ def test_spec_interrupt_on_is_the_passed_mapping():
     io = {"write_file": True, "edit_file": True, "execute": True}
     assert general_purpose_subagent(io)["interrupt_on"] == io
     assert general_purpose_subagent({"write_file": True})["interrupt_on"] == {"write_file": True}
+
+
+def test_graph_kwargs_wires_one_gated_gateway_bound_subagent(monkeypatch, tmp_path):
+    # --files binds exactly one subagent: gateway-bound (no model) with every mutating tool gated.
+    monkeypatch.chdir(tmp_path)
+    subs = brain._graph_kwargs(CascadeConfig(files=True))["subagents"]
+    assert isinstance(subs, list) and len(subs) == 1
+    spec = subs[0]
+    assert spec["name"] == "general-purpose"
+    assert "model" not in spec  # inherits the gateway-bound model
+    assert spec["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
+
+
+def test_graph_kwargs_off_binds_no_subagents():
+    assert "subagents" not in brain._graph_kwargs(CascadeConfig(files=False))
+
+
+def test_tool_label_task_is_working_on_a_subtask():
+    assert brain._tool_label("task") == "Working on a subtask"
