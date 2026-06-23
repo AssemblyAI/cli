@@ -32,7 +32,8 @@ def test_default_config_values():
         "without preamble or filler. Your reply is read aloud by a text-to-speech "
         "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
     )
-    # The sliding-window default keeps the last 40 messages of context.
+    # The standalone (--show-code / init template) sliding-window default; the live brain
+    # delegates context management to the deepagents SummarizationMiddleware instead.
     assert config.max_history == 40
     assert DEFAULT_MAX_HISTORY == 40
     # Formatting is on by default, so the reply trigger waits for the formatted turn.

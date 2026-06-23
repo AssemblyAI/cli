@@ -11,6 +11,7 @@ import queue
 import types
 
 import pytest
+from typer.testing import CliRunner
 
 from aai_cli.agent_cascade import brain, engine, streamer
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
@@ -19,14 +20,86 @@ from aai_cli.app.context import AppState
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import run_agent_cascade
 from aai_cli.core import config
+from aai_cli.main import app
 from tests._cascade_fakes import make_session
 from tests.test_agent_cascade_command import _opts
+
+runner = CliRunner()
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [([], True), (["--no-files"], False), (["--files"], True)],
+)
+def test_files_flag_resolves_into_options(monkeypatch, argv, expected):
+    # Filesystem access is on by default: omitting the flag yields files=True, and --no-files
+    # opts out. Pinned at the argv->options seam so the True default isn't a silent mutation.
+    captured = {}
+
+    def fake_run(opts, state, *, json_mode):
+        captured["opts"] = opts
+
+    monkeypatch.setattr(_exec, "run_agent_cascade", fake_run)
+    result = runner.invoke(app, ["live", *argv])
+    assert result.exit_code == 0
+    assert captured["opts"].files is expected
 
 
 def test_deny_writes_always_rejects():
     # The non-interactive approver declines every write (no channel to confirm one).
     assert _exec._deny_writes("write_file", {"file_path": "/x"}) is False
     assert _exec._deny_writes("edit_file", {"file_path": "/y"}) is False
+
+
+def test_normalize_auto_write_maps_variants_to_a_virtual_root():
+    # A bare name, a ./ prefix, and a leading / all resolve to the same cwd-rooted virtual root;
+    # a nested subdir keeps its segments.
+    assert _exec._normalize_auto_write("scratch") == "/scratch"
+    assert _exec._normalize_auto_write("./scratch") == "/scratch"
+    assert _exec._normalize_auto_write("/scratch") == "/scratch"
+    assert _exec._normalize_auto_write("out/data") == "/out/data"
+
+
+@pytest.mark.parametrize("bad", ["", ".", "/", "../escape", "~", "~/secrets", "a/../b"])
+def test_normalize_auto_write_rejects_escapes_and_whole_tree_aliases(bad):
+    # Traversal, home, and the whole-tree aliases can't name a contained subtree, so each is a
+    # clean usage error rather than a silently-broadened or gate-disabling path.
+    from aai_cli.core.errors import UsageError
+
+    with pytest.raises(UsageError):
+        _exec._normalize_auto_write(bad)
+
+
+def test_resolve_auto_write_paths_requires_files():
+    from aai_cli.core.errors import UsageError
+
+    with pytest.raises(UsageError, match="only applies with --files"):
+        _exec._resolve_auto_write_paths(auto_write=("scratch",), files=False)
+    # With --files it normalizes every value; empty input stays empty regardless of the flag.
+    assert _exec._resolve_auto_write_paths(auto_write=("scratch",), files=True) == ("/scratch",)
+    assert _exec._resolve_auto_write_paths(auto_write=(), files=False) == ()
+
+
+def test_auto_write_threads_into_config(monkeypatch):
+    # --auto-write reaches CascadeConfig.auto_write_paths (normalized) on the headless run path.
+    monkeypatch.setattr(_exec.tts_session, "require_available", lambda _c: None)
+    monkeypatch.setattr(config, "resolve_api_key", lambda **_: "k")
+    monkeypatch.setattr(_exec, "FileSource", lambda src: types.SimpleNamespace(sample_rate=16000))
+    monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
+    captured = {}
+
+    def fake_real(api_key, cfg, *, audio, stt_params, approver=None):
+        captured["auto_write_paths"] = cfg.auto_write_paths
+        return "deps"
+
+    monkeypatch.setattr(_exec.engine.CascadeDeps, "real", fake_real)
+    monkeypatch.setattr(_exec.engine, "run_cascade", lambda **kwargs: None)
+    run_agent_cascade(
+        _opts(source="clip.wav", files=True, auto_write=("scratch", "./build")),
+        AppState(),
+        json_mode=False,
+    )
+    assert captured["auto_write_paths"] == ("/scratch", "/build")
 
 
 def test_files_flag_threads_into_config_with_deny_approver_on_headless_path(monkeypatch):

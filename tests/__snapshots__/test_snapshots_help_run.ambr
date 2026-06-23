@@ -630,11 +630,17 @@
   │                                                             streaming fields │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Tools ──────────────────────────────────────────────────────────────────────╮
-  │ --mcp-config        FILE  MCP servers config JSON ({"mcpServers": {…}}) to   │
-  │                           add (repeatable; none load by default)             │
-  │ --files                   Let the agent read, write, and run code in the     │
-  │                           current directory, sandboxed (writes and runs need │
-  │                           confirmation)                                      │
+  │ --mcp-config                  FILE  MCP servers config JSON ({"mcpServers":  │
+  │                                     {…}}) to add (repeatable; none load by   │
+  │                                     default)                                 │
+  │ --files         --no-files          Let the agent read, write, and run code  │
+  │                                     in the current directory, sandboxed      │
+  │                                     (writes and runs need confirmation). Use │
+  │                                     --no-files to disable                    │
+  │                                     [default: files]                         │
+  │ --auto-write                  TEXT  Auto-approve --files writes under this   │
+  │                                     subdirectory, skipping the confirmation  │
+  │                                     (repeatable)                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -646,8 +652,8 @@
    $ assembly --sandbox live --system-prompt "You are a terse pirate."
    Add your own MCP servers (none load by default)
    $ assembly --sandbox live --mcp-config ~/.config/mcp/servers.json
-   Let the agent read and write files in the current directory
-   $ assembly --sandbox live --files
+   Run a conversation without filesystem access
+   $ assembly --sandbox live --no-files
    See available voices
    $ assembly --sandbox live --list-voices
    Print equivalent Python instead of running

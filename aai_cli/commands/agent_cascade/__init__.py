@@ -62,8 +62,8 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
                 "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
             ),
             (
-                "Let the agent read and write files in the current directory",
-                "assembly --sandbox live --files",
+                "Run a conversation without filesystem access",
+                "assembly --sandbox live --no-files",
             ),
             ("See available voices", "assembly --sandbox live --list-voices"),
             (
@@ -172,9 +172,15 @@ def live(
         rich_help_panel=_PANEL_TOOLS,
     ),
     files: bool = typer.Option(
-        False,
-        "--files",
-        help="Let the agent read, write, and run code in the current directory, sandboxed (writes and runs need confirmation)",
+        True,
+        "--files/--no-files",
+        help="Let the agent read, write, and run code in the current directory, sandboxed (writes and runs need confirmation). Use --no-files to disable",
+        rich_help_panel=_PANEL_TOOLS,
+    ),
+    auto_write: list[str] | None = typer.Option(
+        None,
+        "--auto-write",
+        help="Auto-approve --files writes under this subdirectory, skipping the confirmation (repeatable)",
         rich_help_panel=_PANEL_TOOLS,
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
@@ -243,6 +249,7 @@ def live(
         tts_config=tuple(tts_config or ()),
         mcp_config=tuple(mcp_config or ()),
         files=files,
+        auto_write=tuple(auto_write or ()),
         show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

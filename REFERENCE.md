@@ -160,8 +160,16 @@ missing `npx`/`uvx`, an offline host) drops only its own tools, so a single brok
 tool never sinks the session. MCP tools are a live-run feature and are not
 reflected in `--show-code` output.
 
-`--files` lets the agent read, write, and run code in the directory you launch
-it from (off by default). Reads run immediately; a write, edit, or command run pauses
+If the directory you launch from has an `AGENTS.md` or `CLAUDE.md`, `assembly live`
+reads it into the agent's context — the same convention coding agents follow — so
+spoken answers are grounded in the project at hand. `AGENTS.md` takes precedence
+(and identical content, e.g. a `CLAUDE.md` symlinked to it, is included once); an
+oversized file is truncated so it can't crowd out the conversation. This is
+independent of `--files` (it happens even under `--no-files`, when the agent can't
+touch the filesystem) and is not reflected in `--show-code` output.
+
+The agent reads, writes, and runs code in the directory you launch it from (on by
+default; pass `--no-files` to disable). Reads run immediately; a write, edit, or command run pauses
 the turn for confirmation in the voice TUI — press `y`/`n` (`a` approves the rest of the
 session) or just say it ("approve" / "run it" / "go ahead"; anything unclear is treated as
 a no). Destructive commands (e.g. `rm -rf`, `sudo`) ignore the spoken answer and require a
@@ -174,3 +182,10 @@ runs need the same confirmation. The agent also keeps a per-project memory file
 (`./.deepagents/AGENTS.md`) so it resumes knowing what it was working on. A non-interactive
 run (a file/URL source, `--json`, `-o text`, or a non-TTY) has no way to confirm a write or
 run, so those are declined there while reads still work.
+
+`--auto-write DIR` relaxes the confirmation for writes inside a chosen subtree: a write or
+edit under `DIR` (relative to the launch directory) runs without a keypress, while a write
+anywhere else still pauses for approval — handy hands-free, where every confirmation is
+friction (e.g. `--auto-write scratch` to let the agent freely save into `./scratch`). Repeat
+the flag for several subtrees. It only applies with `--files`, and never auto-approves a
+command run (`execute` is always confirmed); the path can't escape the launch directory.

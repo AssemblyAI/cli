@@ -50,6 +50,7 @@ _DEFAULTS = AgentCascadeOptions(
     tts_config=(),
     mcp_config=(),
     files=False,
+    auto_write=(),
     show_code=False,
 )
 

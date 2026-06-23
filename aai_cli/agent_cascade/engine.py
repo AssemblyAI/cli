@@ -61,7 +61,7 @@ from aai_cli.agent_cascade._runtime import (
     timeout_error as _timeout_error,
 )
 from aai_cli.agent_cascade.config import CascadeConfig
-from aai_cli.agent_cascade.text import pop_clauses, trim_history
+from aai_cli.agent_cascade.text import pop_clauses
 from aai_cli.core.errors import CLIError
 from aai_cli.ui import output
 
@@ -150,7 +150,6 @@ class CascadeSession:
             self.renderer.user_final(text)
             self._barge_in()
             self.history.append({"role": "user", "content": text})
-            trim_history(self.history, self.config.max_history)
             self._start_reply()
         else:
             self.renderer.user_partial(text)
@@ -300,9 +299,7 @@ class CascadeSession:
     def _terminal_result(
         self, item: _ReplyEvent | _Timeout, buffer: str, held: list[str], *, used_tool: bool
     ) -> tuple[bool, str | None]:
-        """Classify a turn-ending queue item: a timeout/leg :class:`_Failure` surfaces the error
-        and ends with no tail, a :class:`_Done` carries the tail to flush, else ``(False, None)``.
-        """
+        """Classify a turn-ending item (surface a timeout/leg error, carry a Done's tail, else pass)."""
         if isinstance(item, _Timeout | _Failure):
             error = _timeout_error() if isinstance(item, _Timeout) else item.error
             self._surface_error(error, started=self._speaking.is_set())
@@ -432,11 +429,14 @@ class CascadeSession:
             self.player.enqueue(pcm)
 
     def _record_spoken(self, spoken: list[str]) -> None:
-        """Append what was actually spoken to the history (kept alternating after a barge-in)."""
+        """Append what was actually spoken to the history (kept alternating after a barge-in).
+
+        Not windowed client-side: the brain's deepagents ``SummarizationMiddleware`` manages the
+        context window, so the engine keeps the full running history and lets the graph compact it.
+        """
         spoken_text = " ".join(spoken).strip()
         if spoken_text:
             self.history.append({"role": "assistant", "content": spoken_text})
-            trim_history(self.history, self.config.max_history)
 
     def _surface_error(self, exc: CLIError, *, started: bool) -> None:
         """Record a reply-leg failure (LLM/timeout). Before any audio, the error is also shown

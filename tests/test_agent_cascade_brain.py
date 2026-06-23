@@ -12,7 +12,15 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from aai_cli.agent_cascade import brain, datetime_tool, plan, streamer, weather_tool, webpage_tool
+from aai_cli.agent_cascade import (
+    brain,
+    datetime_tool,
+    plan,
+    streamer,
+    weather_tool,
+    webpage_tool,
+    write_gate,
+)
 from aai_cli.agent_cascade import model as model_mod
 from aai_cli.agent_cascade.config import CascadeConfig
 from tests._cascade_fakes import FakeChatModel
@@ -35,11 +43,106 @@ def test_graph_kwargs_gates_writes_and_execute_and_sets_memory(monkeypatch, tmp_
     assert isinstance(backend, sandbox.SandboxedShellBackend)
     assert Path(backend.cwd) == tmp_path.resolve()
     assert backend.virtual_mode is True
-    # execute now joins the write gate.
-    assert kwargs["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
+    # With no --auto-write paths, the gate covers both file-write tools (path-scoped) plus the
+    # always-gated execute. write_file/edit_file are now InterruptOnConfig maps (a `when`
+    # predicate), execute stays a plain True.
+    interrupt_on = kwargs["interrupt_on"]
+    assert sorted(interrupt_on) == ["edit_file", "execute", "write_file"]
+    assert interrupt_on["execute"] is True
+    assert "when" in interrupt_on["write_file"]
     assert kwargs["checkpointer"] is not None
     # Durable per-project memory is turned on.
     assert kwargs["memory"] == ["./.deepagents/AGENTS.md"]
+    # No explicit subagent: deepagents auto-adds the general-purpose one and it inherits this
+    # top-level interrupt_on (the delegated-write surfacing is locked in test_agent_cascade_subagents).
+    assert "subagents" not in kwargs
+
+
+def test_graph_kwargs_threads_auto_write_paths_into_the_gate(monkeypatch, tmp_path):
+    # CascadeConfig.auto_write_paths reaches the graph's interrupt_on, so a write under the
+    # configured subtree auto-approves while others still gate.
+    monkeypatch.chdir(tmp_path)
+    kwargs = brain._graph_kwargs(CascadeConfig(files=True, auto_write_paths=("/scratch",)))
+    interrupt_on = kwargs["interrupt_on"]
+    assert _write_fires(interrupt_on, "write_file", "/scratch/out.md") is False
+    assert _write_fires(interrupt_on, "write_file", "/elsewhere.md") is True
+
+
+def _write_fires(interrupt_on: dict[str, object], tool: str, path: str) -> bool:
+    """Whether the path-scoped gate would pause `tool` for the write to `path`.
+
+    Drives the InterruptOnConfig's `when` predicate directly — its True means "interrupt
+    (ask the approver)", False means "auto-approve (run ungated)". The predicate reads only
+    ``req.tool_call`` (the dict of name/args), so a SimpleNamespace stands in for the full
+    langchain ``ToolCallRequest`` without dragging its strict TypedDict/runtime fields in.
+    """
+    import types
+
+    config = interrupt_on[tool]
+    assert isinstance(config, dict)
+    req = types.SimpleNamespace(tool_call={"name": tool, "args": {"file_path": path}})
+    return bool(config["when"](req))
+
+
+def test_write_interrupt_on_gates_every_write_without_auto_write_paths():
+    # No --auto-write subtrees: both file-write tools pause for any target (the pre-existing
+    # all-or-nothing behavior), and execute is always gated.
+    interrupt_on = write_gate.write_interrupt_on(())
+    assert interrupt_on["execute"] is True
+    assert _write_fires(interrupt_on, "write_file", "/notes.txt") is True
+    assert _write_fires(interrupt_on, "edit_file", "/src/deep/main.py") is True
+
+
+def test_write_interrupt_on_auto_approves_under_allowed_subtree():
+    # A --auto-write subtree relaxes the gate ONLY for writes inside it: a write under /scratch
+    # runs ungated (when -> False), a write elsewhere still pauses (when -> True). This is the
+    # crux of the feature, so assert both sides — a one-sided assert would miss an always-allow
+    # or always-gate mutant.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/out.md") is False
+    assert _write_fires(interrupt_on, "edit_file", "/scratch/sub/deep.txt") is False
+    assert _write_fires(interrupt_on, "write_file", "/notes.txt") is True
+    assert _write_fires(interrupt_on, "edit_file", "/src/main.py") is True
+    # execute is never path-scoped — every command run is still approved.
+    assert interrupt_on["execute"] is True
+
+
+def test_write_interrupt_on_honors_multiple_auto_write_subtrees():
+    # Several --auto-write subtrees each auto-approve; an unlisted sibling still gates.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch", "/build"))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/a") is False
+    assert _write_fires(interrupt_on, "write_file", "/build/b") is False
+    assert _write_fires(interrupt_on, "write_file", "/src/c") is True
+
+
+def test_write_interrupt_on_matches_whole_segments_not_string_prefix():
+    # A sibling that merely shares a name prefix (/scratchpad vs the root /scratch) is NOT under
+    # the auto-write subtree, so it still gates — a naive string-prefix check would wrongly skip it.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratchpad/x") is True
+    assert _write_fires(interrupt_on, "write_file", "/scratch") is False  # the root node itself
+
+
+def test_write_interrupt_on_roots_a_relative_target_like_an_absolute_one():
+    # A relative tool-call path is rooted under cwd the same way the model's /-rooted paths are,
+    # so `scratch/out.md` resolves under the /scratch auto-write subtree and auto-approves.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "scratch/out.md") is False
+    assert _write_fires(interrupt_on, "write_file", "other/out.md") is True
+
+
+def test_write_interrupt_on_fails_safe_to_gating_for_unlocatable_paths():
+    # A path the gate can't place — a non-string arg, or one with a `..` segment — must require
+    # approval rather than silently auto-approve, even inside an auto-write subtree.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/../etc/passwd") is True
+    # A non-string file_path arg also fails safe (drive the predicate directly).
+    import types
+
+    config = interrupt_on["write_file"]
+    assert isinstance(config, dict)
+    req = types.SimpleNamespace(tool_call={"name": "write_file", "args": {"file_path": 123}})
+    assert config["when"](req) is True
 
 
 def test_sandboxed_backend_implements_sandbox_protocol(monkeypatch, tmp_path):
@@ -223,6 +326,24 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
     assert any(isinstance(mw, ToolCallLimitMiddleware) for mw in captured["middleware"])
 
 
+def test_build_graph_threads_project_context_into_system_prompt(monkeypatch):
+    import deepagents
+
+    captured = {}
+
+    def fake_create(*, model, tools, system_prompt, middleware):
+        del model, tools, middleware
+        captured["system_prompt"] = system_prompt
+        return "graph"
+
+    monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
+    cfg = CascadeConfig(project_context="# AGENTS.md\n\nRun uv sync first.")
+    brain.build_graph("k", cfg, tools=[], mcp_tools=[])
+    # The launch directory's instruction file rides into the live agent's system prompt.
+    assert "Run uv sync first." in captured["system_prompt"]
+
+
 def test_build_graph_loads_mcp_tools_from_config_when_not_injected(monkeypatch):
     import deepagents
 
@@ -324,3 +445,53 @@ def test_todo_collector_prefers_complete_buffer_over_partial_tool_calls():
         )
     )
     assert collector.take() == plan.TodoUpdate((plan.TodoItem(content="A", status="done"),))
+
+
+def test_todo_collector_ignores_a_non_write_todos_tool_carrying_todos_args():
+    # Only write_todos populates the plan: the `name == write_todos AND args-is-a-dict` guard must
+    # reject a *different* tool whose args happen to carry a `todos` key (an `or` there would let a
+    # sibling tool's payload masquerade as the plan).
+    collector = plan.TodoCollector()
+    collector.note_chunk(
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "search",
+                    "args": {"todos": [{"content": "X", "status": "pending"}]},
+                    "id": "s",
+                }
+            ],
+        )
+    )
+    assert collector.take() is None
+
+
+def test_todo_collector_ignores_fragments_from_a_different_tool_index():
+    # A write_todos call opens at index 0; a sibling tool's arg fragment arrives at index 1. The
+    # `index == open-index` guard must drop it — folding a foreign fragment into the buffer (an `or`
+    # there) corrupts the todos JSON. The fakes expose only `tool_call_chunks` (no `.tool_calls`),
+    # so the buffer is the *sole* source: under the `or` mutant the buffer no longer parses and
+    # take() returns None instead of the plan, which this assert catches.
+    import types
+
+    def chunk(fragments: list[dict[str, object]]) -> types.SimpleNamespace:
+        return types.SimpleNamespace(tool_call_chunks=fragments)
+
+    collector = plan.TodoCollector()
+    collector.note_chunk(
+        chunk(
+            [
+                {
+                    "name": "write_todos",
+                    "args": '{"todos":[{"content":"A","status":"pending"}',
+                    "index": 0,
+                }
+            ]
+        )
+    )
+    # A different tool's fragment at index 1 — must NOT be appended to the write_todos buffer.
+    collector.note_chunk(chunk([{"name": None, "args": "GARBAGE", "index": 1}]))
+    # Close the write_todos JSON at its own index 0.
+    collector.note_chunk(chunk([{"name": None, "args": "]}", "index": 0}]))
+    assert collector.take() == plan.TodoUpdate((plan.TodoItem(content="A", status="pending"),))

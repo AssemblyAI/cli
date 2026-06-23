@@ -27,7 +27,11 @@ DEFAULT_SYSTEM_PROMPT = (
     "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
 )
 DEFAULT_GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
-# Sliding-window size: keep the last N messages of conversation as LLM context.
+# Sliding-window size for the standalone, hand-rolled cascade: keep the last N messages of
+# conversation as LLM context. Used by the `--show-code` generator and the `assembly init`
+# template, which talk to the gateway directly. The live `assembly live` brain does NOT window
+# client-side — it delegates context management to the deepagents `SummarizationMiddleware`
+# (summarize old turns, offload to a file), so this knob is inert on that path. See brain.py.
 DEFAULT_MAX_HISTORY = 40
 # Per-turn cap on how many tool calls the deepagents brain may make before it must answer.
 # Enforced by a ToolCallLimitMiddleware with exit_behavior="continue": once the budget is hit,
@@ -69,3 +73,12 @@ class CascadeConfig:
     # behavior unchanged (the default in-memory backend, no gating, nothing advertised); on
     # swaps to a real-cwd FilesystemBackend and gates writes behind human approval.
     files: bool = False
+    # Auto-approve writes under these cwd-rooted virtual subtrees (e.g. ("/scratch",)) when
+    # --files is on. A write inside one runs without a confirmation keypress; a write anywhere
+    # else still pauses for approval. Empty (the default) gates every write, as before. The
+    # paths are normalized virtual roots (always leading "/", no ".."), matching the virtual_mode
+    # backend the model addresses. execute is never auto-approved — it can't be path-scoped.
+    auto_write_paths: tuple[str, ...] = ()
+    # The launch directory's AGENTS.md/CLAUDE.md, read into the system prompt so the agent
+    # answers grounded in the project it's run from (None when no instruction file is present).
+    project_context: str | None = None

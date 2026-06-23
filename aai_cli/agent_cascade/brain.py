@@ -7,7 +7,8 @@ experience). The toolset is deliberately minimal: a low-latency spoken turn does
 with one obvious tool rather than a menu it has to choose among. The graph is built once
 per session (:func:`build_graph`); tools are read-only and auto-approved, because a spoken
 turn can't pause for a keyboard confirmation, and the system prompt keeps every reply short
-and speakable.
+and speakable. Context-window management is deepagents' job (its built-in
+``SummarizationMiddleware``), so the engine feeds the full untrimmed history each turn.
 
 This module owns graph *assembly* (tools, backend, middleware, the compiled graph) plus the
 shared stream-event types (:class:`SpeechDelta`/:class:`ToolNotice`/:class:`ApprovalPause`)
@@ -28,6 +29,7 @@ from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.agent_cascade.prompt import build_system_prompt
+from aai_cli.agent_cascade.write_gate import write_interrupt_on
 
 if TYPE_CHECKING:
     from langchain.agents.middleware import AgentMiddleware
@@ -74,8 +76,7 @@ def _tool_label(name: str) -> str:
 # Spoken filler the agent says aloud when it pauses for a tool, so a hands-free turn fills the
 # silent tool round-trip with *why* it paused instead of dead air (the audible counterpart to the
 # visual `_TOOL_LABELS` affordance). Each tool gets a few short, speakable variants the engine
-# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS`. Spoken-style only — no
-# markdown, no trailing detail — since they're synthesized straight to TTS ahead of the answer.
+# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS` (spoken-style, no markdown).
 _GENERIC_FILLERS: tuple[str, ...] = ("One sec.", "Let me check.")
 
 _TOOL_FILLERS: dict[str, tuple[str, ...]] = {
@@ -177,12 +178,6 @@ def build_live_tools() -> list[BaseTool]:
     return tools
 
 
-# The mutating tools gated behind human approval when --files is on (reads — incl. grep — stay
-# ungated). execute joins the gate because the backend is now sandbox-capable: it runs real
-# commands in cwd, OS-confined, but every run is still approved.
-_WRITE_TOOLS = ("write_file", "edit_file", "execute")
-
-
 def _build_fs_backend() -> object:
     """A sandbox-capable deepagents backend rooted at the launch directory.
 
@@ -201,21 +196,21 @@ def _graph_kwargs(
     """Extra ``create_deep_agent`` kwargs that turn on real-cwd files + write-gating.
 
     Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
-    backend, ``interrupt_on`` pausing only the mutating tools for human approval, and an
-    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam.
+    backend, a path-scoped ``interrupt_on`` (writes outside the ``--auto-write`` subtrees pause
+    for approval; ``execute`` always does — see :func:`write_gate.write_interrupt_on`), and an
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam. No
+    ``subagents`` key: deepagents auto-adds a general-purpose subagent that inherits this
+    ``interrupt_on`` (see ``subagents.py``).
     """
     if not config.files:
         return {}
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from aai_cli.agent_cascade.subagents import general_purpose_subagent
-
     return {
         "backend": backend_factory(),
-        "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
+        "interrupt_on": write_interrupt_on(config.auto_write_paths),
         "checkpointer": InMemorySaver(),
         "memory": ["./.deepagents/AGENTS.md"],
-        "subagents": [general_purpose_subagent(dict.fromkeys(_WRITE_TOOLS, True))],
     }
 
 
@@ -254,7 +249,9 @@ def build_graph(
 
     from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
     from aai_cli.agent_cascade.model import build_model
+    from aai_cli.agent_cascade.subagents import register_gp_subagent_profile
 
+    register_gp_subagent_profile()
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
     )
@@ -264,7 +261,11 @@ def build_graph(
         model=model,
         tools=builtin + extra,
         system_prompt=build_system_prompt(
-            config.system_prompt, tools=builtin, extra_tools=extra, files=config.files
+            config.system_prompt,
+            tools=builtin,
+            extra_tools=extra,
+            files=config.files,
+            project_context=config.project_context,
         ),
         middleware=_build_middleware(config),
         **_graph_kwargs(config),
