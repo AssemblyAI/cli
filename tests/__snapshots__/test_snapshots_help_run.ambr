@@ -632,8 +632,9 @@
   ╭─ Tools ──────────────────────────────────────────────────────────────────────╮
   │ --mcp-config        FILE  MCP servers config JSON ({"mcpServers": {…}}) to   │
   │                           add (repeatable; none load by default)             │
-  │ --files                   Let the agent read and write files in the current  │
-  │                           directory (writes need confirmation)               │
+  │ --files                   Let the agent read, write, and run code in the     │
+  │                           current directory, sandboxed (writes and runs need │
+  │                           confirmation)                                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

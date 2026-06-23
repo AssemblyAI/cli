@@ -163,7 +163,7 @@ def test_default_runner_timeout_returns_partial_text_output(monkeypatch):
     result = sandbox.default_runner(["sleep", "99"], "/w", 5)
     assert "partial" in result.output
     assert "timed out after 5s" in result.output
-    assert result.returncode == sandbox._TIMEOUT_EXIT
+    assert result.returncode == 124  # conventional timeout exit code (literal pins the value)
 
 
 def test_default_runner_timeout_decodes_bytes_output(monkeypatch):
@@ -335,3 +335,4 @@ def test_backend_defaults_runner_capability_tmp_and_home(tmp_path):
     assert backend._capability in ("seatbelt", "bwrap", "none")  # the real detector ran
     assert backend._tmp == tempfile.gettempdir()
     assert backend._home == str(Path("~").expanduser())
+    assert backend.virtual_mode is True  # defaults to traversal-blocked virtual mode

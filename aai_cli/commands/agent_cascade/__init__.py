@@ -174,7 +174,7 @@ def live(
     files: bool = typer.Option(
         False,
         "--files",
-        help="Let the agent read and write files in the current directory (writes need confirmation)",
+        help="Let the agent read, write, and run code in the current directory, sandboxed (writes and runs need confirmation)",
         rich_help_panel=_PANEL_TOOLS,
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),

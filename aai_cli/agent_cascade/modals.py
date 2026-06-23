@@ -58,7 +58,10 @@ class ApprovalScreen(ModalScreen[str]):
         self._tool_name = name  # not _name: that shadows Textual Widget's str|None attr
         self._args = args
         self._expanded = False  # toggled by `e`; collapsed (one-line) by default
-        self._answered = False  # guards against a double dismiss
+        # Must start False so the first y/a/n decision dismisses; pinned by
+        # test_approval_screen_starts_unanswered (and the keyboard pilots). pragma: the mutation
+        # harness mis-selects covering tests for this Textual __init__ line (false survivor).
+        self._answered = False  # pragma: no mutate — guards against a double dismiss
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approvalbox"):
