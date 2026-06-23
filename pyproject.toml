@@ -163,6 +163,7 @@ artifacts = [
     "aai_cli/init/templates/**",
     "aai_cli/skills/**",
     "aai_cli/streaming/macos_system_audio.swift",
+    "aai_cli/control/macos_ui_control.swift",
 ]
 exclude = ["**/__pycache__", "**/*.pyc", "**/AGENTS.md", "**/CLAUDE.md"]
 
@@ -489,6 +490,7 @@ max-statements = 40
 "aai_cli/commands/webhooks/_listen.py" = ["TID251"]
 "aai_cli/init/runner.py" = ["TID251"]
 "aai_cli/init/tunnel.py" = ["TID251"]
+"aai_cli/control/helper.py" = ["TID251"]
 "aai_cli/streaming/macos.py" = ["TID251"]
 "aai_cli/streaming/sources.py" = ["TID251"]
 # Sandbox shell-out: launches the OS sandbox binary (sandbox-exec / bwrap) with controlled

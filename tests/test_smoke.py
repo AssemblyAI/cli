@@ -161,6 +161,7 @@ def test_help_lists_commands_in_workflow_order():
         "dictate",
         "agent",
         "live",
+        "control",
         "speak",
         "llm",
         "clip",

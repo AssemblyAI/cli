@@ -49,6 +49,8 @@
   │              back                                                            │
   │ agent        Hold a live two-way voice conversation with the Voice Agent API │
   │ live         [sandbox] Talk live to a tool-using voice agent                 │
+  │ control      Drive your Mac hands-free: speak an instruction, an agent acts  │
+  │              on the UI                                                       │
   │ speak        [sandbox] Synthesize speech from text with AssemblyAI streaming │
   │              TTS                                                             │
   │ llm          Send a prompt to AssemblyAI's LLM Gateway and print the reply   │

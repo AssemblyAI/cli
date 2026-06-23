@@ -264,6 +264,58 @@
   
   '''
 # ---
+# name: test_command_help_matches_snapshot[control]
+  '''
+  
+   Usage: assembly control [OPTIONS]
+  
+   Drive your Mac hands-free: speak an instruction, an agent acts on the UI
+  
+   Each spoken instruction is transcribed with Streaming STT and handed to an
+   LLM agent that decides which UI actions to take — typing, key chords,
+   clicking accessibility elements, launching apps — and performs them through a
+   bundled native macOS helper, then speaks back a short confirmation.
+  
+   macOS only: the helper needs Apple's Swift compiler and the Accessibility +
+   Microphone permissions granted to your terminal. Use --dry-run to watch the
+   agent plan without it touching anything.
+  
+  ╭─ Options ────────────────────────────────────────────────────────────────────╮
+  │ --dry-run            Plan and observe only: refuse every UI-changing action  │
+  │ --json     -j        Emit newline-delimited JSON events                      │
+  │ --help               Show this message and exit.                             │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ Audio Capture ──────────────────────────────────────────────────────────────╮
+  │ --device             INTEGER               Microphone device index           │
+  │ --sample-rate        INTEGER RANGE [x>=1]  Microphone capture rate in Hz     │
+  │                                            (default: device native)          │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  ╭─ LLM Transform ──────────────────────────────────────────────────────────────╮
+  │ --model             TEXT                  LLM Gateway model that decides the │
+  │                                           actions                            │
+  │                                           [default:                          │
+  │                                           claude-haiku-4-5-20251001]         │
+  │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per agent step          │
+  │                                           [default: 8192]                    │
+  │ --max-steps         INTEGER RANGE [x>=1]  Max action steps the agent may     │
+  │                                           take per spoken instruction        │
+  │                                           [default: 10]                      │
+  ╰──────────────────────────────────────────────────────────────────────────────╯
+  
+   Examples
+   Control your Mac hands-free by voice
+   $ assembly control
+   Preview actions without touching the UI
+   $ assembly control --dry-run
+   Use a more capable model for the agent
+   $ assembly control --model claude-opus-4-7
+   Emit the loop as newline-delimited JSON
+   $ assembly control --json
+  
+  
+  
+  '''
+# ---
 # name: test_command_help_matches_snapshot[dictate]
   '''
   
