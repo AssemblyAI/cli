@@ -51,15 +51,12 @@ class CompiledAgent(Protocol):
         """Run one step of the graph, returning the updated state (incl. messages)."""
 
 
-# Verbose (`-v`) flow logging for the agent's tool loop. `invoke` runs the whole loop
-# internally, so without this `-v` only shows the httpx request lines and never which
-# tools the agent reached for or what they returned — exactly what you need to see when
-# a spoken turn stalls mid-tool. Logged at INFO so plain `-v` surfaces it.
+# Verbose (`-v`) flow logging for the agent's tool loop: `invoke` runs the whole loop internally,
+# so without this `-v` never shows which tools the agent reached for when a spoken turn stalls.
 _FLOW_LOG = logging.getLogger("aai_cli.agent_cascade.brain")
 
-# Tool outputs (a fetched page, a search payload) can be huge; cap what we log per result
-# so a single tool call doesn't bury the rest of the flow in stderr. The exact cap is an
-# arbitrary tuning knob — a +-1 shift is behaviorally equivalent, so no test can kill it.
+# Tool outputs (a fetched page, a search payload) can be huge; cap what we log per result so a
+# single tool call doesn't bury the flow. The exact cap is an arbitrary knob (no test can kill it).
 _RESULT_LOG_CAP = 500  # pragma: no mutate
 
 # Human, speakable labels for the tool affordance the live UI shows while a tool runs (so a
@@ -89,8 +86,7 @@ def _tool_label(name: str) -> str:
 # Spoken filler the agent says aloud when it pauses for a tool, so a hands-free turn fills the
 # silent tool round-trip with *why* it paused instead of dead air (the audible counterpart to the
 # visual `_TOOL_LABELS` affordance). Each tool gets a few short, speakable variants the engine
-# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS`. Spoken-style only — no
-# markdown, no trailing detail — since they're synthesized straight to TTS ahead of the answer.
+# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS` (spoken-style, no markdown).
 _GENERIC_FILLERS: tuple[str, ...] = ("One sec.", "Let me check.")
 
 _TOOL_FILLERS: dict[str, tuple[str, ...]] = {
@@ -281,7 +277,11 @@ def build_graph(
         model=model,
         tools=builtin + extra,
         system_prompt=build_system_prompt(
-            config.system_prompt, tools=builtin, extra_tools=extra, files=config.files
+            config.system_prompt,
+            tools=builtin,
+            extra_tools=extra,
+            files=config.files,
+            project_context=config.project_context,
         ),
         middleware=_build_middleware(config),
         **_graph_kwargs(config),

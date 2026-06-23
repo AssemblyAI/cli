@@ -69,6 +69,20 @@ _FILE_SAFETY_GUIDANCE = (
     "replacing the whole file unless asked."
 )
 
+# Introduces the launch directory's AGENTS.md/CLAUDE.md when one is present, so the model treats
+# it as project background to ground its answers rather than as another instruction to recite.
+_PROJECT_CONTEXT_INTRO = (
+    "The following is background on the project in your working directory, taken from its "
+    "AGENTS.md/CLAUDE.md. Use it to ground your answers, but keep your reply short and spoken."
+)
+
+
+def _append_project_context(prompt: str, project_context: str | None) -> str:
+    """Append the launch directory's instruction files to the prompt as project background."""
+    if not project_context:
+        return prompt
+    return f"{prompt}\n\n{_PROJECT_CONTEXT_INTRO}\n\n{project_context}"
+
 
 def _join_clause(parts: list[str]) -> str:
     """Join capability phrases into a readable clause: ``a``, ``a and b``, ``a, b, and c``."""
@@ -121,6 +135,7 @@ def build_system_prompt(
     tools: Sequence[BaseTool],
     extra_tools: Sequence[BaseTool] = (),
     files: bool = False,
+    project_context: str | None = None,
 ) -> str:
     """The live agent's system prompt: the user's persona plus tool guidance.
 
@@ -134,6 +149,8 @@ def build_system_prompt(
     its own knowledge. Whenever tools are bound the guidance also tells the model to report
     tool outcomes honestly (never narrate a success the tool didn't return), and the
     ``--files`` path adds a warning to confirm before irreversible writes or code execution.
+    ``project_context`` (the launch directory's AGENTS.md/CLAUDE.md) is appended as project
+    background when present, so the agent's answers are grounded in the project it's run from.
     """
     capabilities = _tool_capabilities(tools)
     extra = _extra_capability(extra_tools)
@@ -142,7 +159,9 @@ def build_system_prompt(
     if files:
         capabilities.append(_FILE_CAPABILITY)
     if not capabilities:
-        return f"{persona}\n\n{_PERSONA_LATCH} {_NO_TOOLS_GUIDANCE}"
+        return _append_project_context(
+            f"{persona}\n\n{_PERSONA_LATCH} {_NO_TOOLS_GUIDANCE}", project_context
+        )
     guidance = (
         f"You can use tools to help answer: {_join_clause(capabilities)}. Reach for a "
         "tool when a question needs fresh or external information; answer directly and "
@@ -151,4 +170,6 @@ def build_system_prompt(
     )
     if files:
         guidance = f"{guidance} {_FILE_SAFETY_GUIDANCE}"
-    return f"{persona}\n\n{_PERSONA_LATCH} {guidance} {_SPOKEN_TAIL}"
+    return _append_project_context(
+        f"{persona}\n\n{_PERSONA_LATCH} {guidance} {_SPOKEN_TAIL}", project_context
+    )
