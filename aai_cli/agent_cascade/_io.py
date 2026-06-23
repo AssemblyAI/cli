@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, plan, streamer
 from aai_cli.agent_cascade._runtime import Worker as _Worker
 from aai_cli.agent_cascade._runtime import spawn_thread as _spawn_thread
 from aai_cli.agent_cascade.config import CascadeConfig
@@ -42,6 +42,9 @@ class Renderer(Protocol):
 
     def tool_call(self, label: str) -> None:
         """Show that the agent is using a tool (e.g. "Searching the web") while it thinks."""
+
+    def todos_updated(self, todos: tuple[plan.TodoItem, ...]) -> None:
+        """Show the agent's current task list (its ``write_todos`` plan), replacing any prior."""
 
     def reply_started(self) -> None:
         """Mark the start of an agent reply."""
@@ -82,12 +85,13 @@ class CascadeDeps:
     """
 
     run_stt: Callable[[Callable[[object], None]], None]
-    # stream_reply(messages) -> iterable of SpeechDelta/ToolNotice events (plus ApprovalPause
-    # markers under --files write gating). The reply is streamed token-by-token so the engine
-    # can speak each clause as it lands; a ToolNotice surfaces the "Searching the web…"
-    # affordance (brain.build_streamer).
+    # stream_reply(messages) -> iterable of SpeechDelta/ToolNotice/TodoUpdate events (plus
+    # ApprovalPause markers under --files write gating). The reply is streamed token-by-token so
+    # the engine can speak each clause as it lands; a ToolNotice surfaces the "Searching the web…"
+    # affordance and a TodoUpdate the agent's plan (streamer.build_streamer).
     stream_reply: Callable[
-        ..., Iterable[brain.SpeechDelta | brain.ToolNotice | brain.ApprovalPause]
+        ...,
+        Iterable[brain.SpeechDelta | brain.ToolNotice | plan.TodoUpdate | brain.ApprovalPause],
     ]
     # synthesize(text, sink): streaming TTS — sink is called with each PCM frame as it
     # arrives so playback starts on the first frame instead of after the whole clause.
@@ -110,7 +114,7 @@ class CascadeDeps:
         # The LLM leg is a deepagents graph (web search / MCP tools), streamed token-by-token
         # so a spoken turn can transparently use tools and start speaking sooner. ``approver``
         # gates --files writes (None on the non-files path, where the graph never pauses).
-        stream_reply = brain.build_streamer(api_key, config, approver=approver)
+        stream_reply = streamer.build_streamer(api_key, config, approver=approver)
 
         def synthesize(text: str, sink: Callable[[bytes], None]) -> None:
             spec = SpeakConfig(

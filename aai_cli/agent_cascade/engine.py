@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, plan
 from aai_cli.agent_cascade._io import CascadeDeps, Player, Renderer
 from aai_cli.agent_cascade._runtime import (
     REPLY_TIMEOUT_SECONDS as _REPLY_TIMEOUT_SECONDS,
@@ -270,17 +270,15 @@ class CascadeSession:
         used_tool = False  # once a tool ran, hold text unspoken so only the final answer is read
         while True:
             item = self._next_event(events, deadline, before)
-            if isinstance(item, _Timeout):
-                self._surface_error(_timeout_error(), started=self._speaking.is_set())
-                return None
-            if isinstance(item, _Failure):
-                self._surface_error(item.error, started=self._speaking.is_set())
-                return None
-            if isinstance(item, _Done):
-                return _final_tail(buffer, held, used_tool=used_tool)
+            terminal, result = self._terminal_result(item, buffer, held, used_tool=used_tool)
+            if terminal:
+                return result
             if isinstance(item, brain.ApprovalPause):
                 deadline = _approval_deadline(item)
                 self._set_awaiting_approval(active=item.active)
+                continue
+            if isinstance(item, plan.TodoUpdate):
+                self.renderer.todos_updated(item.todos)  # visual only; never gates the reply
                 continue
             if isinstance(item, brain.ToolNotice):
                 if not self._handle_tool_notice(item, spoke_filler=spoke_filler):
@@ -292,11 +290,26 @@ class CascadeSession:
                 continue
             if self._stop.is_set():
                 return None
-            # item is a streamed SpeechDelta (every other case returned/continued above).
-            tail = self._speak_delta(item, buffer, held, spoken, used_tool=used_tool)
-            if tail is None:
-                return None
-            buffer = tail
+            # Only a SpeechDelta reaches here; the isinstance re-narrows it for the type checker.
+            if isinstance(item, brain.SpeechDelta):  # pragma: no mutate — narrowing-only guard
+                tail = self._speak_delta(item, buffer, held, spoken, used_tool=used_tool)
+                if tail is None:
+                    return None
+                buffer = tail
+
+    def _terminal_result(
+        self, item: _ReplyEvent | _Timeout, buffer: str, held: list[str], *, used_tool: bool
+    ) -> tuple[bool, str | None]:
+        """Classify a turn-ending queue item: a timeout/leg :class:`_Failure` surfaces the error
+        and ends with no tail, a :class:`_Done` carries the tail to flush, else ``(False, None)``.
+        """
+        if isinstance(item, _Timeout | _Failure):
+            error = _timeout_error() if isinstance(item, _Timeout) else item.error
+            self._surface_error(error, started=self._speaking.is_set())
+            return True, None
+        if isinstance(item, _Done):
+            return True, _final_tail(buffer, held, used_tool=used_tool)
+        return False, None
 
     def _speak_delta(
         self,

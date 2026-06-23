@@ -5,7 +5,7 @@ from __future__ import annotations
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, streamer
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.subagents import general_purpose_subagent
 from tests._cascade_fakes import FakeChatModel
@@ -107,14 +107,14 @@ def test_subagent_write_surfaces_through_the_parent_gate_and_is_approved(tmp_pat
     # approval loop (build_streamer -> _stream_gated -> _pending_writes -> approver). Approved, it lands.
     asked: list[tuple[str, dict]] = []
     graph = _delegating_graph(_delegate_then_write("Saved it via the helper."), str(tmp_path))
-    streamer = brain.build_streamer(
+    stream_reply = streamer.build_streamer(
         "k",
         CascadeConfig(files=True),
         graph=graph,
         approver=lambda name, args: asked.append((name, args)) or True,
     )
 
-    list(streamer([{"role": "user", "content": "have the helper save a note"}]))
+    list(stream_reply([{"role": "user", "content": "have the helper save a note"}]))
 
     assert any(name == "write_file" for name, _ in asked)  # the SUBAGENT's write was gated by us
     assert (tmp_path / "n.txt").read_text() == "hi"  # approved -> actually written
@@ -122,10 +122,10 @@ def test_subagent_write_surfaces_through_the_parent_gate_and_is_approved(tmp_pat
 
 def test_subagent_write_is_declined_when_the_approver_rejects(tmp_path):
     graph = _delegating_graph(_delegate_then_write("Okay, left it alone."), str(tmp_path))
-    streamer = brain.build_streamer(
+    stream_reply = streamer.build_streamer(
         "k", CascadeConfig(files=True), graph=graph, approver=lambda name, args: False
     )
 
-    list(streamer([{"role": "user", "content": "have the helper save a note"}]))
+    list(stream_reply([{"role": "user", "content": "have the helper save a note"}]))
 
     assert not (tmp_path / "n.txt").exists()  # declined -> nothing written by the subagent

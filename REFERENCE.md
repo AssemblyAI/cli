@@ -94,7 +94,7 @@ each carrying a `"type"` field to dispatch on:
 | ------- | ----------- |
 | `assembly stream --json` | `begin`, `turn`, `termination` (with `--from-stdin`, a `source` event precedes each file's events) |
 | `assembly agent --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `reply.started`, `transcript.agent`, `reply.done` |
-| `assembly live --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `tool.use`, `reply.started`, `transcript.agent`, `reply.done` |
+| `assembly live --json` | `session.ready`, `transcript.user.delta`, `transcript.user`, `tool.use`, `plan`, `reply.started`, `transcript.agent`, `reply.done` |
 | `assembly dictate --json` | `utterance` |
 | `assembly llm --follow --json` | `answer` |
 | `assembly transcribe <batch> --json` | `result` (one per source), then `reduce` if `--llm-reduce` is set |

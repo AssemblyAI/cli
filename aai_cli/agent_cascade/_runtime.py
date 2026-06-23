@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, plan
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
@@ -53,9 +53,11 @@ class Timeout:
     """Consumer sentinel: the wall-clock deadline elapsed before the next event arrived."""
 
 
-# What the producer thread puts on the consumer's queue: a speech/tool event from the
+# What the producer thread puts on the consumer's queue: a speech/tool/plan event from the
 # streaming leg, an approval-pause marker (--files write gating), or a terminal sentinel.
-type ReplyEvent = brain.SpeechDelta | brain.ToolNotice | brain.ApprovalPause | Done | Failure
+type ReplyEvent = (
+    brain.SpeechDelta | brain.ToolNotice | plan.TodoUpdate | brain.ApprovalPause | Done | Failure
+)
 
 
 def timeout_error() -> CLIError:
