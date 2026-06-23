@@ -17,6 +17,7 @@ from __future__ import annotations
 import concurrent.futures.thread as cf_thread
 import contextlib
 import threading
+import time
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -120,3 +121,27 @@ def spawn_thread(target: Callable[[], None]) -> Worker:
     thread = threading.Thread(target=target, daemon=True)  # pragma: no mutate
     thread.start()
     return thread
+
+
+def final_tail(buffer: str, held: list[str], *, used_tool: bool) -> str:
+    """End-of-stream remainder to flush: joined post-tool narration, else the live pre-tool buffer."""
+    return "".join(held) if used_tool else buffer
+
+
+def approval_deadline(pause: brain.ApprovalPause) -> float | None:
+    """The reply deadline across a write-approval pause: ``None`` (clock suspended) while the user
+    is deciding on a gated write — a slow y/n keypress must not trip the reply timeout — and a fresh
+    finite deadline once answered."""
+    return None if pause.active else time.monotonic() + REPLY_TIMEOUT_SECONDS
+
+
+def is_final_turn(event: object, *, format_turns: bool) -> bool:
+    """True for an end-of-turn that's the cue to generate a reply.
+
+    With formatting on, wait for the *formatted* turn (better text for the LLM); with it off the
+    server never sets ``turn_is_formatted``, so a bare end-of-turn is the cue — otherwise
+    ``--no-format-turns`` would make the agent never reply.
+    """
+    if not bool(getattr(event, "end_of_turn", False)):
+        return False
+    return bool(getattr(event, "turn_is_formatted", False)) or not format_turns

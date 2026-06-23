@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from aai_cli.agent_cascade.risk import url_is_internal
 from aai_cli.core.errors import UsageError
 
 if TYPE_CHECKING:
@@ -62,6 +63,11 @@ def build_read_url_tool(read: Reader = _read) -> BaseTool:
     def read_url(url: str) -> str:
         """Read a web page or PDF by URL and return its text. Use to read an article,
         document, or page you have the URL for (e.g. from a web-search result)."""
+        if url_is_internal(url):
+            # SSRF guard: an agent-chosen URL (often surfaced by web content it just read) must
+            # never reach a local/internal address or a local file, where it could read cloud
+            # metadata or internal services and speak the contents back.
+            return "I can't open that address."
         try:
             return _format(read(url))
         except UsageError:

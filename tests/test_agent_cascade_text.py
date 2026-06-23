@@ -95,8 +95,22 @@ def test_pop_clauses_returns_nothing_for_an_unterminated_buffer():
 
 
 def test_pop_clauses_strips_whitespace_from_each_flushed_clause():
-    chunks, _remainder = pop_clauses("  Hi there.  Next.", min_chars=1)
+    # Trailing space after the last "." so it's a confirmed boundary (a terminator at end-of-buffer
+    # is held, not flushed — see test_pop_clauses_holds_terminator_at_end_of_buffer).
+    chunks, _remainder = pop_clauses("  Hi there.  Next. ", min_chars=1)
     assert chunks == ["Hi there.", "Next."]
+
+
+def test_pop_clauses_holds_terminator_at_end_of_buffer():
+    # A terminator sitting at the current end of a streamed chunk may be mid-token ("$3." before
+    # "50" arrives), so it is held in the remainder rather than split into its own clause.
+    chunks, remainder = pop_clauses("It costs $3.", min_chars=1)
+    assert chunks == []
+    assert remainder == "It costs $3."
+    # Once the rest streams in and a real boundary follows, the number is spoken whole.
+    chunks, remainder = pop_clauses("It costs $3.50 today. ", min_chars=1)
+    assert chunks == ["It costs $3.50 today."]
+    assert remainder == " "
 
 
 @pytest.mark.parametrize("min_chars", [1, 25])

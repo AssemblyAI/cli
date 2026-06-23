@@ -85,7 +85,7 @@ def _c_to_f(celsius: float) -> int:
 
 def _get_json(url: str) -> object:
     """GET ``url`` and return its parsed JSON body (the default network seam)."""
-    import httpx
+    import httpx2 as httpx
 
     response = httpx.get(url, timeout=_TIMEOUT)
     response.raise_for_status()

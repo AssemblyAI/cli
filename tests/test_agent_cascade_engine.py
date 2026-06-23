@@ -71,6 +71,26 @@ def test_on_turn_final_renders_and_replies():
     assert ("reply_done", False) in renderer.calls
 
 
+def test_empty_reply_still_brackets_reply_done_with_reply_started():
+    # A reply that produces no clause and no tool call must still emit reply_started before
+    # reply_done, so a stream consumer never sees an unmatched reply_done and the TUI resets.
+    session, renderer, _player = make_session(stream_reply=lambda m: [])
+    session._generate_reply()
+    assert renderer.calls.count(("reply_started",)) == 1
+    started = renderer.calls.index(("reply_started",))
+    done = renderer.calls.index(("reply_done", False))
+    assert started < done
+
+
+def test_reply_started_fires_exactly_once_per_turn():
+    # The idempotent _emit_reply_started must not double-fire: a multi-clause spoken reply emits
+    # reply_started once, and the per-turn reset means a second turn emits it again (once).
+    session, renderer, _player = make_session(stream_reply=_deltas("One. ", "Two. "))
+    session._generate_reply()
+    session._generate_reply()
+    assert renderer.calls.count(("reply_started",)) == 2
+
+
 def test_reply_forwards_tool_calls_to_the_renderer():
     def stream(messages):
         yield ToolNotice("Searching the web", ("Searching now.",))

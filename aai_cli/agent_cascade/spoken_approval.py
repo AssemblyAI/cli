@@ -38,6 +38,13 @@ def interpret_spoken_approval(transcript: str) -> bool:
     return bool(_AFFIRMATIVE.search(text))
 
 
+# Running code is never voice-approvable: an STT-misheard affirmative must not be able to run an
+# arbitrary command. The advisory ``risk`` regex only catches a handful of obviously-destructive
+# shells, so the enforcement boundary keys off the tool *class* — every ``execute`` demands a
+# deliberate keypress, regardless of how benign its command text looks.
+_KEYPRESS_ONLY_TOOLS: tuple[str, ...] = ("execute",)
+
+
 def spoken_decision(
     name: str,
     args: Mapping[str, object],
@@ -48,10 +55,11 @@ def spoken_decision(
     """How a spoken transcript should resolve an open approval: True approve, False reject, or
     None *ignore the voice* (the destructive tier — require the keyboard).
 
-    Destructive tier (``risk.risk_warning`` fires, e.g. ``rm -rf``/``sudo``) → None, so an STT
-    mishearing can never green-light it; the keypress is the only channel. Otherwise the grammar
+    Keypress-only tier → None, so an STT mishearing can never green-light it; the keypress is the
+    only channel. That tier is any ``execute`` (running code is the highest-stakes mutation) plus
+    anything the advisory ``risk.risk_warning`` flags (``rm -rf``/``sudo``…). Otherwise the grammar
     decides: an unambiguous affirmative approves, everything else rejects (fail-safe).
     """
-    if warn(name, args) is not None:
+    if name in _KEYPRESS_ONLY_TOOLS or warn(name, args) is not None:
         return None
     return interpret_spoken_approval(transcript)

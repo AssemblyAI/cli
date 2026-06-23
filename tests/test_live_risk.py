@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from aai_cli.agent_cascade.risk import risk_warning
+from aai_cli.agent_cascade.risk import risk_warning, url_is_internal
 
 
 @pytest.mark.parametrize(
@@ -30,17 +30,25 @@ def test_risk_warning_passes_benign_shell() -> None:
 
 
 def test_risk_warning_flags_local_and_file_urls() -> None:
-    assert "local file" in (risk_warning("fetch_url", {"url": "file:///etc/passwd"}) or "")
-    assert "local/internal" in (risk_warning("fetch_url", {"url": "http://localhost:8080/x"}) or "")
-    assert "local/internal" in (risk_warning("fetch_url", {"url": "http://169.254.169.254/"}) or "")
-    assert "local/internal" in (risk_warning("fetch_url", {"url": "http://192.168.1.1/"}) or "")
+    assert "local file" in (risk_warning("read_url", {"url": "file:///etc/passwd"}) or "")
+    assert "local/internal" in (risk_warning("read_url", {"url": "http://localhost:8080/x"}) or "")
+    assert "local/internal" in (risk_warning("read_url", {"url": "http://169.254.169.254/"}) or "")
+    assert "local/internal" in (risk_warning("read_url", {"url": "http://192.168.1.1/"}) or "")
 
 
 def test_risk_warning_passes_public_url() -> None:
-    assert risk_warning("fetch_url", {"url": "https://example.com/docs"}) is None
+    assert risk_warning("read_url", {"url": "https://example.com/docs"}) is None
 
 
 def test_risk_warning_none_for_other_tools_and_non_string_args() -> None:
     assert risk_warning("write_file", {"file_path": "rm -rf /"}) is None  # path, not a command
     assert risk_warning("execute", {"command": ["rm", "-rf"]}) is None  # non-string is ignored
-    assert risk_warning("fetch_url", {"url": 123}) is None
+    assert risk_warning("read_url", {"url": 123}) is None
+
+
+def test_url_is_internal_matches_the_warning_tier() -> None:
+    # The enforced SSRF predicate is True exactly for the local/file URLs the warning flags.
+    assert url_is_internal("file:///etc/passwd") is True
+    assert url_is_internal("http://169.254.169.254/latest/meta-data/") is True
+    assert url_is_internal("http://localhost:8080/x") is True
+    assert url_is_internal("https://example.com/docs") is False
