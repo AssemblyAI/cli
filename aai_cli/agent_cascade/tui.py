@@ -247,15 +247,19 @@ class LiveAgentApp(App[None]):
         self._scroll_end()
 
     def begin_reply(self) -> None:
-        """Switch to the speaking phase. The reply widget is *not* mounted here — it is created
-        lazily on the first streamed sentence (:meth:`show_agent_sentence`).
+        """Start a fresh reply: drop the previous reply widget and switch to the speaking phase.
+        The new widget is *not* mounted here — it is created lazily on the first streamed sentence
+        (:meth:`show_agent_sentence`), so it always lands *after* the turn's tool affordances.
 
-        ``reply_started`` fires on the turn's first audible output, which for a tool-using turn
-        is the spoken filler *during the first tool call* — before later tool affordances and the
-        answer land. Mounting the reply widget eagerly here would wedge it above those later tool
-        lines (the answer streaming in above them) and leave an empty placeholder in the gap.
-        Deferring the mount keeps the answer below every tool affordance of the turn.
+        Clearing ``_reply_msg`` is what makes the next sentence open a new widget rather than
+        appending to the last one. That matters because the greeting also streams through
+        ``show_agent_sentence`` (with no ``reply_done`` after it), so without this reset the first
+        turn's answer would be appended to the greeting line. ``reply_started`` fires on the turn's
+        first audible output — for a tool-using turn that's the spoken filler *during the first
+        tool call* — so mounting eagerly here would wedge an empty widget above the later tool
+        lines and stream the answer into it; deferring the mount keeps the answer below them.
         """
+        self._reply_msg = None
         self._set_phase("speaking")
 
     def show_agent_sentence(self, text: str) -> None:

@@ -195,6 +195,36 @@ def test_begin_reply_defers_the_widget_so_the_answer_lands_below_the_tools() -> 
     _run(go())
 
 
+def test_reply_after_greeting_is_a_separate_widget_below_the_tool() -> None:
+    # The greeting streams through show_agent_sentence with no reply_done after it, so _reply_msg
+    # still points at the greeting when the first turn begins. begin_reply must drop it, so the
+    # answer opens its OWN widget (below the tool affordance) instead of being appended to the
+    # greeting line. Regression guard for the greeting+answer concatenation bug.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_agent_sentence("Hi! What can I help you with?")  # the greeting (no reply_done)
+            app.show_user_final("what files are here?")
+            app.show_tool_call("Listing files")
+            app.begin_reply()  # the turn starts: must drop the greeting widget
+            app.show_agent_sentence("The directory is empty.")  # the answer — its own widget
+            replies = list(app.query(AssistantMessage))
+            assert len(replies) == 2  # greeting and answer are distinct widgets, not concatenated
+            assert replies[0].text == "Hi! What can I help you with? "
+            assert replies[1].text == "The directory is empty. "
+            # The answer widget mounts below the tool affordance (tools never under the answer).
+            log = app.query_one("#log")
+            tail = [
+                type(w).__name__
+                for w in log.children
+                if isinstance(w, ToolAffordance | AssistantMessage)
+            ]
+            assert tail[-2:] == ["ToolAffordance", "AssistantMessage"]
+
+    _run(go())
+
+
 def test_interrupted_reply_notes_the_barge_in() -> None:
     async def go() -> None:
         app = _app()
