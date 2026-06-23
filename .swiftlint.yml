@@ -1,0 +1,10 @@
+# Coordinate and status names that read better short than padded to three
+# characters. `x`/`y` are also the on-the-wire JSON keys the macOS UI-control
+# helper shares with aai_cli/control/helper.py, so they can't be renamed.
+identifier_name:
+  excluded:
+    - id
+    - x
+    - y
+    - ok
+    - up
