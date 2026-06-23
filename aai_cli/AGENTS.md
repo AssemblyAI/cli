@@ -34,8 +34,10 @@ between layers is enforced — higher may import lower, never the reverse:
   `config_builder`, `keyring_store`, `environments`, `env`, `errors`, `llm`,
   `telemetry`, `debuglog`, `remotefs`, `sync_stt`, `signals`, `ws`, `youtube`,
   `wer`, `argscan`, `jsonshape`, `timeparse`, `microphone`, `procs`, `stdio`,
-  `choices`. Contract 4 also forbids `rich` here, so
-  "no Rich below the UI layer" is structural.
+  `choices`, `ssrf` (the outbound-fetch SSRF guard: resolves a URL's host and
+  refuses private/loopback/link-local IPs, re-checked on every redirect hop —
+  shared by `webpage` and `app.transcribe.feed`). Contract 4 also forbids `rich`
+  here, so "no Rich below the UI layer" is structural.
 
 Three things sit *beside* the stack, intentionally unlisted in the layers
 contract:

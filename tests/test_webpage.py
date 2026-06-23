@@ -5,8 +5,18 @@ import dataclasses
 import httpx2 as httpx
 import pytest
 
-from aai_cli.core import webpage
+from aai_cli.core import ssrf, webpage
 from aai_cli.core.errors import APIError, UsageError
+
+# A public IP every host resolves to by default, so the SSRF guard passes without
+# real DNS (the suite is socket-blocked). Tests exercising the guard override this.
+_PUBLIC_IP = "93.184.216.34"
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    monkeypatch.setattr(ssrf, "_resolve_host", lambda host: [_PUBLIC_IP])
+
 
 # An article wrapped in the usual page chrome: nav, a comment thread, and a
 # <title>. The extractor should keep the body and drop the rest.
@@ -53,13 +63,13 @@ def test_fetch_returns_body_and_sends_browser_user_agent(monkeypatch):
         return httpx.Response(200, text="<html>ok</html>")
 
     _client_returning(monkeypatch, handler)
-    assert webpage._fetch("https://example.com/post").text == "<html>ok</html>"
+    assert webpage._fetch("https://example.com/post").content == b"<html>ok</html>"
     # The browser-like UA is sent so sites don't serve a stub/block page.
     assert "assembly-cli" in seen["ua"]
 
 
 def test_fetch_follows_redirects(monkeypatch):
-    # A 301 must be followed to the final 200; without follow_redirects the
+    # A 301 must be followed to the final 200; without following redirects the
     # client would return the empty 301 body instead of the article.
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/start":
@@ -67,7 +77,84 @@ def test_fetch_follows_redirects(monkeypatch):
         return httpx.Response(200, text="final body")
 
     _client_returning(monkeypatch, handler)
-    assert webpage._fetch("https://example.com/start").text == "final body"
+    assert webpage._fetch("https://example.com/start").content == b"final body"
+
+
+def test_fetch_blocks_internal_host(monkeypatch):
+    # A host that resolves to a link-local (cloud-metadata) address is refused
+    # outright — the SSRF guard, before any request is sent.
+    monkeypatch.setattr(ssrf, "_resolve_host", lambda host: ["169.254.169.254"])
+    _client_returning(monkeypatch, lambda request: httpx.Response(200, text="secret"))
+    with pytest.raises(ssrf.BlockedURLError):
+        webpage._fetch("http://metadata.internal/latest/meta-data/")
+
+
+def test_fetch_blocks_redirect_to_internal_host(monkeypatch):
+    # The headline bypass: a public URL that 30x-redirects to an internal address
+    # must be caught on the redirect hop, not just the input URL.
+    monkeypatch.setattr(
+        ssrf,
+        "_resolve_host",
+        lambda host: ["169.254.169.254"] if "internal" in host else [_PUBLIC_IP],
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "example.com":
+            return httpx.Response(301, headers={"Location": "http://internal.host/meta"})
+        return httpx.Response(200, text="cloud credentials")
+
+    _client_returning(monkeypatch, handler)
+    with pytest.raises(ssrf.BlockedURLError):
+        webpage._fetch("https://example.com/start")
+
+
+def test_fetch_caps_oversize_body(monkeypatch):
+    # A body larger than the cap is truncated so a hostile URL can't exhaust memory.
+    monkeypatch.setattr(webpage, "_MAX_BYTES", 10)
+    _client_returning(
+        monkeypatch,
+        lambda request: httpx.Response(
+            200, content=b"x" * 100, headers={"content-type": "text/html"}
+        ),
+    )
+    assert webpage._fetch("https://example.com/big").content == b"x" * 10
+
+
+def test_fetch_decodes_with_the_declared_charset(monkeypatch):
+    # A non-UTF-8 page is decoded with its declared charset, not assumed UTF-8.
+    _client_returning(
+        monkeypatch,
+        lambda request: httpx.Response(
+            200,
+            content="café".encode("latin-1"),
+            headers={"content-type": "text/html; charset=iso-8859-1"},
+        ),
+    )
+    page = webpage._fetch("https://example.com/latin1")
+    # Decoded as UTF-8 the é byte would turn into a replacement character instead.
+    assert page.text == "café"
+
+
+def test_fetch_too_many_redirects_is_api_error(monkeypatch):
+    # A redirect loop is bounded; exceeding the hop cap is an APIError, not a hang.
+    _client_returning(
+        monkeypatch,
+        lambda request: httpx.Response(302, headers={"Location": "https://example.com/again"}),
+    )
+    with pytest.raises(APIError) as exc:
+        webpage._fetch("https://example.com/loop")
+    assert "redirect" in exc.value.message.lower()
+
+
+def test_fetch_dns_failure_is_api_error(monkeypatch):
+    # A name that doesn't resolve surfaces as an APIError, not an uncaught OSError.
+    def _boom(host):
+        raise OSError("name or service not known")
+
+    monkeypatch.setattr(ssrf, "_resolve_host", _boom)
+    with pytest.raises(APIError) as exc:
+        webpage._fetch("https://does-not-resolve.example/")
+    assert "does-not-resolve.example" in exc.value.message
 
 
 def test_fetch_non_2xx_becomes_api_error(monkeypatch):

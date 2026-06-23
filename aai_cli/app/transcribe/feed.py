@@ -20,11 +20,11 @@ only network path.
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from pydantic import BaseModel, Field
 
-from aai_cli.core import youtube
+from aai_cli.core import ssrf, youtube
 
 # A feed lives at an extensionless URL (e.g. feeds.simplecast.com/<id>) or a feed
 # document (.xml/.rss/.atom). Every other path — .mp3, .txt, .pdf — is never a feed,
@@ -98,26 +98,38 @@ def _episode_urls(body: str) -> list[str] | None:
 
 def _fetch(url: str) -> str | None:
     """Up to ``_MAX_FEED_BYTES`` of `url` decoded as text, or ``None`` on any failure
-    or when the response is obviously binary media (audio/video/image)."""
+    or when the response is obviously binary media (audio/video/image).
+
+    Redirects are followed manually so the SSRF guard runs on every hop; a
+    non-public host (directly or via redirect) reads as ``None`` — the URL falls
+    through to the single-source path, which the API fetches server-side.
+    """
     import httpx2 as httpx
 
     chunks: list[bytes] = []
+    current = url
     try:
-        with (
-            httpx.Client(timeout=_FETCH_TIMEOUT_SECONDS, follow_redirects=True) as client,
-            client.stream("GET", url) as response,
-        ):
-            if not response.is_success:
-                return None
-            content_type = response.headers.get("content-type", "").lower()
-            if content_type.startswith(("audio/", "video/", "image/")):
-                return None
-            total = 0
-            for chunk in response.iter_bytes():
-                chunks.append(chunk)
-                total += len(chunk)
-                if total >= _MAX_FEED_BYTES:
-                    break
-    except (httpx.HTTPError, OSError):
+        with httpx.Client(timeout=_FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
+            for _ in range(ssrf.MAX_REDIRECTS + 1):  # pragma: no mutate -- hop cap; +-1 equivalent
+                ssrf.assert_public_url(current)
+                with client.stream("GET", current) as response:
+                    if response.status_code in ssrf.REDIRECT_STATUS:
+                        location = response.headers.get("location")
+                        if location:
+                            current = urljoin(current, location)
+                            continue
+                    if not response.is_success:
+                        return None
+                    content_type = response.headers.get("content-type", "").lower()
+                    if content_type.startswith(("audio/", "video/", "image/")):
+                        return None
+                    total = 0
+                    for chunk in response.iter_bytes():
+                        chunks.append(chunk)
+                        total += len(chunk)
+                        if total >= _MAX_FEED_BYTES:
+                            break
+                    return b"".join(chunks).decode("utf-8", "replace")
+            return None
+    except (httpx.HTTPError, OSError, ssrf.BlockedURLError):
         return None
-    return b"".join(chunks).decode("utf-8", "replace")
