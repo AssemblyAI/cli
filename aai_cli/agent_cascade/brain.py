@@ -218,20 +218,19 @@ def _graph_kwargs(
 
     Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
     backend, ``interrupt_on`` pausing only the mutating tools for human approval, and an
-    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam.
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam. No
+    ``subagents`` key: deepagents auto-adds a general-purpose subagent that inherits this
+    ``interrupt_on`` (so a delegated write surfaces at the same parent gate — see ``subagents.py``).
     """
     if not config.files:
         return {}
     from langgraph.checkpoint.memory import InMemorySaver
-
-    from aai_cli.agent_cascade.subagents import general_purpose_subagent
 
     return {
         "backend": backend_factory(),
         "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
         "checkpointer": InMemorySaver(),
         "memory": ["./.deepagents/AGENTS.md"],
-        "subagents": [general_purpose_subagent(dict.fromkeys(_WRITE_TOOLS, True))],
     }
 
 
@@ -270,7 +269,9 @@ def build_graph(
 
     from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
     from aai_cli.agent_cascade.model import build_model
+    from aai_cli.agent_cascade.subagents import register_gp_subagent_profile
 
+    register_gp_subagent_profile()
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
     )
