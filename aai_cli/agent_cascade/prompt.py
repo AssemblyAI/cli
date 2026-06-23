@@ -25,8 +25,8 @@ _SPOKEN_TAIL = (
 # Advertised when --files is on, so the model knows it can touch the launch directory (and the
 # spoken tail still keeps replies short). Writes pause for the user's y/n; reads are immediate.
 _FILE_CAPABILITY = (
-    "read, write, and search files in your working directory, and run code to solve problems "
-    "and operate on this project"
+    "read, write, and search files in your working directory, run code to solve problems "
+    "and operate on this project, and delegate a bigger job to a helper"
 )
 
 # When the session has *no* tools wired (e.g. no web search and the docs host is

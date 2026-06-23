@@ -79,6 +79,19 @@ def test_system_prompt_omits_code_execution_without_files():
     assert "run code" not in prompt_text
 
 
+def test_system_prompt_advertises_delegation_under_files():
+    # --files binds the task tool (a subagent), so the prompt offers delegating to a helper.
+    assert "delegate a bigger job to a helper" in prompt.build_system_prompt(
+        "persona", tools=[], files=True
+    )
+
+
+def test_system_prompt_omits_delegation_without_files():
+    assert "delegate a bigger job" not in prompt.build_system_prompt(
+        "persona", tools=[], files=False
+    )
+
+
 def test_system_prompt_omits_files_when_disabled():
     # Default: no file capability advertised (the model shouldn't promise file access it lacks).
     text = prompt.build_system_prompt("persona", tools=[], files=False)

@@ -166,7 +166,9 @@ the turn for a `y`/`n` confirmation in the voice TUI (`a` approves the rest of t
 session). Commands run OS-sandboxed in that directory — confined to it, with no network
 access — on macOS (`sandbox-exec`) and Linux (`bwrap`); on any other platform, or if the
 sandbox tool is missing, running code is refused rather than run unconfined. Access is
-rooted at the launch directory — the agent can't escape it. The agent also keeps a
-per-project memory file (`./.deepagents/AGENTS.md`) so it resumes knowing what it was
-working on. A non-interactive run (a file/URL source, `--json`, `-o text`, or a non-TTY)
-has no way to confirm a write or run, so those are declined there while reads still work.
+rooted at the launch directory — the agent can't escape it. It can also delegate a
+focused subtask to a helper (a sandboxed general-purpose subagent), whose own writes and
+runs need the same confirmation. The agent also keeps a per-project memory file
+(`./.deepagents/AGENTS.md`) so it resumes knowing what it was working on. A non-interactive
+run (a file/URL source, `--json`, `-o text`, or a non-TTY) has no way to confirm a write or
+run, so those are declined there while reads still work.
