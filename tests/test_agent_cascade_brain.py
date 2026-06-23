@@ -45,9 +45,9 @@ def test_graph_kwargs_gates_writes_and_execute_and_sets_memory(monkeypatch, tmp_
     assert kwargs["checkpointer"] is not None
     # Durable per-project memory is turned on.
     assert kwargs["memory"] == ["./.deepagents/AGENTS.md"]
-    # The subagent inherits the same gate so its mutations prompt through the same approver.
-    subagent = kwargs["subagents"][0]
-    assert subagent["interrupt_on"] == interrupt_on
+    # No explicit subagent: deepagents auto-adds the general-purpose one and it inherits this
+    # top-level interrupt_on (the delegated-write surfacing is locked in test_agent_cascade_subagents).
+    assert "subagents" not in kwargs
 
 
 def test_graph_kwargs_threads_auto_write_paths_into_the_gate(monkeypatch, tmp_path):

@@ -210,22 +210,20 @@ def _graph_kwargs(
 
     Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
     backend, a path-scoped ``interrupt_on`` (writes outside the ``--auto-write`` subtrees pause
-    for approval; ``execute`` always does — see :func:`write_gate.write_interrupt_on`), and an in-memory
-    checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam.
+    for approval; ``execute`` always does — see :func:`write_gate.write_interrupt_on`), and an
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam. No
+    ``subagents`` key: deepagents auto-adds a general-purpose subagent that inherits this
+    ``interrupt_on`` (see ``subagents.py``).
     """
     if not config.files:
         return {}
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from aai_cli.agent_cascade.subagents import general_purpose_subagent
-
-    interrupt_on = write_interrupt_on(config.auto_write_paths)
     return {
         "backend": backend_factory(),
-        "interrupt_on": interrupt_on,
+        "interrupt_on": write_interrupt_on(config.auto_write_paths),
         "checkpointer": InMemorySaver(),
         "memory": ["./.deepagents/AGENTS.md"],
-        "subagents": [general_purpose_subagent(interrupt_on)],
     }
 
 
@@ -264,7 +262,9 @@ def build_graph(
 
     from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
     from aai_cli.agent_cascade.model import build_model
+    from aai_cli.agent_cascade.subagents import register_gp_subagent_profile
 
+    register_gp_subagent_profile()
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
     )
