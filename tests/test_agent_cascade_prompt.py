@@ -85,6 +85,27 @@ def test_system_prompt_omits_files_when_disabled():
     assert "working directory" not in text
 
 
+def test_system_prompt_reports_tool_outcomes_honestly_when_tools_present():
+    # A spoken agent that narrates a success it never achieved is worse than one that admits
+    # it couldn't — so whenever tools are bound the guidance must tell the model not to claim
+    # an action happened until the tool returns.
+    text = prompt.build_system_prompt("persona", tools=[_NamedTool(prompt.WEB_SEARCH_TOOL_NAME)])
+    assert "until the tool actually returns" in text
+
+
+def test_system_prompt_warns_before_irreversible_file_actions():
+    # The --files capability can write files and run code, which speaking can't undo, so the
+    # model must be told to confirm before destructive actions and not claim a change landed.
+    text = prompt.build_system_prompt("persona", tools=[], files=True)
+    assert "can't be undone" in text
+
+
+def test_system_prompt_omits_file_safety_warning_without_files():
+    # The irreversibility warning is only meaningful when the file tools are actually bound.
+    text = prompt.build_system_prompt("persona", tools=[], files=False)
+    assert "can't be undone" not in text
+
+
 def test_join_clause_grammar():
     # One/two/three capability phrases each render with natural conjunctions.
     assert prompt._join_clause(["a"]) == "a"

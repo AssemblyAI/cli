@@ -41,6 +41,22 @@ _NO_TOOLS_GUIDANCE = (
     f"briefly instead. {_SPOKEN_TAIL}"
 )
 
+# Closes the guidance whenever tools are bound: a spoken agent that narrates a success it
+# never achieved is worse than one that admits it couldn't, so it must report what the tools
+# actually did rather than inventing the result it expected.
+_HONESTY_GUIDANCE = (
+    "Don't claim you've done something until the tool actually returns; if a tool fails or "
+    "finds nothing, say so briefly instead of inventing an answer."
+)
+
+# Added when --files is on: writing files and running code change the user's project and can't
+# be undone by speaking, so the model must confirm first and not narrate a change as done
+# before it has actually landed.
+_FILE_SAFETY_GUIDANCE = (
+    "Writing files and running code change this project and can't be undone — confirm out "
+    "loud before anything destructive or irreversible, and never say a change landed until it has."
+)
+
 
 def _join_clause(parts: list[str]) -> str:
     """Join capability phrases into a readable clause: ``a``, ``a and b``, ``a, b, and c``."""
@@ -103,7 +119,9 @@ def build_system_prompt(
     fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
     generically by name. ``files`` advertises the launch-directory read/write capability
     (the ``--files`` filesystem tools). With no capabilities at all the model answers from
-    its own knowledge.
+    its own knowledge. Whenever tools are bound the guidance also tells the model to report
+    tool outcomes honestly (never narrate a success the tool didn't return), and the
+    ``--files`` path adds a warning to confirm before irreversible writes or code execution.
     """
     capabilities = _tool_capabilities(tools)
     extra = _extra_capability(extra_tools)
@@ -117,6 +135,8 @@ def build_system_prompt(
         f"You can use tools to help answer: {_join_clause(capabilities)}. Reach for a "
         "tool when a question needs fresh or external information; answer directly and "
         "instantly when you already know. Only offer to do what these tools allow — don't "
-        f"say you'll search the web or look something up unless it's listed here. {_SPOKEN_TAIL}"
+        f"say you'll search the web or look something up unless it's listed here. {_HONESTY_GUIDANCE}"
     )
-    return f"{persona}\n\n{guidance}"
+    if files:
+        guidance = f"{guidance} {_FILE_SAFETY_GUIDANCE}"
+    return f"{persona}\n\n{guidance} {_SPOKEN_TAIL}"
