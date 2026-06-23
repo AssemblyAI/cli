@@ -14,10 +14,18 @@ from typer.testing import CliRunner
 
 from aai_cli.app.transcribe import feed
 from aai_cli.app.transcribe import sources as transcribe_sources
-from aai_cli.core import config
+from aai_cli.core import config, ssrf
 from aai_cli.main import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    # The SSRF guard resolves the feed host; stub DNS to a public IP so the
+    # socket-blocked suite stays hermetic. Guard-specific tests override this.
+    monkeypatch.setattr(ssrf, "_resolve_host", lambda host: ["93.184.216.34"])
+
 
 _TRANSCRIBE = "aai_cli.app.transcribe.run.client.transcribe"
 
@@ -143,10 +151,14 @@ def test_feed_episode_urls_returns_none_for_non_feed_body(monkeypatch):
 
 
 class _FakeStream:
-    def __init__(self, *, status=200, content_type="application/rss+xml", chunks=(b"<rss/>",)):
+    def __init__(
+        self, *, status=200, content_type="application/rss+xml", chunks=(b"<rss/>",), location=None
+    ):
         self.status_code = status
         self.is_success = 200 <= status < 300  # mirror httpx.Response.is_success
         self.headers = {"content-type": content_type}
+        if location is not None:
+            self.headers["location"] = location
         self._chunks = chunks
 
     def __enter__(self):
@@ -184,11 +196,40 @@ def _patch_client(monkeypatch, stream):
     return captured
 
 
+class _SequenceClient:
+    """A client whose successive `stream` calls return the given streams in order,
+    so a redirect hop and its destination can be distinguished."""
+
+    def __init__(self, streams):
+        self._streams = list(streams)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def stream(self, method, url):
+        return self._streams.pop(0)
+
+
+def test_fetch_follows_redirect_to_final_body(monkeypatch):
+    # A 301 to a public CDN is followed to the real feed body — proves the status is
+    # recognized as a redirect (not parsed as the body itself).
+    streams = [
+        _FakeStream(status=301, location="https://cdn.example.com/final"),
+        _FakeStream(chunks=(b"<rss>real</rss>",)),
+    ]
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _SequenceClient(streams))
+    assert feed._fetch("https://feeds.example.com/show") == "<rss>real</rss>"
+
+
 def test_fetch_returns_decoded_body(monkeypatch):
     captured = _patch_client(monkeypatch, _FakeStream(chunks=(b"<rss>", b"</rss>")))
     assert feed._fetch("https://feeds.example.com/show") == "<rss></rss>"
-    # Feeds commonly 301/302 to a CDN, so redirects must be followed.
-    assert captured["follow_redirects"] is True
+    # Redirects are followed manually (per-hop SSRF check), so the client itself
+    # must not auto-follow.
+    assert captured["follow_redirects"] is False
     assert captured["timeout"] == feed._FETCH_TIMEOUT_SECONDS
 
 
@@ -221,6 +262,31 @@ def test_fetch_returns_none_on_network_error(monkeypatch):
         raise httpx.ConnectError("boom")
 
     monkeypatch.setattr(httpx, "Client", _raise)
+    assert feed._fetch("https://feeds.example.com/show") is None
+
+
+def test_fetch_returns_none_for_internal_host(monkeypatch):
+    # A feed URL whose host resolves to an internal address is refused (None) so the
+    # local fetch never reaches it — it falls through to the API's server-side fetch.
+    monkeypatch.setattr(ssrf, "_resolve_host", lambda host: ["169.254.169.254"])
+    _patch_client(monkeypatch, _FakeStream())
+    assert feed._fetch("https://feeds.internal.example/show") is None
+
+
+def test_fetch_returns_none_on_redirect_to_internal_host(monkeypatch):
+    # A public feed URL that redirects to an internal address is caught on the hop.
+    monkeypatch.setattr(
+        ssrf,
+        "_resolve_host",
+        lambda host: ["169.254.169.254"] if "internal" in host else ["93.184.216.34"],
+    )
+    _patch_client(monkeypatch, _FakeStream(status=301, location="http://internal.host/meta"))
+    assert feed._fetch("https://feeds.example.com/show") is None
+
+
+def test_fetch_returns_none_on_redirect_loop(monkeypatch):
+    # A redirect that never resolves is bounded by the hop cap and gives up (None).
+    _patch_client(monkeypatch, _FakeStream(status=301, location="https://feeds.example.com/again"))
     assert feed._fetch("https://feeds.example.com/show") is None
 
 
