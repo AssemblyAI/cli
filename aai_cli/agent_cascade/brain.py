@@ -29,6 +29,7 @@ from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
 from aai_cli.agent_cascade.prompt import build_system_prompt
+from aai_cli.agent_cascade.write_gate import write_interrupt_on
 from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
 
@@ -190,12 +191,6 @@ def build_live_tools() -> list[BaseTool]:
     return tools
 
 
-# The mutating tools gated behind human approval when --files is on (reads — incl. grep — stay
-# ungated). execute joins the gate because the backend is now sandbox-capable: it runs real
-# commands in cwd, OS-confined, but every run is still approved.
-_WRITE_TOOLS = ("write_file", "edit_file", "execute")
-
-
 def _build_fs_backend() -> object:
     """A sandbox-capable deepagents backend rooted at the launch directory.
 
@@ -213,10 +208,12 @@ def _graph_kwargs(
 ) -> dict[str, object]:
     """Extra ``create_deep_agent`` kwargs that turn on real-cwd files + write-gating.
 
-    Empty when ``--files`` is off, so the graph is built as before. When on: a real-cwd backend,
-    ``interrupt_on`` gating only the mutating tools, an in-memory checkpointer (interrupt/resume
-    needs one), and ``backend_factory`` as the test seam. No ``subagents`` key: deepagents
-    auto-adds a general-purpose subagent that inherits this ``interrupt_on`` (see ``subagents.py``).
+    Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
+    backend, a path-scoped ``interrupt_on`` (writes outside the ``--auto-write`` subtrees pause
+    for approval; ``execute`` always does — see :func:`write_gate.write_interrupt_on`), and an
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam. No
+    ``subagents`` key: deepagents auto-adds a general-purpose subagent that inherits this
+    ``interrupt_on`` (see ``subagents.py``).
     """
     if not config.files:
         return {}
@@ -224,7 +221,7 @@ def _graph_kwargs(
 
     return {
         "backend": backend_factory(),
-        "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
+        "interrupt_on": write_interrupt_on(config.auto_write_paths),
         "checkpointer": InMemorySaver(),
         "memory": ["./.deepagents/AGENTS.md"],
     }

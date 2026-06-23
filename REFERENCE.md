@@ -182,3 +182,10 @@ runs need the same confirmation. The agent also keeps a per-project memory file
 (`./.deepagents/AGENTS.md`) so it resumes knowing what it was working on. A non-interactive
 run (a file/URL source, `--json`, `-o text`, or a non-TTY) has no way to confirm a write or
 run, so those are declined there while reads still work.
+
+`--auto-write DIR` relaxes the confirmation for writes inside a chosen subtree: a write or
+edit under `DIR` (relative to the launch directory) runs without a keypress, while a write
+anywhere else still pauses for approval — handy hands-free, where every confirmation is
+friction (e.g. `--auto-write scratch` to let the agent freely save into `./scratch`). Repeat
+the flag for several subtrees. It only applies with `--files`, and never auto-approves a
+command run (`execute` is always confirmed); the path can't escape the launch directory.

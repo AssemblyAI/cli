@@ -33,9 +33,11 @@ def register_gp_subagent_profile() -> None:
 
     Registers a harness profile that swaps in a spoken-length summary prompt (instead of
     deepagents' "complete answer" default) and our short description. The subagent keeps
-    inheriting the gateway-bound model, the sandboxed toolset, and the top-level ``interrupt_on``.
-    Idempotent — re-registers the same profile under the same key; ``brain.build_graph`` calls it
-    once per graph build (the deepagents import stays lazy here, off the startup path).
+    inheriting the gateway-bound model, the sandboxed toolset, and the top-level ``interrupt_on``
+    (now path-scoped by ``--auto-write`` — so a delegated write inside an auto-write subtree
+    auto-approves and any other delegated write still surfaces at the parent gate). Idempotent —
+    re-registers the same profile under the same key; ``brain.build_graph`` calls it once per
+    graph build (the deepagents import stays lazy here, off the startup path).
     """
     from deepagents import (
         GeneralPurposeSubagentProfile,

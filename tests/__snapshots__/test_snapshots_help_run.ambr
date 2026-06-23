@@ -638,6 +638,9 @@
   │                                     (writes and runs need confirmation). Use │
   │                                     --no-files to disable                    │
   │                                     [default: files]                         │
+  │ --auto-write                  TEXT  Auto-approve --files writes under this   │
+  │                                     subdirectory, skipping the confirmation  │
+  │                                     (repeatable)                             │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

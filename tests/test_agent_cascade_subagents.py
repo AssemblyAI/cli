@@ -67,10 +67,15 @@ def test_profile_override_lands_on_the_auto_added_subagent(monkeypatch, tmp_path
 
 def test_graph_kwargs_on_gates_writes_without_declaring_a_subagent():
     # --files binds the gating + checkpointer but no explicit subagent: the gateway-bound GP
-    # subagent is auto-added and inherits this interrupt_on (see the surfacing test below).
+    # subagent is auto-added and inherits this interrupt_on (see the surfacing test below). The
+    # write tools are now path-scoped InterruptOnConfig maps (a `when` predicate), execute a plain
+    # True — the auto-added subagent inherits the whole map, so it honors --auto-write too.
     kw = brain._graph_kwargs(CascadeConfig(files=True))
     assert "subagents" not in kw
-    assert kw["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
+    interrupt_on = kw["interrupt_on"]
+    assert sorted(interrupt_on) == ["edit_file", "execute", "write_file"]
+    assert interrupt_on["execute"] is True
+    assert "when" in interrupt_on["write_file"] and "when" in interrupt_on["edit_file"]
     assert "checkpointer" in kw and "backend" in kw
 
 
