@@ -15,6 +15,7 @@ from aai_cli.agent_cascade import _runtime, engine
 from aai_cli.agent_cascade.brain import SpeechDelta, ToolNotice
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
+from aai_cli.agent_cascade.plan import TodoItem, TodoUpdate
 from aai_cli.core.errors import APIError
 from tests._cascade_fakes import FakePlayer, FakeRenderer, FakeWorker, make_session
 from tests._cascade_fakes import deltas as _deltas
@@ -99,6 +100,22 @@ def test_reply_forwards_tool_calls_to_the_renderer():
     session, renderer, _player = make_session(stream_reply=stream)
     session.on_turn(_turn("what's the news"))
     assert ("tool_call", "Searching the web") in renderer.calls
+
+
+def test_reply_forwards_a_plan_and_still_speaks_the_reply():
+    # A TodoUpdate is a purely visual affordance: it reaches the renderer as todos_updated and,
+    # unlike a ToolNotice, does NOT suppress the spoken reply that follows it.
+    todos = (TodoItem(content="Book a flight", status="in_progress"),)
+
+    def stream(messages):
+        yield TodoUpdate(todos)
+        yield SpeechDelta("First I'll book the flight.")
+
+    session, renderer, _player = make_session(stream_reply=stream)
+    session.on_turn(_turn("plan my trip"))
+    assert ("todos_updated", todos) in renderer.calls
+    # The reply was still spoken (a plain ToolNotice would have held it back).
+    assert ("agent_transcript", "First I'll book the flight.", False) in renderer.calls
 
 
 def test_on_turn_interim_shows_partial_and_does_not_reply():

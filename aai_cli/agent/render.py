@@ -1,11 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.text import Text
 
 from aai_cli.agent import events
 from aai_cli.ui.render import BaseRenderer
+
+if TYPE_CHECKING:
+    from aai_cli.agent_cascade.plan import TodoItem
+
+# Single-cell status marks for the plan, pipe-safe and aligned (the TUI styles its own).
+_TODO_MARKS = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}
+
+
+def _mark(status: str) -> str:
+    """The checklist marker for a todo status, falling back to the pending box for an unknown one."""
+    return _TODO_MARKS.get(status, "[ ]")
 
 
 def _labeled(label: str, body: str, *, style: str = "aai.label") -> Text:
@@ -87,6 +98,24 @@ class AgentRenderer(BaseRenderer):
             self._status(f"{label}…")
         else:
             self._line(_labeled("", f"{label}…", style="aai.muted"))
+
+    def todos_updated(self, todos: tuple[TodoItem, ...]) -> None:
+        """Surface the agent's plan (its ``write_todos`` list), replacing any prior plan.
+
+        JSON emits a ``plan`` event; piped text routes a compact one-line summary to stderr
+        (transcript-only stdout); human mode shows a muted multi-line checklist.
+        """
+        if self.json_mode:
+            items = tuple(events.TodoItem(content=t.content, status=t.status) for t in todos)
+            self._emit_event(events.PlanUpdate(todos=items))
+        elif self.text_mode:
+            self._status("Plan: " + "; ".join(f"{_mark(t.status)} {t.content}" for t in todos))
+        else:
+            self._line(_labeled("", "Plan:", style="aai.muted"))
+            for todo in todos:
+                self._line(
+                    _labeled("  ", f"{_mark(todo.status)} {todo.content}", style="aai.muted")
+                )
 
     # --- agent -------------------------------------------------------------
     def reply_started(self) -> None:

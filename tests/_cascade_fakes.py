@@ -55,6 +55,9 @@ class FakeRenderer:
     def tool_call(self, label):
         self.calls.append(("tool_call", label))
 
+    def todos_updated(self, todos):
+        self.calls.append(("todos_updated", todos))
+
     def reply_started(self):
         self.calls.append(("reply_started",))
 

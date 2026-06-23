@@ -59,6 +59,20 @@ class ToolUse(_Event):
     label: str
 
 
+class TodoItem(_Event):
+    """One task in the agent's plan: its text and lifecycle ``status``."""
+
+    content: str
+    status: str
+
+
+class PlanUpdate(_Event):
+    """The agent's task list (its ``write_todos`` plan); ``todos`` replaces any prior plan."""
+
+    type: Literal["plan"] = "plan"
+    todos: tuple[TodoItem, ...]
+
+
 class AgentTranscript(_Event):
     """The agent's reply transcript (``interrupted`` when the user barged in)."""
 
@@ -74,4 +88,13 @@ class ReplyDone(_Event):
     interrupted: bool
 
 
-Event = SessionReady | UserDelta | UserFinal | ToolUse | ReplyStarted | AgentTranscript | ReplyDone
+Event = (
+    SessionReady
+    | UserDelta
+    | UserFinal
+    | ToolUse
+    | PlanUpdate
+    | ReplyStarted
+    | AgentTranscript
+    | ReplyDone
+)

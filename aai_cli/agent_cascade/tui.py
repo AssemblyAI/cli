@@ -29,6 +29,7 @@ from aai_cli.agent_cascade.messages import (
     AssistantMessage,
     ErrorMessage,
     Note,
+    TodoList,
     ToolAffordance,
     UserMessage,
 )
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from textual.timer import Timer
 
     from aai_cli.agent_cascade.engine import Renderer
+    from aai_cli.agent_cascade.plan import TodoItem
 
 # Splash intro copy (the code agent's banner copy is code-specific, so `live` carries its own).
 _READY_LINE = "Listening… start talking when you're ready."
@@ -84,6 +86,9 @@ class _TuiRenderer:
 
     def tool_call(self, label: str) -> None:
         self._dispatch(self._app.show_tool_call, label)
+
+    def todos_updated(self, todos: tuple[TodoItem, ...]) -> None:
+        self._dispatch(self._app.show_todos, todos)
 
     def reply_started(self) -> None:
         self._dispatch(self._app.begin_reply)
@@ -164,6 +169,10 @@ class LiveAgentApp(App[None]):
         self._voice_timer: Timer | None = None
         self._user_partial: UserMessage | None = None  # the in-place "you: …" widget for a turn
         self._reply_msg: AssistantMessage | None = None  # the reply widget sentences stream into
+        # The current turn's plan panel, updated in place as write_todos revises it; reset at each
+        # new turn (show_user_final) so a fresh turn's plan mounts inline rather than editing a
+        # widget scrolled far above.
+        self._todo_widget: TodoList | None = None
         self._stopped = False  # guards on_stop against a double teardown (quit + unmount)
         # A fatal cascade error caught on the worker thread, re-raised on the main thread (after
         # app.run returns) so the command exits with the error's code instead of a silent 0 —
@@ -234,6 +243,7 @@ class LiveAgentApp(App[None]):
         else:
             self._user_partial.set_text(text)
         self._user_partial = None  # finalized; the next partial starts a fresh line
+        self._todo_widget = None  # a new turn's plan mounts fresh, not into the prior turn's panel
         self._set_phase("thinking")
         self._scroll_end()
 
@@ -247,6 +257,20 @@ class LiveAgentApp(App[None]):
         log = self.query_one("#log", VerticalScroll)
         tight = isinstance(log.children[-1], ToolAffordance)
         self._mount(ToolAffordance(f"{label}…", tight=tight))
+        self._scroll_end()
+
+    def show_todos(self, todos: tuple[TodoItem, ...]) -> None:
+        """Surface the agent's plan (its ``write_todos`` list) as an inline checklist.
+
+        The first plan of a turn mounts a fresh :class:`TodoList`; a later revision within the
+        same turn repaints it in place, so a multi-step spoken request shows one evolving plan
+        rather than a stack of copies.
+        """
+        if self._todo_widget is None:
+            self._todo_widget = TodoList(todos)
+            self._mount(self._todo_widget)
+        else:
+            self._todo_widget.set_todos(todos)
         self._scroll_end()
 
     def begin_reply(self) -> None:

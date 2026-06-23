@@ -144,6 +144,61 @@ def test_human_tool_call_shows_inline_line():
     assert "Searching the web" in buf.getvalue()
 
 
+# --- todos / plan ----------------------------------------------------------
+
+
+def _plan():
+    from aai_cli.agent_cascade.plan import TodoItem
+
+    return (
+        TodoItem(content="Book a flight", status="in_progress"),
+        TodoItem(content="Check the weather", status="pending"),
+    )
+
+
+def test_json_todos_emits_plan_event():
+    buf = io.StringIO()
+    AgentRenderer(json_mode=True, out=buf).todos_updated(_plan())
+    assert {
+        "type": "plan",
+        "todos": [
+            {"content": "Book a flight", "status": "in_progress"},
+            {"content": "Check the weather", "status": "pending"},
+        ],
+    } in _json_lines(buf)
+
+
+def test_text_todos_summary_goes_to_stderr_not_stdout():
+    # The plan is status, so in piped text mode it stays off stdout (transcript-only). Each
+    # status maps to its own mark, and an unknown status falls back to the pending box.
+    from aai_cli.agent_cascade.plan import TodoItem
+
+    todos = (
+        TodoItem(content="Booked", status="completed"),
+        TodoItem(content="Booking", status="in_progress"),
+        TodoItem(content="Queued", status="pending"),
+        TodoItem(content="Mystery", status="weird"),
+    )
+    out, err = io.StringIO(), io.StringIO()
+    AgentRenderer(json_mode=False, text_mode=True, out=out, err=err).todos_updated(todos)
+    summary = err.getvalue()
+    assert "Plan:" in summary
+    assert "[x] Booked" in summary  # completed
+    assert "[~] Booking" in summary  # in_progress
+    assert "[ ] Queued" in summary  # pending
+    assert "[ ] Mystery" in summary  # unknown status -> pending fallback
+    assert out.getvalue() == ""
+
+
+def test_human_todos_show_an_inline_checklist():
+    r, buf = _human()
+    r.todos_updated(_plan())
+    rendered = buf.getvalue()
+    assert "Plan:" in rendered
+    assert "Book a flight" in rendered
+    assert "Check the weather" in rendered
+
+
 def test_human_close_commits_open_partial():
     r, buf = _human()
     r.user_partial("half a sentence")

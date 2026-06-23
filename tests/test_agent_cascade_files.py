@@ -13,7 +13,7 @@ import types
 import pytest
 from typer.testing import CliRunner
 
-from aai_cli.agent_cascade import brain, engine
+from aai_cli.agent_cascade import brain, engine, streamer
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.app.context import AppState
@@ -132,7 +132,7 @@ def test_real_passes_approver_to_streamer(monkeypatch):
         captured["approver"] = approver
         return lambda messages: []
 
-    monkeypatch.setattr(engine.brain, "build_streamer", fake_build_streamer)
+    monkeypatch.setattr(streamer, "build_streamer", fake_build_streamer)
 
     def approve(name, args):
         return True
@@ -217,9 +217,9 @@ def test_approval_deadline_suspends_then_restores_into_the_future():
 
 def test_declined_execute_yields_declined_message():
     action = {"name": "execute", "args": {"command": "rm -rf build"}}
-    assert brain._decide(action, lambda name, args: False) == {
+    assert streamer._decide(action, lambda name, args: False) == {
         "type": "reject",
-        "message": brain._DECLINED,
+        "message": streamer._DECLINED,
     }
 
 
@@ -233,7 +233,7 @@ def test_decide_coerces_non_dict_args_to_empty_dict():
         seen["args"] = args
         return True
 
-    decision = brain._decide({"name": "execute", "args": [1, 2]}, approver)
+    decision = streamer._decide({"name": "execute", "args": [1, 2]}, approver)
 
     assert decision == {"type": "approve"}
     assert seen["name"] == "execute"
@@ -249,7 +249,7 @@ def test_decide_passes_dict_args_through_unchanged():
         seen["args"] = args
         return True
 
-    brain._decide({"name": "write_file", "args": {"file_path": "n.txt"}}, approver)
+    streamer._decide({"name": "write_file", "args": {"file_path": "n.txt"}}, approver)
 
     assert seen["args"] == {"file_path": "n.txt"}
 
@@ -293,6 +293,6 @@ def test_stream_graph_defaults_to_ungated():
     # asserting get_state is never called kills it.
     graph = _SpyGatedGraph()
 
-    list(brain._stream_graph(graph, []))
+    list(streamer._stream_graph(graph, []))
 
     assert graph.get_state_calls == 0

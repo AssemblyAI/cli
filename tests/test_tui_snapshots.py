@@ -139,6 +139,27 @@ def test_live_tool_then_answer_ordering(snap_compare) -> None:
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
 
 
+def test_live_plan(snap_compare) -> None:
+    """A multi-step turn surfaces the agent's plan: a `Plan` panel of status-marked tasks."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        from aai_cli.agent_cascade.plan import TodoItem
+
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_final("book a flight to Seattle, then check the weather there")
+        app.show_todos(
+            (
+                TodoItem(content="Book a flight to Seattle", status="completed"),
+                TodoItem(content="Check the Seattle weather", status="in_progress"),
+                TodoItem(content="Suggest what to pack", status="pending"),
+            )
+        )
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
 def test_live_interrupted(snap_compare) -> None:
     """An interrupted reply is finalized and tagged `(interrupted)`, then returns to listening."""
 

@@ -15,7 +15,7 @@ import typer
 from typer.testing import CliRunner
 
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import _io, engine
+from aai_cli.agent_cascade import _io
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
@@ -248,7 +248,7 @@ def test_run_wires_deps_and_invokes_cascade(monkeypatch):
     # CascadeDeps.real builds the brain graph (which would launch the default MCP servers);
     # stub the streamer so deps still wire up without spawning any npx/uvx subprocess.
     monkeypatch.setattr(
-        _exec.engine.brain, "build_streamer", lambda api_key, config, *, approver=None: lambda m: []
+        _io.streamer, "build_streamer", lambda api_key, config, *, approver=None: lambda m: []
     )
     captured = {}
 
@@ -290,7 +290,7 @@ def _wire_run(monkeypatch, run_cascade):
     monkeypatch.setattr(_exec.client, "resolve_audio_source", lambda source, sample: "clip.wav")
     # Stub the brain streamer so CascadeDeps.real never launches the default MCP servers.
     monkeypatch.setattr(
-        _exec.engine.brain, "build_streamer", lambda api_key, config, *, approver=None: lambda m: []
+        _io.streamer, "build_streamer", lambda api_key, config, *, approver=None: lambda m: []
     )
     monkeypatch.setattr(_exec.engine, "run_cascade", run_cascade)
     rendered = {}
@@ -474,7 +474,7 @@ def test_deps_real_stream_reply_is_built_by_the_deepagents_brain(monkeypatch):
         del api_key, config
         return lambda messages: [SpeechDelta("reply to " + messages[-1]["content"])]
 
-    monkeypatch.setattr(engine.brain, "build_streamer", fake_build_streamer)
+    monkeypatch.setattr(_io.streamer, "build_streamer", fake_build_streamer)
     cfg = CascadeConfig()
     deps = CascadeDeps.real("k", cfg, audio=[], stt_params=_stt_params())
     events = list(deps.stream_reply([{"role": "user", "content": "hi"}]))

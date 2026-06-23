@@ -12,7 +12,15 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from aai_cli.agent_cascade import brain, datetime_tool, weather_tool, webpage_tool, write_gate
+from aai_cli.agent_cascade import (
+    brain,
+    datetime_tool,
+    plan,
+    streamer,
+    weather_tool,
+    webpage_tool,
+    write_gate,
+)
 from aai_cli.agent_cascade import model as model_mod
 from aai_cli.agent_cascade.config import CascadeConfig
 from tests._cascade_fakes import FakeChatModel
@@ -191,15 +199,15 @@ def test_tool_label_execute_is_running_code():
 
 
 def test_clip_passes_short_text_and_truncates_long_text():
-    assert brain._clip("short") == "short"
+    assert streamer._clip("short") == "short"
     # A result exactly at the cap is left whole (the boundary is inclusive).
-    at_cap = "y" * brain._RESULT_LOG_CAP
-    assert brain._clip(at_cap) == at_cap
-    long = "x" * (brain._RESULT_LOG_CAP + 5000)
-    clipped = brain._clip(long)
+    at_cap = "y" * streamer._RESULT_LOG_CAP
+    assert streamer._clip(at_cap) == at_cap
+    long = "x" * (streamer._RESULT_LOG_CAP + 5000)
+    clipped = streamer._clip(long)
     # Only the first _RESULT_LOG_CAP chars survive, with a marker noting the full length —
     # so a multi-KB tool payload can't bury the rest of the flow in stderr.
-    assert clipped == "x" * brain._RESULT_LOG_CAP + f"… ({len(long)} chars)"
+    assert clipped == "x" * streamer._RESULT_LOG_CAP + f"… ({len(long)} chars)"
     assert len(clipped) < len(long)
 
 
@@ -208,9 +216,9 @@ def test_clip_flattens_whitespace_so_tool_output_cant_forge_log_lines():
     # "[aai_cli.…]" log lines. _clip collapses all whitespace runs to single spaces, so the
     # result stays on one line.
     forged = "ok\n[aai_cli.agent_cascade.brain] tool call rm_rf args={}\r\nmore"
-    assert brain._clip(forged) == "ok [aai_cli.agent_cascade.brain] tool call rm_rf args={} more"
-    assert "\n" not in brain._clip(forged)
-    assert "\r" not in brain._clip(forged)
+    assert streamer._clip(forged) == "ok [aai_cli.agent_cascade.brain] tool call rm_rf args={} more"
+    assert "\n" not in streamer._clip(forged)
+    assert "\r" not in streamer._clip(forged)
 
 
 # --- _content_text -----------------------------------------------------------
@@ -218,11 +226,11 @@ def test_clip_flattens_whitespace_so_tool_output_cant_forge_log_lines():
 
 def test_content_text_coerces_unexpected_content():
     # A content that is neither a string nor a list of blocks (defensive fallback).
-    assert brain._content_text(123) == "123"
+    assert streamer._content_text(123) == "123"
 
 
 def test_content_text_joins_list_content_blocks():
-    assert brain._content_text([{"type": "text", "text": "Hello "}, "world"]) == "Hello world"
+    assert streamer._content_text([{"type": "text", "text": "Hello "}, "world"]) == "Hello world"
 
 
 # --- build_live_tools --------------------------------------------------------
@@ -281,8 +289,8 @@ def test_build_graph_uses_gateway_model_and_runs_offline(monkeypatch):
     # The cascade's model + knobs are threaded into the gateway model build.
     assert captured == {"model": "claude-x", "max_tokens": 128, "extra": {"temperature": 0.2}}
     # The compiled graph is a real deepagents graph that answers offline via the fake model.
-    streamer = brain.build_streamer("k", cfg, graph=graph)
-    spoken = "".join(e.text for e in streamer([{"role": "user", "content": "hi"}]))
+    stream_reply = streamer.build_streamer("k", cfg, graph=graph)
+    spoken = "".join(e.text for e in stream_reply([{"role": "user", "content": "hi"}]))
     assert spoken == "hi from the agent"
 
 
@@ -376,3 +384,114 @@ def test_tool_label_maps_weather():
 
 def test_tool_label_maps_datetime():
     assert brain._tool_label(datetime_tool.DATETIME_TOOL_NAME) == "Checking the time"
+
+
+# --- write_todos plan parsing ------------------------------------------------
+
+
+def test_parse_todos_shapes_a_valid_blob_and_rejects_junk():
+    update = plan._parse_todos('{"todos":[{"content":"A","status":"pending"}]}')
+    assert update == plan.TodoUpdate((plan.TodoItem(content="A", status="pending"),))
+    # Not-JSON, valid-JSON-without-todos, and an empty list all yield no plan (None).
+    assert plan._parse_todos("{not json") is None
+    assert plan._parse_todos('{"other":1}') is None
+    assert plan._parse_todos('{"todos":[]}') is None
+
+
+def test_todos_from_list_drops_non_dict_items_and_defaults_missing_fields():
+    update = plan._todos_from_list([{"content": "A"}, "junk", {"status": "completed"}])
+    # The string item is dropped; missing content/status default to empty strings.
+    assert update == plan.TodoUpdate(
+        (
+            plan.TodoItem(content="A", status=""),
+            plan.TodoItem(content="", status="completed"),
+        )
+    )
+    assert plan._todos_from_list("not a list") is None
+
+
+def test_todo_collector_resets_after_take():
+    collector = plan.TodoCollector()
+    chunk = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "write_todos", "args": {"todos": [{"content": "A", "status": "x"}]}, "id": "w"}
+        ],
+    )
+    collector.note_chunk(chunk)
+    assert collector.take() == plan.TodoUpdate((plan.TodoItem(content="A", status="x"),))
+    # take() consumed the buffer: a second take with no further chunks yields nothing.
+    assert collector.take() is None
+
+
+def test_todo_collector_prefers_complete_buffer_over_partial_tool_calls():
+    # A streaming chunk carries both the full JSON fragment AND langchain's partial-parse
+    # .tool_calls; the complete buffer must win so the plan isn't truncated to the partial parse.
+    from langchain_core.messages import AIMessageChunk
+
+    collector = plan.TodoCollector()
+    collector.note_chunk(
+        AIMessageChunk(
+            content="",
+            tool_call_chunks=[
+                {"name": "write_todos", "args": '{"todos":[{"content":"A",', "id": "w", "index": 0}
+            ],
+        )
+    )
+    collector.note_chunk(
+        AIMessageChunk(
+            content="",
+            tool_call_chunks=[{"name": None, "args": '"status":"done"}]}', "id": "w", "index": 0}],
+        )
+    )
+    assert collector.take() == plan.TodoUpdate((plan.TodoItem(content="A", status="done"),))
+
+
+def test_todo_collector_ignores_a_non_write_todos_tool_carrying_todos_args():
+    # Only write_todos populates the plan: the `name == write_todos AND args-is-a-dict` guard must
+    # reject a *different* tool whose args happen to carry a `todos` key (an `or` there would let a
+    # sibling tool's payload masquerade as the plan).
+    collector = plan.TodoCollector()
+    collector.note_chunk(
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "search",
+                    "args": {"todos": [{"content": "X", "status": "pending"}]},
+                    "id": "s",
+                }
+            ],
+        )
+    )
+    assert collector.take() is None
+
+
+def test_todo_collector_ignores_fragments_from_a_different_tool_index():
+    # A write_todos call opens at index 0; a sibling tool's arg fragment arrives at index 1. The
+    # `index == open-index` guard must drop it — folding a foreign fragment into the buffer (an `or`
+    # there) corrupts the todos JSON. The fakes expose only `tool_call_chunks` (no `.tool_calls`),
+    # so the buffer is the *sole* source: under the `or` mutant the buffer no longer parses and
+    # take() returns None instead of the plan, which this assert catches.
+    import types
+
+    def chunk(fragments: list[dict[str, object]]) -> types.SimpleNamespace:
+        return types.SimpleNamespace(tool_call_chunks=fragments)
+
+    collector = plan.TodoCollector()
+    collector.note_chunk(
+        chunk(
+            [
+                {
+                    "name": "write_todos",
+                    "args": '{"todos":[{"content":"A","status":"pending"}',
+                    "index": 0,
+                }
+            ]
+        )
+    )
+    # A different tool's fragment at index 1 — must NOT be appended to the write_todos buffer.
+    collector.note_chunk(chunk([{"name": None, "args": "GARBAGE", "index": 1}]))
+    # Close the write_todos JSON at its own index 0.
+    collector.note_chunk(chunk([{"name": None, "args": "]}", "index": 0}]))
+    assert collector.take() == plan.TodoUpdate((plan.TodoItem(content="A", status="pending"),))

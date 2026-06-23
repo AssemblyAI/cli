@@ -12,15 +12,23 @@ literally — Text doesn't parse console markup, so a stray ``[`` can't raise or
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from rich.markdown import Markdown
 from rich.text import Text
 from textual.widgets import Static
 
+from aai_cli.agent_cascade import banner
 from aai_cli.agent_cascade.summarize import summarize_call, summarize_result
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from aai_cli.agent_cascade.plan import TodoItem
 
 _DIM = "#8a8f98"  # muted gray for tool lines / notes
 _ERROR = "#f04438"
+_DONE = "#22c55e"  # green for a completed task (the voice bar's "speaking" hue)
 
 
 class Note(Static):
@@ -89,6 +97,49 @@ class ToolCallLine(Static):
 
     def __init__(self, name: str, args: Mapping[str, object]) -> None:
         super().__init__(Text(f"→ {summarize_call(name, args)}", style=_DIM))
+
+
+# Per-status glyph + style for a plan line: a green ✓ when done, a brand-accented ▸ for the
+# task in progress, a dim ○ for one still pending (an unknown status falls back to pending).
+_TODO_STYLES: dict[str, tuple[str, str]] = {
+    "completed": ("✓", _DONE),
+    "in_progress": ("▸", banner.BRAND_HEX),
+    "pending": ("○", _DIM),
+}
+
+
+def _todos_markup(todos: Sequence[TodoItem]) -> Text:
+    """Render the plan as a ``Plan`` heading above one styled line per task.
+
+    Completed tasks are struck through and dimmed; the in-progress task is brand-accented; the
+    rest are dim — so the panel reads as a live checklist of the spoken plan at a glance.
+    """
+    text = Text("Plan", style=f"bold {_DIM}")
+    for todo in todos:
+        glyph, color = _TODO_STYLES.get(todo.status, _TODO_STYLES["pending"])
+        style = f"{color} strike" if todo.status == "completed" else color
+        text.append(f"\n{glyph} ", style=color)
+        text.append(todo.content, style=style)
+    return text
+
+
+class TodoList(Static):
+    """The agent's task plan (its ``write_todos`` list), updated in place as the plan evolves.
+
+    ``write_todos`` replaces the whole list on each call, so one widget shows the current plan
+    (revised in place) rather than a fresh copy per revision — the visible counterpart to a
+    hands-free "first I'll…, then I'll…". Spaced off the turn above by a top margin.
+    """
+
+    DEFAULT_CSS = "TodoList { margin-top: 1; }"
+
+    def __init__(self, todos: Sequence[TodoItem]) -> None:
+        super().__init__()
+        self.set_todos(todos)
+
+    def set_todos(self, todos: Sequence[TodoItem]) -> None:
+        """Repaint the panel with the current plan (replacing whatever it showed before)."""
+        self.update(_todos_markup(todos))
 
 
 class ErrorMessage(Static):

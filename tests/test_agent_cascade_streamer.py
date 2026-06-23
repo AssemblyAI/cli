@@ -14,7 +14,7 @@ import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
-from aai_cli.agent_cascade import brain
+from aai_cli.agent_cascade import brain, plan, streamer
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.core.errors import CLIError
 from tests._cascade_fakes import FakeChatModel
@@ -37,8 +37,8 @@ class _MessageStreamGraph:
 
 
 def _collect(graph, messages):
-    streamer = brain.build_streamer("k", CascadeConfig(), graph=graph)
-    return list(streamer(messages))
+    stream_reply = streamer.build_streamer("k", CascadeConfig(), graph=graph)
+    return list(stream_reply(messages))
 
 
 def test_streamer_yields_speech_deltas_for_assistant_tokens():
@@ -109,15 +109,84 @@ def test_streamer_emits_one_notice_per_call_ignoring_arg_only_chunks():
     assert [e.label for e in events if isinstance(e, brain.ToolNotice)] == ["Using get_time"]
 
 
+# --- build_streamer (write_todos -> TodoUpdate plan) -------------------------
+
+
+def test_streamer_emits_a_todo_update_from_streamed_write_todos_args():
+    # write_todos args stream as JSON fragments across chunks; the streamer accumulates them and
+    # surfaces the full plan as a TodoUpdate when the tool result lands — NOT a ToolNotice.
+    frag1 = AIMessageChunk(
+        content="",
+        tool_call_chunks=[
+            {
+                "name": plan.WRITE_TODOS_TOOL_NAME,
+                "args": '{"todos":[{"content":"Book", ',
+                "id": "w",
+                "index": 0,
+            }
+        ],
+    )
+    frag2 = AIMessageChunk(
+        content="",
+        tool_call_chunks=[
+            {"name": None, "args": '"status":"in_progress"}]}', "id": "w", "index": 0}
+        ],
+    )
+    result = ToolMessage(content="Updated todo list to [...]", name="write_todos", tool_call_id="w")
+    graph = _MessageStreamGraph(
+        [(frag1, {}), (frag2, {}), (result, {}), (AIMessageChunk(content="On it."), {})]
+    )
+    events = _collect(graph, [{"role": "user", "content": "book a flight"}])
+    updates = [e for e in events if isinstance(e, plan.TodoUpdate)]
+    assert updates == [plan.TodoUpdate((plan.TodoItem(content="Book", status="in_progress"),))]
+    # The plan tool never doubles as a spoken affordance.
+    assert [e for e in events if isinstance(e, brain.ToolNotice)] == []
+    assert [e.text for e in events if isinstance(e, brain.SpeechDelta)] == ["On it."]
+
+
+def test_streamer_emits_a_todo_update_from_a_non_streaming_model():
+    # A non-streaming model (the test fakes) surfaces a complete write_todos call as a single
+    # AIMessage with a parsed .tool_calls dict; the streamer still produces the same TodoUpdate.
+    todo_call = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "write_todos",
+                "args": {
+                    "todos": [
+                        {"content": "Find a flight", "status": "in_progress"},
+                        {"content": "Check Seattle weather", "status": "pending"},
+                    ]
+                },
+                "id": "w1",
+            }
+        ],
+    )
+    graph = _real_graph(FakeChatModel(responses=[todo_call, AIMessage(content="Working on it.")]))
+    events = _collect(graph, [{"role": "user", "content": "plan my trip"}])
+    (update,) = [e for e in events if isinstance(e, plan.TodoUpdate)]
+    assert update.todos == (
+        plan.TodoItem(content="Find a flight", status="in_progress"),
+        plan.TodoItem(content="Check Seattle weather", status="pending"),
+    )
+
+
+def _real_graph(model: BaseChatModel):
+    """A real deepagents graph (with the auto-installed write_todos tool) over a fake model."""
+    from deepagents import create_deep_agent
+
+    return create_deep_agent(model=model, tools=[], system_prompt="be a friendly live agent")
+
+
 def test_streamer_wraps_graph_errors_in_cli_error():
     class _Boom:
         def stream(self, graph_input, config, *, stream_mode):
             del graph_input, config, stream_mode
             raise ValueError("gateway said no")
 
-    streamer = brain.build_streamer("k", CascadeConfig(), graph=_Boom())
+    stream_reply = streamer.build_streamer("k", CascadeConfig(), graph=_Boom())
     with pytest.raises(CLIError) as excinfo:
-        list(streamer([{"role": "user", "content": "hi"}]))
+        list(stream_reply([{"role": "user", "content": "hi"}]))
     assert "couldn't complete the turn" in excinfo.value.message
     assert "gateway said no" in excinfo.value.message
 
@@ -128,9 +197,9 @@ def test_streamer_passes_cli_error_through():
             del graph_input, config, stream_mode
             raise CLIError("already clean", error_type="x")
 
-    streamer = brain.build_streamer("k", CascadeConfig(), graph=_CliBoom())
+    stream_reply = streamer.build_streamer("k", CascadeConfig(), graph=_CliBoom())
     with pytest.raises(CLIError, match="already clean"):
-        list(streamer([{"role": "user", "content": "hi"}]))
+        list(stream_reply([{"role": "user", "content": "hi"}]))
 
 
 def test_streamer_errors_when_graph_cannot_stream():
@@ -141,14 +210,14 @@ def test_streamer_errors_when_graph_cannot_stream():
             del graph_input
             return {"messages": []}
 
-    streamer = brain.build_streamer("k", CascadeConfig(), graph=_InvokeOnly())
+    stream_reply = streamer.build_streamer("k", CascadeConfig(), graph=_InvokeOnly())
     with pytest.raises(CLIError) as excinfo:
-        list(streamer([{"role": "user", "content": "hi"}]))
+        list(stream_reply([{"role": "user", "content": "hi"}]))
     assert "cannot stream" in excinfo.value.message
 
 
 def test_streamer_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_state):
-    monkeypatch.setattr(brain.debuglog, "active", lambda: True)
+    monkeypatch.setattr(streamer.debuglog, "active", lambda: True)
     call_chunk = AIMessageChunk(
         content="", tool_call_chunks=[{"name": "tavily_search", "args": "", "id": "c1", "index": 0}]
     )
@@ -160,7 +229,7 @@ def test_streamer_logs_flow_when_verbose(monkeypatch, caplog, preserve_logging_s
         (AIMessageChunk(content="It's rainy."), {}),
     ]
     graph = _MessageStreamGraph(items)
-    with caplog.at_level(logging.INFO, logger="aai_cli.agent_cascade.brain"):
+    with caplog.at_level(logging.INFO, logger="aai_cli.agent_cascade.streamer"):
         _collect(graph, [{"role": "user", "content": "weather?"}])
     messages = [r.getMessage() for r in caplog.records]
     # Accumulated assistant text is logged as one line per assistant turn, around the
@@ -210,8 +279,10 @@ def test_streamer_approves_write_then_resumes(tmp_path):
         return True
 
     graph = _gated_graph(_write_then("Saved your note."), str(tmp_path))
-    streamer = brain.build_streamer("k", CascadeConfig(files=True), graph=graph, approver=approve)
-    events = list(streamer([{"role": "user", "content": "save a note"}]))
+    stream_reply = streamer.build_streamer(
+        "k", CascadeConfig(files=True), graph=graph, approver=approve
+    )
+    events = list(stream_reply([{"role": "user", "content": "save a note"}]))
     spoken = "".join(e.text for e in events if isinstance(e, brain.SpeechDelta))
     assert spoken == "Saved your note."
     # The approver was consulted for the write, and the approved write hit the rooted dir.
@@ -221,10 +292,10 @@ def test_streamer_approves_write_then_resumes(tmp_path):
 
 def test_streamer_rejects_write_without_approval(tmp_path):
     graph = _gated_graph(_write_then("Okay, I won't save it."), str(tmp_path))
-    streamer = brain.build_streamer(
+    stream_reply = streamer.build_streamer(
         "k", CascadeConfig(files=True), graph=graph, approver=lambda name, args: False
     )
-    events = list(streamer([{"role": "user", "content": "save a note"}]))
+    events = list(stream_reply([{"role": "user", "content": "save a note"}]))
     spoken = "".join(e.text for e in events if isinstance(e, brain.SpeechDelta))
     assert spoken == "Okay, I won't save it."
     # Declined: nothing was written to the rooted directory.
@@ -237,12 +308,12 @@ def test_streamer_brackets_write_approval_with_pause_events(tmp_path):
     # the two markers by construction (the streamer yields True, asks, then yields False).
     asked: list[str] = []
     graph = _gated_graph(_write_then("Done."), str(tmp_path))
-    streamer = brain.build_streamer(
+    stream_reply = streamer.build_streamer(
         "k",
         CascadeConfig(files=True),
         graph=graph,
         approver=lambda name, args: asked.append(name) or True,
     )
-    events = list(streamer([{"role": "user", "content": "save"}]))
+    events = list(stream_reply([{"role": "user", "content": "save"}]))
     pauses = [event.active for event in events if isinstance(event, brain.ApprovalPause)]
     assert pauses == [True, False]  # the write was bracketed: pause on, then resume

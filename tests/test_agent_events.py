@@ -23,6 +23,12 @@ from aai_cli.agent import events
             {"type": "tool.use", "label": "Searching the web"},
         ),
         (
+            events.PlanUpdate(todos=(events.TodoItem(content="Book a flight", status="pending"),)),
+            # model_dump keeps todos a tuple of nested dicts; it serializes to a JSON array on the
+            # wire (asserted end-to-end in test_agent_render.test_json_todos_emits_plan_event).
+            {"type": "plan", "todos": ({"content": "Book a flight", "status": "pending"},)},
+        ),
+        (
             events.AgentTranscript(text="hi back", interrupted=False),
             {"type": "transcript.agent", "text": "hi back", "interrupted": False},
         ),
