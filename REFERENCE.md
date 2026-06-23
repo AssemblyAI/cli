@@ -160,6 +160,14 @@ missing `npx`/`uvx`, an offline host) drops only its own tools, so a single brok
 tool never sinks the session. MCP tools are a live-run feature and are not
 reflected in `--show-code` output.
 
+If the directory you launch from has an `AGENTS.md` or `CLAUDE.md`, `assembly live`
+reads it into the agent's context — the same convention coding agents follow — so
+spoken answers are grounded in the project at hand. `AGENTS.md` takes precedence
+(and identical content, e.g. a `CLAUDE.md` symlinked to it, is included once); an
+oversized file is truncated so it can't crowd out the conversation. This is
+independent of `--files` (it happens even when the agent can't touch the
+filesystem) and is not reflected in `--show-code` output.
+
 `--files` lets the agent read, write, and run code in the directory you launch
 it from (off by default). Reads run immediately; a write, edit, or command run pauses
 the turn for confirmation in the voice TUI — press `y`/`n` (`a` approves the rest of the

@@ -69,3 +69,6 @@ class CascadeConfig:
     # behavior unchanged (the default in-memory backend, no gating, nothing advertised); on
     # swaps to a real-cwd FilesystemBackend and gates writes behind human approval.
     files: bool = False
+    # The launch directory's AGENTS.md/CLAUDE.md, read into the system prompt so the agent
+    # answers grounded in the project it's run from (None when no instruction file is present).
+    project_context: str | None = None
