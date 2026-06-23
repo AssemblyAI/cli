@@ -635,6 +635,9 @@
   │ --files                   Let the agent read, write, and run code in the     │
   │                           current directory, sandboxed (writes and runs need │
   │                           confirmation)                                      │
+  │ --auto-write        TEXT  Auto-approve --files writes under this             │
+  │                           subdirectory, skipping the confirmation            │
+  │                           (repeatable)                                       │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples

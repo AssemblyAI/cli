@@ -33,12 +33,19 @@ def test_spec_interrupt_on_is_the_passed_mapping():
 def test_graph_kwargs_wires_one_gated_gateway_bound_subagent(monkeypatch, tmp_path):
     # --files binds exactly one subagent: gateway-bound (no model) with every mutating tool gated.
     monkeypatch.chdir(tmp_path)
-    subs = brain._graph_kwargs(CascadeConfig(files=True))["subagents"]
+    kwargs = brain._graph_kwargs(CascadeConfig(files=True))
+    subs = kwargs["subagents"]
     assert isinstance(subs, list) and len(subs) == 1
     spec = subs[0]
     assert spec["name"] == "general-purpose"
     assert "model" not in spec  # inherits the gateway-bound model
-    assert spec["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
+    # The subagent's gate is the SAME mapping the parent graph gates on, so the two can never
+    # drift: the path-scoped file-write tools plus the always-on execute (write_file/edit_file
+    # are InterruptOnConfig maps now, execute a plain True).
+    assert spec["interrupt_on"] is kwargs["interrupt_on"]
+    assert sorted(spec["interrupt_on"]) == ["edit_file", "execute", "write_file"]
+    assert spec["interrupt_on"]["execute"] is True
+    assert "when" in spec["interrupt_on"]["write_file"]
 
 
 def test_graph_kwargs_off_binds_no_subagents():

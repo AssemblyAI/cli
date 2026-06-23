@@ -10,7 +10,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import typer
@@ -77,6 +77,9 @@ class AgentCascadeOptions:
     mcp_config: tuple[Path, ...]
     # Let the agent read/write files in the launch directory (writes confirmed; off by default).
     files: bool
+    # Directories (relative to cwd) whose writes auto-approve under --files; everything else
+    # still pauses for confirmation. Empty gates every write.
+    auto_write: tuple[str, ...]
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
 
@@ -149,6 +152,42 @@ def _deny_writes(name: str, args: dict[str, object]) -> bool:
     """
     del name, args
     return False
+
+
+def _normalize_auto_write(raw: str) -> str:
+    """Normalize one ``--auto-write DIR`` to a cwd-rooted virtual prefix (``scratch`` -> ``/scratch``).
+
+    The ``--files`` backend runs in ``virtual_mode``, so the model addresses files at ``/``-rooted
+    virtual paths mapped under cwd; an auto-approve subtree is expressed against that same virtual
+    root. Leading ``./`` and ``/`` are stripped and a single ``/`` re-added, so ``scratch``,
+    ``./scratch``, and ``/scratch`` all resolve to ``/scratch``. Traversal (``..``), home (``~``),
+    and the whole-tree aliases (empty, ``.``, ``/``) are rejected — an auto-write path must name a
+    contained subtree, never escape cwd or silently disable every write gate.
+    """
+    cleaned = raw.strip().replace("\\", "/").strip("/")
+    while cleaned.startswith("./"):
+        cleaned = cleaned[2:].strip("/")
+    parts = PurePosixPath(cleaned).parts if cleaned else ()
+    if not cleaned or cleaned == "." or ".." in parts or "~" in parts:
+        raise UsageError(
+            f"--auto-write expects a subdirectory under the launch directory, got {raw!r}.",
+            suggestion="e.g. --auto-write scratch",
+        )
+    return "/" + cleaned
+
+
+def _resolve_auto_write_paths(*, auto_write: tuple[str, ...], files: bool) -> tuple[str, ...]:
+    """Normalize every ``--auto-write`` value to a virtual root; reject it without ``--files``.
+
+    ``--auto-write`` only relaxes the ``--files`` write gate, so passing it alone is a usage
+    error (a silent no-op would hide the missing ``--files``).
+    """
+    if auto_write and not files:
+        raise UsageError(
+            "--auto-write only applies with --files.",
+            suggestion="add --files to enable filesystem access",
+        )
+    return tuple(_normalize_auto_write(value) for value in auto_write)
 
 
 def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
@@ -316,6 +355,8 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
     tts_extra = _parse_tts_config(opts.tts_config)
     # Resolve MCP servers before opening the device, so a malformed config fails fast.
     mcp_servers = _resolve_mcp_servers(opts.mcp_config)
+    # Normalize --auto-write subtrees (and reject them without --files) before the device opens.
+    auto_write_paths = _resolve_auto_write_paths(auto_write=opts.auto_write, files=opts.files)
     api_key = state.resolve_api_key()
 
     config = CascadeConfig(
@@ -331,6 +372,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         tts_extra=tts_extra,
         mcp_servers=mcp_servers,
         files=opts.files,
+        auto_write_paths=auto_write_paths,
     )
 
     if _should_use_tui(from_file=from_file, json_mode=json_mode, text_mode=text_mode):

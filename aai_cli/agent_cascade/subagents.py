@@ -16,12 +16,14 @@ _SYSTEM_PROMPT = (
 )
 
 
-def general_purpose_subagent(interrupt_on: dict[str, bool]) -> dict[str, object]:
+def general_purpose_subagent(interrupt_on: dict[str, object]) -> dict[str, object]:
     """The ``task`` subagent spec: gateway-bound (no ``model``), full sandboxed tools (no ``tools``),
-    with ``interrupt_on`` mirroring the caller's write tools so its mutations stay gated.
+    with ``interrupt_on`` mirroring the caller's write gating so its mutations stay gated.
 
     ``interrupt_on`` is a parameter (not a local constant) so this module needn't import
-    ``brain._WRITE_TOOLS`` — that would be a circular import, since ``brain`` imports this.
+    ``brain``'s write-gating helpers — that would be a circular import, since ``brain`` imports
+    this. Its values may be plain ``True`` (e.g. ``execute``) or a path-scoped ``InterruptOnConfig``
+    (the ``--auto-write`` write tools), so the subagent honors the same per-path policy as the parent.
     """
     return {
         "name": "general-purpose",

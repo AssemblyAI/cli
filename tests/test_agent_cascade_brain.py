@@ -12,7 +12,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from aai_cli.agent_cascade import brain, datetime_tool, weather_tool, webpage_tool
+from aai_cli.agent_cascade import brain, datetime_tool, weather_tool, webpage_tool, write_gate
 from aai_cli.agent_cascade import model as model_mod
 from aai_cli.agent_cascade.config import CascadeConfig
 from tests._cascade_fakes import FakeChatModel
@@ -35,11 +35,85 @@ def test_graph_kwargs_gates_writes_and_execute_and_sets_memory(monkeypatch, tmp_
     assert isinstance(backend, sandbox.SandboxedShellBackend)
     assert Path(backend.cwd) == tmp_path.resolve()
     assert backend.virtual_mode is True
-    # execute now joins the write gate.
-    assert kwargs["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
+    # With no --auto-write paths, the gate covers both file-write tools (path-scoped) plus the
+    # always-gated execute. write_file/edit_file are now InterruptOnConfig maps (a `when`
+    # predicate), execute stays a plain True.
+    interrupt_on = kwargs["interrupt_on"]
+    assert sorted(interrupt_on) == ["edit_file", "execute", "write_file"]
+    assert interrupt_on["execute"] is True
+    assert "when" in interrupt_on["write_file"]
     assert kwargs["checkpointer"] is not None
     # Durable per-project memory is turned on.
     assert kwargs["memory"] == ["./.deepagents/AGENTS.md"]
+    # The subagent inherits the same gate so its mutations prompt through the same approver.
+    subagent = kwargs["subagents"][0]
+    assert subagent["interrupt_on"] == interrupt_on
+
+
+def test_graph_kwargs_threads_auto_write_paths_into_the_gate(monkeypatch, tmp_path):
+    # CascadeConfig.auto_write_paths reaches the graph's interrupt_on, so a write under the
+    # configured subtree auto-approves while others still gate.
+    monkeypatch.chdir(tmp_path)
+    kwargs = brain._graph_kwargs(CascadeConfig(files=True, auto_write_paths=("/scratch",)))
+    interrupt_on = kwargs["interrupt_on"]
+    assert _write_fires(interrupt_on, "write_file", "/scratch/out.md") is False
+    assert _write_fires(interrupt_on, "write_file", "/elsewhere.md") is True
+
+
+def _write_fires(interrupt_on: dict[str, object], tool: str, path: str) -> bool:
+    """Whether the path-scoped gate would pause `tool` for the write to `path`.
+
+    Drives the InterruptOnConfig's `when` predicate directly — its True means "interrupt
+    (ask the approver)", False means "auto-approve (run ungated)". The predicate reads only
+    ``req.tool_call`` (the dict of name/args), so a SimpleNamespace stands in for the full
+    langchain ``ToolCallRequest`` without dragging its strict TypedDict/runtime fields in.
+    """
+    import types
+
+    config = interrupt_on[tool]
+    assert isinstance(config, dict)
+    req = types.SimpleNamespace(tool_call={"name": tool, "args": {"file_path": path}})
+    return bool(config["when"](req))
+
+
+def test_write_interrupt_on_gates_every_write_without_auto_write_paths():
+    # No --auto-write subtrees: both file-write tools pause for any target (the pre-existing
+    # all-or-nothing behavior), and execute is always gated.
+    interrupt_on = write_gate.write_interrupt_on(())
+    assert interrupt_on["execute"] is True
+    assert _write_fires(interrupt_on, "write_file", "/notes.txt") is True
+    assert _write_fires(interrupt_on, "edit_file", "/src/deep/main.py") is True
+
+
+def test_write_interrupt_on_auto_approves_under_allowed_subtree():
+    # A --auto-write subtree relaxes the gate ONLY for writes inside it: a write under /scratch
+    # runs ungated (when -> False), a write elsewhere still pauses (when -> True). This is the
+    # crux of the feature, so assert both sides — a one-sided assert would miss an always-allow
+    # or always-gate mutant.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch",))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/out.md") is False
+    assert _write_fires(interrupt_on, "edit_file", "/scratch/sub/deep.txt") is False
+    assert _write_fires(interrupt_on, "write_file", "/notes.txt") is True
+    assert _write_fires(interrupt_on, "edit_file", "/src/main.py") is True
+    # execute is never path-scoped — every command run is still approved.
+    assert interrupt_on["execute"] is True
+
+
+def test_write_interrupt_on_honors_multiple_auto_write_subtrees():
+    # Several --auto-write subtrees each auto-approve; an unlisted sibling still gates.
+    interrupt_on = write_gate.write_interrupt_on(("/scratch", "/build"))
+    assert _write_fires(interrupt_on, "write_file", "/scratch/a") is False
+    assert _write_fires(interrupt_on, "write_file", "/build/b") is False
+    assert _write_fires(interrupt_on, "write_file", "/src/c") is True
+
+
+def test_auto_write_rules_put_allow_before_the_catch_all_interrupt():
+    # First-match-wins, so each allow subtree must precede the trailing /** interrupt rule;
+    # the allow rule carries both the node and its subtree pattern.
+    rules = write_gate._auto_write_rules(("/scratch",))
+    assert [r.mode for r in rules] == ["allow", "interrupt"]
+    assert rules[0].paths == ["/scratch", "/scratch/**"]
+    assert rules[-1].paths == ["/**"] and rules[-1].mode == "interrupt"
 
 
 def test_sandboxed_backend_implements_sandbox_protocol(monkeypatch, tmp_path):

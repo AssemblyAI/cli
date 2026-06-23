@@ -69,3 +69,9 @@ class CascadeConfig:
     # behavior unchanged (the default in-memory backend, no gating, nothing advertised); on
     # swaps to a real-cwd FilesystemBackend and gates writes behind human approval.
     files: bool = False
+    # Auto-approve writes under these cwd-rooted virtual subtrees (e.g. ("/scratch",)) when
+    # --files is on. A write inside one runs without a confirmation keypress; a write anywhere
+    # else still pauses for approval. Empty (the default) gates every write, as before. The
+    # paths are normalized virtual roots (always leading "/", no ".."), matching the virtual_mode
+    # backend the model addresses. execute is never auto-approved — it can't be path-scoped.
+    auto_write_paths: tuple[str, ...] = ()
