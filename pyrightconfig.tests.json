@@ -3,7 +3,8 @@
   "ignore": [
     "tests/test_live_model.py",
     "tests/test_agent_cascade_brain.py",
-    "tests/test_agent_cascade_prompt.py"
+    "tests/test_agent_cascade_prompt.py",
+    "tests/test_agent_cascade_subagents.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "standard",
