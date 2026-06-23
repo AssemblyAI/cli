@@ -129,6 +129,9 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
         def set_interrupt(self, interrupt):
             captured["interrupt"] = interrupt
 
+        def submit_voice_approval(self, transcript):  # the engine's spoken-approval sink
+            captured["voice"] = transcript
+
     monkeypatch.setattr("aai_cli.agent_cascade.tui.LiveAgentApp", FakeApp)
     run_agent_cascade(_opts(), AppState(), json_mode=False)
     assert captured["player"] is fake_duplex.player
@@ -136,6 +139,8 @@ def test_tui_run_conversation_drives_the_cascade(monkeypatch) -> None:
     assert captured["renderer"] == "renderer-sentinel"
     # The session's interrupt_reply was wired onto the app (so Escape/Ctrl-C can use it).
     assert captured["interrupt"] == "session-interrupt"
+    # The app's spoken-approval sink is wired so the engine can resolve a write by voice.
+    assert getattr(captured["on_approval_voice"], "__name__", "") == "submit_voice_approval"
 
 
 def test_tui_reraises_a_fatal_leg_error_for_the_exit_code(monkeypatch) -> None:

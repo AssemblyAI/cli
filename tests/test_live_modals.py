@@ -172,3 +172,55 @@ def test_approval_screen_starts_unanswered() -> None:
     # not only to the async keyboard pilots where coverage-context can miss it.)
     screen = ApprovalScreen("write_file", {"file_path": "x.py"})
     assert screen._answered is False
+
+
+def test_voice_affirmative_resolves_a_benign_modal_to_approve() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            box: dict[str, object] = {}
+            screen = ApprovalScreen("write_file", {"file_path": "x.py"})
+            app.push_screen(screen, lambda r: box.update(value=r))
+            await pilot.pause()
+            screen.try_voice("yes, run it")  # spoken approval resolves the open modal
+            await pilot.pause()
+            assert box.get("value") == "approve"
+
+    _run(go())
+
+
+def test_voice_non_affirmative_resolves_a_benign_modal_to_reject() -> None:
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            box: dict[str, object] = {}
+            screen = ApprovalScreen("write_file", {"file_path": "x.py"})
+            app.push_screen(screen, lambda r: box.update(value=r))
+            await pilot.pause()
+            screen.try_voice("hmm what was that")  # unrecognized -> fail-safe reject
+            await pilot.pause()
+            assert box.get("value") == "reject"
+
+    _run(go())
+
+
+def test_voice_is_ignored_for_a_destructive_modal() -> None:
+    # A destructive command ignores a spoken "approve"; the modal stays open until a keypress.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            box: dict[str, object] = {}
+            screen = ApprovalScreen("execute", {"command": "rm -rf build"})
+            app.push_screen(screen, lambda r: box.update(value=r))
+            await pilot.pause()
+            screen.try_voice("approve")  # ignored: destructive tier needs the keyboard
+            await pilot.pause()
+            assert "value" not in box  # not dismissed by voice
+            await pilot.press("y")  # the keyboard still works
+            await pilot.pause()
+            assert box.get("value") == "approve"
+
+    _run(go())

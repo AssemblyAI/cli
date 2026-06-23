@@ -100,6 +100,63 @@ def test_on_turn_interim_barges_in_on_live_reply():
     assert session._reply is None
 
 
+# --- spoken approval (--files): route the next final transcript to the open gate -------------
+
+
+def test_on_turn_routes_final_to_voice_during_approval_pause():
+    # While a --files write/run awaits approval, the next FINAL transcript answers the gate by
+    # voice — it does NOT render a user turn or start a new reply.
+    session, renderer, _player = make_session()
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
+
+    session.on_turn(_turn("yes, run it"))
+
+    assert voiced == ["yes, run it"]
+    assert session.history == []  # no new turn started
+    assert ("user_final", "yes, run it") not in renderer.calls
+
+
+def test_on_turn_ignores_interim_during_approval_pause():
+    # Interim partials during the pause are dropped (only a final transcript answers the gate).
+    session, renderer, _player = make_session()
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
+
+    session.on_turn(_turn("yes", end_of_turn=False))
+
+    assert voiced == []
+    assert renderer.calls == []
+
+
+def test_on_turn_final_during_pause_without_voice_sink_is_dropped():
+    # Keyboard-only path (no voice sink): a final transcript during the pause is simply dropped,
+    # not started as a turn — pins the `on_approval_voice is not None` guard.
+    session, renderer, _player = make_session()  # on_approval_voice defaults to None
+    session._set_awaiting_approval(active=True)
+
+    session.on_turn(_turn("anything"))
+
+    assert session.history == []
+    assert renderer.calls == []
+
+
+def test_on_turn_resumes_normal_turns_once_approval_clears():
+    # After the pause clears (active=False), a final transcript starts a reply again, NOT voice.
+    session, renderer, _player = make_session(stream_reply=_deltas("Done."))
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
+    session._set_awaiting_approval(active=False)
+
+    session.on_turn(_turn("what time is it"))
+
+    assert voiced == []
+    assert ("user_final", "what time is it") in renderer.calls
+
+
 # --- helpers -----------------------------------------------------------------
 
 

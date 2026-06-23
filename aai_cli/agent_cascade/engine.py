@@ -81,8 +81,16 @@ class CascadeSession:
     # First leg failure (LLM/TTS). Recorded on the reply worker thread, where raising
     # would dump a thread traceback, and re-raised from the main thread to fail cleanly.
     error: CLIError | None = None
+    # Routes a spoken approval during a --files pause (the live TUI's submit_voice_approval); None
+    # on the keyboard-only/headless paths, where a spoken transcript can't answer the gate.
+    on_approval_voice: Callable[[str], None] | None = None
     _reply: _Worker | None = field(default=None, init=False)  # pragma: no mutate
     _stop: threading.Event = field(default_factory=threading.Event, init=False)  # pragma: no mutate
+    # Set while a --files write/run awaits approval: the next final transcript answers the gate
+    # (voice) instead of starting a new turn. Armed/cleared by _consume on the ApprovalPause events.
+    _awaiting_approval: threading.Event = field(
+        default_factory=threading.Event, init=False
+    )  # pragma: no mutate
     # Set only while a reply is in its audible speak-and-enqueue phase (not while it's still
     # *thinking* — generating in a blocking graph call). A UI interrupt keys off this so Ctrl-C
     # can quit while the agent thinks instead of being swallowed by a no-op "interrupt".
@@ -116,6 +124,14 @@ class CascadeSession:
         """
         text = (getattr(event, "transcript", "") or "").strip()
         if not text:
+            return
+        if self._awaiting_approval.is_set():
+            # A --files write/run is waiting on approval: the next *final* transcript answers the
+            # gate by voice (interim partials are ignored), instead of barging in / starting a turn.
+            if _is_final_turn(event, format_turns=self.config.format_turns) and (
+                self.on_approval_voice is not None
+            ):
+                self.on_approval_voice(text)
             return
         if _is_final_turn(event, format_turns=self.config.format_turns):
             self.renderer.user_final(text)
@@ -212,6 +228,14 @@ class CascadeSession:
         self._speaking.clear()
         self.renderer.reply_done(interrupted=self._stop.is_set())
 
+    def _set_awaiting_approval(self, *, active: bool) -> None:
+        """Arm/disarm the voice-approval gate: while armed, ``on_turn`` routes the next final
+        transcript to the open write/run approval instead of starting a new turn."""
+        if active:
+            self._awaiting_approval.set()
+        else:
+            self._awaiting_approval.clear()
+
     def _consume(
         self, events: queue.Queue[_ReplyEvent], before: set[threading.Thread], spoken: list[str]
     ) -> str | None:
@@ -234,6 +258,7 @@ class CascadeSession:
                 return buffer
             if isinstance(item, brain.ApprovalPause):
                 deadline = _approval_deadline(item)
+                self._set_awaiting_approval(active=item.active)
                 continue
             if isinstance(item, brain.ToolNotice):
                 if not self._handle_tool_notice(item, spoke_filler=spoke_filler):
@@ -423,6 +448,7 @@ def run_cascade(
     config: CascadeConfig,
     deps: CascadeDeps,
     on_session: Callable[[CascadeSession], None] | None = None,
+    on_approval_voice: Callable[[str], None] | None = None,
 ) -> None:
     """Run one terminal cascade conversation until STT closes or the user stops.
 
@@ -432,7 +458,13 @@ def run_cascade(
     live TUI) can grab a handle to it — e.g. to wire a keyboard interrupt to
     :meth:`CascadeSession.interrupt_reply`.
     """
-    session = CascadeSession(deps=deps, renderer=renderer, player=player, config=config)
+    session = CascadeSession(
+        deps=deps,
+        renderer=renderer,
+        player=player,
+        config=config,
+        on_approval_voice=on_approval_voice,
+    )
     if on_session is not None:
         on_session(session)
     player.start()

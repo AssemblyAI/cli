@@ -5,8 +5,10 @@ Split out of ``tui.py`` to keep each module under the file-length gate. The
 transcript stays visible above it (see the ``ModalScreen { background: transparent }``
 rule in :class:`~aai_cli.agent_cascade.tui.LiveAgentApp`).
 
-The keyboard path (``y / a / n / e``) is the only input channel — the live voice TUI
-has no spoken-answer path for approvals.
+The keyboard path (``y / a / n / e``) is always available; under ``--files`` an open modal
+can *also* be resolved by voice (:meth:`ApprovalScreen.try_voice`), the engine routing the
+next spoken transcript here so the gate stays hands-free — except destructive commands, which
+ignore the spoken answer and require a keypress.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Label
 
 from aai_cli.agent_cascade import banner, risk
+from aai_cli.agent_cascade.spoken_approval import spoken_decision
 from aai_cli.agent_cascade.summarize import describe_args, full_args
 
 if TYPE_CHECKING:
@@ -75,11 +78,23 @@ class ApprovalScreen(ModalScreen[str]):
             )
 
     def _decide(self, decision: str) -> None:
-        """Dismiss once, whether the answer came by keypress."""
+        """Dismiss once, whether the answer came by keypress or voice."""
         if self._answered:
             return
         self._answered = True
         self.dismiss(decision)
+
+    def try_voice(self, transcript: str) -> None:
+        """Resolve this open modal from a spoken transcript (the hands-free path).
+
+        Destructive commands ignore the spoken answer (``spoken_decision`` returns None) so only
+        a keypress can green-light them; otherwise an unambiguous affirmative approves and
+        anything else (negation, bare "yes", unrelated speech) rejects — fail-safe. A no-op once
+        already answered (a keypress won the race)."""
+        decision = spoken_decision(self._tool_name, self._args, transcript)
+        if decision is None:
+            return
+        self._decide("approve" if decision else "reject")
 
     def _detail_markup(self) -> str:
         """The 'Run tool X?' line — the compact arg, or the full args when expanded."""

@@ -258,6 +258,9 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
             config=config,
             deps=deps,
             on_session=lambda session: app.set_interrupt(session.interrupt_reply),
+            # Hands-free --files approvals: the engine routes the next spoken transcript during an
+            # approval pause to the open modal (which applies the grammar / destructive-tier gate).
+            on_approval_voice=app.submit_voice_approval,
         )
 
     app = LiveAgentApp(

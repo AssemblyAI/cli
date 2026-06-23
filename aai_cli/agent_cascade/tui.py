@@ -156,6 +156,9 @@ class LiveAgentApp(App[None]):
         self._interrupt: Callable[[], bool] | None = None
         # Set once the user picks "auto" on a --files write prompt; later writes then skip the modal.
         self._auto_approve_writes = False
+        # The currently-open approval modal, so the engine can resolve it by voice (None when no
+        # write is awaiting a decision); see submit_voice_approval.
+        self._approval_screen: ApprovalScreen | None = None
         self._voice_phase = "listening"
         self._voice_frames = itertools.cycle(tui_status.VOICE_FRAMES)
         self._voice_timer: Timer | None = None
@@ -361,11 +364,26 @@ class LiveAgentApp(App[None]):
         """
         if self._auto_approve_writes:
             return True
-        decision = self._modal_result(ApprovalScreen(name, args), default="reject")
+        screen = ApprovalScreen(name, args)
+        self._approval_screen = screen  # let the engine resolve it by voice while it's open
+        try:
+            decision = self._modal_result(screen, default="reject")
+        finally:
+            self._approval_screen = None
         if decision == "auto":
             self._auto_approve_writes = True
             return True
         return decision == "approve"
+
+    def submit_voice_approval(self, transcript: str) -> None:
+        """Resolve an open --files approval modal from a spoken transcript (no-op if none is open).
+
+        The engine routes the next final transcript here during an approval pause; the modal's
+        own ``try_voice`` applies the grammar (and ignores voice for destructive commands). Hops
+        to the UI thread since the engine calls this from the STT reader thread."""
+        screen = self._approval_screen
+        if screen is not None:
+            self.call_from_thread(screen.try_voice, transcript)
 
     def set_interrupt(self, interrupt: Callable[[], bool]) -> None:
         """Wire the session's reply-interrupt once the cascade has built its session.
