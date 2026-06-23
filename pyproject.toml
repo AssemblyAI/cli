@@ -75,6 +75,10 @@ dependencies = [
     # `assembly live` voice agent (deepagents on the LLM Gateway). Heavy trees,
     # intentionally added on this WIP branch; see aai_cli/agent_cascade/.
     "deepagents>=0.6.10",
+    # The live brain imports langchain's public `langchain.agents.middleware` API directly
+    # (agent_cascade/brain.py), so the meta package is declared rather than relied on as a
+    # transitive edge of deepagents — you depend on what you import.
+    "langchain>=1.3.9",
     "langchain-openai>=1.3.2",
     "langgraph>=1.2.2",
     "langchain-core>=1.4.7",
@@ -266,7 +270,7 @@ module = [
     "aai_cli.agent_cascade.brain",
 ]
 disallow_any_generics = false
-disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg"]
+disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg", "list-item"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of

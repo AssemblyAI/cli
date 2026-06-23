@@ -13,12 +13,21 @@ _GEOCODE: dict[str, object] = {
     "results": [{"name": "Paris", "latitude": 48.85, "longitude": 2.35, "country": "France"}]
 }
 _FORECAST: dict[str, object] = {
-    "current": {"temperature_2m": 14.3, "weather_code": 2},
+    "current": {
+        "temperature_2m": 14.3,
+        "relative_humidity_2m": 82,
+        "apparent_temperature": 13.1,
+        "weather_code": 2,
+        "wind_speed_10m": 11.5,
+    },
     "daily": {
         "time": ["2026-06-22", "2026-06-23", "2026-06-24"],
-        "temperature_2m_max": [17.2, 17.0, 19.1],
-        "temperature_2m_min": [9.0, 9.4, 11.2],
+        # Today's high/low (index 0) deliberately differ after rounding from tomorrow's
+        # (index 1) so an off-by-one index mutant in the Today line can't survive.
+        "temperature_2m_max": [24.4, 17.0, 19.1],
+        "temperature_2m_min": [14.0, 9.4, 11.2],
         "weather_code": [2, 61, 0],
+        "precipitation_probability_max": [30, 80, 10],
     },
 }
 
@@ -63,11 +72,11 @@ def test_geocode_returns_top_match_and_hits_geocoding_host():
 
 
 def test_geocode_no_results_is_none():
-    assert weather_tool._geocode("Nowhereville", fetch=lambda url: {"results": []}) is None
+    assert weather_tool._geocode("Nowhereville", fetch=lambda _url: {"results": []}) is None
 
 
 def test_geocode_missing_results_key_is_none():
-    assert weather_tool._geocode("x", fetch=lambda url: {}) is None
+    assert weather_tool._geocode("x", fetch=lambda _url: {}) is None
 
 
 # --- _forecast ---------------------------------------------------------------
@@ -88,18 +97,71 @@ def test_forecast_requests_current_and_daily_for_coordinates():
     assert "current=temperature_2m" in seen["url"]
     assert "daily=temperature_2m_max" in seen["url"]
     assert "forecast_days=3" in seen["url"]
+    # The widened field set: current humidity/feels-like/wind and daily rain chance must
+    # all be requested, or the report can't speak them. Each substring kills the mutant
+    # that drops that field from the query.
+    assert "relative_humidity_2m" in seen["url"]
+    assert "apparent_temperature" in seen["url"]
+    assert "wind_speed_10m" in seen["url"]
+    assert "precipitation_probability_max" in seen["url"]
 
 
 # --- format_report -----------------------------------------------------------
 
 
-def test_format_report_renders_current_in_both_units_and_two_forecast_days():
+def test_format_report_renders_current_today_and_two_forecast_days():
     report = weather_tool.format_report("Paris", _FORECAST)
-    # Current line: rounded °C, derived °F, and the condition text.
-    assert "In Paris it's 14°C (58°F) and partly cloudy." in report
+    # Current line: rounded °C, derived °F, feels-like, condition, humidity, wind.
+    assert (
+        "In Paris it's 14°C (58°F), feels like 13°C, partly cloudy. "
+        "Humidity 82%, wind 12 km/h." in report
+    )
+    # Today's own high/low + rain chance + condition (the bug fix: today was dropped).
+    assert "Today 14 to 24°C, 30% chance of rain, partly cloudy." in report
     # Two forecast days, labelled, °C lows-to-highs with their own conditions.
     assert "Tomorrow 9 to 17°C, light rain." in report
     assert "Then 11 to 19°C, clear sky." in report
+
+
+def test_format_report_today_line_omits_rain_chance_when_absent():
+    # No precipitation_probability_max in the daily payload: the Today line still renders
+    # high/low/condition but drops the rain clause rather than speaking "0% chance".
+    data: dict[str, object] = {
+        "current": {"temperature_2m": 10.0, "weather_code": 0},
+        "daily": {
+            "temperature_2m_max": [20.0],
+            "temperature_2m_min": [8.0],
+            "weather_code": [0],
+        },
+    }
+    report = weather_tool.format_report("Testville", data)
+    assert "Today 8 to 20°C, clear sky." in report
+    assert "chance of rain" not in report
+
+
+def test_format_report_omits_today_line_when_daily_is_empty():
+    # An empty daily block must not synthesize a Today line (no IndexError, no empty
+    # "Today ." fragment) — just the current-conditions sentence survives.
+    data: dict[str, object] = {"current": {"temperature_2m": 10.0, "weather_code": 0}, "daily": {}}
+    report = weather_tool.format_report("Testville", data)
+    assert report.startswith("In Testville it's 10°C")
+    assert "Today" not in report
+
+
+def test_format_report_omits_today_line_when_one_today_array_is_empty():
+    # The high/low arrays are present but the weather_code array is empty: the Today
+    # guard is an `and` over all three, so a missing one means "no today data" rather
+    # than indexing an empty list. Kills the `and`->`or` mutation in the guard.
+    data: dict[str, object] = {
+        "current": {"temperature_2m": 10.0, "weather_code": 0},
+        "daily": {
+            "temperature_2m_max": [20.0],
+            "temperature_2m_min": [8.0],
+            "weather_code": [],
+        },
+    }
+    report = weather_tool.format_report("Testville", data)
+    assert "Today" not in report
 
 
 # --- build_weather_tool (end to end via the seam) ----------------------------
@@ -109,19 +171,20 @@ def test_tool_name_and_happy_path():
     tool = weather_tool.build_weather_tool(fetch=_fake_fetch())
     assert tool.name == weather_tool.WEATHER_TOOL_NAME == "get_weather"
     out = tool.invoke({"location": "Paris"})
-    assert "In Paris it's 14°C (58°F) and partly cloudy." in out
+    assert "In Paris it's 14°C (58°F), feels like 13°C, partly cloudy." in out
+    assert "Today 14 to 24°C, 30% chance of rain, partly cloudy." in out
     assert "Tomorrow 9 to 17°C, light rain." in out
 
 
 def test_tool_location_not_found_message():
-    tool = weather_tool.build_weather_tool(fetch=lambda url: {"results": []})
+    tool = weather_tool.build_weather_tool(fetch=lambda _url: {"results": []})
     assert tool.invoke({"location": "Nowhereville"}) == (
         "I couldn't find a place called 'Nowhereville'."
     )
 
 
 def test_tool_network_error_is_graceful():
-    def boom(url: str) -> object:
+    def boom(_url: str) -> object:
         raise RuntimeError("open-meteo down")
 
     tool = weather_tool.build_weather_tool(fetch=boom)

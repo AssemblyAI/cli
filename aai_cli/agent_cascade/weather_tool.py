@@ -118,13 +118,50 @@ def _forecast(lat: float, lon: float, *, fetch: Fetcher) -> dict[str, object]:
         {
             "latitude": lat,
             "longitude": lon,
-            "current": "temperature_2m,weather_code",
-            "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+            "current": (
+                "temperature_2m,relative_humidity_2m,apparent_temperature,"
+                "weather_code,wind_speed_10m"
+            ),
+            "daily": (
+                "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"
+            ),
             "forecast_days": _FORECAST_DAYS,
             "timezone": "auto",
         }
     )
     return jsonshape.as_mapping(fetch(f"{_FORECAST_URL}?{query}")) or {}
+
+
+def _current_line(name: str, current: dict[str, object]) -> str:
+    """The current-conditions sentence: temperature (both units), feels-like, humidity, wind."""
+    temp = jsonshape.as_float(current.get("temperature_2m"))
+    feels = round(jsonshape.as_float(current.get("apparent_temperature")))
+    humidity = round(jsonshape.as_float(current.get("relative_humidity_2m")))
+    wind = round(jsonshape.as_float(current.get("wind_speed_10m")))
+    desc = describe_weather_code(jsonshape.as_int(current.get("weather_code")))
+    return (
+        f"In {name} it's {round(temp)}°C ({_c_to_f(temp)}°F), feels like {feels}°C, {desc}. "
+        f"Humidity {humidity}%, wind {wind} km/h."
+    )
+
+
+def _today_line(daily: dict[str, object]) -> str | None:
+    """Today's own high/low, rain chance, and condition — None if today's data is absent.
+
+    This is the line the old report dropped: it started the daily outlook at *tomorrow*,
+    so "what's the high today?" had no datum and the model guessed from the current temp.
+    """
+    highs = jsonshape.object_list(daily.get("temperature_2m_max"))
+    lows = jsonshape.object_list(daily.get("temperature_2m_min"))
+    codes = jsonshape.object_list(daily.get("weather_code"))
+    if not (highs and lows and codes):
+        return None
+    low = round(jsonshape.as_float(lows[0]))
+    high = round(jsonshape.as_float(highs[0]))
+    cond = describe_weather_code(jsonshape.as_int(codes[0]))
+    probs = jsonshape.object_list(daily.get("precipitation_probability_max"))
+    rain = f"{round(jsonshape.as_float(probs[0]))}% chance of rain, " if probs else ""
+    return f"Today {low} to {high}°C, {rain}{cond}."
 
 
 def _forecast_lines(daily: dict[str, object]) -> list[str]:
@@ -143,16 +180,21 @@ def _forecast_lines(daily: dict[str, object]) -> list[str]:
 
 
 def format_report(name: str, data: dict[str, object]) -> str:
-    """Render the Open-Meteo forecast as one short, speakable string.
+    """Render the Open-Meteo forecast as one compact, model-readable string.
 
-    The current temperature is given in both units (the agent speaks whichever fits
-    the conversation); the outlook days stay in °C to keep the spoken reply short.
+    This text is the *tool result* fed back to the live agent's LLM (not spoken
+    verbatim), so it carries every interesting datum Open-Meteo returns — current
+    conditions (temperature in both units, feels-like, humidity, wind), today's own
+    high/low and rain chance, then a two-day outlook — and lets the model pick out
+    whatever the user asked for. The current temperature is given in both units; the
+    daily lines stay in °C to keep the reply short.
     """
     current = jsonshape.as_mapping(data.get("current")) or {}
     daily = jsonshape.as_mapping(data.get("daily")) or {}
-    temp = jsonshape.as_float(current.get("temperature_2m"))
-    desc = describe_weather_code(jsonshape.as_int(current.get("weather_code")))
-    lines = [f"In {name} it's {round(temp)}°C ({_c_to_f(temp)}°F) and {desc}."]
+    lines = [_current_line(name, current)]
+    today = _today_line(daily)
+    if today is not None:
+        lines.append(today)
     lines.extend(_forecast_lines(daily))
     return " ".join(lines)
 
