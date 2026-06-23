@@ -99,22 +99,32 @@ def test_generate_reply_threads_system_prompt_and_history():
     assert {"role": "user", "content": "prior"} in captured["messages"]
 
 
-def test_generate_reply_trims_history_window():
+def test_generate_reply_keeps_full_untrimmed_history():
+    # Context-window management now lives in the deepagents brain's SummarizationMiddleware, so the
+    # engine no longer windows client-side: max_history is inert here and the prior turn is kept
+    # even though it exceeds it (a trim would have dropped the user "hi").
     session, _renderer, _player = make_session(
         stream_reply=_deltas("a. b."), config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "user", "content": "hi"})
     session._generate_reply()
-    assert session.history == [{"role": "assistant", "content": "a. b."}]
+    assert session.history == [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "a. b."},
+    ]
 
 
-def test_on_turn_trims_history_window():
+def test_on_turn_keeps_full_untrimmed_history():
+    # Same: a new user turn appends without dropping the older assistant turn, despite max_history=1.
     session, _renderer, _player = make_session(
         stream_reply=_deltas(""), config=CascadeConfig(max_history=1)
     )
     session.history.append({"role": "assistant", "content": "old"})
     session.on_turn(_turn("newest"))
-    assert session.history == [{"role": "user", "content": "newest"}]
+    assert session.history == [
+        {"role": "assistant", "content": "old"},
+        {"role": "user", "content": "newest"},
+    ]
 
 
 def test_generate_reply_stop_during_a_clause_drops_it_from_the_record():

@@ -8,7 +8,8 @@ with one obvious tool rather than a menu it has to choose among. The graph is bu
 (:func:`build_graph`) and driven turn-by-turn with the running history the
 cascade already keeps (:func:`build_streamer`); tools are read-only and auto-approved,
 because a spoken turn can't pause for a keyboard confirmation, and the system prompt
-keeps every reply short and speakable.
+keeps every reply short and speakable. Context-window management is deepagents' job (its built-in
+``SummarizationMiddleware``), so the engine feeds the full untrimmed history each turn.
 
 The graph is the only network seam: :func:`build_streamer` accepts an injected graph,
 so the per-turn streaming reply leg is unit-tested against a fake with no sockets — the
