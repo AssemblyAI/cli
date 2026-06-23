@@ -318,6 +318,24 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
     assert any(isinstance(mw, ToolCallLimitMiddleware) for mw in captured["middleware"])
 
 
+def test_build_graph_threads_project_context_into_system_prompt(monkeypatch):
+    import deepagents
+
+    captured = {}
+
+    def fake_create(*, model, tools, system_prompt, middleware):
+        del model, tools, middleware
+        captured["system_prompt"] = system_prompt
+        return "graph"
+
+    monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **k: object())
+    cfg = CascadeConfig(project_context="# AGENTS.md\n\nRun uv sync first.")
+    brain.build_graph("k", cfg, tools=[], mcp_tools=[])
+    # The launch directory's instruction file rides into the live agent's system prompt.
+    assert "Run uv sync first." in captured["system_prompt"]
+
+
 def test_build_graph_loads_mcp_tools_from_config_when_not_injected(monkeypatch):
     import deepagents
 

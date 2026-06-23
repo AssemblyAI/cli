@@ -79,3 +79,6 @@ class CascadeConfig:
     # paths are normalized virtual roots (always leading "/", no ".."), matching the virtual_mode
     # backend the model addresses. execute is never auto-approved — it can't be path-scoped.
     auto_write_paths: tuple[str, ...] = ()
+    # The launch directory's AGENTS.md/CLAUDE.md, read into the system prompt so the agent
+    # answers grounded in the project it's run from (None when no instruction file is present).
+    project_context: str | None = None
