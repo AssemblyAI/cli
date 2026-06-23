@@ -257,3 +257,34 @@ def test_run_cascade_closes_player_when_stt_raises():
             renderer=FakeRenderer(), player=player, config=CascadeConfig(greeting=""), deps=deps
         )
     assert player.closed is True
+
+
+def test_runtime_reply_sentinels_are_frozen():
+    # Done/Failure/Timeout are frozen dataclasses; the frozen=True->False mutant is killed by
+    # asserting a write raises. A variable attr name dodges ruff B010 and pyright's frozen check.
+    import dataclasses
+
+    probe = "injected_probe"
+    for instance in (_runtime.Done(), _runtime.Failure(error=APIError("x")), _runtime.Timeout()):
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(instance, probe, 1)
+
+
+def test_cascade_session_speaking_event_is_not_an_init_field():
+    # _speaking is internal state, never a constructor argument; the init=False->True mutant is
+    # killed by asserting the field stays init=False.
+    import dataclasses
+
+    fields = {f.name: f for f in dataclasses.fields(engine.CascadeSession)}
+    assert fields["_speaking"].init is False
+
+
+def test_detach_executor_threads_noop_without_registry(monkeypatch):
+    # When concurrent.futures exposes no thread registry, detach returns before touching it. A
+    # thread that WOULD be popped is staged, so the mutant dropping the early return crashes on
+    # None.pop and the test kills it; with the return intact the call is a clean no-op.
+    monkeypatch.setattr(_runtime.cf_thread, "_threads_queues", None, raising=False)
+    staged = threading.Thread(target=lambda: None)
+    monkeypatch.setattr(_runtime, "executor_threads", lambda: {staged})
+
+    _runtime.detach_executor_threads_since(set())  # no AttributeError: early-returns on None

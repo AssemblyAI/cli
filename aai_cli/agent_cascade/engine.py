@@ -59,6 +59,11 @@ from aai_cli.ui import output
 if TYPE_CHECKING:
     from openai.types.chat import ChatCompletionMessageParam
 
+# engine is the cascade's public seam: it owns CascadeSession/run_cascade and deliberately
+# re-exports the injection protocols that moved to _io (CascadeDeps/Renderer/Player), so callers
+# keep importing them from here. __all__ marks the re-exports as explicit (mypy --no-implicit-reexport).
+__all__ = ["CascadeDeps", "CascadeSession", "Player", "Renderer", "run_cascade"]
+
 # A clause is flushed to TTS on a soft separator (comma/semicolon/colon) only once it is at
 # least this long, so we don't synthesize a choppy two-word fragment. Pinned by a text test.
 _MIN_CLAUSE_CHARS = 25

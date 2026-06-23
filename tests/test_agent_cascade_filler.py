@@ -9,11 +9,13 @@ sockets, mic, or speaker.
 
 from __future__ import annotations
 
+from langchain_core.messages import AIMessageChunk
+
 from aai_cli.agent_cascade import brain, weather_tool
 from aai_cli.agent_cascade.brain import SpeechDelta, ToolNotice
 from aai_cli.core.errors import APIError
 from tests._cascade_fakes import make_session
-from tests.test_agent_cascade_brain import AIMessageChunk, _collect, _MessageStreamGraph
+from tests.test_agent_cascade_brain import _collect, _MessageStreamGraph
 
 # --- brain: the per-tool filler table + the carrier ToolNotice ---------------
 

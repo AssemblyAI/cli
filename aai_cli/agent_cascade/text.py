@@ -39,7 +39,9 @@ def pop_clauses(buffer: str, *, min_chars: int) -> tuple[list[str], str]:
         is_soft = char in _SOFT_SEPARATORS
         if not (is_hard or is_soft) or not _is_boundary(buffer, index):
             continue
-        clause = buffer[start : index + 1].strip()
+        # +1/+2 are equivalent here: _is_boundary guarantees text[index+1] is whitespace or EOF,
+        # so any extra char a +2 would include is stripped off the clause anyway.
+        clause = buffer[start : index + 1].strip()  # pragma: no mutate
         if is_soft and len(clause) < min_chars:
             continue  # too short to speak on its own — keep accumulating
         if clause:

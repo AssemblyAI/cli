@@ -10,7 +10,9 @@ from __future__ import annotations
 import queue
 import types
 
-from aai_cli.agent_cascade import engine
+import pytest
+
+from aai_cli.agent_cascade import brain, engine
 from aai_cli.agent_cascade.brain import ApprovalPause, SpeechDelta
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.app.context import AppState
@@ -120,3 +122,78 @@ def test_approval_deadline_suspends_then_restores_into_the_future():
     restored = engine._approval_deadline(ApprovalPause(active=False))
     assert restored is not None
     assert restored > time.monotonic()
+
+
+def test_decide_coerces_non_dict_args_to_empty_dict():
+    # When a pending action's args isn't a dict, _decide hands the approver {} (not the raw
+    # value). Asserting the approver SAW {} kills the mutant that drops the coercion.
+    seen: dict[str, object] = {}
+
+    def approver(name: str, args: dict[str, object]) -> bool:
+        seen["name"] = name
+        seen["args"] = args
+        return True
+
+    decision = brain._decide({"name": "execute", "args": [1, 2]}, approver)
+
+    assert decision == {"type": "approve"}
+    assert seen["name"] == "execute"
+    assert seen["args"] == {}
+
+
+def test_decide_passes_dict_args_through_unchanged():
+    # When args IS a dict, _decide forwards it verbatim (the `or {}` keeps the real dict). This
+    # kills the Or->And mutant, which would collapse a real dict to {} before the approver sees it.
+    seen: dict[str, object] = {}
+
+    def approver(name: str, args: dict[str, object]) -> bool:
+        seen["args"] = args
+        return True
+
+    brain._decide({"name": "write_file", "args": {"file_path": "n.txt"}}, approver)
+
+    assert seen["args"] == {"file_path": "n.txt"}
+
+
+def test_brain_stream_event_dataclasses_are_frozen():
+    # SpeechDelta/ToolNotice/ApprovalPause are frozen; the frozen=True->False mutant is killed
+    # by asserting a write raises. A variable attr name dodges ruff B010 and pyright's frozen check.
+    import dataclasses
+
+    probe = "injected_probe"
+    events = (
+        brain.SpeechDelta(text="x"),
+        brain.ToolNotice(label="Searching", fillers=("one moment",)),
+        brain.ApprovalPause(active=True),
+    )
+    for event in events:
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(event, probe, 1)
+
+
+class _SpyGatedGraph:
+    """A graph satisfying _GatedGraph that records get_state calls (the gate inspection)."""
+
+    def __init__(self) -> None:
+        self.get_state_calls = 0
+
+    def invoke(self, input, config=None):  # satisfies CompiledAgent (unused by the stream path)
+        return {}
+
+    def stream(self, graph_input, config, *, stream_mode):
+        return iter(())  # no chunks; the test only cares which path runs
+
+    def get_state(self, config):
+        self.get_state_calls += 1
+        return types.SimpleNamespace(interrupts=())
+
+
+def test_stream_graph_defaults_to_ungated():
+    # _stream_graph's `gated` defaults to False: an ungated pass never inspects interrupts. The
+    # gated=False->True mutant would route a _GatedGraph through _stream_gated -> get_state, so
+    # asserting get_state is never called kills it.
+    graph = _SpyGatedGraph()
+
+    list(brain._stream_graph(graph, []))
+
+    assert graph.get_state_calls == 0

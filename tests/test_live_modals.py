@@ -164,3 +164,11 @@ def test_risky_command_shows_warning() -> None:
             _ = result  # dismissed — not the point of this test (the visual golden covers it)
 
     _run(go())
+
+
+def test_approval_screen_starts_unanswered() -> None:
+    # _answered is the double-dismiss guard; it must start False so the first y/a/n decision
+    # actually dismisses. (A synchronous check so the mutation gate attributes the line here,
+    # not only to the async keyboard pilots where coverage-context can miss it.)
+    screen = ApprovalScreen("write_file", {"file_path": "x.py"})
+    assert screen._answered is False

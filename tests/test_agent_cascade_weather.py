@@ -183,3 +183,31 @@ def test_wmo_descriptions_table_is_exact():
         96: "thunderstorms with hail",
         99: "severe thunderstorms with hail",
     }
+
+
+def test_get_json_fetches_and_parses_via_httpx(monkeypatch):
+    # Exercises the default network seam (httpx GET -> raise_for_status -> json), mocking
+    # httpx so no socket opens. Asserts the URL/timeout passthrough and that the response is
+    # status-checked, so the mutation gate can't drop any of those lines silently.
+    import httpx
+
+    calls: dict[str, object] = {}
+
+    class _Resp:
+        def raise_for_status(self) -> None:
+            calls["raised"] = True
+
+        def json(self) -> object:
+            return {"ok": True}
+
+    def fake_get(url: str, timeout: float) -> _Resp:
+        calls["url"] = url
+        calls["timeout"] = timeout
+        return _Resp()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert weather_tool._get_json("https://example.test/x") == {"ok": True}
+    assert calls["url"] == "https://example.test/x"
+    assert calls["timeout"] == weather_tool._TIMEOUT
+    assert calls["raised"] is True
