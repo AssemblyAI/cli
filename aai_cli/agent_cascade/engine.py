@@ -89,8 +89,9 @@ class CascadeSession:
     # Set while a --files write/run awaits approval: the next final transcript answers the gate
     # (voice) instead of starting a new turn. Armed/cleared by _consume on the ApprovalPause events.
     _awaiting_approval: threading.Event = field(
-        default_factory=threading.Event, init=False
-    )  # pragma: no mutate
+        default_factory=threading.Event,
+        init=False,  # pragma: no mutate
+    )
     # Set only while a reply is in its audible speak-and-enqueue phase (not while it's still
     # *thinking* — generating in a blocking graph call). A UI interrupt keys off this so Ctrl-C
     # can quit while the agent thinks instead of being swallowed by a no-op "interrupt".

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
+from textual.widgets import Label
+
 from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.agent_cascade.tui import LiveAgentApp
 
@@ -130,20 +132,25 @@ def test_decide_is_idempotent() -> None:
 
 
 def test_expand_toggles_detail_markup() -> None:
-    # ``e`` toggles between the compact identifying arg and the full args.
+    # The modal opens collapsed (the compact identifying arg only) and ``e`` toggles to the full
+    # args — a collapsed-by-default start is what keeps a big write from rendering inline on open.
     async def go() -> None:
         app = _app()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            app.push_screen(
-                ApprovalScreen(
-                    "write_file", {"file_path": "app.py", "content": "PORT = 8080\nDEBUG = 1"}
-                )
+            screen = ApprovalScreen(
+                "write_file", {"file_path": "app.py", "content": "PORT = 8080\nDEBUG = 1"}
             )
+            app.push_screen(screen)
             await pilot.pause()
-            # Expanded view: pressing e reveals the full args.
+            # Collapsed by default: just the identifying path, never the file body.
+            collapsed = str(screen.query_one("#approvaldetail", Label).render())
+            assert "app.py" in collapsed
+            assert "PORT = 8080" not in collapsed
+            # Expanded view: pressing e reveals the full args (the content).
             await pilot.press("e")
             await pilot.pause()
+            assert "PORT = 8080" in str(screen.query_one("#approvaldetail", Label).render())
 
     _run(go())
 

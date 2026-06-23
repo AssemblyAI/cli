@@ -20,6 +20,7 @@ from aai_cli.agent_cascade.messages import (
     ToolAffordance,
     UserMessage,
 )
+from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
 from aai_cli.core.errors import CLIError
 
@@ -463,3 +464,34 @@ def test_tui_renderer_drops_calls_after_the_app_stops() -> None:
     renderer = _TuiRenderer(app)
     renderer.user_final("ignored")  # returns without raising
     renderer.reply_done(interrupted=False)
+
+
+def test_submit_voice_approval_feeds_an_open_modal_and_no_ops_otherwise() -> None:
+    # During a --files approval pause the engine routes the next final transcript here from the
+    # STT reader thread; it must hop to the UI thread and feed the open ApprovalScreen's try_voice.
+    # With no modal open it's a safe no-op (a stray transcript before/after the pause is dropped).
+    async def go() -> None:
+        heard: list[str] = []
+
+        class _SpyApproval(ApprovalScreen):
+            def try_voice(self, transcript: str) -> None:
+                heard.append(transcript)
+
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # No modal open -> the None guard short-circuits, nothing is routed.
+            no_modal = threading.Thread(target=app.submit_voice_approval, args=("nothing open",))
+            no_modal.start()
+            no_modal.join()
+            # Open a modal on the UI thread, then resolve it by voice from a worker thread (the hop
+            # call_from_thread requires a non-UI thread).
+            app._approval_screen = _SpyApproval("write_file", {"file_path": "x.py"})
+            worker = threading.Thread(target=app.submit_voice_approval, args=("yes, run it",))
+            worker.start()
+            assert await _wait_until(pilot, lambda: heard == ["yes, run it"])
+            worker.join()
+        # Only the open-modal call reached try_voice; the no-modal call added nothing.
+        assert heard == ["yes, run it"]
+
+    _run(go())

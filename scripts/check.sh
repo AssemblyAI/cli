@@ -334,8 +334,11 @@ if git rev-parse --verify --quiet origin/main >/dev/null; then
     exit 1
   fi
 
-  base_cast_count="$(hatch_base 'cast\(' aai_cli tests)"
-  work_cast_count="$(hatch_work 'cast\(' aai_cli tests)"
+  # \b so a function whose name merely ends in "cast" (e.g. weather_tool._forecast(),
+  # broadcast()) isn't miscounted as a typing.cast() escape hatch — the bare cast\( substring
+  # false-matched _forecast( and failed this gate on a branch that added no real cast.
+  base_cast_count="$(hatch_base '\bcast\(' aai_cli tests)"
+  work_cast_count="$(hatch_work '\bcast\(' aai_cli tests)"
   if (( work_cast_count > base_cast_count )); then
     echo "New cast() usage found: ${work_cast_count} current vs ${base_cast_count} at the merge-base with origin/main."
     exit 1

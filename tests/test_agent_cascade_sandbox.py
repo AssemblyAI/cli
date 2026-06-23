@@ -237,7 +237,7 @@ def test_execute_bwrap_uses_bwrap_argv(tmp_path):
 
 
 def test_execute_capability_none_refuses_and_never_runs(tmp_path):
-    # Record-and-assert-not-called (no `# pragma: no cover` — that's a gated escape hatch).
+    # Record-and-assert-not-called (no no-cover pragma — that's a gated escape hatch).
     calls: list[list[str]] = []
 
     def runner(argv: list[str], cwd: str, timeout: int) -> sandbox._Result:
