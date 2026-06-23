@@ -119,6 +119,50 @@ def test_system_prompt_omits_file_safety_warning_without_files():
     assert "can't be undone" not in text
 
 
+def test_system_prompt_latches_persona_against_rules_with_tools():
+    # A user persona can pull against the spoken/honesty rules (a chatty in-character persona
+    # fighting "keep it short"), so the prompt must state the rules outrank the persona's style,
+    # and the latch must sit between the persona and the guidance it governs.
+    text = prompt.build_system_prompt(
+        "You are a pirate.", tools=[_NamedTool(prompt.WEB_SEARCH_TOOL_NAME)]
+    )
+    latch = "the rules below override the persona's style"
+    assert latch in text
+    assert text.index("You are a pirate.") < text.index(latch) < text.index("search the web")
+
+
+def test_system_prompt_latches_persona_against_rules_without_tools():
+    # The latch applies on the no-tools path too: the persona must not override the
+    # answer-from-knowledge / don't-promise-tools rules either.
+    text = prompt.build_system_prompt("You are a pirate.", tools=[])
+    assert "the rules below override the persona's style" in text
+    assert "your own knowledge" in text
+
+
+def test_system_prompt_tells_model_to_retry_a_thin_lookup_before_giving_up():
+    # An empty/thin tool result shouldn't end the turn — the model should rephrase once before
+    # concluding it found nothing (the openclaw "vary query before concluding" technique).
+    text = prompt.build_system_prompt("persona", tools=[_NamedTool(prompt.WEB_SEARCH_TOOL_NAME)])
+    assert "try once more with different wording" in text
+
+
+def test_no_tools_guidance_gives_a_worked_example_of_not_promising_a_lookup():
+    # The documented failure (promise to look something up, then go silent) is reinforced with a
+    # concrete spoken example, not just the abstract rule.
+    text = prompt.build_system_prompt("persona", tools=[])
+    assert "rather than offering to look it up" in text
+
+
+def test_files_safety_tells_model_to_read_before_overwriting():
+    # --files writes can clobber a file wholesale; the model must read first and merge rather
+    # than replace unless asked. Only meaningful when the file tools are bound.
+    with_files = prompt.build_system_prompt("persona", tools=[], files=True)
+    assert "Read a file before overwriting it" in with_files
+    assert "Read a file before overwriting it" not in prompt.build_system_prompt(
+        "persona", tools=[], files=False
+    )
+
+
 def test_join_clause_grammar():
     # One/two/three capability phrases each render with natural conjunctions.
     assert prompt._join_clause(["a"]) == "a"

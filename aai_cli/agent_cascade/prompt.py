@@ -22,6 +22,14 @@ _SPOKEN_TAIL = (
     "Your reply is read aloud, so keep it short and spoken — no markdown, lists, code, or raw URLs."
 )
 
+# The persona is user-supplied and can pull against the operational rules — a verbose or
+# strongly in-character persona ("a pirate who loves long tales") fights the spoken-brevity and
+# honesty guidance. State once that the rules below outrank the persona's *style*, so a chatty
+# persona can't override the constraints that keep the spoken agent short and truthful.
+_PERSONA_LATCH = (
+    "Stay in character, but the rules below override the persona's style when they conflict."
+)
+
 # Advertised when --files is on, so the model knows it can touch the launch directory (and the
 # spoken tail still keeps replies short). Writes pause for the user's y/n; reads are immediate.
 _FILE_CAPABILITY = (
@@ -38,7 +46,8 @@ _NO_TOOLS_GUIDANCE = (
     "You have no external tools available, so answer from your own knowledge. Never say "
     "you will search the web, look something up, or fetch a page — you can't do any of "
     "that, so don't promise it; if a question needs information you don't have, say so "
-    f"briefly instead. {_SPOKEN_TAIL}"
+    "briefly instead. For example, say you don't have that handy rather than offering to "
+    f"look it up and then going quiet. {_SPOKEN_TAIL}"
 )
 
 # Closes the guidance whenever tools are bound: a spoken agent that narrates a success it
@@ -46,7 +55,8 @@ _NO_TOOLS_GUIDANCE = (
 # actually did rather than inventing the result it expected.
 _HONESTY_GUIDANCE = (
     "Don't claim you've done something until the tool actually returns; if a tool fails or "
-    "finds nothing, say so briefly instead of inventing an answer."
+    "finds nothing, say so briefly instead of inventing an answer. If a search or lookup comes "
+    "back empty or thin, try once more with different wording before giving up."
 )
 
 # Added when --files is on: writing files and running code change the user's project and can't
@@ -54,7 +64,9 @@ _HONESTY_GUIDANCE = (
 # before it has actually landed.
 _FILE_SAFETY_GUIDANCE = (
     "Writing files and running code change this project and can't be undone — confirm out "
-    "loud before anything destructive or irreversible, and never say a change landed until it has."
+    "loud before anything destructive or irreversible, and never say a change landed until it has. "
+    "Read a file before overwriting it, and prefer merging your change into what's there over "
+    "replacing the whole file unless asked."
 )
 
 
@@ -130,7 +142,7 @@ def build_system_prompt(
     if files:
         capabilities.append(_FILE_CAPABILITY)
     if not capabilities:
-        return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
+        return f"{persona}\n\n{_PERSONA_LATCH} {_NO_TOOLS_GUIDANCE}"
     guidance = (
         f"You can use tools to help answer: {_join_clause(capabilities)}. Reach for a "
         "tool when a question needs fresh or external information; answer directly and "
@@ -139,4 +151,4 @@ def build_system_prompt(
     )
     if files:
         guidance = f"{guidance} {_FILE_SAFETY_GUIDANCE}"
-    return f"{persona}\n\n{guidance} {_SPOKEN_TAIL}"
+    return f"{persona}\n\n{_PERSONA_LATCH} {guidance} {_SPOKEN_TAIL}"
