@@ -31,7 +31,12 @@ needs no sockets.
   the live voice agent. The coding agent's toolset is unchanged.
 - **Data source: Open-Meteo (keyless).** Free, no signup, with a companion
   geocoding endpoint to turn a place name into coordinates.
-- **Coverage: current conditions + short forecast** (today + next two days).
+- **Coverage: full current conditions + a multi-day forecast** (today + the next
+  six days). The report surfaces every field an LLM might draw on to answer a
+  follow-up — temperature and feels-like, humidity, precipitation (amount *and*
+  probability), wind speed / direction / gusts, cloud cover, pressure, day/night,
+  the UV index, and sunrise / sunset — rather than a single spoken sentence. The
+  agent reads aloud only the slice the conversation calls for.
 
 ### Out of scope (YAGNI)
 
@@ -59,20 +64,27 @@ get_weather(location)  ──▶  _geocode(location)     ──▶ Open-Meteo ge
 - `Fetcher = Callable[[str], object]` — GETs a URL and returns parsed JSON. The
   default `_get_json` uses `httpx`; tests inject a fake mapping URLs → canned
   JSON. **This is the only network seam.**
-- `_geocode(name, *, fetch)` → resolved display name + latitude/longitude, or
-  `None` when there is no match. Endpoint:
+- `_geocode(name, *, fetch)` → resolved display name + country + latitude/longitude,
+  or `None` when there is no match. Endpoint:
   `https://geocoding-api.open-meteo.com/v1/search?name=<name>&count=1`.
-- `_forecast(lat, lon, *, fetch)` → the `current` and `daily` blocks. Endpoint:
-  `https://api.open-meteo.com/v1/forecast` with
-  `current=temperature_2m,weather_code`,
-  `daily=temperature_2m_max,temperature_2m_min,weather_code`,
-  `forecast_days=3`, temperatures in Celsius (°F derived in formatting).
+- `_forecast(lat, lon, *, fetch)` → the full `current` and `daily` blocks. Endpoint:
+  `https://api.open-meteo.com/v1/forecast` with the full current series
+  (`temperature_2m`, `apparent_temperature`, `relative_humidity_2m`,
+  `precipitation`, `weather_code`, `cloud_cover`, `wind_speed_10m`,
+  `wind_direction_10m`, `wind_gusts_10m`, `pressure_msl`, `is_day`) and daily series
+  (`weather_code`, `temperature_2m_max/min`, `precipitation_sum`,
+  `precipitation_probability_max`, `wind_speed_10m_max`, `wind_gusts_10m_max`,
+  `wind_direction_10m_dominant`, `uv_index_max`, `sunrise`, `sunset`),
+  `forecast_days=7`, `timezone=auto`. Temperatures in Celsius (°F derived in formatting).
 - `describe_weather_code(code)` — pure WMO weather-code → human text
   ("partly cloudy", "light rain", …) with a fallback for an unknown code.
-- `format_report(name, current, daily)` — pure → a short speakable string, e.g.
-  *"In Paris it's 14°C (57°F) and partly cloudy. Tomorrow 9 to 17°C, light rain.
-  Then 11 to 19°C, clear."* Temperatures are given in both units; °F is computed
-  as `round(c * 9 / 5 + 32)`.
+- `describe_wind_direction(degrees)` — pure bearing → 16-point compass name.
+- `format_report(name, country, data)` — pure → a comprehensive, labelled
+  multi-line report: a current-conditions block (both units for temperature/
+  feels-like, plus humidity, cloud cover, precipitation, wind, pressure, day/night)
+  followed by one line per forecast day (high/low in both units, condition,
+  precipitation amount + probability, wind + gusts + direction, UV index, sunrise/
+  sunset). °F is computed as `round(c * 9 / 5 + 32)`.
 - `build_weather_tool(fetch=_get_json)` — the `@tool(WEATHER_TOOL_NAME)` wrapper
   exposing `get_weather(location: str) -> str`. The `fetch` seam is injectable
   for hermetic tests. Plus `WEATHER_TOOL_NAME`, these are the module's only
