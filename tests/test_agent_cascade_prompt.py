@@ -69,6 +69,16 @@ def test_system_prompt_advertises_files_when_enabled():
     assert "your own knowledge" not in text
 
 
+def test_system_prompt_advertises_code_execution_under_files():
+    prompt_text = prompt.build_system_prompt("persona", tools=[], files=True)
+    assert "run code to solve problems" in prompt_text
+
+
+def test_system_prompt_omits_code_execution_without_files():
+    prompt_text = prompt.build_system_prompt("persona", tools=[], files=False)
+    assert "run code" not in prompt_text
+
+
 def test_system_prompt_omits_files_when_disabled():
     # Default: no file capability advertised (the model shouldn't promise file access it lacks).
     text = prompt.build_system_prompt("persona", tools=[], files=False)

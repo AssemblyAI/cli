@@ -458,6 +458,9 @@ max-statements = 40
 # A002: the CompiledAgent protocol must mirror langgraph's `invoke(input, ...)` parameter
 # name so the real compiled graph structurally satisfies it.
 "aai_cli/agent_cascade/brain.py" = ["A002"]
+# A002: a test fake mirrors CompiledAgent.invoke's `input` parameter name so pyright accepts
+# it as the protocol (the param is never used; renaming it breaks the structural match).
+"tests/test_agent_cascade_files.py" = ["A002"]
 
 # TID251 banned-api allowlist (see [tool.ruff.lint.flake8-tidy-imports.banned-api]).
 # Two OS boundaries are fenced; each is owned by a chokepoint so the allowlist stays

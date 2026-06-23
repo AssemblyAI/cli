@@ -71,6 +71,7 @@ _TOOL_LABELS = {
     "read_file": "Reading a file",
     "write_file": "Writing a file",
     "edit_file": "Editing a file",
+    "execute": "Running code",
     "ls": "Listing files",
     "glob": "Finding files",
     "grep": "Searching files",
@@ -190,22 +191,22 @@ def build_live_tools() -> list[BaseTool]:
     return tools
 
 
-# The mutating file tools gated behind human approval when --files is on (reads — incl. grep —
-# stay ungated, and the always-bound `execute` is inert with a non-sandbox backend so it needs
-# no gate). Matches the code agent's write-tool names so the same approval flow applies.
-_WRITE_TOOLS = ("write_file", "edit_file")
+# The mutating tools gated behind human approval when --files is on (reads — incl. grep — stay
+# ungated). execute joins the gate because the backend is now sandbox-capable: it runs real
+# commands in cwd, OS-confined, but every run is still approved.
+_WRITE_TOOLS = ("write_file", "edit_file", "execute")
 
 
 def _build_fs_backend() -> object:
-    """A deepagents filesystem backend rooted at the launch directory.
+    """A sandbox-capable deepagents backend rooted at the launch directory.
 
     ``virtual_mode=True`` maps the model's ``/``-rooted paths under cwd and blocks traversal
-    escapes — the same containment ``assembly code`` gets from its ``LocalShellBackend``. This
-    is a filesystem (not sandbox) backend, so the always-bound ``execute`` tool stays inert.
-    """
-    from deepagents.backends import FilesystemBackend
+    escapes (same containment as before for file ops). Being a ``SandboxBackendProtocol`` backend
+    is what makes deepagents bind a *functional* ``execute`` — and :class:`SandboxedShellBackend`
+    runs it OS-sandboxed in cwd (no network, no escape) rather than on the host shell."""
+    from aai_cli.agent_cascade.sandbox import SandboxedShellBackend
 
-    return FilesystemBackend(root_dir=str(Path.cwd()), virtual_mode=True)
+    return SandboxedShellBackend(root_dir=str(Path.cwd()), virtual_mode=True)
 
 
 def _graph_kwargs(
@@ -225,6 +226,7 @@ def _graph_kwargs(
         "backend": backend_factory(),
         "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
         "checkpointer": InMemorySaver(),
+        "memory": ["./.deepagents/AGENTS.md"],
     }
 
 

@@ -124,6 +124,14 @@ def test_approval_deadline_suspends_then_restores_into_the_future():
     assert restored > time.monotonic()
 
 
+def test_declined_execute_yields_declined_message():
+    action = {"name": "execute", "args": {"command": "rm -rf build"}}
+    assert brain._decide(action, lambda name, args: False) == {
+        "type": "reject",
+        "message": brain._DECLINED,
+    }
+
+
 def test_decide_coerces_non_dict_args_to_empty_dict():
     # When a pending action's args isn't a dict, _decide hands the approver {} (not the raw
     # value). Asserting the approver SAW {} kills the mutant that drops the coercion.
@@ -177,7 +185,7 @@ class _SpyGatedGraph:
     def __init__(self) -> None:
         self.get_state_calls = 0
 
-    def invoke(self, input, config=None):  # satisfies CompiledAgent (unused by the stream path)
+    def invoke(self, input, config=None):  # mirrors langgraph/CompiledAgent.invoke (unused here)
         return {}
 
     def stream(self, graph_input, config, *, stream_mode):

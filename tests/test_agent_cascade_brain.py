@@ -9,6 +9,7 @@ directly.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -50,22 +51,29 @@ def test_graph_kwargs_empty_when_files_off():
     assert brain._graph_kwargs(CascadeConfig(files=False)) == {}
 
 
-def test_graph_kwargs_gates_writes_and_roots_backend_at_cwd(monkeypatch, tmp_path):
-    from pathlib import Path
-
-    from deepagents.backends import FilesystemBackend
+def test_graph_kwargs_gates_writes_and_execute_and_sets_memory(monkeypatch, tmp_path):
+    from aai_cli.agent_cascade import sandbox
 
     monkeypatch.chdir(tmp_path)
     kwargs = brain._graph_kwargs(CascadeConfig(files=True))
 
     backend = kwargs["backend"]
-    assert isinstance(backend, FilesystemBackend)
-    # Rooted at the launch directory; virtual_mode blocks traversal escapes.
+    assert isinstance(backend, sandbox.SandboxedShellBackend)
     assert Path(backend.cwd) == tmp_path.resolve()
     assert backend.virtual_mode is True
-    # Only the mutating file tools are gated — reads (incl. grep) and the inert execute aren't.
-    assert kwargs["interrupt_on"] == {"write_file": True, "edit_file": True}
+    # execute now joins the write gate.
+    assert kwargs["interrupt_on"] == {"write_file": True, "edit_file": True, "execute": True}
     assert kwargs["checkpointer"] is not None
+    # Durable per-project memory is turned on.
+    assert kwargs["memory"] == ["./.deepagents/AGENTS.md"]
+
+
+def test_sandboxed_backend_implements_sandbox_protocol(monkeypatch, tmp_path):
+    from deepagents.backends.protocol import SandboxBackendProtocol
+
+    monkeypatch.chdir(tmp_path)
+    backend = brain._build_fs_backend()
+    assert isinstance(backend, SandboxBackendProtocol)
 
 
 # --- build_system_prompt -----------------------------------------------------
@@ -107,6 +115,10 @@ def test_tool_label_for_file_ops_is_speakable():
     assert brain._tool_label("edit_file") == "Editing a file"
     assert brain._tool_label("read_file") == "Reading a file"
     assert brain._tool_label("grep") == "Searching files"
+
+
+def test_tool_label_execute_is_running_code():
+    assert brain._tool_label("execute") == "Running code"
 
 
 def test_clip_passes_short_text_and_truncates_long_text():
