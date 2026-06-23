@@ -13,14 +13,15 @@ import threading
 
 from textual.widgets import Static
 
-from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
-from aai_cli.code_agent.messages import (
+from aai_cli.agent_cascade.messages import (
     AssistantMessage,
     ErrorMessage,
     Note,
     ToolAffordance,
     UserMessage,
 )
+from aai_cli.agent_cascade.modals import ApprovalScreen
+from aai_cli.agent_cascade.tui import LiveAgentApp, _TuiRenderer
 from aai_cli.core.errors import CLIError
 
 
@@ -41,7 +42,7 @@ def _wait_until(pilot, predicate):
     return loop()
 
 
-def _app(run_conversation=None, on_stop=None, web_note=None):
+def _app(run_conversation=None, on_stop=None, on_toggle_listen=None, web_note=None):
     """A LiveAgentApp whose worker stays alive for the test, releasing on teardown.
 
     The real ``run_conversation`` blocks on the live mic; the default here blocks on an event
@@ -61,6 +62,7 @@ def _app(run_conversation=None, on_stop=None, web_note=None):
     return LiveAgentApp(
         run_conversation=run_conversation or block,
         on_stop=stop,
+        on_toggle_listen=on_toggle_listen or (lambda: True),
         web_note=web_note,
     )
 
@@ -164,6 +166,66 @@ def test_agent_sentence_without_begin_reply_mounts_a_reply() -> None:
     _run(go())
 
 
+def test_begin_reply_defers_the_widget_so_the_answer_lands_below_the_tools() -> None:
+    # The reply widget is mounted lazily on the first streamed sentence, never eagerly at
+    # begin_reply — so a tool call that fires *after* the reply starts (begin_reply runs during
+    # the first tool's spoken filler) still lands above the answer, and there's no empty
+    # placeholder widget sitting in the gap. This is the live tool-call ordering fix.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Mirror the engine's call order for a two-tool turn (see _handle_tool_notice).
+            app.show_tool_call("Checking the weather")  # tool 1
+            app.begin_reply()  # reply_started fires during tool 1's filler
+            assert len(app.query(AssistantMessage)) == 0  # nothing mounted yet — deferred
+            assert "Speaking" in _voicebar(app)  # but the phase still flips to speaking
+            app.show_tool_call("Checking the weather")  # tool 2, after the reply "started"
+            app.show_agent_sentence("It's 87 degrees and clear.")  # the answer, flushed last
+            # The transcript order is the two tool affordances, then the answer — never the
+            # answer wedged between them.
+            log = app.query_one("#log")
+            kinds = [
+                type(w).__name__
+                for w in log.children
+                if isinstance(w, ToolAffordance | AssistantMessage)
+            ]
+            assert kinds == ["ToolAffordance", "ToolAffordance", "AssistantMessage"]
+            assert app.query_one(AssistantMessage).text == "It's 87 degrees and clear. "
+
+    _run(go())
+
+
+def test_reply_after_greeting_is_a_separate_widget_below_the_tool() -> None:
+    # The greeting streams through show_agent_sentence with no reply_done after it, so _reply_msg
+    # still points at the greeting when the first turn begins. begin_reply must drop it, so the
+    # answer opens its OWN widget (below the tool affordance) instead of being appended to the
+    # greeting line. Regression guard for the greeting+answer concatenation bug.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app.show_agent_sentence("Hi! What can I help you with?")  # the greeting (no reply_done)
+            app.show_user_final("what files are here?")
+            app.show_tool_call("Listing files")
+            app.begin_reply()  # the turn starts: must drop the greeting widget
+            app.show_agent_sentence("The directory is empty.")  # the answer — its own widget
+            replies = list(app.query(AssistantMessage))
+            assert len(replies) == 2  # greeting and answer are distinct widgets, not concatenated
+            assert replies[0].text == "Hi! What can I help you with? "
+            assert replies[1].text == "The directory is empty. "
+            # The answer widget mounts below the tool affordance (tools never under the answer).
+            log = app.query_one("#log")
+            tail = [
+                type(w).__name__
+                for w in log.children
+                if isinstance(w, ToolAffordance | AssistantMessage)
+            ]
+            assert tail[-2:] == ["ToolAffordance", "AssistantMessage"]
+
+    _run(go())
+
+
 def test_interrupted_reply_notes_the_barge_in() -> None:
     async def go() -> None:
         app = _app()
@@ -234,6 +296,39 @@ def test_escape_interrupts_a_playing_reply_via_the_session_hook() -> None:
             app.set_interrupt(hook)
             app.action_interrupt()
             assert fired == [True]
+
+    _run(go())
+
+
+def test_space_toggles_listening_and_paints_paused() -> None:
+    # Space starts/stops listening: it drives the duplex mic mute (the returned state) and
+    # repaints the voice bar to "Paused" while muted, then back to "Listening" on resume.
+    async def go() -> None:
+        state = {"on": True}
+
+        def toggle() -> bool:
+            state["on"] = not state["on"]
+            return state["on"]
+
+        app = _app(on_toggle_listen=toggle)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert "Listening" in _voicebar(app)  # opens listening
+            await pilot.press("space")  # the Space binding -> action_toggle_listen -> stop
+            # Read into locals: `state` is mutated opaquely through the Textual binding, which
+            # mypy can't see, so asserting `state["on"] is …` directly narrows it for the rest
+            # of the scope and makes the later resume assertions look unreachable.
+            muted, muted_flag = state["on"], app._listening
+            assert muted is False and muted_flag is False  # mic muted
+            assert "Paused" in _voicebar(app)  # muted shows paused, not listening
+            # Muting only gates the user's input: a reply still in flight keeps "Speaking".
+            app._set_phase("speaking")
+            assert "Speaking" in _voicebar(app) and "Paused" not in _voicebar(app)
+            app._set_phase("listening")
+            await pilot.press("space")  # resume listening
+            resumed, resumed_flag = state["on"], app._listening
+            assert resumed is True and resumed_flag is True
+            assert "Listening" in _voicebar(app)
 
     _run(go())
 
@@ -357,6 +452,37 @@ def test_worker_surfaces_a_leg_error_in_the_transcript() -> None:
             # The error is also kept on the app so the launcher can re-raise it for the
             # right exit code, not just shown inline (where a torn-down TUI would lose it).
             assert app.error is boom_error
+
+    _run(go())
+
+
+def test_submit_voice_approval_routes_an_open_modal_and_no_ops_otherwise() -> None:
+    # During a --files write pause the engine routes the next final transcript to
+    # submit_voice_approval (from the STT reader thread). With a modal open it hops to the UI
+    # thread and replays the transcript through the screen's try_voice; with none open it's a
+    # no-op (the spoken turn was just conversation).
+    async def go() -> None:
+        spoken: list[str] = []
+        gate = threading.Event()
+        done = threading.Event()
+
+        class _SpyScreen(ApprovalScreen):
+            def try_voice(self, transcript: str) -> None:
+                spoken.append(transcript)
+
+        def run_conversation(renderer) -> None:
+            gate.wait(30)
+            app.submit_voice_approval("no modal open")  # swallowed: no screen armed
+            app._approval_screen = _SpyScreen("write_file", {})  # arm an open approval modal
+            app.submit_voice_approval("yes, do it")  # routed to the screen on the UI thread
+            done.wait(30)
+
+        app = _app(run_conversation=run_conversation, on_stop=done.set)
+        async with app.run_test(size=(100, 30)) as pilot:
+            gate.set()
+            # Only the armed-modal transcript reaches try_voice; the no-modal call recorded nothing.
+            assert await _wait_until(pilot, lambda: spoken == ["yes, do it"])
+        assert done.is_set()
 
     _run(go())
 

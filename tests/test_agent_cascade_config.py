@@ -10,6 +10,7 @@ from aai_cli.agent_cascade.config import (
     DEFAULT_GREETING,
     DEFAULT_MAX_HISTORY,
     DEFAULT_MODEL,
+    DEFAULT_SYSTEM_PROMPT,
     CascadeConfig,
 )
 from aai_cli.agent_cascade.voices import DEFAULT_VOICE
@@ -19,8 +20,18 @@ from aai_cli.core import llm
 def test_default_config_values():
     config = CascadeConfig()
     assert config.voice == DEFAULT_VOICE
-    assert config.model == DEFAULT_MODEL == "claude-haiku-4-5-20251001"  # `assembly live` default
+    assert config.model == DEFAULT_MODEL == "kimi-k2.5"  # `assembly live` default
     assert config.greeting == DEFAULT_GREETING
+    # The default prompt drives brevity (a sentence or two) and bans markup, since the
+    # reply is spoken. Pin each clause against an independent literal so a mutated segment
+    # of DEFAULT_SYSTEM_PROMPT can't pass by moving config.system_prompt with it.
+    assert config.system_prompt == DEFAULT_SYSTEM_PROMPT
+    assert config.system_prompt == (
+        "You are a friendly, concise voice assistant. Keep replies as short as "
+        "possible — usually a single sentence, never more than two. Answer directly "
+        "without preamble or filler. Your reply is read aloud by a text-to-speech "
+        "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
+    )
     # The sliding-window default keeps the last 40 messages of context.
     assert config.max_history == 40
     assert DEFAULT_MAX_HISTORY == 40
@@ -31,6 +42,11 @@ def test_default_config_values():
     # Escape-hatch overrides start empty.
     assert dict(config.llm_extra) == {}
     assert dict(config.tts_extra) == {}
+
+
+def test_files_defaults_off():
+    # File read/write is opt-in (--files); default behavior is unchanged and disk-free.
+    assert CascadeConfig().files is False
 
 
 def test_config_is_frozen():

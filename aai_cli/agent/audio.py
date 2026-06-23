@@ -102,6 +102,11 @@ class DuplexAudio:
         # access goes through `_lock`. `_out_state` (the target->device ratecv state)
         # is touched ONLY by feed(), never the callback, so it needs no lock.
         self._in: queue.Queue[bytes | None] = queue.Queue()
+        # The mic gate: set = listening (real audio), clear = muted (silence to STT). Flipped
+        # from the UI thread (start/stop listening), read on the capture thread, so it's an
+        # Event rather than a bare bool. Starts open — a session listens as soon as it connects.
+        self._listening = threading.Event()
+        self._listening.set()
         # How long capture_frames() waits for a chunk before checking whether the
         # device stream silently died (e.g. unplugged); injectable for fast tests.
         self._poll_timeout = poll_timeout
@@ -179,11 +184,39 @@ class DuplexAudio:
                 continue
             if chunk is None:
                 return
+            if not self._listening.is_set():
+                # Muted: feed silence of the same length so the recognizer keeps receiving
+                # audio (the socket stays alive) but hears nothing, instead of stalling the
+                # stream. Resampling zeros still yields zeros, so gate before the resample.
+                chunk = bytes(len(chunk))
             if self._device_rate != self._target:
                 chunk, state = resample_pcm16(
                     chunk, state, src_rate=self._device_rate, dst_rate=self._target
                 )
             yield chunk
+
+    def set_listening(self, *, on: bool) -> None:
+        """Open or mute the mic in place, without tearing down the stream.
+
+        Muting keeps the full-duplex stream and the live STT/TTS session alive — captured
+        frames are zeroed to silence (see :meth:`capture_frames`) — so toggling back on
+        resumes listening instantly, with no socket reconnect.
+        """
+        if on:
+            self._listening.set()
+        else:
+            self._listening.clear()
+
+    def toggle_listening(self) -> bool:
+        """Flip the mic between listening and muted; return the resulting listening state."""
+        on = not self._listening.is_set()
+        self.set_listening(on=on)
+        return on
+
+    @property
+    def listening(self) -> bool:
+        """Whether the mic is feeding real audio to STT (vs muted silence)."""
+        return self._listening.is_set()
 
     def close(self) -> None:
         self._in.put(None)  # end capture_frames()

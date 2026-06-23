@@ -51,7 +51,6 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | `assembly live` | Talk live to a tool-using voice agent, wired client-side from Streaming STT + a deepagents brain on the LLM Gateway + streaming TTS — it can web-search, fetch URLs, and read the docs mid-conversation, like the `agent-cascade` starter (sandbox-only) |
 | `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, files, stdin, or a live stream |
-| `assembly code` | Terminal coding agent (deepagents SDK) backed only by the LLM Gateway — reads/writes/edits files, runs shell, searches the docs MCP, and can invoke the `assembly` CLI itself; mutating actions ask for approval. Defaults to voice in a terminal (speak your request, replies read back via streaming TTS in the sandbox); pass `--no-voice` for the keyboard TUI |
 | `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range (`--video` keeps the picture for URL sources) — clip boundaries snap into nearby silence |
 | `assembly dub` | Re-voice an audio/video file or URL in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
 | `assembly caption` | Burn always-visible captions into a video: transcribe (or reuse a transcript), fetch SRT, ffmpeg burns it in — audio untouched |

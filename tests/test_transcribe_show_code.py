@@ -128,6 +128,31 @@ def test_transcribe_show_code_output_utterances_generates_loop(monkeypatch):
     assert 'print(f"Speaker {utt.speaker}: {utt.text}")' in result.output
 
 
+def test_transcribe_show_code_defaults_to_universal_3_5_pro(monkeypatch):
+    # With no --speech-model, the batch request defaults to universal-3-5-pro,
+    # delivered via the plural speech_models list (it's not in the SpeechModel enum).
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.app.transcribe.run.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "--show-code"])
+    assert result.exit_code == 0
+    assert "speech_models=['universal-3-5-pro']" in result.output
+
+
+def test_transcribe_show_code_explicit_model_suppresses_default(monkeypatch):
+    # An explicit --speech-model wins: the singular speech_model is emitted and the
+    # universal-3-5-pro speech_models default is not injected alongside it.
+    def _boom(*a, **k):
+        raise AssertionError("must not transcribe")
+
+    monkeypatch.setattr("aai_cli.app.transcribe.run.client.transcribe", _boom)
+    result = runner.invoke(app, ["transcribe", "--sample", "--speech-model", "best", "--show-code"])
+    assert result.exit_code == 0
+    assert "speech_model='best'" in result.output
+    assert "speech_models" not in result.output
+
+
 def test_transcribe_show_code_rejects_bucket_urls(monkeypatch):
     # Generated SDK code can't fetch s3://-style URLs (the API only reads http(s)),
     # so a bucket source is rejected up front instead of emitting a broken script.

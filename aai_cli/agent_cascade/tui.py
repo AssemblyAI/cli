@@ -15,21 +15,24 @@ from __future__ import annotations
 
 import contextlib
 import itertools
+import threading
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.css.query import NoMatches
+from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from aai_cli.code_agent import banner, tui_status
-from aai_cli.code_agent.messages import (
+from aai_cli.agent_cascade import banner, tui_status
+from aai_cli.agent_cascade.messages import (
     AssistantMessage,
     ErrorMessage,
     Note,
     ToolAffordance,
     UserMessage,
 )
+from aai_cli.agent_cascade.modals import ApprovalScreen
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
@@ -42,8 +45,8 @@ if TYPE_CHECKING:
 # Splash intro copy (the code agent's banner copy is code-specific, so `live` carries its own).
 _READY_LINE = "Listening… start talking when you're ready."
 _TIP_LINE = "Use headphones — the mic stays open while the agent speaks."
-# The one-line footer: a hands-free session, so the controls are interrupt-and-quit.
-_STATUS_LINE = "Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
+# The one-line footer: Space starts/stops listening (mutes the mic), Esc/Ctrl-C interrupts.
+_STATUS_LINE = "Space to start/stop listening · Esc/Ctrl-C to interrupt · Ctrl-Q to quit"
 
 
 def _call_on_ui_thread(app: App[None], fn: Callable[..., None], *args: object) -> None:
@@ -111,6 +114,9 @@ class LiveAgentApp(App[None]):
     #status {{ dock: bottom; height: 1; background: #000000; padding: 0 1; }}
     /* Blank line above each agent reply (and the greeting), so turns don't run together. */
     AssistantMessage {{ margin-top: 1; }}
+    /* The --files write-approval modal docks at the bottom and stays see-through, so the
+       transcript shows above it (overriding ModalScreen's opaque DEFAULT_CSS). */
+    ModalScreen {{ background: transparent; }}
     /* First tool line of a turn keeps a top margin (lifts the block off the prompt); a
        consecutive call adds `-tight` to drop it, so a multi-tool turn stays compact. */
     ToolAffordance {{ margin-top: 1; }}
@@ -124,6 +130,7 @@ class LiveAgentApp(App[None]):
     # hatch, so a stuck reply can never trap the session). Quitting closes the audio, which
     # unblocks the cascade worker.
     BINDINGS: ClassVar = [
+        ("space", "toggle_listen", "Start / stop listening"),
         ("escape", "interrupt", "Interrupt"),
         ("ctrl+c", "interrupt_or_quit", "Interrupt / Quit"),
         ("ctrl+q", "stop", "Quit"),
@@ -134,15 +141,24 @@ class LiveAgentApp(App[None]):
         *,
         run_conversation: Callable[[Renderer], None],
         on_stop: Callable[[], None],
+        on_toggle_listen: Callable[[], bool],
         web_note: str | None = None,
     ) -> None:
         super().__init__()
         self._run_conversation = run_conversation  # blocking; runs the cascade given a Renderer
         self._on_stop = on_stop  # closes the audio so a quit unblocks the cascade worker
+        # Mutes/unmutes the mic in place (returns the new listening state); Space toggles it.
+        self._on_toggle_listen = on_toggle_listen
+        self._listening = True  # mic open by default; muted shows the bar as "paused"
         self._web_note = web_note
         # The cascade's reply-interrupt, wired once its session exists (see set_interrupt);
         # None until then, so an early keypress is a harmless no-op.
         self._interrupt: Callable[[], bool] | None = None
+        # Set once the user picks "auto" on a --files write prompt; later writes then skip the modal.
+        self._auto_approve_writes = False
+        # The currently-open approval modal, so the engine can resolve it by voice (None when no
+        # write is awaiting a decision); see submit_voice_approval.
+        self._approval_screen: ApprovalScreen | None = None
         self._voice_phase = "listening"
         self._voice_frames = itertools.cycle(tui_status.VOICE_FRAMES)
         self._voice_timer: Timer | None = None
@@ -234,10 +250,20 @@ class LiveAgentApp(App[None]):
         self._scroll_end()
 
     def begin_reply(self) -> None:
-        """Open a fresh reply widget the agent's sentences stream into; switch to speaking."""
+        """Start a fresh reply: drop the previous reply widget and switch to the speaking phase.
+        The new widget is *not* mounted here — it is created lazily on the first streamed sentence
+        (:meth:`show_agent_sentence`), so it always lands *after* the turn's tool affordances.
+
+        Clearing ``_reply_msg`` is what makes the next sentence open a new widget rather than
+        appending to the last one. That matters because the greeting also streams through
+        ``show_agent_sentence`` (with no ``reply_done`` after it), so without this reset the first
+        turn's answer would be appended to the greeting line. ``reply_started`` fires on the turn's
+        first audible output — for a tool-using turn that's the spoken filler *during the first
+        tool call* — so mounting eagerly here would wedge an empty widget above the later tool
+        lines and stream the answer into it; deferring the mount keeps the answer below them.
+        """
+        self._reply_msg = None
         self._set_phase("speaking")
-        self._reply_msg = AssistantMessage()
-        self._mount(self._reply_msg)
 
     def show_agent_sentence(self, text: str) -> None:
         """Append one spoken sentence to the in-flight reply."""
@@ -276,7 +302,18 @@ class LiveAgentApp(App[None]):
             bar = self.query_one("#voicebar", Static)
         except NoMatches:
             return
-        bar.update(tui_status.voicebar_markup(self._voice_phase, next(self._voice_frames)))
+        bar.update(tui_status.voicebar_markup(self._display_phase(), next(self._voice_frames)))
+
+    def _display_phase(self) -> str:
+        """The phase the voice bar shows: ``paused`` when the mic is muted while idle.
+
+        A muted mic would otherwise sit on ``listening`` hearing nothing, so it reads as
+        paused instead. A reply still in flight keeps ``speaking``/``thinking`` — muting
+        gates the user's input, never the agent's voice.
+        """
+        if self._voice_phase == "listening" and not self._listening:
+            return "paused"
+        return self._voice_phase
 
     def _tick_voice(self) -> None:
         """Advance the voice-bar meter one frame (the animation timer's callback)."""
@@ -304,6 +341,50 @@ class LiveAgentApp(App[None]):
 
     # --- interrupt / quit -----------------------------------------------------
 
+    def _modal_result[T](self, screen: ModalScreen[T], default: T) -> T:
+        """Push a modal from the cascade worker thread and block until it's dismissed."""
+        done = threading.Event()
+        box: dict[str, T] = {"value": default}
+
+        def _store(result: T | None) -> None:
+            if result is not None:
+                box["value"] = result
+            done.set()
+
+        self.call_from_thread(self.push_screen, screen, _store)
+        done.wait()
+        return box["value"]
+
+    def approve_write(self, name: str, args: dict[str, object]) -> bool:
+        """Decide a gated --files write by a y/n keypress; True to allow.
+
+        Called on the cascade worker thread (via the brain's approver). Blocks on a bottom-docked
+        approval modal — the one place the hands-free session pauses for the keyboard. "Auto"
+        approves every later write this session, so a multi-file edit isn't a y per file.
+        """
+        if self._auto_approve_writes:
+            return True
+        screen = ApprovalScreen(name, args)
+        self._approval_screen = screen  # let the engine resolve it by voice while it's open
+        try:
+            decision = self._modal_result(screen, default="reject")
+        finally:
+            self._approval_screen = None
+        if decision == "auto":
+            self._auto_approve_writes = True
+            return True
+        return decision == "approve"
+
+    def submit_voice_approval(self, transcript: str) -> None:
+        """Resolve an open --files approval modal from a spoken transcript (no-op if none is open).
+
+        The engine routes the next final transcript here during an approval pause; the modal's
+        own ``try_voice`` applies the grammar (and ignores voice for destructive commands). Hops
+        to the UI thread since the engine calls this from the STT reader thread."""
+        screen = self._approval_screen
+        if screen is not None:
+            self.call_from_thread(screen.try_voice, transcript)
+
     def set_interrupt(self, interrupt: Callable[[], bool]) -> None:
         """Wire the session's reply-interrupt once the cascade has built its session.
 
@@ -311,6 +392,15 @@ class LiveAgentApp(App[None]):
         stores a callable reference, so no UI hop is needed.
         """
         self._interrupt = interrupt
+
+    def action_toggle_listen(self) -> None:
+        """Space: start/stop listening by muting the mic in place, keeping the session live.
+
+        The cascade stays connected while muted (the agent can still finish a reply), so
+        resuming is instant — no reconnect. Repaints the voice bar to reflect the new state.
+        """
+        self._listening = self._on_toggle_listen()
+        self._render_voicebar()
 
     def action_interrupt(self) -> None:
         """Escape: silence a playing reply and return to listening (a no-op when idle)."""

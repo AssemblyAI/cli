@@ -264,76 +264,6 @@
   
   '''
 # ---
-# name: test_command_help_matches_snapshot[code]
-  '''
-  
-   Usage: assembly code [OPTIONS] [PROMPT]
-  
-   Run a terminal coding agent backed by the AssemblyAI LLM Gateway
-  
-   An autonomous coding agent (built on the deepagents SDK) that reads, writes,
-   and edits files, runs shell commands, searches the AssemblyAI docs, and can
-   invoke the 'assembly' CLI itself — all in the working directory. It talks
-   only to the AssemblyAI LLM Gateway. Mutating actions ask for approval unless
-   you pass --auto.
-  
-   In an interactive terminal it defaults to voice: speak your request (mic ->
-   streaming STT) and the agent's replies are read back aloud (sandbox only).
-   Pass --no-voice for the keyboard TUI, or pipe input for the headless loop.
-  
-  ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-  │   prompt      [PROMPT]  Initial task for the agent. Omit to just open the    │
-  │                         session                                              │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --model                       TEXT       LLM Gateway model                   │
-  │                                          [default: gpt-5.1]                  │
-  │ --dir      -C                 DIRECTORY  Working directory the agent's file  │
-  │                                          and shell tools operate in          │
-  │                                          [default: .]                        │
-  │ --auto     -y                            Skip approval prompts and run every │
-  │                                          tool automatically                  │
-  │ --docs         --no-docs                 Connect to the AssemblyAI docs MCP  │
-  │                                          server for reference                │
-  │                                          [default: docs]                     │
-  │ --skills       --no-skills               Load installed agent skills (e.g.   │
-  │                                          the assemblyai skill)               │
-  │                                          [default: skills]                   │
-  │ --web          --no-web                  Enable Firecrawl web search when    │
-  │                                          FIRECRAWL_API_KEY is set            │
-  │                                          [default: web]                      │
-  │ --memory       --no-memory               Load and persist the agent's        │
-  │                                          long-term memory                    │
-  │                                          [default: memory]                   │
-  │ --session                     TEXT       Resume a named session. Default: a  │
-  │                                          new unique session each run         │
-  │ --persist      --fresh                   Persist the session to disk         │
-  │                                          (--fresh: ephemeral)                │
-  │                                          [default: persist]                  │
-  │ --tui          --no-tui                  Use the full-screen TUI (off: a     │
-  │                                          plain read-eval loop)               │
-  │                                          [default: tui]                      │
-  │ --voice        --no-voice                Speak to the agent and hear replies │
-  │                                          read back (readback needs the       │
-  │                                          sandbox)                            │
-  │                                          [default: voice]                    │
-  │ --help                                   Show this message and exit.         │
-  ╰──────────────────────────────────────────────────────────────────────────────╯
-  
-   Examples
-   Start a coding session in the current directory
-   $ assembly code
-   Kick off with an initial task
-   $ assembly code "add a --verbose flag"
-   Run without approval prompts
-   $ assembly code --auto "fix the failing test"
-   Point at another project
-   $ assembly code --dir ../service
-  
-  
-  
-  '''
-# ---
 # name: test_command_help_matches_snapshot[dictate]
   '''
   
@@ -636,8 +566,11 @@
   │                                            persona)                          │
   │                                            [default: You are a friendly,     │
   │                                            concise voice assistant. Keep     │
-  │                                            replies short and conversational. │
-  │                                            Your reply is read aloud by a     │
+  │                                            replies as short as possible —    │
+  │                                            usually a single sentence, never  │
+  │                                            more than two. Answer directly    │
+  │                                            without preamble or filler. Your  │
+  │                                            reply is read aloud by a          │
   │                                            text-to-speech engine, so write   │
   │                                            plain spoken prose — no markdown, │
   │                                            emoji, bullet lists, or code.]    │
@@ -668,8 +601,7 @@
   ╭─ Language model ─────────────────────────────────────────────────────────────╮
   │ --model             TEXT                  LLM Gateway model that powers the  │
   │                                           agent's replies                    │
-  │                                           [default:                          │
-  │                                           claude-haiku-4-5-20251001]         │
+  │                                           [default: kimi-k2.5]               │
   │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
   │                                           [default: 8192]                    │
   │ --llm-config        TEXT                  Set any LLM Gateway request field  │
@@ -679,7 +611,7 @@
   │ --speech-model                            TEXT              Streaming speech │
   │                                                             model            │
   │                                                             [default:        │
-  │                                                             u3-rt-pro]       │
+  │                                                             universal-3-5-p… │
   │ --format-turns       --no-format-turns                      Format           │
   │                                                             (punctuate)      │
   │                                                             finalized turns  │
@@ -700,6 +632,9 @@
   ╭─ Tools ──────────────────────────────────────────────────────────────────────╮
   │ --mcp-config        FILE  MCP servers config JSON ({"mcpServers": {…}}) to   │
   │                           add (repeatable; none load by default)             │
+  │ --files                   Let the agent read, write, and run code in the     │
+  │                           current directory, sandboxed (writes and runs need │
+  │                           confirmation)                                      │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
@@ -711,6 +646,8 @@
    $ assembly --sandbox live --system-prompt "You are a terse pirate."
    Add your own MCP servers (none load by default)
    $ assembly --sandbox live --mcp-config ~/.config/mcp/servers.json
+   Let the agent read and write files in the current directory
+   $ assembly --sandbox live --files
    See available voices
    $ assembly --sandbox live --list-voices
    Print equivalent Python instead of running
@@ -918,10 +855,11 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ╭─ Model & Language ───────────────────────────────────────────────────────────╮
   │ --speech-model              [universal-streaming-m  Streaming speech model   │
-  │                             ultilingual|universal-  [default: u3-rt-pro]     │
-  │                             streaming-english|u3-r                           │
-  │                             t-pro|whisper-rt|u3-pr                           │
-  │                             o]                                               │
+  │                             ultilingual|universal-  [default:                │
+  │                             streaming-english|u3-r  universal-3-5-pro]       │
+  │                             t-pro|u3-rt-pro-beta-1                           │
+  │                             |whisper-rt|universal-                           │
+  │                             3-5-pro|u3-pro]                                  │
   │ --encoding                  [pcm_s16le|pcm_mulaw]   Audio encoding           │
   │ --language-detection                                Auto-detect the spoken   │
   │                                                     language                 │

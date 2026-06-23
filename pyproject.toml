@@ -26,7 +26,7 @@ classifiers = [
 
 dependencies = [
     "typer>=0.26.7", # >=0.13 vendors its own click (typer._click); we no longer import click
-    "assemblyai>=0.64.4",
+    "assemblyai>=0.64.21",
     "rich>=15.0.0",
     "keyring>=25.7.0",
     # httpx2 is Pydantic's maintained fork of httpx (github.com/pydantic/httpx2,
@@ -72,15 +72,14 @@ dependencies = [
     # (webpage.py, imported lazily). Pure-Python, permissively licensed, ships a
     # universal wheel, so it adds no source-compile step to Homebrew bottling.
     "pypdf>=5.1.0",
-    # `assembly code` coding agent (deepagents on the LLM Gateway). Heavy trees,
-    # intentionally added on this WIP branch; see aai_cli/code_agent/.
+    # `assembly live` voice agent (deepagents on the LLM Gateway). Heavy trees,
+    # intentionally added on this WIP branch; see aai_cli/agent_cascade/.
     "deepagents>=0.6.10",
     "langchain-openai>=1.3.2",
     "langgraph>=1.2.2",
     "langchain-core>=1.4.7",
     "langchain-mcp-adapters>=0.3.0",
     "textual>=8.2.7",
-    "langgraph-checkpoint-sqlite>=3.1.0",
     "pyperclip>=1.11.0",
     "langchain-text-splitters>=1.0.0",
     "langchain-firecrawl>=0.1.0",
@@ -117,7 +116,7 @@ dev = [
     # failure instead of a wedged session (not in addopts — opt-in per run).
     "pytest-timeout>=2.3.1",
     "time-machine>=3.1.0",
-    # Visual-regression snapshots for the Textual TUIs (`assembly code` / `live`): the
+    # Visual-regression snapshots for the Textual TUI (`assembly live`): the
     # `snap_compare` fixture renders an app to SVG and diffs it against a committed golden,
     # catching CSS/layout/docking regressions the behavioral pilot tests can't see. Stores
     # SVGs under tests/__snapshots__/<module>/ (regenerate with --snapshot-update like the
@@ -263,16 +262,11 @@ disable_error_code = ["annotation-unchecked"]
 # keep our own signatures precise and silence only the boundary-assignment codes for
 # these two wiring modules (the orchestration is covered by the real-graph tests).
 module = [
-    "aai_cli.code_agent.agent",
-    "aai_cli.code_agent.skills",
-    "aai_cli.code_agent.memory",
-    "aai_cli.code_agent.store",
-    "aai_cli.code_agent.model",
-    "aai_cli.commands.code._exec",
+    "aai_cli.agent_cascade.model",
     "aai_cli.agent_cascade.brain",
 ]
 disallow_any_generics = false
-disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg"]
+disable_error_code = ["return-value", "arg-type", "type-arg", "call-arg", "list-item"]
 
 [tool.pyright]
 # Second type checker alongside mypy: pyright catches a different class of
@@ -286,12 +280,12 @@ include = ["aai_cli"]
 # (aai_cli.init.templates.<name>.api.*), the same bar as the rest of the package; only
 # generated/hidden dirs are skipped.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
-# The coding-agent slice wires the deeply-generic, only-partially-typed
-# deepagents/langchain/langgraph boundary, where pyright-strict floods on
+# agent_cascade/brain.py and model.py wire the deeply-generic, only-partially-typed
+# deepagents/langchain/ChatOpenAI boundary, where pyright-strict floods on
 # Unknown*/invariance diagnostics our precise signatures can't satisfy. mypy still
 # type-checks these modules (with the targeted overrides above) as the safety net, so
 # we suppress pyright diagnostics here rather than littering per-line `# pyright: ignore`.
-ignore = ["aai_cli/code_agent", "aai_cli/commands/code", "aai_cli/agent_cascade/brain.py"]
+ignore = ["aai_cli/agent_cascade/brain.py", "aai_cli/agent_cascade/model.py"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 # Third-party deps (assemblyai, sounddevice) ship no type stubs.
@@ -449,21 +443,24 @@ max-statements = 40
 # ENV_CLIENT_TOKEN holds an env-var *name*; the shipped token constant is empty in
 # source (release builds inject the write-only client token).
 "aai_cli/core/telemetry.py" = ["S105"]
-# BLE001: connecting to the docs MCP server is best-effort — any failure (blocked host,
-# offline, transport error) degrades to "no docs tools", so a broad except is the shape.
-"aai_cli/code_agent/docs_mcp.py" = ["BLE001"]
 # BLE001: launching each live-agent MCP server is best-effort — any failure (npx/uvx
 # missing, offline host, transport error) skips just that server so one broken tool
 # can't sink a live session, so a broad per-server except is the right shape.
 "aai_cli/agent_cascade/mcp_tools.py" = ["BLE001"]
-# BLE001: a turn must never crash the TUI/REPL — any agent/gateway failure is caught and
-# surfaced as an ErrorText event so the user can simply retry.
-"aai_cli/code_agent/session.py" = ["BLE001"]
+# BLE001: a weather fetch failure (network error, bad response, timeout) must never
+# bubble into brain's "couldn't complete the turn" path — speak a short apology instead
+# so an Open-Meteo outage can't sink a live session turn.
+"aai_cli/agent_cascade/weather_tool.py" = ["BLE001"]
+# BLE001: a page/PDF fetch failure (network error, bad URL, no readable text) must never
+# bubble into brain's "couldn't complete the turn" path — speak a short apology instead so
+# a fetch outage can't sink a live session turn (mirrors weather_tool).
+"aai_cli/agent_cascade/webpage_tool.py" = ["BLE001"]
 # A002: the CompiledAgent protocol must mirror langgraph's `invoke(input, ...)` parameter
 # name so the real compiled graph structurally satisfies it.
-"aai_cli/code_agent/agent.py" = ["A002"]
-# FBT001: a Textual push_screen result callback receives the bool decision positionally.
-"aai_cli/code_agent/tui.py" = ["FBT001"]
+"aai_cli/agent_cascade/brain.py" = ["A002"]
+# A002: a test fake mirrors CompiledAgent.invoke's `input` parameter name so pyright accepts
+# it as the protocol (the param is never used; renaming it breaks the structural match).
+"tests/test_agent_cascade_files.py" = ["A002"]
 
 # TID251 banned-api allowlist (see [tool.ruff.lint.flake8-tidy-imports.banned-api]).
 # Two OS boundaries are fenced; each is owned by a chokepoint so the allowlist stays
@@ -478,8 +475,6 @@ max-statements = 40
 # of `subprocess`, so they stay individually allowlisted (claude/npx/ffmpeg/yt-dlp/
 # tunnels/vercel/the macOS Swift helper, etc.):
 "aai_cli/core/procs.py" = ["TID251"]
-# Runs the AssemblyAI CLI itself (python -m aai_cli) as a tool the coding agent calls.
-"aai_cli/code_agent/cli_tool.py" = ["TID251"]
 "aai_cli/app/coding_agent.py" = ["TID251"]
 "aai_cli/app/mediafile.py" = ["TID251"]
 "aai_cli/app/setup_exec.py" = ["TID251"]
@@ -490,14 +485,17 @@ max-statements = 40
 "aai_cli/init/tunnel.py" = ["TID251"]
 "aai_cli/streaming/macos.py" = ["TID251"]
 "aai_cli/streaming/sources.py" = ["TID251"]
+# Sandbox shell-out: launches the OS sandbox binary (sandbox-exec / bwrap) with controlled
+# argv; the whole module exists to confine that one subprocess call.
+"aai_cli/agent_cascade/sandbox.py" = ["TID251"]
 
 [tool.vulture]
 paths = ["aai_cli", "tests"]
 exclude = ["aai_cli/_version.py"]
 min_confidence = 90
 ignore_decorators = ["@app.command", "@app.callback"]
-ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", "memory_keyring",
-                "org", "preserve_logging_state", "refresh", "rpath"]
+ignore_names = ["app", "capture_output", "download", "healthy", "input", "ist", "lpath",
+                "memory_keyring", "org", "preserve_logging_state", "refresh", "rpath"]
 
 [tool.codespell]
 # Spell-check code, comments, and docs (Kubernetes' verify-spelling, generalized). Run via
@@ -506,11 +504,12 @@ ignore_names = ["app", "capture_output", "download", "healthy", "ist", "lpath", 
 # are byte-pinned and must not be "corrected".
 skip = "./.venv,./dist,./docs,./node_modules,./.git,uv.lock,*.ambr,./tests/fixtures,./aai_cli/_version.py"
 # Domain words codespell misreads: "unparseable" (accepted variant), "ist" (an identifier),
-# "expresso" (a deliberate mis-transcription used as an eval/WER example).
-ignore-words-list = "unparseable,ist,expresso,notin,ans"
+# "expresso" (a deliberate mis-transcription used as an eval/WER example), "zar" (the ISO-4217
+# currency code for the South African rand, in the keyless-tools plan).
+ignore-words-list = "unparseable,ist,expresso,notin,ans,zar"
 
 [tool.deptry]
-exclude = ["docs", "dist", ".venv", "aai_cli/init/templates"]
+exclude = ["docs", "dist", ".venv", ".claude", "aai_cli/init/templates"]
 
 [tool.deptry.package_module_name_map]
 audioop-lts = "audioop"
@@ -519,6 +518,12 @@ audioop-lts = "audioop"
 # The CLI templates carry their own requirements and are dependency-checked by
 # dedicated install tests, not by the root package metadata.
 DEP002 = ["fastapi", "python-dotenv", "python-multipart", "uvicorn"]
+# `langchain` (the meta package, distinct from the langchain-* packages we declare
+# directly) is a hard dependency of `deepagents`, so it always rides in with the agent
+# stack. The live brain imports its public `langchain.agents.middleware` API directly —
+# pinning it here too would add a second lockfile edge to the same package without
+# changing the resolved version, so we let it stay the transitive deepagents owns.
+DEP003 = ["langchain"]
 # coverage is read by scripts/mutation_gate.py and click by
 # scripts/generated_code_compile_gate.py (dev-only gates run from check.sh, never
 # shipped in the wheel), so deptry sees dev deps imported from non-test code.

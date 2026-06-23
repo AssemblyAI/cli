@@ -61,6 +61,10 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
                 "Add your own MCP servers (none load by default)",
                 "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
             ),
+            (
+                "Let the agent read and write files in the current directory",
+                "assembly --sandbox live --files",
+            ),
             ("See available voices", "assembly --sandbox live --list-voices"),
             (
                 "Print equivalent Python instead of running",
@@ -167,6 +171,12 @@ def live(
         dir_okay=False,
         rich_help_panel=_PANEL_TOOLS,
     ),
+    files: bool = typer.Option(
+        False,
+        "--files",
+        help="Let the agent read, write, and run code in the current directory, sandboxed (writes and runs need confirmation)",
+        rich_help_panel=_PANEL_TOOLS,
+    ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
     list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit"),
     json_out: bool = options.json_option("Emit newline-delimited JSON events"),
@@ -232,6 +242,7 @@ def live(
         language=language,
         tts_config=tuple(tts_config or ()),
         mcp_config=tuple(mcp_config or ()),
+        files=files,
         show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

@@ -26,7 +26,6 @@ from tests._cli_tree import leaf_command_argvs
 # module suffix). A brand-new panel must be mapped here before its commands ship.
 PANEL_TO_GROUP: dict[str, str] = {
     help_panels.QUICK_START: "build",
-    help_panels.CODE: "run",
     help_panels.BUILD: "build",
     help_panels.TRANSCRIPTION: "run",
     help_panels.SETUP: "tools",

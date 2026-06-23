@@ -1,8 +1,10 @@
-"""Tests for the cascade's pure text helpers."""
+"""Tests for the cascade's pure text helpers (sentence/clause splitting)."""
 
 from __future__ import annotations
 
-from aai_cli.agent_cascade.text import split_sentences, trim_history
+import pytest
+
+from aai_cli.agent_cascade.text import pop_clauses, split_sentences, trim_history
 
 
 def test_split_sentences_breaks_on_terminators():
@@ -57,3 +59,49 @@ def test_trim_history_at_limit_is_untouched():
     history = [{"role": "user", "content": str(i)} for i in range(3)]
     trim_history(history, 3)
     assert len(history) == 3
+
+
+def test_pop_clauses_flushes_hard_terminators_and_keeps_tail():
+    chunks, remainder = pop_clauses("One. Two! Three", min_chars=1)
+    assert chunks == ["One.", "Two!"]
+    assert remainder == " Three"  # no terminator yet -> stays buffered
+
+
+def test_pop_clauses_flushes_soft_separator_only_past_min_chars():
+    # The clause before the comma is long enough, so the comma ends a clause.
+    chunks, remainder = pop_clauses("the weather today is, in fact ", min_chars=10)
+    assert chunks == ["the weather today is,"]
+    assert remainder == " in fact "
+
+
+def test_pop_clauses_holds_short_soft_clause_to_avoid_choppy_tts():
+    # "Yes," is shorter than min_chars, so it is NOT flushed on the comma.
+    chunks, remainder = pop_clauses("Yes, it is sunny", min_chars=10)
+    assert chunks == []
+    assert remainder == "Yes, it is sunny"
+
+
+def test_pop_clauses_does_not_fragment_a_decimal_or_stacked_terminators():
+    # A '.' inside $3.50 (no following space) and stacked '...'/'?!' are not boundaries.
+    chunks, remainder = pop_clauses("It costs $3.50 total... ", min_chars=1)
+    assert chunks == ["It costs $3.50 total..."]
+    assert remainder == " "
+
+
+def test_pop_clauses_returns_nothing_for_an_unterminated_buffer():
+    chunks, remainder = pop_clauses("still going", min_chars=1)
+    assert chunks == []
+    assert remainder == "still going"
+
+
+def test_pop_clauses_strips_whitespace_from_each_flushed_clause():
+    chunks, _remainder = pop_clauses("  Hi there.  Next.", min_chars=1)
+    assert chunks == ["Hi there.", "Next."]
+
+
+@pytest.mark.parametrize("min_chars", [1, 25])
+def test_pop_clauses_flushes_hard_terminator_regardless_of_min_chars(min_chars):
+    # min_chars only gates SOFT separators; a sentence terminator always flushes.
+    chunks, remainder = pop_clauses("Hi. ", min_chars=min_chars)
+    assert chunks == ["Hi."]
+    assert remainder == " "

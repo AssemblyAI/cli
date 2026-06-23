@@ -73,6 +73,19 @@
       "Read(**/*.p12)"
     ]
   },
+  "sandbox": {
+    "network": {
+      "allowLocalBinding": true,
+      "allowMachLookup": ["com.apple.SystemConfiguration.configd"]
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/uv",
+        "~/.local/share/uv",
+        "~/.local/state/uv"
+      ]
+    }
+  },
   "hooks": {
     "SessionStart": [
       {

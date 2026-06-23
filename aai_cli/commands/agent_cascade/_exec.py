@@ -18,12 +18,11 @@ import typer
 from aai_cli import code_gen
 from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
-from aai_cli.agent_cascade import engine, mcp_tools, voices
+from aai_cli.agent_cascade import engine, firecrawl_search, mcp_tools, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
-from aai_cli.code_agent import firecrawl_search
 from aai_cli.core import choices, client, config_builder, env, errors, llm, signals, stdio
 from aai_cli.core.errors import UsageError
 from aai_cli.streaming import turn_presets
@@ -76,6 +75,8 @@ class AgentCascadeOptions:
     tts_config: tuple[str, ...]
     # Tools: opt-in standard mcpServers JSON config files (none load by default).
     mcp_config: tuple[Path, ...]
+    # Let the agent read/write files in the launch directory (writes confirmed; off by default).
+    files: bool
     # Print the equivalent Python instead of running a conversation.
     show_code: bool
 
@@ -139,6 +140,17 @@ def _warn_without_web_search(*, json_mode: bool) -> None:
         output.emit_warning(note, json_mode=json_mode)
 
 
+def _deny_writes(name: str, args: dict[str, object]) -> bool:
+    """Approver for non-interactive ``--files`` runs: deny every gated write.
+
+    File/--json/non-TTY runs have no keyboard channel to confirm a write, so writes are
+    declined (the model is told and moves on). Reads stay ungated — they never reach an
+    approver — so a piped or file-driven ``--files`` session can still read and search.
+    """
+    del name, args
+    return False
+
+
 def _resolve_mcp_servers(mcp_config: tuple[Path, ...]) -> dict[str, Mapping[str, object]]:
     """The MCP servers for this run: only those from ``--mcp-config`` files (none by default).
 
@@ -194,6 +206,7 @@ def _print_show_code(opts: AgentCascadeOptions, system_prompt_text: str) -> None
         language=opts.language,
         max_tokens=opts.max_tokens,
         format_turns=opts.format_turns,
+        files=opts.files,
     )
     output.print_code(code_gen.agent_cascade(config, speech_model=opts.speech_model))
 
@@ -226,7 +239,15 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
 
     duplex = DuplexAudio(target_rate=SAMPLE_RATE, device=opts.device)
     stt_params = _build_stt_params(opts, SAMPLE_RATE)
-    deps = engine.CascadeDeps.real(api_key, config, audio=duplex.mic, stt_params=stt_params)
+
+    # The TUI confirms --files writes with a y/n keypress; the closure resolves ``app`` at
+    # call time (it's assigned below, before any reply — hence before any approver call).
+    def approve_write(name: str, args: dict[str, object]) -> bool:
+        return app.approve_write(name, args)
+
+    deps = engine.CascadeDeps.real(
+        api_key, config, audio=duplex.mic, stt_params=stt_params, approver=approve_write
+    )
 
     def run_conversation(renderer: engine.Renderer) -> None:
         # Hand the app the session's reply-interrupt so Escape/Ctrl-C can silence a reply
@@ -237,11 +258,15 @@ def _run_live_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig
             config=config,
             deps=deps,
             on_session=lambda session: app.set_interrupt(session.interrupt_reply),
+            # Hands-free --files approvals: the engine routes the next spoken transcript during an
+            # approval pause to the open modal (which applies the grammar / destructive-tier gate).
+            on_approval_voice=app.submit_voice_approval,
         )
 
     app = LiveAgentApp(
         run_conversation=run_conversation,
         on_stop=duplex.close,
+        on_toggle_listen=duplex.toggle_listening,
         web_note=_web_search_note(),
     )
     app.run(mouse=False)
@@ -305,6 +330,7 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         llm_extra=llm_extra,
         tts_extra=tts_extra,
         mcp_servers=mcp_servers,
+        files=opts.files,
     )
 
     if _should_use_tui(from_file=from_file, json_mode=json_mode, text_mode=text_mode):
@@ -318,7 +344,10 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         renderer, source=opts.source, sample=opts.sample, device=opts.device, from_file=from_file
     )
     stt_params = _build_stt_params(opts, sample_rate)
-    deps = engine.CascadeDeps.real(api_key, config, audio=audio, stt_params=stt_params)
+    # Non-interactive (file/--json/non-TTY): writes can't be confirmed, so deny them; reads work.
+    deps = engine.CascadeDeps.real(
+        api_key, config, audio=audio, stt_params=stt_params, approver=_deny_writes
+    )
     try:
         # SIGTERM stops the cascade as cleanly as Ctrl-C, so an external supervisor
         # (Hammerspoon, a service manager, a wrapper's `kill`) can end the session.

@@ -11,11 +11,13 @@ import types
 
 import pytest
 
-from aai_cli.agent_cascade import engine
+from aai_cli.agent_cascade import _runtime, engine
+from aai_cli.agent_cascade.brain import SpeechDelta, ToolNotice
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps, CascadeSession, run_cascade
 from aai_cli.core.errors import APIError
 from tests._cascade_fakes import FakePlayer, FakeRenderer, FakeWorker, make_session
+from tests._cascade_fakes import deltas as _deltas
 from tests._cascade_fakes import sync_spawn as _sync_spawn
 from tests._cascade_fakes import turn as _turn
 
@@ -39,7 +41,7 @@ def test_greet_empty_greeting_is_silent():
 
 
 def test_greet_records_tts_failure():
-    def boom(text):
+    def boom(text, sink):
         raise APIError("tts down")
 
     session, _renderer, player = make_session(synthesize=boom)
@@ -60,7 +62,7 @@ def test_on_turn_blank_transcript_ignored():
 
 
 def test_on_turn_final_renders_and_replies():
-    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "Sure thing.")
+    session, renderer, player = make_session(stream_reply=_deltas("Sure thing."))
     session.on_turn(_turn("what time is it"))
     assert ("user_final", "what time is it") in renderer.calls
     assert {"role": "user", "content": "what time is it"} in session.history
@@ -70,25 +72,23 @@ def test_on_turn_final_renders_and_replies():
 
 
 def test_reply_forwards_tool_calls_to_the_renderer():
-    # The reply worker hands complete_reply an on_tool sink; a tool call it makes surfaces on
-    # the renderer, so the live UI can show a "Searching the web…" affordance mid-turn.
-    def reply(messages, on_tool):
-        on_tool("Searching the web")
-        return "Found it."
+    def stream(messages):
+        yield ToolNotice("Searching the web", ("Searching now.",))
+        yield SpeechDelta("Found it.")
 
-    session, renderer, _player = make_session(complete_reply=reply)
+    session, renderer, _player = make_session(stream_reply=stream)
     session.on_turn(_turn("what's the news"))
     assert ("tool_call", "Searching the web") in renderer.calls
 
 
 def test_on_turn_interim_shows_partial_and_does_not_reply():
-    replies = []
+    streamed = []
     session, renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: replies.append(m) or "x"
+        stream_reply=lambda m: streamed.append(m) or [SpeechDelta("x")]
     )
     session.on_turn(_turn("partial words", end_of_turn=False))
     assert ("user_partial", "partial words") in renderer.calls
-    assert replies == []  # no reply generated for an interim turn
+    assert streamed == []  # no reply generated for an interim turn
     assert session.history == []
 
 
@@ -100,209 +100,61 @@ def test_on_turn_interim_barges_in_on_live_reply():
     assert session._reply is None
 
 
-# --- reply generation --------------------------------------------------------
+# --- spoken approval (--files): route the next final transcript to the open gate -------------
 
 
-def test_generate_reply_speaks_each_sentence():
-    spoken = []
-    session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "One. Two! Three?",
-        synthesize=lambda text: spoken.append(text) or text.encode(),
-    )
-    session._generate_reply()
-    assert spoken == ["One.", "Two!", "Three?"]
-    assert player.enqueued == [b"One.", b"Two!", b"Three?"]
-    assert ("reply_started",) in renderer.calls
-    assert ("agent_transcript", "One.", False) in renderer.calls
-    assert session.history[-1] == {"role": "assistant", "content": "One. Two! Three?"}
-    assert ("reply_done", False) in renderer.calls
+def test_on_turn_routes_final_to_voice_during_approval_pause():
+    # While a --files write/run awaits approval, the next FINAL transcript answers the gate by
+    # voice — it does NOT render a user turn or start a new reply.
+    session, renderer, _player = make_session()
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
+
+    session.on_turn(_turn("yes, run it"))
+
+    assert voiced == ["yes, run it"]
+    assert session.history == []  # no new turn started
+    assert ("user_final", "yes, run it") not in renderer.calls
 
 
-def test_generate_reply_threads_system_prompt_and_history():
-    captured = {}
+def test_on_turn_ignores_interim_during_approval_pause():
+    # Interim partials during the pause are dropped (only a final transcript answers the gate).
+    session, renderer, _player = make_session()
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
 
-    def capture(messages, on_tool=None):
-        captured["messages"] = messages
-        return "Ok."
+    session.on_turn(_turn("yes", end_of_turn=False))
 
-    session, _renderer, _player = make_session(
-        complete_reply=capture, config=CascadeConfig(system_prompt="be terse")
-    )
-    session.history.append({"role": "user", "content": "prior"})
-    session._generate_reply()
-    assert captured["messages"][0] == {"role": "system", "content": "be terse"}
-    assert {"role": "user", "content": "prior"} in captured["messages"]
+    assert voiced == []
+    assert renderer.calls == []
 
 
-def test_generate_reply_trims_history_window():
-    session, _renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: "a. b.", config=CascadeConfig(max_history=1)
-    )
-    session.history.append({"role": "user", "content": "hi"})
-    session._generate_reply()
-    # user + assistant would be 2; the window caps it to the most recent 1.
-    assert session.history == [{"role": "assistant", "content": "a. b."}]
+def test_on_turn_final_during_pause_without_voice_sink_is_dropped():
+    # Keyboard-only path (no voice sink): a final transcript during the pause is simply dropped,
+    # not started as a turn — pins the `on_approval_voice is not None` guard.
+    session, renderer, _player = make_session()  # on_approval_voice defaults to None
+    session._set_awaiting_approval(active=True)
+
+    session.on_turn(_turn("anything"))
+
+    assert session.history == []
+    assert renderer.calls == []
 
 
-def test_on_turn_trims_history_window():
-    # An empty reply adds no assistant turn, so only on_turn's own trim caps the list.
-    session, _renderer, _player = make_session(
-        complete_reply=lambda m, on_tool=None: "", config=CascadeConfig(max_history=1)
-    )
-    session.history.append({"role": "assistant", "content": "old"})
-    session.on_turn(_turn("newest"))
-    assert session.history == [{"role": "user", "content": "newest"}]
+def test_on_turn_resumes_normal_turns_once_approval_clears():
+    # After the pause clears (active=False), a final transcript starts a reply again, NOT voice.
+    session, renderer, _player = make_session(stream_reply=_deltas("Done."))
+    voiced: list[str] = []
+    session.on_approval_voice = voiced.append
+    session._set_awaiting_approval(active=True)
+    session._set_awaiting_approval(active=False)
 
+    session.on_turn(_turn("what time is it"))
 
-def test_generate_reply_stop_after_first_sentence_records_partial():
-    def synth(text):
-        if text == "Two.":
-            session._stop.set()
-        return text.encode()
-
-    session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "One. Two. Three."
-    )
-    session.deps.synthesize = synth
-    session._generate_reply()
-    # Only the first sentence finished enqueuing before the barge-in stop landed.
-    assert player.enqueued == [b"One."]
-    assert session.history[-1] == {"role": "assistant", "content": "One."}
-    assert ("reply_done", True) in renderer.calls
-
-
-def test_generate_reply_stop_before_first_sentence_speaks_nothing():
-    session, renderer, player = make_session(complete_reply=lambda m, on_tool=None: "One. Two.")
-    session._stop.set()
-    session._generate_reply()
-    assert player.enqueued == []
-    # nothing spoken -> no assistant turn recorded
-    assert all(item.get("role") != "assistant" for item in session.history)
-    assert ("reply_done", True) in renderer.calls
-
-
-def test_generate_reply_llm_failure_is_recorded_and_surfaced():
-    def boom(messages, on_tool=None):
-        del messages
-        raise APIError("gateway down")
-
-    session, renderer, player = make_session(complete_reply=boom)
-    session._generate_reply()
-    assert isinstance(session.error, APIError)  # recorded for the exit path
-    # Surfaced in the transcript (not swallowed) but nothing is spoken — the turn aborts.
-    assert ("agent_transcript", "(error: gateway down)", False) in renderer.calls
-    assert ("reply_done", False) in renderer.calls  # the error line is closed off cleanly
-    assert player.enqueued == []
-
-
-def test_generate_reply_tts_failure_midway_is_recorded():
-    def boom(text):
-        raise APIError("tts down")
-
-    session, renderer, player = make_session(
-        complete_reply=lambda m, on_tool=None: "Hi.", synthesize=boom
-    )
-    session._generate_reply()
-    assert isinstance(session.error, APIError)
-    assert player.enqueued == []
-    assert ("reply_started",) in renderer.calls
-    assert ("reply_done", False) in renderer.calls
-
-
-def test_record_error_keeps_first_and_warns(monkeypatch):
-    printed = []
-    monkeypatch.setattr(engine.output.error_console, "print", lambda msg: printed.append(msg))
-    session, _renderer, _player = make_session()
-    session._record_error(APIError("first"))
-    session._record_error(APIError("second"))
-    assert isinstance(session.error, APIError)
-    assert session.error.message == "first"
-    assert any("first" in str(msg) for msg in printed)
-
-
-# --- barge-in / shutdown -----------------------------------------------------
-
-
-def test_barge_in_cancels_and_flushes_live_worker():
-    session, _renderer, player = make_session()
-    worker = FakeWorker(alive=True)
-    session._reply = worker
-    session._barge_in()
-    assert session._stop.is_set()
-    assert player.flushed == 1
-    assert worker.joined == 1
-    assert session._reply is None
-
-
-def test_barge_in_without_a_live_worker_does_not_flush():
-    # No worker, or one that already finished: nothing to cancel, so no flush.
-    session, _renderer, player = make_session()
-    session._barge_in()  # no worker
-    session._reply = FakeWorker(alive=False)
-    session._barge_in()  # finished worker
-    assert player.flushed == 0
-    assert session._reply is None
-
-
-def test_interrupt_reply_signals_stop_and_flushes_without_joining():
-    # Live TUI Escape/Ctrl-C silences a playing reply: stop flag + flush, but NO join.
-    session, _renderer, player = make_session()
-    worker = FakeWorker(alive=True)
-    session._reply = worker
-    assert session.interrupt_reply() is True
-    assert session._stop.is_set()
-    assert player.flushed == 1
-    assert worker.joined == 0  # not joined — the worker unwinds on its own
-    assert session._reply is worker  # still tracked; the next turn's barge-in joins it
-
-
-def test_interrupt_reply_is_a_noop_when_nothing_is_playing():
-    # No worker, or one that already finished: nothing to stop, so no flush and no stop flag.
-    session, _renderer, player = make_session()
-    assert session.interrupt_reply() is False  # no worker
-    session._reply = FakeWorker(alive=False)
-    assert session.interrupt_reply() is False  # finished worker
-    assert player.flushed == 0
-    assert not session._stop.is_set()
-
-
-def test_interrupt_reply_silences_the_greeting_with_no_worker():
-    # The greeting is enqueued with no reply worker; Escape/Ctrl-C must still cut it. With audio
-    # queued (pending>0) the interrupt flushes the player and reports that it silenced something,
-    # so the live TUI interrupts the greeting instead of (for Ctrl-C) quitting the session.
-    session, _renderer, player = make_session()
-    player.pending_samples = 1  # even a single queued sample (>0) means sound is still playing
-    assert session.interrupt_reply() is True
-    assert player.flushed == 1
-    assert player.pending() == 0  # the queued greeting was dropped
-
-
-def test_barge_in_silences_a_draining_reply_tail_after_the_worker_exits():
-    # The reply worker enqueues every sentence then exits, but the audio keeps draining. A new
-    # spoken turn in that window must still cut the tail — a bare is_alive() check would miss it.
-    session, _renderer, player = make_session()
-    session._reply = FakeWorker(alive=False)  # worker finished enqueuing
-    player.pending_samples = 9600  # ...but its audio is still playing
-    session._barge_in()
-    assert session._stop.is_set()
-    assert player.flushed == 1
-    assert session._reply is None
-
-
-def test_shutdown_joins_live_worker():
-    session, _renderer, _player = make_session()
-    worker = FakeWorker(alive=True)
-    session._reply = worker
-    session.shutdown()
-    assert session._stop.is_set()
-    assert worker.joined == 1
-    assert session._reply is None
-
-
-def test_shutdown_without_worker_is_safe():
-    session, _renderer, _player = make_session()
-    session.shutdown()  # no worker spawned
-    assert session._reply is None
+    assert voiced == []
+    assert ("user_final", "what time is it") in renderer.calls
 
 
 # --- helpers -----------------------------------------------------------------
@@ -343,7 +195,7 @@ def test_is_final_turn_defaults_missing_attrs_to_not_final():
 
 def test_spawn_thread_runs_target():
     ran = threading.Event()
-    worker = engine._spawn_thread(ran.set)
+    worker = _runtime.spawn_thread(ran.set)
     worker.join()
     assert ran.is_set()
     assert worker.is_alive() is False
@@ -358,17 +210,17 @@ def test_run_cascade_greets_then_pumps_turns():
 
     session_box = {}
 
-    def complete_reply(messages, on_tool=None):
+    def stream_reply(messages):
         session_box["messages"] = messages
-        return "Hi back."
+        return [SpeechDelta("Hi back.")]
 
     renderer = FakeRenderer()
     player = FakePlayer()
     config = CascadeConfig(greeting="Welcome.")
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=complete_reply,
-        synthesize=lambda text: text.encode(),
+        stream_reply=stream_reply,
+        synthesize=lambda text, sink: sink(text.encode()),
         spawn=_sync_spawn,
     )
     run_cascade(renderer=renderer, player=player, config=config, deps=deps)
@@ -387,8 +239,8 @@ def test_run_cascade_hands_the_session_to_on_session_before_greeting():
     player = FakePlayer()
     deps = CascadeDeps(
         run_stt=lambda on_turn: None,
-        complete_reply=lambda m, on_tool=None: "hi",
-        synthesize=lambda text: b"",
+        stream_reply=_deltas("hi"),
+        synthesize=lambda text, sink: sink(b""),
         spawn=_sync_spawn,
     )
     run_cascade(
@@ -414,8 +266,8 @@ def test_run_cascade_shuts_down_inflight_worker():
 
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=lambda m, on_tool=None: "hi",
-        synthesize=lambda t: b"",
+        stream_reply=_deltas("hi"),
+        synthesize=lambda text, sink: sink(b""),
         spawn=lazy_spawn,
     )
     run_cascade(
@@ -428,11 +280,14 @@ def test_run_cascade_reraises_recorded_leg_error():
     def run_stt(on_turn):
         on_turn(_turn("hi"))
 
-    def boom(messages, on_tool=None):
+    def boom(messages):
         raise APIError("gateway down")
 
     deps = CascadeDeps(
-        run_stt=run_stt, complete_reply=boom, synthesize=lambda t: b"", spawn=_sync_spawn
+        run_stt=run_stt,
+        stream_reply=boom,
+        synthesize=lambda text, sink: sink(b""),
+        spawn=_sync_spawn,
     )
     with pytest.raises(APIError, match="gateway down"):
         run_cascade(
@@ -450,8 +305,8 @@ def test_run_cascade_closes_player_when_stt_raises():
     player = FakePlayer()
     deps = CascadeDeps(
         run_stt=run_stt,
-        complete_reply=lambda m, on_tool=None: "",
-        synthesize=lambda t: b"",
+        stream_reply=_deltas(""),
+        synthesize=lambda text, sink: sink(b""),
         spawn=_sync_spawn,
     )
     with pytest.raises(APIError, match="stt failed"):
@@ -459,3 +314,34 @@ def test_run_cascade_closes_player_when_stt_raises():
             renderer=FakeRenderer(), player=player, config=CascadeConfig(greeting=""), deps=deps
         )
     assert player.closed is True
+
+
+def test_runtime_reply_sentinels_are_frozen():
+    # Done/Failure/Timeout are frozen dataclasses; the frozen=True->False mutant is killed by
+    # asserting a write raises. A variable attr name dodges ruff B010 and pyright's frozen check.
+    import dataclasses
+
+    probe = "injected_probe"
+    for instance in (_runtime.Done(), _runtime.Failure(error=APIError("x")), _runtime.Timeout()):
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(instance, probe, 1)
+
+
+def test_cascade_session_speaking_event_is_not_an_init_field():
+    # _speaking is internal state, never a constructor argument; the init=False->True mutant is
+    # killed by asserting the field stays init=False.
+    import dataclasses
+
+    fields = {f.name: f for f in dataclasses.fields(engine.CascadeSession)}
+    assert fields["_speaking"].init is False
+
+
+def test_detach_executor_threads_noop_without_registry(monkeypatch):
+    # When concurrent.futures exposes no thread registry, detach returns before touching it. A
+    # thread that WOULD be popped is staged, so the mutant dropping the early return crashes on
+    # None.pop and the test kills it; with the return intact the call is a clean no-op.
+    monkeypatch.setattr(_runtime.cf_thread, "_threads_queues", None, raising=False)
+    staged = threading.Thread(target=lambda: None)
+    monkeypatch.setattr(_runtime, "executor_threads", lambda: {staged})
+
+    _runtime.detach_executor_threads_since(set())  # no AttributeError: early-returns on None

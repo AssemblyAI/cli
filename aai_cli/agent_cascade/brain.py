@@ -5,32 +5,50 @@ LLM completion, so the agent can transparently reach for a tool — web search �
 mid-conversation, mimicking a live multimodal assistant (the "talk to Gemini Live"
 experience). The toolset is deliberately minimal: a low-latency spoken turn does best
 with one obvious tool rather than a menu it has to choose among. The graph is built once per session
-(:func:`build_graph`) and invoked statelessly per turn with the running history the
-cascade already keeps (:func:`build_completer`); tools are read-only and auto-approved,
+(:func:`build_graph`) and driven turn-by-turn with the running history the
+cascade already keeps (:func:`build_streamer`); tools are read-only and auto-approved,
 because a spoken turn can't pause for a keyboard confirmation, and the system prompt
 keeps every reply short and speakable.
 
-The graph is the only network seam: :func:`build_completer` accepts an injected graph,
-so the per-turn orchestration is unit-tested against a fake with no sockets — the same
-seam the rest of the cascade uses for its STT/LLM/TTS legs.
+The graph is the only network seam: :func:`build_streamer` accepts an injected graph,
+so the per-turn streaming reply leg is unit-tested against a fake with no sockets — the
+same seam the rest of the cascade uses for its STT/LLM/TTS legs.
 """
 
 from __future__ import annotations
 
+import itertools
 import logging
-from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from aai_cli.agent_cascade import datetime_tool, weather_tool, webpage_tool
 from aai_cli.agent_cascade.config import CascadeConfig
-from aai_cli.code_agent.agent import CompiledAgent
-from aai_cli.code_agent.firecrawl_search import WEB_SEARCH_TOOL_NAME
-from aai_cli.code_agent.summarize import describe_args
+from aai_cli.agent_cascade.firecrawl_search import WEB_SEARCH_TOOL_NAME
+from aai_cli.agent_cascade.prompt import build_system_prompt
 from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
+    from langchain.agents.middleware import AgentMiddleware
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
+
+
+class CompiledAgent(Protocol):
+    """The slice of the compiled langgraph graph the live reply leg drives.
+
+    A structural type so we needn't name langgraph's deeply-generic
+    ``CompiledStateGraph`` (and don't drag its type params through our code).
+    """
+
+    def invoke(
+        self, input: object, config: Mapping[str, object] | None = None
+    ) -> dict[str, object]:
+        """Run one step of the graph, returning the updated state (incl. messages)."""
+
 
 # Verbose (`-v`) flow logging for the agent's tool loop. `invoke` runs the whole loop
 # internally, so without this `-v` only shows the httpx request lines and never which
@@ -45,7 +63,21 @@ _RESULT_LOG_CAP = 500  # pragma: no mutate
 
 # Human, speakable labels for the tool affordance the live UI shows while a tool runs (so a
 # spoken turn that pauses to use a tool says *why* it's working, not just spin silently).
-_TOOL_LABELS = {WEB_SEARCH_TOOL_NAME: "Searching the web"}
+_TOOL_LABELS = {
+    WEB_SEARCH_TOOL_NAME: "Searching the web",
+    weather_tool.WEATHER_TOOL_NAME: "Checking the weather",
+    webpage_tool.READ_URL_TOOL_NAME: "Reading the page",
+    datetime_tool.DATETIME_TOOL_NAME: "Checking the time",
+    # The --files filesystem tools (deepagents' built-in names).
+    "read_file": "Reading a file",
+    "write_file": "Writing a file",
+    "edit_file": "Editing a file",
+    "execute": "Running code",
+    "task": "Working on a subtask",
+    "ls": "Listing files",
+    "glob": "Finding files",
+    "grep": "Searching files",
+}
 
 
 def _tool_label(name: str) -> str:
@@ -53,116 +85,168 @@ def _tool_label(name: str) -> str:
     return _TOOL_LABELS.get(name, f"Using {name}")
 
 
-def _tool_affordance(name: str, args: Mapping[str, object]) -> str:
-    """The live UI's tool-affordance string: the label plus its identifying arg.
+# Spoken filler the agent says aloud when it pauses for a tool, so a hands-free turn fills the
+# silent tool round-trip with *why* it paused instead of dead air (the audible counterpart to the
+# visual `_TOOL_LABELS` affordance). Each tool gets a few short, speakable variants the engine
+# rotates across turns; unknown/MCP tools fall back to `_GENERIC_FILLERS`. Spoken-style only — no
+# markdown, no trailing detail — since they're synthesized straight to TTS ahead of the answer.
+_GENERIC_FILLERS: tuple[str, ...] = ("One sec.", "Let me check.")
 
-    Joins the friendly present-tense label (``Searching the web`` / ``Using read_file``) with
-    the one identifying argument :func:`describe_args` picks out (a query, path, or URL), so a
-    paused turn reads as ``Searching the web · ai house Seattle`` rather than a bare verb. Falls
-    back to the bare label when the call carries no arguments.
+_TOOL_FILLERS: dict[str, tuple[str, ...]] = {
+    WEB_SEARCH_TOOL_NAME: (
+        "Let me look that up.",
+        "Searching now.",
+        "One moment, checking the web.",
+    ),
+    weather_tool.WEATHER_TOOL_NAME: ("Let me check the weather.", "Checking the forecast now."),
+    webpage_tool.READ_URL_TOOL_NAME: ("Let me pull up that page.", "Reading it now."),
+    datetime_tool.DATETIME_TOOL_NAME: ("Let me check the time.", "One moment."),
+}
+
+
+def _tool_fillers(name: str) -> tuple[str, ...]:
+    """The spoken filler variants for a tool call, falling back to the generic tuple.
+
+    Mirrors :func:`_tool_label`: a known tool gets its own phrases, an unknown/MCP tool the
+    generic fallback. The tuple (not a single pre-chosen phrase) rides on :class:`ToolNotice`
+    so the engine owns rotation state and two notices for the same tool don't repeat.
     """
-    label = _tool_label(name)
-    detail = describe_args(args)
-    return f"{label} · {detail}" if detail else label
+    return _TOOL_FILLERS.get(name, _GENERIC_FILLERS)
 
 
-# Closes every guidance variant: the reply is spoken, so it must stay short and plain.
-_SPOKEN_TAIL = (
-    "Your reply is read aloud, so keep it short and spoken — no markdown, lists, code, or raw URLs."
-)
+@dataclass(frozen=True)
+class SpeechDelta:
+    """A top-level assistant-text token delta to be spoken (one piece of the reply)."""
 
-# When the session has *no* tools wired (e.g. no web search and the docs host is
-# unreachable), the model must answer from its own knowledge — and crucially must not
-# promise an action it can't take. Without this, telling it "you can search the web" while
-# no search tool is bound makes it narrate "I'll search for that…" and then stop, so the
-# answer never comes (the tool it announced was never actually available to call).
-_NO_TOOLS_GUIDANCE = (
-    "You have no external tools available, so answer from your own knowledge. Never say "
-    "you will search the web, look something up, or fetch a page — you can't do any of "
-    "that, so don't promise it; if a question needs information you don't have, say so "
-    f"briefly instead. {_SPOKEN_TAIL}"
-)
+    text: str
 
 
-def _join_clause(parts: list[str]) -> str:
-    """Join capability phrases into a readable clause: ``a``, ``a and b``, ``a, b, and c``."""
-    *initial, last = parts
-    if not initial:
-        return last
-    # Oxford comma only once there are three-or-more items (two or more lead the last).
-    joiner = ", and " if initial[1:] else " and "
-    return f"{', '.join(initial)}{joiner}{last}"
+@dataclass(frozen=True)
+class ToolNotice:
+    """A speakable affordance emitted when the agent starts a tool call mid-turn.
 
-
-def _tool_capabilities(tools: Sequence[BaseTool]) -> list[str]:
-    """The spoken-capability phrase backed by a present built-in tool.
-
-    The live agent's only built-in tool is Firecrawl web search, bound just when a
-    ``FIRECRAWL_API_KEY`` is set — so the prompt advertises web search only when the agent
-    can really do it. Advertising a tool it doesn't have made it announce an action ("I'll
-    search…") it then couldn't take, leaving the turn with no answer.
+    ``label`` is the visual affordance ("Searching the web"); ``fillers`` are the spoken
+    variants the engine may say aloud for the *first* tool call of a turn (it owns the
+    rotation), so a hands-free turn isn't dead air during the tool round-trip.
     """
-    names = {tool.name for tool in tools}
-    if WEB_SEARCH_TOOL_NAME in names:
-        return ["search the web for current or unfamiliar facts"]
-    return []
+
+    label: str
+    fillers: tuple[str, ...]
 
 
-def _extra_capability(extra_tools: Sequence[BaseTool]) -> str | None:
-    """The spoken-capability phrase for user-configured MCP tools, listing them by name.
+@dataclass(frozen=True)
+class ApprovalPause:
+    """Brackets a human write-approval wait (``--files``).
 
-    The deepagents graph already shows the model each tool's schema, so this only has to
-    name the tools so the guidance doesn't claim "no external tools" when MCP tools are
-    bound — and so the model knows to reach for them.
+    Emitted ``active=True`` just before the streamer blocks on the user's y/n decision and
+    ``active=False`` once it's answered, so the engine can suspend its reply-timeout deadline
+    for exactly the human-think interval (a slow keypress must not cut off the write).
     """
-    names = sorted(tool.name for tool in extra_tools)
-    if not names:
-        return None
-    return f"use your connected tools ({', '.join(names)})"
+
+    active: bool
 
 
-def build_system_prompt(
-    persona: str, *, tools: Sequence[BaseTool], extra_tools: Sequence[BaseTool] = ()
-) -> str:
-    """The live agent's system prompt: the user's persona plus tool guidance.
+@runtime_checkable
+class _GatedGraph(Protocol):
+    """The graph surface the --files write-approval loop drives beyond ``invoke``.
 
-    The guidance is tailored to the bound tools so the model is only told about
-    capabilities it actually has — advertising a missing tool (web search without a
-    ``FIRECRAWL_API_KEY``) made the agent announce an action it then couldn't take, leaving
-    the turn hanging with no answer. ``tools`` are the built-in legs (web search, URL
-    fetch, AssemblyAI docs); ``extra_tools`` are user-configured MCP tools, advertised
-    generically by name. With no tools at all the model answers from its own knowledge.
+    ``CompiledAgent`` deliberately declares only ``invoke`` (mirroring the code agent), so the
+    gated path narrows to this protocol for the ``stream``/``get_state`` it additionally needs.
     """
-    capabilities = _tool_capabilities(tools)
-    extra = _extra_capability(extra_tools)
-    if extra is not None:
-        capabilities.append(extra)
-    if not capabilities:
-        return f"{persona}\n\n{_NO_TOOLS_GUIDANCE}"
-    guidance = (
-        f"You can use tools to help answer: {_join_clause(capabilities)}. Reach for a "
-        "tool when a question needs fresh or external information; answer directly and "
-        "instantly when you already know. Only offer to do what these tools allow — don't "
-        f"say you'll search the web or look something up unless it's listed here. {_SPOKEN_TAIL}"
-    )
-    return f"{persona}\n\n{guidance}"
+
+    def stream(
+        self, graph_input: object, config: Mapping[str, object] | None, *, stream_mode: str
+    ) -> Iterator[tuple[object, object]]:
+        """Yield ``(message_chunk, metadata)`` pairs for one streamed segment."""
+
+    def get_state(self, config: Mapping[str, object] | None) -> object:
+        """The checkpointed state snapshot (its ``.interrupts`` carry any pending write)."""
+
+
+# Decide whether a gated write may run (front-end supplied). Mirrors the code agent's Approver.
+Approver = Callable[[str, dict[str, object]], bool]
+
+# Message handed back to the model when the user declines a write (matches the code agent's copy).
+_DECLINED = "User declined to run this tool."
 
 
 def build_live_tools() -> list[BaseTool]:
-    """The live agent's single read-only tool: Firecrawl web search (only when keyed).
+    """The live agent's built-in tools: the keyless weather, read-a-URL, and date/time
+    tools, plus Firecrawl web search when ``FIRECRAWL_API_KEY`` is set.
 
-    Deliberately minimal. A low-latency spoken turn does best with one obvious tool rather
-    than a large menu it has to choose among — a big toolset made the model narrate "I'll
-    search…" without ever calling anything, and bloated every request with tool schemas.
-    Web search is the one capability worth the round-trip; everything else the agent answers
-    from its own knowledge. The tool is reused (un-approval-gated) from the coding agent and
-    is present only when ``FIRECRAWL_API_KEY`` is set, so an unkeyed session simply runs
-    tool-free. Extra tools remain strictly opt-in via ``--mcp-config``.
+    Deliberately minimal. A low-latency spoken turn does best with a few obvious tools
+    rather than a large menu it must choose among. Open-Meteo, the URL reader, and the
+    system clock need no key, so the weather, read-url, and datetime tools are always
+    present (every session has real capabilities); web search is reused (un-approval-gated)
+    from the coding agent and added only when keyed. Extra tools remain strictly opt-in via
+    ``--mcp-config``.
     """
-    from aai_cli.code_agent.firecrawl_search import build_web_search_tool
+    from aai_cli.agent_cascade.datetime_tool import build_datetime_tool
+    from aai_cli.agent_cascade.firecrawl_search import build_web_search_tool
+    from aai_cli.agent_cascade.weather_tool import build_weather_tool
+    from aai_cli.agent_cascade.webpage_tool import build_read_url_tool
 
+    tools: list[BaseTool] = [build_weather_tool(), build_read_url_tool(), build_datetime_tool()]
     search = build_web_search_tool()
-    return [search] if search is not None else []
+    if search is not None:
+        tools.append(search)
+    return tools
+
+
+# The mutating tools gated behind human approval when --files is on (reads — incl. grep — stay
+# ungated). execute joins the gate because the backend is now sandbox-capable: it runs real
+# commands in cwd, OS-confined, but every run is still approved.
+_WRITE_TOOLS = ("write_file", "edit_file", "execute")
+
+
+def _build_fs_backend() -> object:
+    """A sandbox-capable deepagents backend rooted at the launch directory.
+
+    ``virtual_mode=True`` maps the model's ``/``-rooted paths under cwd and blocks traversal
+    escapes (same containment as before for file ops). Being a ``SandboxBackendProtocol`` backend
+    is what makes deepagents bind a *functional* ``execute`` — and :class:`SandboxedShellBackend`
+    runs it OS-sandboxed in cwd (no network, no escape) rather than on the host shell."""
+    from aai_cli.agent_cascade.sandbox import SandboxedShellBackend
+
+    return SandboxedShellBackend(root_dir=str(Path.cwd()), virtual_mode=True)
+
+
+def _graph_kwargs(
+    config: CascadeConfig, *, backend_factory: Callable[[], object] = _build_fs_backend
+) -> dict[str, object]:
+    """Extra ``create_deep_agent`` kwargs that turn on real-cwd files + write-gating.
+
+    Empty when ``--files`` is off, so the graph is built exactly as before. When on: a real-cwd
+    backend, ``interrupt_on`` pausing only the mutating tools for human approval, and an
+    in-memory checkpointer (interrupt/resume needs one). ``backend_factory`` is the test seam.
+    """
+    if not config.files:
+        return {}
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from aai_cli.agent_cascade.subagents import general_purpose_subagent
+
+    return {
+        "backend": backend_factory(),
+        "interrupt_on": dict.fromkeys(_WRITE_TOOLS, True),
+        "checkpointer": InMemorySaver(),
+        "memory": ["./.deepagents/AGENTS.md"],
+        "subagents": [general_purpose_subagent(dict.fromkeys(_WRITE_TOOLS, True))],
+    }
+
+
+def _build_middleware(config: CascadeConfig) -> list[AgentMiddleware]:
+    """The live brain's extra agent middleware: a per-turn tool-call budget.
+
+    ``ToolCallLimitMiddleware(run_limit=…, exit_behavior="continue")`` caps tool calls *per
+    spoken turn* and, once the budget is hit, blocks further tool calls so the model is forced to
+    answer with what it has gathered — a graceful stop rather than looping until langgraph's
+    recursion backstop raises. deepagents inserts this into its own middleware stack (additive,
+    so the core file/subagent/summarization middleware is untouched).
+    """
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    return [ToolCallLimitMiddleware(run_limit=config.tool_call_limit, exit_behavior="continue")]
 
 
 def build_graph(
@@ -185,7 +269,7 @@ def build_graph(
     from deepagents import create_deep_agent
 
     from aai_cli.agent_cascade.mcp_tools import load_mcp_tools
-    from aai_cli.code_agent.model import build_model
+    from aai_cli.agent_cascade.model import build_model
 
     model = build_model(
         api_key, model=config.model, max_tokens=config.max_tokens, extra=config.llm_extra
@@ -195,116 +279,198 @@ def build_graph(
     return create_deep_agent(
         model=model,
         tools=builtin + extra,
-        system_prompt=build_system_prompt(config.system_prompt, tools=builtin, extra_tools=extra),
+        system_prompt=build_system_prompt(
+            config.system_prompt, tools=builtin, extra_tools=extra, files=config.files
+        ),
+        middleware=_build_middleware(config),
+        **_graph_kwargs(config),
     )
 
 
-def build_completer(
-    api_key: str, config: CascadeConfig, *, graph: CompiledAgent | None = None
-) -> Callable[..., str]:
-    """A ``complete_reply`` for the cascade engine backed by the deepagents graph.
+def build_streamer(
+    api_key: str,
+    config: CascadeConfig,
+    *,
+    graph: CompiledAgent | None = None,
+    approver: Approver | None = None,
+) -> Callable[..., Iterator[SpeechDelta | ToolNotice | ApprovalPause]]:
+    """A streaming reply leg for the cascade engine, backed by the deepagents graph.
 
-    The cascade prepends its own ``system`` message to the history each turn; the graph
-    already owns the system prompt, so we drop it before invoking. The graph runs the full
-    tool loop and we return its final spoken text. ``on_tool`` (when given) is called with a
-    short label as each tool call lands, so the front-end can show a "Searching the web…"
-    affordance instead of sitting silent while the agent works; the loop is also streamed —
-    rather than ``invoke``-d — whenever a sink is wired or under ``-v`` (see :func:`_run_graph`).
-    ``graph`` is injected in tests so the per-turn wiring runs against a fake with no network.
+    The cascade prepends its own ``system`` message each turn; the graph owns the system
+    prompt, so it is dropped before streaming. The graph is driven with
+    ``stream_mode="messages"`` and each top-level assistant token delta is yielded as a
+    :class:`SpeechDelta`, each started tool call as a :class:`ToolNotice` (the live UI's
+    affordance). Under ``-v`` the flow is logged. ``graph`` is injected in tests so the
+    per-turn wiring runs against a fake with no network.
+
+    With ``--files`` on (``config.files``) the graph gates ``write_file``/``edit_file``: a
+    pending write pauses the stream, ``approver`` decides, and the turn resumes (see
+    :func:`_stream_gated`). Each turn uses a fresh ``thread_id`` so the checkpointer never
+    accumulates the cascade's full-history-per-turn input across turns.
     """
     resolved = build_graph(api_key, config) if graph is None else graph
+    turn_ids = itertools.count()
 
-    def complete_reply(
+    def stream_reply(
         messages: list[ChatCompletionMessageParam],
-        on_tool: Callable[[str], None] | None = None,
-    ) -> str:
+    ) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
         conversation = [message for message in messages if message.get("role") != "system"]
-        return _reply_text(_run_graph(resolved, conversation, on_tool))
+        run_config = (
+            {"configurable": {"thread_id": f"live-{next(turn_ids)}"}} if config.files else None
+        )
+        return _stream_graph(
+            resolved, conversation, approver=approver, config=run_config, gated=config.files
+        )
 
-    return complete_reply
+    return stream_reply
 
 
-def _run_graph(
+def _stream_graph(
     graph: CompiledAgent,
     conversation: list[ChatCompletionMessageParam],
-    on_tool: Callable[[str], None] | None = None,
-) -> dict[str, object]:
-    """Run one turn through the graph, returning its end state.
+    *,
+    approver: Approver | None = None,
+    config: dict[str, object] | None = None,
+    gated: bool = False,
+) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
+    """Stream one turn through the graph token-by-token, yielding speech/tool events.
 
-    Normally a single ``invoke`` (the whole tool loop runs internally). When a tool sink is
-    wired (the live UI's affordance) or under verbose mode, and the graph can stream, drive
-    it as incremental state snapshots instead so :func:`_log_flow` surfaces each tool call as
-    it happens. The test fakes only implement ``invoke``, so they (and the plain path with no
-    sink) take the invoke branch.
+    Wraps any graph failure as a CLIError (a clean ``CLIError`` passes through) so the
+    cascade surfaces it instead of the reply worker dying silently. Under ``-v`` the
+    accumulated assistant text, each tool call, and each tool result are logged to
+    ``_FLOW_LOG``. When ``gated`` (``--files``), writes pause for ``approver`` (see
+    :func:`_stream_gated`); otherwise it is a single uninterrupted stream pass.
     """
+    verbose = debuglog.active()
+    pending: list[str] = []  # assistant deltas accumulated for one verbose "llm:" line
+
+    def flush_log() -> None:
+        if verbose and pending:
+            _FLOW_LOG.info("llm: %s", "".join(pending))
+        pending.clear()
+
+    if not hasattr(graph, "stream"):
+        raise CLIError(
+            "the agent couldn't complete the turn: the agent graph cannot stream",
+            error_type="agent_brain_error",
+        )
     try:
-        return _drive_graph(graph, {"messages": conversation}, on_tool)
+        # The gated path needs stream + get_state (the graph is built with a checkpointer, so it
+        # always satisfies _GatedGraph); the isinstance both narrows for mypy and falls back to a
+        # plain stream for the impossible non-gated-graph case.
+        if gated and isinstance(graph, _GatedGraph):
+            yield from _stream_gated(
+                graph,
+                conversation,
+                approver,
+                config,
+                verbose=verbose,
+                pending=pending,
+                flush_log=flush_log,
+            )
+        else:
+            for chunk, _m in graph.stream(
+                {"messages": conversation}, config, stream_mode="messages"
+            ):
+                yield from _events_from_chunk(
+                    chunk, verbose=verbose, pending=pending, flush_log=flush_log
+                )
+            flush_log()
     except CLIError:
         raise
     except Exception as exc:
-        # The graph can fail anywhere in the tool loop — a gateway 4xx/5xx, a tool raising,
-        # a langgraph recursion limit. Convert it to a CLIError so the cascade records and
-        # *surfaces* it (the engine shows it in the transcript) instead of the reply worker
-        # dying silently and the user getting no answer with no clue why.
         raise CLIError(
             f"the agent couldn't complete the turn: {exc}", error_type="agent_brain_error"
         ) from exc
 
 
-def _drive_graph(
-    graph: CompiledAgent,
-    graph_input: dict[str, object],
-    on_tool: Callable[[str], None] | None = None,
-) -> dict[str, object]:
-    """Invoke the graph, or stream it (when a tool sink is wired or under ``-v``) so
-    :func:`_log_flow` can surface each tool call as it lands."""
-    if (on_tool is not None or debuglog.active()) and hasattr(graph, "stream"):
-        last: dict[str, object] = {}
-        seen = 0
-        for chunk in graph.stream(graph_input, None, stream_mode="values"):
-            seen = _log_flow(chunk, seen, on_tool)
-            last = chunk
-        return last
-    return graph.invoke(graph_input)
+def _stream_gated(
+    graph: _GatedGraph,
+    conversation: list[ChatCompletionMessageParam],
+    approver: Approver | None,
+    config: dict[str, object] | None,
+    *,
+    verbose: bool,
+    pending: list[str],
+    flush_log: Callable[[], None],
+) -> Iterator[SpeechDelta | ToolNotice | ApprovalPause]:
+    """Stream a write-gated turn: each pause on a write asks ``approver`` and resumes.
 
-
-def _log_flow(
-    state: dict[str, object], seen: int, on_tool: Callable[[str], None] | None = None
-) -> int:
-    """Surface the tool calls/results added to ``state`` since the first ``seen`` messages.
-
-    Feeds ``on_tool`` a speakable label as each tool call lands (the live UI's affordance) and,
-    under ``-v``, logs the call/result/interim line to stderr. Reuses the coding agent's
-    message→event vocabulary so it reads the same AIMessage/ToolMessage shapes the TUI does.
-    Returns the new high-water message count so the next snapshot only re-surfaces what it added.
+    The graph pauses (before executing a gated write) by ending the ``messages`` stream with
+    a pending interrupt on the checkpointed state. We surface its action requests, bracket the
+    human decision with :class:`ApprovalPause` events, and resume with the approve/reject
+    ``Command`` — looping until the turn finishes without pausing.
     """
-    from aai_cli.code_agent.events import message_events
+    from langgraph.types import Command
 
-    messages = state.get("messages")
-    if not isinstance(messages, list):
-        return seen
-    verbose = debuglog.active()
-    for message in messages[seen:]:
-        for event in message_events(message, announce_calls=True):
-            _surface_event(event, on_tool, verbose=verbose)
-    return len(messages)
+    graph_input: object = {"messages": conversation}
+    while True:
+        for chunk, _m in graph.stream(graph_input, config, stream_mode="messages"):
+            yield from _events_from_chunk(
+                chunk, verbose=verbose, pending=pending, flush_log=flush_log
+            )
+        flush_log()
+        requests = _pending_writes(graph, config)
+        if not requests:
+            return
+        decisions: list[dict[str, object]] = []
+        for request in requests:
+            yield ApprovalPause(active=True)
+            decisions.append(_decide(request, approver))
+            yield ApprovalPause(active=False)
+        graph_input = Command(resume={"decisions": decisions})
 
 
-def _surface_event(event: object, on_tool: Callable[[str], None] | None, *, verbose: bool) -> None:
-    """Surface one flow event: feed a tool call's label to ``on_tool``, and (under ``-v``)
-    log the call/result/interim line to stderr."""
-    from aai_cli.code_agent.events import AssistantText, ToolCall, ToolResult
+def _pending_writes(
+    graph: _GatedGraph, config: dict[str, object] | None
+) -> list[dict[str, object]]:
+    """The action requests of a paused gated write (empty when the turn isn't paused).
 
-    if isinstance(event, ToolCall) and on_tool is not None:
-        on_tool(_tool_affordance(event.name, event.args))
-    if not verbose:
+    deepagents surfaces an approval pause as ``interrupts`` on the checkpointed state, each
+    interrupt's ``.value`` carrying the ``action_requests`` (the gated tool calls).
+    """
+    state = graph.get_state(config)
+    requests: list[dict[str, object]] = []
+    for interrupt in getattr(state, "interrupts", ()) or ():
+        value = getattr(interrupt, "value", None)
+        actions = value.get("action_requests") if isinstance(value, dict) else None
+        if isinstance(actions, list):
+            requests.extend(action for action in actions if isinstance(action, dict))
+    return requests
+
+
+def _decide(action: dict[str, object], approver: Approver | None) -> dict[str, object]:
+    """Ask the approver about one pending write and shape the resume decision (reject if none)."""
+    name = str(action.get("name", ""))
+    args = action.get("args") or {}
+    if not isinstance(args, dict):
+        args = {}
+    if approver is not None and approver(name, args):
+        return {"type": "approve"}
+    return {"type": "reject", "message": _DECLINED}
+
+
+def _events_from_chunk(
+    chunk: object, *, verbose: bool, pending: list[str], flush_log: Callable[[], None]
+) -> Iterator[SpeechDelta | ToolNotice]:
+    """Translate one streamed message chunk into speech/tool events (and verbose logs)."""
+    if type(chunk).__name__ == "ToolMessage":
+        flush_log()
+        if verbose:
+            content = _content_text(getattr(chunk, "content", ""))
+            _FLOW_LOG.info("tool result %s -> %s", getattr(chunk, "name", ""), _clip(content))
         return
-    if isinstance(event, ToolCall):
-        _FLOW_LOG.info("tool call %s args=%s", event.name, event.args)
-    elif isinstance(event, ToolResult):
-        _FLOW_LOG.info("tool result %s -> %s", event.name, _clip(event.content))
-    elif isinstance(event, AssistantText):
-        _FLOW_LOG.info("llm: %s", event.text)
+    for call in getattr(chunk, "tool_call_chunks", None) or []:
+        name = call.get("name")
+        if name:
+            flush_log()
+            if verbose:
+                _FLOW_LOG.info("tool call %s", name)
+            yield ToolNotice(_tool_label(name), _tool_fillers(name))
+    text = _content_text(getattr(chunk, "content", ""))
+    if text:
+        pending.append(text)
+        yield SpeechDelta(text)
 
 
 def _clip(text: str) -> str:
@@ -320,25 +486,6 @@ def _clip(text: str) -> str:
     if len(flattened) <= _RESULT_LOG_CAP:
         return flattened
     return f"{flattened[:_RESULT_LOG_CAP]}… ({len(flattened)} chars)"
-
-
-def _reply_text(result: dict[str, object]) -> str:
-    """The agent's final spoken reply: the last assistant message that carries text.
-
-    A tool-using turn ends in an ``AIMessage`` whose ``content`` is the spoken answer,
-    but earlier ``AIMessage``\\s in the same turn (the tool-call requests) have empty
-    text — so we scan from the end for the last one with non-empty content.
-    """
-    messages = result.get("messages")
-    if not isinstance(messages, list):
-        return ""
-    for message in reversed(messages):
-        if type(message).__name__ != "AIMessage":
-            continue
-        text = _content_text(getattr(message, "content", "")).strip()
-        if text:
-            return text
-    return ""
 
 
 def _content_text(content: object) -> str:

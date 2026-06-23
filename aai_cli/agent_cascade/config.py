@@ -16,18 +16,25 @@ from aai_cli.core import llm
 # `assembly live` defaults to a fast, low-latency gateway model (override with --model) —
 # a literal rather than llm.DEFAULT_MODEL so the live agent's default is independent of the
 # one-shot `assembly llm` default. Latency matters most for a spoken back-and-forth.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = "kimi-k2.5"
 DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
 # The realtime model the cascade transcribes with (same as the agent-cascade template).
-DEFAULT_SPEECH_MODEL = "u3-rt-pro"
+DEFAULT_SPEECH_MODEL = "universal-3-5-pro"
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a friendly, concise voice assistant. Keep replies short and "
-    "conversational. Your reply is read aloud by a text-to-speech engine, so "
-    "write plain spoken prose — no markdown, emoji, bullet lists, or code."
+    "You are a friendly, concise voice assistant. Keep replies as short as "
+    "possible — usually a single sentence, never more than two. Answer directly "
+    "without preamble or filler. Your reply is read aloud by a text-to-speech "
+    "engine, so write plain spoken prose — no markdown, emoji, bullet lists, or code."
 )
 DEFAULT_GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 # Sliding-window size: keep the last N messages of conversation as LLM context.
 DEFAULT_MAX_HISTORY = 40
+# Per-turn cap on how many tool calls the deepagents brain may make before it must answer.
+# Enforced by a ToolCallLimitMiddleware with exit_behavior="continue": once the budget is hit,
+# further tool calls are blocked and the model is forced to answer with what it has gathered —
+# a graceful stop, never a GraphRecursionError. (langgraph's own recursion_limit stays at the
+# deepagents default as a far-off safety backstop; this middleware is the real, soft cap.)
+DEFAULT_TOOL_CALL_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -39,6 +46,9 @@ class CascadeConfig:
     greeting: str = DEFAULT_GREETING
     model: str = DEFAULT_MODEL
     max_history: int = DEFAULT_MAX_HISTORY
+    # Per-turn tool-call budget: after this many tool calls the brain is forced to answer with
+    # what it has (a graceful stop), rather than looping until langgraph's recursion backstop errors.
+    tool_call_limit: int = DEFAULT_TOOL_CALL_LIMIT
     # TTS language (None lets the server pick from the voice).
     language: str | None = None
     # LLM: cap per-reply tokens and pass through any extra gateway request fields.
@@ -55,3 +65,7 @@ class CascadeConfig:
     # Whether STT formats finalized turns. The reply trigger waits for the formatted
     # turn when on; with it off, an unformatted end-of-turn is the cue instead.
     format_turns: bool = True
+    # Opt-in: let the agent read/write files in the launch directory. Off by default keeps
+    # behavior unchanged (the default in-memory backend, no gating, nothing advertised); on
+    # swaps to a real-cwd FilesystemBackend and gates writes behind human approval.
+    files: bool = False
