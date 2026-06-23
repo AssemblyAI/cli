@@ -117,6 +117,28 @@ def test_live_tool_call_note(snap_compare) -> None:
     assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
 
 
+def test_live_tool_then_answer_ordering(snap_compare) -> None:
+    """A tool-using turn: the answer lands *below* every tool affordance, with no empty gap.
+
+    Mirrors the engine's call order — ``reply_started`` (begin_reply) fires during the first
+    tool's spoken filler, so a second tool call follows it before the answer streams. The reply
+    widget is deferred to the first sentence, so it mounts beneath both tool lines rather than
+    wedging between them with an empty placeholder in the gap (the live tool-call ordering fix)."""
+
+    async def run_before(pilot: Pilot[None]) -> None:
+        app = pilot.app
+        assert isinstance(app, LiveAgentApp)
+        h.freeze_animation(app)
+        app.show_user_final("what's the weather like in Boston?")
+        app.show_tool_call("Checking the weather · Boston")
+        app.begin_reply()  # fires during the first tool's filler — must not mount the reply yet
+        app.show_tool_call("Checking the weather · Boston forecast")
+        app.show_agent_sentence("It's sunny and about sixty degrees right now.")
+        h.freeze_animation(app)  # begin_reply switched the phase, which repainted the bar
+
+    assert snap_compare(h.build_live_app(), terminal_size=h.TERMINAL_SIZE, run_before=run_before)
+
+
 def test_live_interrupted(snap_compare) -> None:
     """An interrupted reply is finalized and tagged `(interrupted)`, then returns to listening."""
 

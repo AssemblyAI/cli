@@ -32,6 +32,7 @@ from aai_cli.core import debuglog
 from aai_cli.core.errors import CLIError
 
 if TYPE_CHECKING:
+    from langchain.agents.middleware import AgentMiddleware
     from langchain_core.tools import BaseTool
     from openai.types.chat import ChatCompletionMessageParam
 
@@ -230,6 +231,20 @@ def _graph_kwargs(
     }
 
 
+def _build_middleware(config: CascadeConfig) -> list[AgentMiddleware]:
+    """The live brain's extra agent middleware: a per-turn tool-call budget.
+
+    ``ToolCallLimitMiddleware(run_limit=…, exit_behavior="continue")`` caps tool calls *per
+    spoken turn* and, once the budget is hit, blocks further tool calls so the model is forced to
+    answer with what it has gathered — a graceful stop rather than looping until langgraph's
+    recursion backstop raises. deepagents inserts this into its own middleware stack (additive,
+    so the core file/subagent/summarization middleware is untouched).
+    """
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    return [ToolCallLimitMiddleware(run_limit=config.tool_call_limit, exit_behavior="continue")]
+
+
 def build_graph(
     api_key: str,
     config: CascadeConfig,
@@ -263,6 +278,7 @@ def build_graph(
         system_prompt=build_system_prompt(
             config.system_prompt, tools=builtin, extra_tools=extra, files=config.files
         ),
+        middleware=_build_middleware(config),
         **_graph_kwargs(config),
     )
 

@@ -165,6 +165,36 @@ def test_agent_sentence_without_begin_reply_mounts_a_reply() -> None:
     _run(go())
 
 
+def test_begin_reply_defers_the_widget_so_the_answer_lands_below_the_tools() -> None:
+    # The reply widget is mounted lazily on the first streamed sentence, never eagerly at
+    # begin_reply — so a tool call that fires *after* the reply starts (begin_reply runs during
+    # the first tool's spoken filler) still lands above the answer, and there's no empty
+    # placeholder widget sitting in the gap. This is the live tool-call ordering fix.
+    async def go() -> None:
+        app = _app()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            # Mirror the engine's call order for a two-tool turn (see _handle_tool_notice).
+            app.show_tool_call("Checking the weather")  # tool 1
+            app.begin_reply()  # reply_started fires during tool 1's filler
+            assert len(app.query(AssistantMessage)) == 0  # nothing mounted yet — deferred
+            assert "Speaking" in _voicebar(app)  # but the phase still flips to speaking
+            app.show_tool_call("Checking the weather")  # tool 2, after the reply "started"
+            app.show_agent_sentence("It's 87 degrees and clear.")  # the answer, flushed last
+            # The transcript order is the two tool affordances, then the answer — never the
+            # answer wedged between them.
+            log = app.query_one("#log")
+            kinds = [
+                type(w).__name__
+                for w in log.children
+                if isinstance(w, ToolAffordance | AssistantMessage)
+            ]
+            assert kinds == ["ToolAffordance", "ToolAffordance", "AssistantMessage"]
+            assert app.query_one(AssistantMessage).text == "It's 87 degrees and clear. "
+
+    _run(go())
+
+
 def test_interrupted_reply_notes_the_barge_in() -> None:
     async def go() -> None:
         app = _app()

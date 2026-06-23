@@ -225,10 +225,11 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
 
     captured = {}
 
-    def fake_create(*, model, tools, system_prompt):
+    def fake_create(*, model, tools, system_prompt, middleware):
         del model
         captured["tools"] = tools
         captured["system_prompt"] = system_prompt
+        captured["middleware"] = middleware
         return "graph"
 
     monkeypatch.setattr(deepagents, "create_deep_agent", fake_create)
@@ -242,6 +243,10 @@ def test_build_graph_binds_builtin_plus_mcp_tools_and_advertises_both(monkeypatc
     # The prompt advertises the built-in web-search leg AND the MCP tool by name.
     assert "search the web" in captured["system_prompt"]
     assert "use your connected tools (get_time)" in captured["system_prompt"]
+    # The per-turn tool-call budget is wired into the deepagents middleware stack.
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    assert any(isinstance(mw, ToolCallLimitMiddleware) for mw in captured["middleware"])
 
 
 def test_build_graph_loads_mcp_tools_from_config_when_not_injected(monkeypatch):
@@ -331,6 +336,22 @@ def test_streamer_strips_system_message_before_streaming():
     graph = _Capture([(AIMessageChunk(content="ok"), {})])
     _collect(graph, [{"role": "system", "content": "p"}, {"role": "user", "content": "hi"}])
     assert captured["roles"] == ["user"]
+
+
+def test_build_middleware_caps_tool_calls_with_a_graceful_stop():
+    # The brain wires a per-turn tool-call budget that forces a graceful answer instead of
+    # erroring: a ToolCallLimitMiddleware with the config's run_limit and exit_behavior="continue"
+    # (block further tool calls and let the model answer with what it has). The default is 10.
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    (default_mw,) = brain._build_middleware(CascadeConfig())
+    assert isinstance(default_mw, ToolCallLimitMiddleware)
+    assert default_mw.run_limit == 10  # DEFAULT_TOOL_CALL_LIMIT
+    assert default_mw.exit_behavior == "continue"  # answer with what it has, never raise
+
+    (custom_mw,) = brain._build_middleware(CascadeConfig(tool_call_limit=3))
+    assert isinstance(custom_mw, ToolCallLimitMiddleware)
+    assert custom_mw.run_limit == 3
 
 
 def test_streamer_emits_a_tool_notice_when_a_tool_call_starts():

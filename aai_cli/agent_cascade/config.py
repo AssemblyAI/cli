@@ -29,6 +29,12 @@ DEFAULT_SYSTEM_PROMPT = (
 DEFAULT_GREETING = "Hi! I'm your AssemblyAI voice agent. What can I help you with?"
 # Sliding-window size: keep the last N messages of conversation as LLM context.
 DEFAULT_MAX_HISTORY = 40
+# Per-turn cap on how many tool calls the deepagents brain may make before it must answer.
+# Enforced by a ToolCallLimitMiddleware with exit_behavior="continue": once the budget is hit,
+# further tool calls are blocked and the model is forced to answer with what it has gathered —
+# a graceful stop, never a GraphRecursionError. (langgraph's own recursion_limit stays at the
+# deepagents default as a far-off safety backstop; this middleware is the real, soft cap.)
+DEFAULT_TOOL_CALL_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,9 @@ class CascadeConfig:
     greeting: str = DEFAULT_GREETING
     model: str = DEFAULT_MODEL
     max_history: int = DEFAULT_MAX_HISTORY
+    # Per-turn tool-call budget: after this many tool calls the brain is forced to answer with
+    # what it has (a graceful stop), rather than looping until langgraph's recursion backstop errors.
+    tool_call_limit: int = DEFAULT_TOOL_CALL_LIMIT
     # TTS language (None lets the server pick from the voice).
     language: str | None = None
     # LLM: cap per-reply tokens and pass through any extra gateway request fields.
