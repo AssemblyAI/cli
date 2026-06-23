@@ -1,7 +1,9 @@
-"""Pure text helpers for the cascade: sentence splitting and history trimming.
+"""Pure text helpers for the cascade: sentence and clause splitting.
 
 Kept Rich-free and dependency-light so the orchestration logic in ``engine`` can
-be unit-tested without any I/O.
+be unit-tested without any I/O. (Conversation-history trimming used to live here as a
+client-side sliding window; the live brain now delegates context-window management to
+the deepagents ``SummarizationMiddleware`` instead — see :mod:`aai_cli.agent_cascade.brain`.)
 """
 
 from __future__ import annotations
@@ -25,6 +27,17 @@ def _is_boundary(text: str, index: int) -> bool:
     caller flushes the final tail at end-of-stream, so nothing is lost.
     """
     return index + 1 < len(text) and text[index + 1].isspace()
+
+
+def _ends_sentence(text: str, index: int, char: str) -> bool:
+    """True when ``char`` at ``index`` closes a sentence: a terminator at end-of-text or
+    followed by whitespace.
+
+    Unlike :func:`_is_boundary` (used for partial streamed chunks), end-of-text *does* close a
+    sentence here: :func:`split_sentences` runs on a complete reply, so a trailing terminator is a
+    real boundary, not a possibly-mid-token one.
+    """
+    return char in _TERMINATORS and (index + 1 == len(text) or text[index + 1].isspace())
 
 
 def pop_clauses(buffer: str, *, min_chars: int) -> tuple[list[str], str]:
@@ -68,7 +81,7 @@ def split_sentences(text: str) -> list[str]:
     sentences: list[str] = []
     start = 0
     for index, char in enumerate(text):
-        if char in _TERMINATORS and (index + 1 == len(text) or text[index + 1].isspace()):
+        if _ends_sentence(text, index, char):
             # Boundary confirmed (end-of-text or a following space); the slice includes
             # the terminator, so it is never blank after stripping leading whitespace.
             sentences.append(text[start : index + 1].strip())
@@ -77,13 +90,3 @@ def split_sentences(text: str) -> list[str]:
     if tail:
         sentences.append(tail)
     return sentences
-
-
-def trim_history[T](history: list[T], max_messages: int) -> None:
-    """Cap ``history`` to its most recent ``max_messages`` entries, in place.
-
-    A sliding window over the conversation so an unbounded chat doesn't grow the
-    context (and the per-turn token cost) without limit.
-    """
-    if len(history) > max_messages:
-        del history[: len(history) - max_messages]
