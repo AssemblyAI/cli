@@ -53,3 +53,44 @@ def render_seatbelt_profile(
     lines.extend(f'(deny file-write* (subpath "{cwd}/{name}"))' for name in cwd_write_deny)
     lines.extend(f'(deny file-write* (subpath "{home}/{name}"))' for name in shell_rc)
     return "\n".join(lines) + "\n"
+
+
+def build_bwrap_argv(
+    cwd: str,
+    tmp: str,
+    command: str,
+    home: str,
+    *,
+    home_secrets: Sequence[str] = HOME_SECRETS,
+    cwd_read_deny: Sequence[str] = CWD_READ_DENY,
+    cwd_write_deny: Sequence[str] = CWD_WRITE_DENY,
+) -> list[str]:
+    """Build a bubblewrap argv: whole FS read-only (default-allow reads), cwd + tmp read-write,
+    secret stores masked, ``.git/hooks`` read-only, network unshared. Path-based, so in-cwd
+    secret-file protection is coarser than Seatbelt's globbing (a documented asymmetry); the
+    directory-level credential stores are masked precisely on both."""
+    argv = [
+        "bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--ro-bind",
+        "/",
+        "/",
+        "--bind",
+        cwd,
+        cwd,
+        "--bind",
+        tmp,
+        tmp,
+    ]
+    # Mask credential stores under $HOME (tmpfs hides their contents).
+    for name in home_secrets:
+        argv += ["--tmpfs", f"{home}/{name}"]
+    # Project-local secrets: mask each path (best-effort; coarser than Seatbelt).
+    for name in cwd_read_deny:
+        argv += ["--ro-bind", "/dev/null", f"{cwd}/{name}"]
+    # Block writes to persistence paths inside cwd by re-binding them read-only.
+    for name in cwd_write_deny:
+        argv += ["--ro-bind", f"{cwd}/{name}", f"{cwd}/{name}"]
+    argv += ["--chdir", cwd, "/bin/sh", "-c", command]
+    return argv
