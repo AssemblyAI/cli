@@ -20,6 +20,7 @@ from aai_cli.agent.audio import SAMPLE_RATE, DuplexAudio, NullPlayer
 from aai_cli.agent.render import AgentRenderer
 from aai_cli.agent_cascade import engine, firecrawl_search, mcp_tools, voices
 from aai_cli.agent_cascade.config import DEFAULT_MAX_HISTORY, CascadeConfig
+from aai_cli.agent_cascade.project_context import load_project_context
 from aai_cli.app.agent_shared import resolve_system_prompt as _resolve_system_prompt
 from aai_cli.app.agent_shared import validate_voice
 from aai_cli.app.context import AppState
@@ -331,6 +332,9 @@ def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: 
         tts_extra=tts_extra,
         mcp_servers=mcp_servers,
         files=opts.files,
+        # Read the launch directory's AGENTS.md/CLAUDE.md into context, so the agent answers
+        # grounded in the project it's run from (like a coding agent).
+        project_context=load_project_context(),
     )
 
     if _should_use_tui(from_file=from_file, json_mode=json_mode, text_mode=text_mode):

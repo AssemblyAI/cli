@@ -200,3 +200,41 @@ def test_datetime_tool_advertised_in_system_prompt():
         "persona", tools=[_NamedTool(datetime_tool.DATETIME_TOOL_NAME)]
     )
     assert "current date and time" in text
+
+
+# --- project context (AGENTS.md/CLAUDE.md) -----------------------------------
+
+
+def test_system_prompt_appends_project_context_when_present():
+    # The launch directory's instruction file is appended as project background, introduced so
+    # the model treats it as grounding rather than another instruction to recite.
+    text = prompt.build_system_prompt(
+        "persona", tools=[], project_context="# AGENTS.md\n\nUse uv run."
+    )
+    assert "background on the project in your working directory" in text
+    assert "# AGENTS.md\n\nUse uv run." in text
+    # It lands after the persona/guidance, not before it.
+    assert text.index("persona") < text.index("Use uv run.")
+
+
+def test_system_prompt_appends_project_context_on_the_tools_path():
+    # The append happens whether or not tools are bound (the capabilities branch too).
+    text = prompt.build_system_prompt(
+        "persona",
+        tools=[_NamedTool(prompt.WEB_SEARCH_TOOL_NAME)],
+        project_context="# AGENTS.md\n\nProject facts.",
+    )
+    assert "search the web" in text
+    assert "Project facts." in text
+
+
+def test_system_prompt_omits_project_context_section_when_absent():
+    # With no instruction file the prompt is unchanged — no dangling background heading.
+    text = prompt.build_system_prompt("persona", tools=[], project_context=None)
+    assert "background on the project in your working directory" not in text
+
+
+def test_system_prompt_treats_empty_project_context_as_absent():
+    # An empty string is falsy, so no background section is appended.
+    text = prompt.build_system_prompt("persona", tools=[], project_context="")
+    assert "background on the project in your working directory" not in text
