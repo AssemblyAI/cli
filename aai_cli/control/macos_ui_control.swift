@@ -21,7 +21,7 @@ let keyCodes: [String: CGKeyCode] = [
     "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46,
     "return": 36, "enter": 36, "tab": 48, "space": 49, "delete": 51, "backspace": 51,
     "escape": 53, "esc": 53, "left": 123, "right": 124, "down": 125, "up": 126,
-    "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+    "home": 115, "end": 119, "pageup": 116, "pagedown": 121
 ]
 
 // Modifier names key_combo accepts, mapped to CGEvent flags.
@@ -30,7 +30,7 @@ let modifierFlags: [String: CGEventFlags] = [
     "shift": .maskShift,
     "ctrl": .maskControl, "control": .maskControl,
     "alt": .maskAlternate, "option": .maskAlternate, "opt": .maskAlternate,
-    "fn": .maskSecondaryFn,
+    "fn": .maskSecondaryFn
 ]
 
 // One request line: the action name plus every argument any action may carry
@@ -173,7 +173,12 @@ func elementFrame(_ element: AXUIElement) -> CGRect? {
     else {
         return nil
     }
+    // The CFGetTypeID checks above are the real type guard: AXValue is a CoreFoundation
+    // type, so a conditional `as?` cast is a no-op that always succeeds and can't verify
+    // it. The force cast is therefore safe once the type ids match.
+    // swiftlint:disable:next force_cast
     let position = positionValue as! AXValue
+    // swiftlint:disable:next force_cast
     let size = sizeValue as! AXValue
     var point = CGPoint.zero
     var dimensions = CGSize.zero
@@ -275,8 +280,8 @@ func launchApp(_ name: String) -> Response {
 
 func focusApp(_ name: String) -> Response {
     let lower = name.lowercased()
-    for app in NSWorkspace.shared.runningApplications where app.localizedName?.lowercased() == lower
-    {
+    let running = NSWorkspace.shared.runningApplications
+    for app in running where app.localizedName?.lowercased() == lower {
         app.activate(options: [.activateAllWindows])
         return succeeded()
     }
@@ -284,46 +289,48 @@ func focusApp(_ name: String) -> Response {
 }
 
 func screenshot() -> Response {
-    guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
+    // CoreGraphics' CGDisplayCreateImage is unavailable in current macOS SDKs
+    // (replaced by ScreenCaptureKit). Shell out to the system `screencapture`
+    // tool instead: it writes a PNG of the main display straight to disk, is
+    // stable across SDK versions, and triggers the same Screen Recording prompt.
+    let path = NSTemporaryDirectory() + "aai-control-screenshot.png"
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    process.arguments = ["-x", "-m", path]
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        return failure("could not capture the screen: \(error)")
+    }
+    guard process.terminationStatus == 0 else {
         return failure("could not capture the screen; grant Screen Recording permission")
     }
-    let bitmap = NSBitmapImageRep(cgImage: image)
-    guard let data = bitmap.representation(using: .png, properties: [:]) else {
-        return failure("could not encode the screenshot")
-    }
-    let path = NSTemporaryDirectory() + "aai-control-screenshot.png"
-    do {
-        try data.write(to: URL(fileURLWithPath: path))
-    } catch {
-        return failure("could not save the screenshot: \(error)")
-    }
     return Response(ok: true, error: nil, elements: nil, path: path)
+}
+
+// Run perform with a required argument, or report it missing. Collapses the
+// per-action "guard the field is present" boilerplate so handle() stays a flat
+// dispatch table.
+func withArg<T>(_ value: T?, _ missing: String, _ perform: (T) -> Response) -> Response {
+    guard let value else {
+        return failure(missing)
+    }
+    return perform(value)
 }
 
 func handle(_ request: Request) -> Response {
     switch request.action {
     case "type_text":
-        guard let text = request.text else {
-            return failure("type_text needs 'text'")
-        }
-        return typeText(text)
+        return withArg(request.text, "type_text needs 'text'", typeText)
     case "key_combo":
-        guard let keys = request.keys else {
-            return failure("key_combo needs 'keys'")
-        }
-        return keyCombo(keys)
+        return withArg(request.keys, "key_combo needs 'keys'", keyCombo)
     case "click":
         return click(request)
     case "launch_app":
-        guard let name = request.name else {
-            return failure("launch_app needs 'name'")
-        }
-        return launchApp(name)
+        return withArg(request.name, "launch_app needs 'name'", launchApp)
     case "focus_app":
-        guard let name = request.name else {
-            return failure("focus_app needs 'name'")
-        }
-        return focusApp(name)
+        return withArg(request.name, "focus_app needs 'name'", focusApp)
     case "get_ui_tree":
         return buildTree()
     case "screenshot":
