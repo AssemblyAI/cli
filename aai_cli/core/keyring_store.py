@@ -13,7 +13,10 @@ must surface as a clean ``CLIError`` or read as "nothing stored", never a traceb
 
 from __future__ import annotations
 
+import base64
 import contextlib
+import re
+import uuid
 
 import keyring
 import keyring.errors  # keyring.errors is not re-exported by keyring/__init__
@@ -31,7 +34,7 @@ def set_secret(username: str, secret: str) -> None:
     it as a CLIError so the command prints a fixable message instead of a traceback.
     """
     try:
-        keyring.set_password(KEYRING_SERVICE, username, secret)
+        _write_secret(username, secret)
     except keyring.errors.KeyringError as exc:
         raise CLIError(
             f"Your OS keyring rejected the write ({exc}).",
@@ -52,7 +55,7 @@ def get_secret(username: str) -> str | None:
     signed in" — ASSEMBLYAI_API_KEY still works there — never as a crash.
     """
     try:
-        return keyring.get_password(KEYRING_SERVICE, username)
+        return _read_secret(username)
     except keyring.errors.KeyringError:
         return None
 
@@ -65,9 +68,9 @@ def restore_secret(username: str, prior: str | None) -> None:
     """
     with contextlib.suppress(keyring.errors.KeyringError):
         if prior is None:
-            keyring.delete_password(KEYRING_SERVICE, username)
+            _delete_secret(username)
         else:
-            keyring.set_password(KEYRING_SERVICE, username, prior)
+            _write_secret(username, prior)
 
 
 def delete_secret(username: str) -> None:
@@ -77,7 +80,7 @@ def delete_secret(username: str) -> None:
     boxes) delete raises NoKeyringError, and "nothing stored" is already the goal.
     """
     with contextlib.suppress(keyring.errors.KeyringError):
-        keyring.delete_password(KEYRING_SERVICE, username)
+        _delete_secret(username)
 
 
 def usable() -> bool:
@@ -93,3 +96,72 @@ def usable() -> bool:
     except keyring.errors.KeyringError:
         return False
     return True
+
+
+# Windows generic credentials permit 2560 UTF-16 bytes. ASCII chunks stay below
+# that limit, including when the original secret contains non-BMP characters.
+_CHUNK_SIZE = 1000
+_MAX_CREDENTIAL_BYTES = 2560
+_MANIFEST = re.compile(r"assemblyai-chunks-v1:([0-9a-f]{32}):([1-9][0-9]{0,5})")
+_CHUNK_SERVICE = KEYRING_SERVICE + "-chunks-v1"
+
+
+def _chunk_names(raw: str | None) -> list[str]:
+    match = _MANIFEST.fullmatch(raw or "")
+    if not match:
+        return []
+    generation, count = match.groups()
+    return [f"{generation}:{index}" for index in range(int(count))]
+
+
+def _remove_chunks(names: list[str]) -> None:
+    for name in names:
+        with contextlib.suppress(keyring.errors.KeyringError):
+            keyring.delete_password(_CHUNK_SERVICE, name)
+
+
+def _write_secret(username: str, secret: str) -> None:
+    old = keyring.get_password(KEYRING_SERVICE, username)
+    names: list[str] = []
+    try:
+        if len(secret.encode("utf-16-le")) <= _MAX_CREDENTIAL_BYTES and not _MANIFEST.fullmatch(
+            secret
+        ):
+            raw = secret
+        else:
+            encoded = base64.b64encode(secret.encode()).decode("ascii")
+            generation = uuid.uuid4().hex
+            for offset in range(0, len(encoded), _CHUNK_SIZE):
+                name = f"{generation}:{len(names)}"
+                names.append(name)
+                keyring.set_password(_CHUNK_SERVICE, name, encoded[offset : offset + _CHUNK_SIZE])
+            raw = f"assemblyai-chunks-v1:{generation}:{len(names)}"
+        # Publish only after all chunks exist; a failed write leaves the old
+        # generation readable. Each generation has independent chunk names.
+        keyring.set_password(KEYRING_SERVICE, username, raw)
+    except Exception:
+        _remove_chunks(names)
+        raise
+    _remove_chunks(_chunk_names(old))
+
+
+def _read_secret(username: str) -> str | None:
+    raw = keyring.get_password(KEYRING_SERVICE, username)
+    names = _chunk_names(raw)
+    if not names:
+        return raw
+    chunks = [keyring.get_password(_CHUNK_SERVICE, name) for name in names]
+    if any(chunk is None for chunk in chunks):
+        return None
+    try:
+        return base64.b64decode(
+            "".join(chunk for chunk in chunks if chunk is not None), validate=True
+        ).decode()
+    except (ValueError, UnicodeError):
+        return None
+
+
+def _delete_secret(username: str) -> None:
+    raw = keyring.get_password(KEYRING_SERVICE, username)
+    keyring.delete_password(KEYRING_SERVICE, username)
+    _remove_chunks(_chunk_names(raw))
