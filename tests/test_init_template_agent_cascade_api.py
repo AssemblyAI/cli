@@ -49,7 +49,7 @@ def test_connect_tts_passes_max_size_none(monkeypatch: pytest.MonkeyPatch) -> No
     settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
-    settings.VOICE = "jane"
+    settings.VOICE_ID = "aai-jane"
     settings.OUTPUT_SAMPLE_RATE = 24000
     captured = untyped_bag()
 

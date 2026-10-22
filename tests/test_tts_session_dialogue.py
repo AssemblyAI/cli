@@ -25,8 +25,8 @@ def test_synthesize_dialogue_concatenates_segments_with_silence():
         connect=_connect,
     )
     # Each segment connected with its own voice.
-    assert "voice=jane" in urls[0]
-    assert "voice=michael" in urls[1]
+    assert "voice_id=aai-jane" in urls[0]
+    assert "voice_id=aai-michael" in urls[1]
     # 0.25 s of silence (24000 * 0.25 * 2 = 12000 zero bytes) sits BETWEEN the two
     # segments' PCM, with none at the ends.
     gap = b"\x00" * 12000

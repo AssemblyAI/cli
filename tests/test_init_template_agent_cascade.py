@@ -32,7 +32,7 @@ def test_settings_imports_without_key_or_tts_host(monkeypatch):
     settings = _load("api.settings", monkeypatch)
     assert settings.API_KEY == ""
     assert settings.MODEL == "claude-haiku-4-5-20251001"
-    assert settings.VOICE == "jane"
+    assert settings.VOICE_ID == "aai-jane"
     assert settings.INPUT_SAMPLE_RATE == 16000
     assert settings.OUTPUT_SAMPLE_RATE == 24000
 
@@ -114,11 +114,11 @@ def test_tts_url_carries_voice_and_rate(monkeypatch: pytest.MonkeyPatch) -> None
     cascade = _cascade(monkeypatch)
     settings = reimport("api.settings")
     settings.TTS_HOST = "tts.example"
-    settings.VOICE = "jane"
+    settings.VOICE_ID = "aai-jane"
     settings.OUTPUT_SAMPLE_RATE = 24000
     url = cascade.tts_url(settings)
     assert url.startswith("wss://tts.example/v1/ws/?")
-    assert "voice=jane" in url
+    assert "voice_id=aai-jane" in url
     assert "sample_rate=24000" in url
 
 

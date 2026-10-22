@@ -411,11 +411,12 @@
   │    --transcript-id      -t      TEXT  Reuse an existing diarized transcript  │
   │                                       of this media instead of transcribing  │
   │                                       it again                               │
-  │    --voice                      TEXT  Voice id for every speaker (e.g. jane, │
-  │                                       michael, paul), or SPEAKER=VOICE to    │
-  │                                       pin a diarized speaker (repeatable,    │
-  │                                       e.g. --voice A=jane). Default: the     │
-  │                                       target language's native voice(s).     │
+  │    --voice                      TEXT  Voice for every speaker (e.g. jane,    │
+  │                                       michael, paul; see --list-voices), or  │
+  │                                       SPEAKER=VOICE to pin a diarized        │
+  │                                       speaker (repeatable, e.g. --voice      │
+  │                                       A=jane). Default: the target           │
+  │                                       language's native voice(s).            │
   │    --out                        PATH  Output file (default:                  │
   │                                       <name>.dub.<lang><ext> next to the     │
   │                                       input)                                 │
@@ -428,6 +429,8 @@
   │                                       "--download-sections" syntax, e.g.     │
   │                                       "*0:00-15:00" for the first fifteen    │
   │                                       minutes; repeatable)                   │
+  │    --list-voices                      List the voices the TTS service offers │
+  │                                       and exit                               │
   │    --json               -j            Emit JSON describing the dubbed file   │
   │    --help                             Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -469,6 +472,8 @@
    $ assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4
    Dub a whole folder into German
    $ find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de
+   See the available voices
+   $ assembly --sandbox dub --list-voices
   
   
   
@@ -633,7 +638,8 @@
   │                                            voice agent. What can I help you  │
   │                                            with?]                            │
   │ --device                      INTEGER      Microphone device index           │
-  │ --list-voices                              Print known voices and exit       │
+  │ --list-voices                              List the voices the TTS service   │
+  │                                            offers and exit                   │
   │ --json                -j                   Emit newline-delimited JSON       │
   │                                            events                            │
   │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
@@ -808,8 +814,8 @@
   │                                              main text (boilerplate          │
   │                                              stripped). Mutually exclusive   │
   │                                              with the text argument          │
-  │ --voice                TEXT                  Voice id (e.g. jane, michael,   │
-  │                                              mary, paul, eve, george), or    │
+  │ --voice                TEXT                  Voice (e.g. jane, michael,      │
+  │                                              mary; see --list-voices), or    │
   │                                              SPEAKER=VOICE for diarized      │
   │                                              input (repeatable, e.g. --voice │
   │                                              A=jane)                         │
@@ -823,6 +829,8 @@
   │                                              omitted.                        │
   │ --out                  PATH                  Write a WAV file instead of     │
   │                                              playing through the speakers    │
+  │ --list-voices                                List the voices the TTS service │
+  │                                              offers and exit                 │
   │ --json         -j                            Emit JSON metadata about the    │
   │                                              synthesized audio               │
   │ --help                                       Show this message and exit.     │
@@ -841,6 +849,8 @@
    $ assembly --sandbox speak --url https://example.com/post
    Save to a WAV instead of playing
    $ assembly --sandbox speak "Hello" --out /tmp/hello.wav
+   See the available voices
+   $ assembly --sandbox speak --list-voices
   
   
   

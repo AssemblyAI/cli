@@ -40,7 +40,7 @@ Set `ASSEMBLYAI_API_KEY` and the three sandbox host vars (`ASSEMBLYAI_STREAMING_
 
 ## Ideas to extend
 
-- Change the `MODEL`, `VOICE`, `SYSTEM_PROMPT`, `GREETING`, or `MAX_HISTORY` in
+- Change the `MODEL`, `VOICE_ID`, `SYSTEM_PROMPT`, `GREETING`, or `MAX_HISTORY` in
   `api/settings.py`.
 - Replies already stream into TTS sentence-by-sentence as the LLM produces them
   (`_generate_reply` flushes on each `.`/`!`/`?`), and a sliding window of

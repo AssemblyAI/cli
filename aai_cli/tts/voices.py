@@ -4,9 +4,31 @@ When no ``--voice`` is chosen, `assembly speak` and `assembly dub` pick the
 voice from the requested language: a non-English language switches to that
 language's native voice(s) — most ship exactly one, so the language alone
 selects the voice — while English keeps the curated multi-speaker rotation.
+
+On the wire a voice is addressed by its ``voice_id`` (``aai-<name>`` for the
+preset and library voices; the bare ``voice=<name>`` parameter is retired), so
+``voice_id`` maps a catalog name to the id the socket URL carries. The live
+listing (`--list-voices`) comes from the service's ``GET /v1/voices`` instead —
+see ``voice_list``; this static catalog only drives defaults and completion.
 """
 
 from __future__ import annotations
+
+# The id prefix the service puts on its own (preset + library) voices.
+VOICE_ID_PREFIX = "aai-"
+
+
+def voice_id(voice: str) -> str:
+    """The ``voice_id`` for a voice: ``jane`` -> ``aai-jane``. A value already
+    carrying the prefix (as ``--list-voices`` prints them) passes through."""
+    return voice if voice.startswith(VOICE_ID_PREFIX) else f"{VOICE_ID_PREFIX}{voice}"
+
+
+def voice_name(voice: str) -> str:
+    """The catalog name behind a ``--voice`` value: ``aai-jane`` -> ``jane``, so a
+    copied ``voice_id`` validates against the catalog like the bare name does."""
+    return voice.removeprefix(VOICE_ID_PREFIX)
+
 
 # Voice id -> ISO 639-1 code of the (single) language the voice speaks.
 VOICE_LANGUAGES: dict[str, str] = {

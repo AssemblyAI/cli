@@ -223,7 +223,7 @@ def test_voice_and_language_flow_into_config(monkeypatch, fake_synthesize):
     cfg = fake_synthesize["cfg"]
     assert cfg.voice == "jane"
     assert cfg.language == "English"
-    assert cfg.query_params() == {"voice": "jane", "language": "English"}
+    assert cfg.query_params() == {"voice_id": "aai-jane", "language": "English"}
 
 
 def test_default_voice_follows_the_language(monkeypatch, fake_synthesize):

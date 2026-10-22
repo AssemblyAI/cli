@@ -36,7 +36,7 @@ class _Settings(Protocol):
     TTS_HOST: str
     LLM_GATEWAY_URL: str
     MODEL: str
-    VOICE: str
+    VOICE_ID: str
     SYSTEM_PROMPT: str
     GREETING: str
     MAX_HISTORY: int
@@ -83,7 +83,7 @@ def stt_url(settings: _Settings) -> str:
 
 def tts_url(settings: _Settings) -> str:
     """The streaming-TTS WebSocket URL for the configured voice and sample rate."""
-    params = urlencode({"voice": settings.VOICE, "sample_rate": settings.OUTPUT_SAMPLE_RATE})
+    params = urlencode({"voice_id": settings.VOICE_ID, "sample_rate": settings.OUTPUT_SAMPLE_RATE})
     return f"wss://{settings.TTS_HOST}/v1/ws/?{params}"
 
 

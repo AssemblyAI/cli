@@ -55,6 +55,7 @@ SPEC = command_registry.CommandModuleSpec(
                 "Dub a whole folder into German",
                 'find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de',
             ),
+            ("See the available voices", "assembly --sandbox dub --list-voices"),
         ]
     ),
 )
@@ -94,9 +95,9 @@ def dub(
     voice: list[str] = typer.Option(
         [],
         "--voice",
-        help="Voice id for every speaker (e.g. jane, michael, paul), or SPEAKER=VOICE "
-        "to pin a diarized speaker (repeatable, e.g. --voice A=jane). Default: the "
-        "target language's native voice(s).",
+        help="Voice for every speaker (e.g. jane, michael, paul; see --list-voices), or "
+        "SPEAKER=VOICE to pin a diarized speaker (repeatable, e.g. --voice A=jane). "
+        "Default: the target language's native voice(s).",
     ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
@@ -127,6 +128,8 @@ def dub(
         '"--download-sections" syntax, e.g. "*0:00-15:00" for the first fifteen '
         "minutes; repeatable)",
     ),
+    # Handled eagerly in the option's own callback (it exits), so the body never reads it.
+    _list_voices: bool = options.list_voices_option("dub"),
     json_out: bool = options.json_option("Emit JSON describing the dubbed file"),
 ) -> None:
     r"""\[sandbox] Dub a video or audio file into another language

@@ -19,6 +19,7 @@ from aai_cli.agent_cascade import _io
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
+from aai_cli.commands import agent_cascade as cascade_command
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import AgentCascadeOptions, run_agent_cascade
 from aai_cli.core import config, config_builder
@@ -59,24 +60,15 @@ def _opts(**overrides) -> AgentCascadeOptions:
     return dataclasses.replace(_DEFAULTS, **overrides)
 
 
-# --- help / list-voices ------------------------------------------------------
-
-
-def test_list_voices_human_lists_catalog():
-    result = runner.invoke(app, ["live", "--list-voices"])
-    assert result.exit_code == 0
-    assert "jane" in result.output
-    assert "English:" in result.output
-
-
-def test_list_voices_json_emits_array():
-    result = runner.invoke(app, ["live", "--list-voices", "--json"])
-    assert result.exit_code == 0
-    assert result.output.lstrip().startswith("[")
-    assert '"jane"' in result.output
+def test_as_tuple_freezes_repeatable_values():
+    # Typer hands back None for a never-passed repeatable flag: that's an empty tuple,
+    # while given values are carried over in order.
+    assert cascade_command._as_tuple(None) == ()
+    assert cascade_command._as_tuple(["a=1", "b=2"]) == ("a=1", "b=2")
 
 
 # --- validation guards -------------------------------------------------------
+# (--list-voices is the shared streaming-TTS flag, covered in test_list_voices.py.)
 
 
 def test_options_are_frozen():
@@ -388,7 +380,12 @@ def test_parse_tts_config_rejects_malformed_pair():
 
 @pytest.mark.parametrize(
     ("key", "hint"),
-    [("voice", "--voice"), ("language", "--language"), ("sample_rate", "fixed")],
+    [
+        ("voice", "--voice"),
+        ("voice_id", "--voice"),
+        ("language", "--language"),
+        ("sample_rate", "fixed"),
+    ],
 )
 def test_parse_tts_config_rejects_reserved_keys(key, hint):
     with pytest.raises(UsageError, match=hint):

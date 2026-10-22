@@ -14,7 +14,7 @@ from aai_cli.core import environments
 from aai_cli.core import ws as wsutil
 from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import diagnostics
-from aai_cli.tts import audio, text
+from aai_cli.tts import audio, text, voices
 
 
 class _WebSocket(Protocol):
@@ -56,6 +56,9 @@ class SpeakConfig:
     """Per-run TTS parameters. Optional fields are only sent when set, so the
     server applies its own defaults (voice/language/sample_rate) otherwise.
 
+    ``voice`` is the catalog name (``jane``) or a full id (``aai-jane``); it rides
+    the URL as ``voice_id`` — the service retired the bare ``voice`` parameter
+    (sending it is a 3006 invalid_parameter once that release lands).
     ``extra`` carries any further query params verbatim (the escape hatch for
     fields the named ones don't cover); the named fields always win a key clash."""
 
@@ -69,7 +72,7 @@ class SpeakConfig:
         # extra first so the named fields below override it on a key clash.
         params: dict[str, str] = {str(k): str(v) for k, v in self.extra.items()}
         if self.voice is not None:
-            params["voice"] = self.voice
+            params["voice_id"] = voices.voice_id(self.voice)
         if self.language is not None:
             params["language"] = self.language
         if self.sample_rate is not None:

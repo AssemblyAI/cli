@@ -79,6 +79,7 @@ assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labe
 ```
 
 `speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices.
+`assembly --sandbox speak --list-voices` prints the voices the TTS service offers.
 
 **Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video. A great demo is the first YouTube video ever, "Me at the zoo" — it's 19 seconds long, a single clear English speaker, and instantly recognizable, so the dub finishes fast and the before/after is obvious:
 

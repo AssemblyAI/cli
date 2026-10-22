@@ -40,7 +40,7 @@ def test_show_code_prints_sandbox_script_without_running(monkeypatch):
     assert "streaming.sandbox000" in result.stdout
     assert "streaming-tts.sandbox000" in result.stdout
     assert "llm-gateway" in result.stdout
-    assert "voice=jane" in result.stdout  # the chosen voice rides the TTS URL
+    assert "voice_id=aai-jane" in result.stdout  # the chosen voice rides the TTS URL as its id
     assert "Hi there" in result.stdout  # the greeting is injected
     compile(result.stdout, "<show-code>", "exec")  # the script is runnable Python
 

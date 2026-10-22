@@ -32,7 +32,10 @@ def test_ws_url_includes_set_params_only():
     cfg = session.SpeakConfig(text="hi", voice="jane", language="English")
     url = session.ws_url(cfg.query_params())
     assert url.startswith("wss://streaming-tts.sandbox000.assemblyai-labs.com/v1/ws/?")
-    assert "voice=jane" in url
+    # The voice rides as voice_id=aai-<name>: the bare voice= param is retired server-side
+    # (3006 invalid_parameter), so it must not be sent even alongside the new one.
+    assert "voice_id=aai-jane" in url
+    assert "voice=jane" not in url
     assert "language=English" in url
     assert "sample_rate" not in url
 

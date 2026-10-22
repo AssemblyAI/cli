@@ -97,3 +97,23 @@ def test_rotation_for(language, expected):
 )
 def test_default_voice(language, expected):
     assert voices.default_voice(language) == expected
+
+
+@pytest.mark.parametrize(
+    ("voice", "expected"),
+    [
+        ("jane", "aai-jane"),  # a catalog name gets the service's id prefix
+        ("bill_boerst", "aai-bill_boerst"),
+        ("aai-jane", "aai-jane"),  # an id copied from --list-voices passes through
+    ],
+)
+def test_voice_id(voice, expected):
+    assert voices.voice_id(voice) == expected
+
+
+@pytest.mark.parametrize(
+    ("voice", "expected"),
+    [("aai-jane", "jane"), ("jane", "jane"), ("aai-aai-x", "aai-x")],  # one prefix, not all
+)
+def test_voice_name(voice, expected):
+    assert voices.voice_name(voice) == expected

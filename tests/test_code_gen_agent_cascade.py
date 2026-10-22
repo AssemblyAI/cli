@@ -53,7 +53,7 @@ def test_render_parses_and_wires_all_three_legs():
 def test_render_injects_session_knobs():
     code = _render(model="claude-x", max_tokens=321, max_history=12)
     ast.parse(code)
-    assert "voice=jane" in code  # the voice rides the TTS URL
+    assert "voice_id=aai-jane" in code  # the voice rides the TTS URL as its voice_id
     assert "Be terse." in code  # the system prompt
     assert "Hi there" in code  # the greeting
     assert '"claude-x"' in code  # the LLM model

@@ -45,6 +45,7 @@ SPEC = command_registry.CommandModuleSpec(
                 "Save to a WAV instead of playing",
                 'assembly --sandbox speak "Hello" --out /tmp/hello.wav',
             ),
+            ("See the available voices", "assembly --sandbox speak --list-voices"),
         ]
     ),
 )
@@ -60,7 +61,7 @@ def speak(
     voice: list[str] = typer.Option(
         [],
         "--voice",
-        help="Voice id (e.g. jane, michael, mary, paul, eve, george), or SPEAKER=VOICE "
+        help="Voice (e.g. jane, michael, mary; see --list-voices), or SPEAKER=VOICE "
         "for diarized input (repeatable, e.g. --voice A=jane)",
     ),
     language: str = typer.Option(
@@ -78,6 +79,8 @@ def speak(
     out: Path | None = typer.Option(
         None, "--out", help="Write a WAV file instead of playing through the speakers"
     ),
+    # Handled eagerly in the option's own callback (it exits), so the body never reads it.
+    _list_voices: bool = options.list_voices_option("speak"),
     json_out: bool = options.json_option("Emit JSON metadata about the synthesized audio"),
 ) -> None:
     r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS
