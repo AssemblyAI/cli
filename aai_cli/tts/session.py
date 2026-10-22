@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import collections
 import contextlib
 import json
 from abc import abstractmethod
@@ -241,10 +242,10 @@ def _run_protocol(
     as it arrives, so a caller can play it immediately; the full PCM is still
     accumulated and returned."""
     sample_rate = _begin_sample_rate(ws)
-    pending = list(texts)
+    pending = collections.deque(texts)
     in_flight = 0
     while pending and in_flight < _MAX_IN_FLIGHT:
-        _send_request(ws, pending.pop(0))
+        _send_request(ws, pending.popleft())
         in_flight += 1
 
     pcm = bytearray()
@@ -257,7 +258,7 @@ def _run_protocol(
             # Exactly one per Flush, in order: every byte of that request is delivered.
             in_flight -= 1
             if pending:
-                _send_request(ws, pending.pop(0))
+                _send_request(ws, pending.popleft())
                 in_flight += 1
         elif mtype == "Error":
             raise APIError(f"TTS error {_error_frame_detail(msg)}")
