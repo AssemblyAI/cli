@@ -326,37 +326,55 @@
    Recording starts immediately and runs headless — no terminal needed — so a
    hotkey tool like Hammerspoon can launch it as a background task and send
    SIGTERM (kill -TERM, task:terminate()) to stop. On SIGTERM the utterance is
-   sent to the AssemblyAI Sync API, the transcript prints right away (no
-   polling), and dictate exits, so it flows straight to the next command in a
-   pipe. The recording can be up to 120 seconds long. Ctrl-C (SIGINT) cancels
-   without transcribing.
+   sent to the AssemblyAI Dictation API, which returns send-ready text — filler
+   removed, self-corrections resolved, punctuation applied — that prints right
+   away, and dictate exits, so it flows straight to the next command in a pipe.
+   --instruction asks for a different shape; --verbatim prints the unedited
+   transcript. The recording can be up to 120 seconds long. Ctrl-C (SIGINT)
+   cancels without transcribing.
   
   ╭─ Options ────────────────────────────────────────────────────────────────────╮
-  │ --language             TEXT                       ISO 639-1 language code,   │
-  │                                                   or a comma-separated list  │
-  │                                                   for code-switching audio   │
-  │                                                   (default: en)              │
-  │ --prompt               TEXT                       Custom transcription       │
-  │                                                   prompt (overrides          │
-  │                                                   --language)                │
-  │ --word-boost           TEXT                       Bias recognition toward a  │
-  │                                                   term (repeatable)          │
-  │ --device               INTEGER                    Microphone device index    │
-  │ --max-seconds          FLOAT RANGE                Auto-stop a recording      │
-  │                        [1.0<=x<=120.0]            after this many seconds    │
-  │                                                   [default: 120.0]           │
-  │ --json         -j                                 Emit one JSON object per   │
-  │                                                   utterance                  │
-  │ --output       -o      [text|json]                Output mode: text (the     │
-  │                                                   bare transcript per        │
-  │                                                   utterance, pipe-friendly)  │
-  │                                                   or json                    │
-  │ --help                                            Show this message and      │
-  │                                                   exit.                      │
+  │ --language              TEXT                       ISO 639-1 language code,  │
+  │                                                    or a comma-separated list │
+  │                                                    for code-switching audio  │
+  │                                                    (default: no language     │
+  │                                                    steering)                 │
+  │ --prompt                TEXT                       Context for the           │
+  │                                                    transcription: what the   │
+  │                                                    audio is about (e.g. "A   │
+  │                                                    doctor dictating a visit  │
+  │                                                    note")                    │
+  │ --keyterm               TEXT                       Bias recognition toward a │
+  │                                                    term, such as a name      │
+  │                                                    (repeatable)              │
+  │ --instruction           TEXT                       Describe the shape you    │
+  │                                                    want the text in;         │
+  │                                                    replaces the default      │
+  │                                                    cleanup                   │
+  │ --rewrite-mode          [fast|smart]               Rewrite model tier: fast  │
+  │                                                    (default, lowest latency) │
+  │                                                    or smart (follows         │
+  │                                                    detailed instructions     │
+  │                                                    more reliably)            │
+  │ --verbatim                                         Print the verbatim        │
+  │                                                    transcript instead of the │
+  │                                                    cleaned-up text           │
+  │ --device                INTEGER                    Microphone device index   │
+  │ --max-seconds           FLOAT RANGE                Auto-stop a recording     │
+  │                         [1.0<=x<=120.0]            after this many seconds   │
+  │                                                    [default: 120.0]          │
+  │ --json          -j                                 Emit one JSON object per  │
+  │                                                    utterance                 │
+  │ --output        -o      [text|json]                Output mode: text (the    │
+  │                                                    bare transcript per       │
+  │                                                    utterance, pipe-friendly) │
+  │                                                    or json                   │
+  │ --help                                             Show this message and     │
+  │                                                    exit.                     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Record until SIGTERM, then print the transcript
+   Record until SIGTERM, then print the cleaned-up text
    $ assembly dictate
    Stop the recording and transcribe (e.g. from a hotkey tool)
    $ kill -TERM $(pgrep -f 'assembly dictate')
@@ -365,7 +383,11 @@
    Dictate in Spanish
    $ assembly dictate --language es
    Bias recognition toward tricky terms
-   $ assembly dictate --word-boost AssemblyAI --word-boost LeMUR
+   $ assembly dictate --keyterm AssemblyAI --keyterm LeMUR
+   Reshape the text instead of the default cleanup
+   $ assembly dictate --instruction "Format as a bulleted task list"
+   Print the verbatim transcript, unedited
+   $ assembly dictate --verbatim
    Emit the utterance as a JSON object
    $ assembly dictate --json
    Pipe the bare transcript onward
@@ -380,7 +402,7 @@
   
    Usage: assembly dub [OPTIONS] [MEDIA]
   
-   [sandbox] Dub a video or audio file into another language
+   Dub a video or audio file into another language
   
    The whole platform in one command: the media is transcribed with diarized
    utterance timestamps, each utterance is translated by an LLM Gateway model,
@@ -388,9 +410,7 @@
    speaker), and ffmpeg lays the new audio over the original — video copied
    untouched. A YouTube/media-page URL is downloaded first (audio only, or
    the full video with --video; --download-sections fetches and dubs only a
-   time slice of it). Streaming TTS only exists in the sandbox
-   today — run it as 'assembly --sandbox dub' (--sandbox goes before the
-   subcommand). Requires ffmpeg.
+   time slice of it). Requires ffmpeg.
   
    Batch mode: pipe one path/URL per line with --from-stdin to dub many sources
    concurrently (--concurrency). Each writes its own <name>.dub.<lang><ext>; a
@@ -411,11 +431,13 @@
   │    --transcript-id      -t      TEXT  Reuse an existing diarized transcript  │
   │                                       of this media instead of transcribing  │
   │                                       it again                               │
-  │    --voice                      TEXT  Voice id for every speaker (e.g. jane, │
-  │                                       michael, paul), or SPEAKER=VOICE to    │
-  │                                       pin a diarized speaker (repeatable,    │
-  │                                       e.g. --voice A=jane). Default: the     │
-  │                                       target language's native voice(s).     │
+  │    --voice                      TEXT  Voice for every speaker (e.g. jane,    │
+  │                                       michael, paul; see --list-voices), or  │
+  │                                       SPEAKER=VOICE to pin a diarized        │
+  │                                       speaker (repeatable, e.g. --voice      │
+  │                                       A=jane). Default: speakers rotate      │
+  │                                       through the built-in voices, which     │
+  │                                       speak every language.                  │
   │    --out                        PATH  Output file (default:                  │
   │                                       <name>.dub.<lang><ext> next to the     │
   │                                       input)                                 │
@@ -428,6 +450,8 @@
   │                                       "--download-sections" syntax, e.g.     │
   │                                       "*0:00-15:00" for the first fifteen    │
   │                                       minutes; repeatable)                   │
+  │    --list-voices                      List the voices the TTS service offers │
+  │                                       and exit                               │
   │    --json               -j            Emit JSON describing the dubbed file   │
   │    --help                             Show this message and exit.            │
   ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -450,25 +474,27 @@
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Dub a talk into German (sandbox only)
-   $ assembly --sandbox dub talk.mp4 --lang de
+   Dub a talk into German
+   $ assembly dub talk.mp4 --lang de
    Use a language name instead of a code
-   $ assembly --sandbox dub talk.mp4 -l Spanish
+   $ assembly dub talk.mp4 -l Spanish
    Dub the full video from YouTube
-   $ assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video
+   $ assembly dub "https://youtube.com/watch?v=ID" -l de --video
    Dub only the first 15 minutes of a YouTube video
-   $ assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video
+   $ assembly dub "https://youtube.com/watch?v=ID" -l de --video
    --download-sections "*0:00-15:00"
    Dub every speaker with one voice
-   $ assembly --sandbox dub talk.mp4 -l fr --voice paul
+   $ assembly dub talk.mp4 -l fr --voice paul
    Pin a voice per diarized speaker
-   $ assembly --sandbox dub panel.mp4 -l de --voice A=jane --voice B=paul
+   $ assembly dub panel.mp4 -l de --voice A=jane --voice B=paul
    Reuse a finished transcript instead of re-transcribing
-   $ assembly --sandbox dub talk.mp4 -l de -t TRANSCRIPT_ID
+   $ assembly dub talk.mp4 -l de -t TRANSCRIPT_ID
    Choose the output file
-   $ assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4
+   $ assembly dub talk.mp4 -l de --out talk-german.mp4
    Dub a whole folder into German
-   $ find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de
+   $ find talks -name "*.mp4" | assembly dub --from-stdin -l de
+   See the available voices
+   $ assembly dub --list-voices
   
   
   
@@ -576,7 +602,7 @@
   
    Usage: assembly live [OPTIONS] [SOURCE]
   
-   [sandbox] Talk live to a tool-using voice agent
+   Talk live to a tool-using voice agent
   
    A real-time spoken conversation, wired client-side from three primitives —
    Streaming STT, a deepagents brain on the LLM Gateway, and streaming TTS.
@@ -585,11 +611,7 @@
    use
    tools mid-conversation — web search, URL fetch, and the AssemblyAI docs — so
    it
-   answers like a live multimodal assistant. Because it uses streaming TTS it
-   only
-   runs in the sandbox: run it as 'assembly --sandbox live' (--sandbox goes
-   before
-   the subcommand).
+   answers like a live multimodal assistant.
   
    Use headphones: the mic stays open while the agent speaks, so on speakers it
    would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
@@ -633,7 +655,8 @@
   │                                            voice agent. What can I help you  │
   │                                            with?]                            │
   │ --device                      INTEGER      Microphone device index           │
-  │ --list-voices                              Print known voices and exit       │
+  │ --list-voices                              List the voices the TTS service   │
+  │                                            offers and exit                   │
   │ --json                -j                   Emit newline-delimited JSON       │
   │                                            events                            │
   │ --output              -o      [text|json]  Output mode: text (you:/agent:    │
@@ -653,7 +676,8 @@
   ╭─ Language model ─────────────────────────────────────────────────────────────╮
   │ --model             TEXT                  LLM Gateway model that powers the  │
   │                                           agent's replies                    │
-  │                                           [default: kimi-k2.5]               │
+  │                                           [default:                          │
+  │                                           claude-haiku-4-5-20251001]         │
   │ --max-tokens        INTEGER RANGE [x>=1]  Max tokens per reply               │
   │                                           [default: 8192]                    │
   │ --llm-config        TEXT                  Set any LLM Gateway request field  │
@@ -697,19 +721,19 @@
   
    Examples
    Start a live voice conversation
-   $ assembly --sandbox live
+   $ assembly live
    Pick a voice and opening line
-   $ assembly --sandbox live --voice michael --greeting "Hi there"
+   $ assembly live --voice michael --greeting "Hi there"
    Give the agent a persona
-   $ assembly --sandbox live --system-prompt "You are a terse pirate."
+   $ assembly live --system-prompt "You are a terse pirate."
    Add your own MCP servers (none load by default)
-   $ assembly --sandbox live --mcp-config ~/.config/mcp/servers.json
+   $ assembly live --mcp-config ~/.config/mcp/servers.json
    Run a conversation without filesystem access
-   $ assembly --sandbox live --no-files
+   $ assembly live --no-files
    See available voices
-   $ assembly --sandbox live --list-voices
+   $ assembly live --list-voices
    Print equivalent Python instead of running
-   $ assembly --sandbox live --show-code
+   $ assembly live --show-code
   
   
   
@@ -789,15 +813,14 @@
   
    Usage: assembly speak [OPTIONS] [TEXT]
   
-   [sandbox] Synthesize speech from text with AssemblyAI streaming TTS
+   Synthesize speech from text with AssemblyAI streaming TTS
   
    Reads text from the argument, piped stdin, or a web page or PDF with --url
    (its main content is extracted and the boilerplate stripped). Plays the
    audio through your speakers by default, or writes a WAV with --out.
    Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
    detected automatically: the labels are stripped and each speaker gets a
-   different voice. This feature only exists in the sandbox today — run it
-   as 'assembly --sandbox speak' (--sandbox goes before the subcommand).
+   different voice.
   
   ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
   │   text      [TEXT]  Text to speak. Omit to read from stdin.                  │
@@ -808,39 +831,44 @@
   │                                              main text (boilerplate          │
   │                                              stripped). Mutually exclusive   │
   │                                              with the text argument          │
-  │ --voice                TEXT                  Voice id (e.g. jane, michael,   │
-  │                                              mary, paul, eve, george), or    │
+  │ --voice                TEXT                  Voice (e.g. jane, michael,      │
+  │                                              mary; see --list-voices), or    │
   │                                              SPEAKER=VOICE for diarized      │
   │                                              input (repeatable, e.g. --voice │
   │                                              A=jane)                         │
-  │ --language             TEXT                  Language of the text. The       │
-  │                                              default voice follows it (e.g.  │
-  │                                              --language Italian speaks with  │
-  │                                              giovanni).                      │
+  │ --language             TEXT                  Language of the text: English,  │
+  │                                              Spanish, German, French,        │
+  │                                              Italian, or Portuguese (a name  │
+  │                                              or ISO code). Every built-in    │
+  │                                              voice speaks all six.           │
   │                                              [default: English]              │
   │ --sample-rate          INTEGER RANGE [x>=1]  Output sample rate in Hz        │
   │                                              (positive). Server default if   │
   │                                              omitted.                        │
   │ --out                  PATH                  Write a WAV file instead of     │
   │                                              playing through the speakers    │
+  │ --list-voices                                List the voices the TTS service │
+  │                                              offers and exit                 │
   │ --json         -j                            Emit JSON metadata about the    │
   │                                              synthesized audio               │
   │ --help                                       Show this message and exit.     │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   
    Examples
-   Speak text aloud (sandbox only)
-   $ assembly --sandbox speak "Hello there, friend."
-   Pick a language (its native voice is selected automatically)
-   $ assembly --sandbox speak "Bonjour" --language French
+   Speak text aloud
+   $ assembly speak "Hello there, friend."
+   Speak another language (every built-in voice speaks it)
+   $ assembly speak "Bonjour" --language French
    Speak a diarized transcript, one voice per speaker
-   $ assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak
+   $ assembly transcribe meeting.mp3 --speaker-labels | assembly speak
    Override a speaker's voice
-   $ … | assembly --sandbox speak --voice A=vera --voice B=paul
+   $ … | assembly speak --voice A=vera --voice B=paul
    Read a web page aloud (boilerplate stripped)
-   $ assembly --sandbox speak --url https://example.com/post
+   $ assembly speak --url https://example.com/post
    Save to a WAV instead of playing
-   $ assembly --sandbox speak "Hello" --out /tmp/hello.wav
+   $ assembly speak "Hello" --out /tmp/hello.wav
+   See the available voices
+   $ assembly speak --list-voices
   
   
   

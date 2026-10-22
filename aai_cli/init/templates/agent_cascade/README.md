@@ -6,17 +6,6 @@ Streaming STT transcribes you, the LLM Gateway generates a reply, and streaming 
 speaks it back — with turn detection and barge-in handled server-side. The browser
 holds one WebSocket to your backend, so your API key never reaches the client.
 
-## Sandbox-only
-
-Streaming TTS has no production host, so the whole cascade runs against the AssemblyAI
-sandbox with a sandbox key. Scaffold it that way:
-
-```sh
-assembly --sandbox init agent-cascade
-```
-
-That pins the sandbox hosts in `.env`. Running against production exits with a hint.
-
 ## Run locally
 
 ```sh
@@ -35,12 +24,13 @@ Railway, Fly.io, or Google Cloud Run (`gcloud run deploy --source .`):
 uvicorn api.index:app --host 0.0.0.0 --port $PORT
 ```
 
-Set `ASSEMBLYAI_API_KEY` and the three sandbox host vars (`ASSEMBLYAI_STREAMING_HOST`,
-`ASSEMBLYAI_TTS_HOST`, `ASSEMBLYAI_LLM_GATEWAY_URL`) in the platform's environment.
+Set `ASSEMBLYAI_API_KEY` in the platform's environment. The three host vars
+(`ASSEMBLYAI_STREAMING_HOST`, `ASSEMBLYAI_TTS_HOST`, `ASSEMBLYAI_LLM_GATEWAY_URL`)
+default to production; set them only to target another environment.
 
 ## Ideas to extend
 
-- Change the `MODEL`, `VOICE`, `SYSTEM_PROMPT`, `GREETING`, or `MAX_HISTORY` in
+- Change the `MODEL`, `VOICE_ID`, `SYSTEM_PROMPT`, `GREETING`, or `MAX_HISTORY` in
   `api/settings.py`.
 - Replies already stream into TTS sentence-by-sentence as the LLM produces them
   (`_generate_reply` flushes on each `.`/`!`/`?`), and a sliding window of

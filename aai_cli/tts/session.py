@@ -6,7 +6,7 @@ import contextlib
 import json
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -14,7 +14,7 @@ from aai_cli.core import environments
 from aai_cli.core import ws as wsutil
 from aai_cli.core.errors import APIError, CLIError
 from aai_cli.streaming import diagnostics
-from aai_cli.tts import audio, text
+from aai_cli.tts import audio, text, voices
 
 
 class _WebSocket(Protocol):
@@ -45,6 +45,15 @@ _DEFAULT_SAMPLE_RATE = 24000
 # Pause inserted between speaker turns in a multi-voice dialogue, for natural pacing.
 _INTER_TURN_SILENCE_SECONDS = 0.25
 
+# The audio encoding the CLI decodes (16-bit little-endian PCM), pinned on every session
+# rather than left to the server default, since playback and WAV output assume it.
+_ENCODING = "pcm_s16le"
+
+# Requests (Generate + Flush pairs) sent ahead of their FlushDone on one session. The
+# docs' recipe for multi-request sessions: bounded, so a long document never arrives as
+# one burst (which the server closes with 3010), yet enough to keep synthesis busy.
+_MAX_IN_FLIGHT = 3
+
 # Bound on the wait for each protocol frame. The server streams frames continuously
 # while a synthesis is in flight, so a gap this long means it went silent mid-session;
 # without a bound, `assembly speak` would hang forever instead of failing cleanly.
@@ -56,6 +65,10 @@ class SpeakConfig:
     """Per-run TTS parameters. Optional fields are only sent when set, so the
     server applies its own defaults (voice/language/sample_rate) otherwise.
 
+    ``voice`` is a built-in name (``jane``) or any ``voice_id`` (``aai-jane``, a
+    UUID, an account voice slug); it rides the URL as ``voice_id`` — the service
+    retired the bare ``voice`` parameter (sending it is a 3006 invalid_parameter).
+    ``language`` is normalized to the lowercase English name the service takes.
     ``extra`` carries any further query params verbatim (the escape hatch for
     fields the named ones don't cover); the named fields always win a key clash."""
 
@@ -69,11 +82,12 @@ class SpeakConfig:
         # extra first so the named fields below override it on a key clash.
         params: dict[str, str] = {str(k): str(v) for k, v in self.extra.items()}
         if self.voice is not None:
-            params["voice"] = self.voice
+            params["voice_id"] = voices.voice_id(self.voice)
         if self.language is not None:
-            params["language"] = self.language
+            params["language"] = voices.language_param(self.language)
         if self.sample_rate is not None:
             params["sample_rate"] = str(self.sample_rate)
+        params["encoding"] = _ENCODING
         return params
 
 
@@ -87,26 +101,27 @@ class SpeakResult:
 
 
 def is_available() -> bool:
-    """True only where the active environment has a streaming-TTS host (sandbox)."""
+    """True where the active environment has a streaming-TTS host."""
     return bool(environments.active().streaming_tts_host)
 
 
 def require_available(command: str) -> None:
-    """Refuse to run a streaming-TTS command (speak, dub) outside the sandbox,
-    pointing at the exact --sandbox re-invocation."""
+    """Refuse to run a streaming-TTS command (speak, dub, live) in an environment
+    with no TTS host, pointing back at production."""
     if not is_available():
+        active = environments.active().name
         raise CLIError(
-            f"assembly {command} is only available in the sandbox (it uses streaming TTS).",
+            f"assembly {command} needs streaming TTS, which the {active} environment lacks.",
             error_type="unsupported_environment",
             exit_code=2,
-            suggestion=f"Re-run as: assembly --sandbox {command} … "
-            f"(--sandbox goes before the command; or use --env {environments.SANDBOX_ENV}).",
+            suggestion=f"Drop --env (and unset AAI_ENV) to run assembly {command} in "
+            f"{environments.DEFAULT_ENV}.",
         )
 
 
 def ws_url(params: dict[str, str]) -> str:
     """The streaming-TTS socket URL for the active environment, with query params."""
-    base = f"wss://{environments.active().streaming_tts_host}/v1/ws/"
+    base = f"wss://{environments.active().streaming_tts_host}/v1/ws"
     return f"{base}?{urlencode(params)}" if params else base
 
 
@@ -135,14 +150,12 @@ def _consume_audio_frame(
     pcm: bytearray,
     sample_rate: int,
     on_audio: Callable[[bytes, int], None] | None,
-) -> bool:
-    """Append one Audio frame's PCM, stream it to ``on_audio``, and report whether
-    it is the final frame (so the collection loop can stop)."""
+) -> None:
+    """Append one Audio frame's PCM and stream it to ``on_audio``."""
     chunk = _decode_audio_frame(msg)
     pcm.extend(chunk)
     if on_audio is not None:
         on_audio(chunk, sample_rate)
-    return bool(msg.get("is_final"))
 
 
 def _error_frame_detail(msg: dict[str, object]) -> str:
@@ -181,71 +194,93 @@ def _default_connect(
     )
 
 
-def _run_protocol(
-    ws: _WebSocket,
-    config: SpeakConfig,
-    on_warning: Callable[[str], None] | None,
-    on_audio: Callable[[bytes, int], None] | None,
-) -> SpeakResult:
-    """Send Generate + Flush, collect Audio until is_final, then Terminate.
-
-    Each decoded Audio chunk is handed to ``on_audio(chunk, sample_rate)`` (when
-    given) as it arrives, so a caller can play it immediately instead of waiting
-    for the whole synthesis; the full PCM is still accumulated and returned."""
+def _begin_sample_rate(ws: _WebSocket) -> int:
+    """Read the server's first frame — Begin, or the Error that replaces it — and
+    return the session's sample rate from Begin's echoed configuration."""
     begin = json.loads(_recv_raw(ws))
     begin_type = begin.get("type")
     if begin_type == "Error":
         # The server refused the session and put the reason in the frame — surface it
-        # (e.g. a Bearer-vs-raw auth mismatch reads as the auth error here), rather
-        # than discarding it behind a generic "got 'Error'".
+        # (e.g. a rejected key or an unknown voice_id), rather than discarding it
+        # behind a generic "got 'Error'".
         raise APIError(f"TTS service rejected the session {_error_frame_detail(begin)}")
     if begin_type != "Begin":
         raise APIError(f"TTS service did not start the session (got {begin_type!r}).")
-    sample_rate = int(begin.get("configuration", {}).get("sample_rate", _DEFAULT_SAMPLE_RATE))
+    return int(begin.get("configuration", {}).get("sample_rate", _DEFAULT_SAMPLE_RATE))
 
-    ws.send(json.dumps({"type": "Generate", "text": config.text}))
-    # "Flush" forces synthesis of any buffered text; the server rejects the older
-    # "ForceFlushTextBuffer" tag with a validation error (matches the template).
+
+def _send_request(ws: _WebSocket, text: str) -> None:
+    """One request: the text, concluded by a Flush (which earns exactly one FlushDone)."""
+    ws.send(json.dumps({"type": "Generate", "text": text}))
     ws.send(json.dumps({"type": "Flush"}))
 
-    pcm = bytearray()
+
+def _await_termination(ws: _WebSocket) -> None:
+    """End the session the documented way: Terminate, then read up to Termination."""
+    ws.send(json.dumps({"type": "Terminate"}))
     while True:
         msg = json.loads(_recv_raw(ws))
         mtype = msg.get("type")
+        if mtype == "Termination":
+            return
+        if mtype == "Error":
+            raise APIError(f"TTS error {_error_frame_detail(msg)}")
+
+
+def _run_protocol(
+    ws: _WebSocket,
+    texts: list[str],
+    on_warning: Callable[[str], None] | None,
+    on_audio: Callable[[bytes, int], None] | None,
+) -> SpeakResult:
+    """Speak ``texts`` as consecutive requests on one session, then terminate it.
+
+    Requests go out at most ``_MAX_IN_FLIGHT`` ahead of their FlushDone (the next
+    is sent as each one completes), which is the docs' multi-request pattern. Each
+    decoded Audio chunk is handed to ``on_audio(chunk, sample_rate)`` (when given)
+    as it arrives, so a caller can play it immediately; the full PCM is still
+    accumulated and returned."""
+    sample_rate = _begin_sample_rate(ws)
+    pending = list(texts)
+    in_flight = 0
+    while pending and in_flight < _MAX_IN_FLIGHT:
+        _send_request(ws, pending.pop(0))
+        in_flight += 1
+
+    pcm = bytearray()
+    while in_flight:
+        msg = json.loads(_recv_raw(ws))
+        mtype = msg.get("type")
         if mtype == "Audio":
-            if _consume_audio_frame(msg, pcm, sample_rate, on_audio):
-                break
+            _consume_audio_frame(msg, pcm, sample_rate, on_audio)
         elif mtype == "FlushDone":
-            # The live server ends a synthesis with FlushDone (its Audio frames carry
-            # no is_final flag), so this is the real end-of-stream marker — stop here,
-            # or the loop blocks until the recv timeout and the audio is lost.
-            break
+            # Exactly one per Flush, in order: every byte of that request is delivered.
+            in_flight -= 1
+            if pending:
+                _send_request(ws, pending.pop(0))
+                in_flight += 1
         elif mtype == "Error":
             raise APIError(f"TTS error {_error_frame_detail(msg)}")
         elif mtype == "Warning" and on_warning is not None:
             on_warning(str(msg.get("warning", "")))
+        # Other frame types (e.g. WordBoundaries) are ignored, as the protocol requires.
 
-    with contextlib.suppress(Exception):
-        ws.send(json.dumps({"type": "Terminate"}))
-
+    _await_termination(ws)
     return SpeakResult(bytes(pcm), sample_rate, _pcm_duration_seconds(pcm, sample_rate))
 
 
-def synthesize(
+def _synthesize_texts(
     api_key: str,
     config: SpeakConfig,
+    texts: list[str],
     *,
-    connect: _Connect | None = None,
-    on_warning: Callable[[str], None] | None = None,
-    on_audio: Callable[[bytes, int], None] | None = None,
+    connect: _Connect | None,
+    on_warning: Callable[[str], None] | None,
+    on_audio: Callable[[bytes, int], None] | None,
 ) -> SpeakResult:
-    """Open the streaming-TTS socket and synthesize ``config.text`` to PCM.
-
-    ``connect`` defaults to websockets' synchronous client; injectable for tests.
-    ``on_audio(chunk, sample_rate)``, when given, receives each PCM chunk as it
-    arrives (for incremental playback); the full PCM is still returned regardless.
-    Connect/session failures map to a clean CLIError (a rejected key -> exit 4).
-    """
+    """Open one streaming-TTS session configured by ``config`` and speak ``texts``
+    on it as consecutive requests. Connect/session failures map to a clean CLIError
+    (a rejected key -> exit 4)."""
     wsutil.silence_websockets_logging()
     if connect is None:
         connect = _default_connect
@@ -261,16 +296,16 @@ def synthesize(
         # Bearer token upgrades fine but is rejected in-band as an Error frame.
         bearer=False,
         max_size=None,  # no frame cap: a synthesis's Audio frames can exceed the 1 MiB default
-        # Disable websockets' keepalive pong deadline. A long input (notably a --url page or
-        # PDF, sent as one Generate frame) can leave the server silent for longer than the
-        # default 20s ping_timeout before it streams the first Audio frame; websockets would
-        # then close the still-alive connection itself with code 1011 ("keepalive ping
-        # timeout"). _RECV_TIMEOUT_SECONDS already bounds server silence per frame, so it is
-        # the single liveness authority — pings still flow, but a slow pong no longer kills us.
+        # Disable websockets' keepalive pong deadline. A long request can leave the server
+        # silent for longer than the default 20s ping_timeout before it streams the first
+        # Audio frame; websockets would then close the still-alive connection itself with
+        # code 1011 ("keepalive ping timeout"). _RECV_TIMEOUT_SECONDS already bounds server
+        # silence per frame, so it is the single liveness authority — pings still flow, but
+        # a slow pong no longer kills us.
         ping_timeout=None,
     )
     try:
-        return _run_protocol(ws, config, on_warning, on_audio)
+        return _run_protocol(ws, texts, on_warning, on_audio)
     except (CLIError, KeyboardInterrupt, BrokenPipeError):
         raise  # clean CLI errors, Ctrl-C, and a closed pipe are handled upstream
     except Exception as exc:
@@ -278,6 +313,25 @@ def synthesize(
     finally:
         with contextlib.suppress(Exception):
             ws.close()
+
+
+def synthesize(
+    api_key: str,
+    config: SpeakConfig,
+    *,
+    connect: _Connect | None = None,
+    on_warning: Callable[[str], None] | None = None,
+    on_audio: Callable[[bytes, int], None] | None = None,
+) -> SpeakResult:
+    """Open the streaming-TTS socket and synthesize ``config.text`` to PCM.
+
+    ``connect`` defaults to websockets' synchronous client; injectable for tests.
+    ``on_audio(chunk, sample_rate)``, when given, receives each PCM chunk as it
+    arrives (for incremental playback); the full PCM is still returned regardless.
+    """
+    return _synthesize_texts(
+        api_key, config, [config.text], connect=connect, on_warning=on_warning, on_audio=on_audio
+    )
 
 
 def synthesize_chunked(
@@ -288,29 +342,28 @@ def synthesize_chunked(
     on_warning: Callable[[str], None] | None = None,
     on_audio: Callable[[bytes, int], None] | None = None,
 ) -> SpeakResult:
-    """Synthesize ``config.text`` as a sequence of sentence-packed chunks, one
-    streaming-TTS connection each, concatenating the PCM.
+    """Synthesize ``config.text`` as sentence-packed chunks, each its own request on
+    one streaming-TTS session.
 
-    PocketTTS is a streaming model meant to be fed incrementally; a whole document in a
-    single Generate frame stalls the server (it then misses the keepalive ping and the
-    socket closes with a 1011). Chunking keeps every Generate small and starts playback
-    on the first chunk. ``on_audio`` still receives each PCM chunk as it arrives and the
-    full PCM is returned for the summary, exactly like ``synthesize`` — this is the same
-    one-connection-per-sentence pattern the agent-cascade path uses.
+    A single Generate holds at most 2000 characters, and the server closes a session
+    that receives a whole document as one burst, so a long text (a --url page, a PDF)
+    goes out as bounded requests on one socket — the documented multi-request pattern,
+    rather than a socket per chunk, which pays the setup each time and runs into the
+    per-account new-session limit (3009). Playback starts on the first chunk;
+    ``on_audio`` and the returned PCM behave exactly like ``synthesize``.
     """
-    pcm = bytearray()
-    sample_rate = _DEFAULT_SAMPLE_RATE
-    for chunk in text.chunk_text(config.text):
-        result = synthesize(
-            api_key,
-            replace(config, text=chunk),
-            connect=connect,
-            on_warning=on_warning,
-            on_audio=on_audio,
-        )
-        pcm.extend(result.pcm)
-        sample_rate = result.sample_rate
-    return SpeakResult(bytes(pcm), sample_rate, _pcm_duration_seconds(pcm, sample_rate))
+    chunks = text.chunk_text(config.text)
+    if not chunks:
+        # Nothing to speak: no session at all, rather than one that synthesizes nothing.
+        return SpeakResult(b"", _DEFAULT_SAMPLE_RATE, 0.0)
+    return _synthesize_texts(
+        api_key,
+        config,
+        chunks,
+        connect=connect,
+        on_warning=on_warning,
+        on_audio=on_audio,
+    )
 
 
 def synthesize_dialogue(

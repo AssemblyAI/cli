@@ -16,9 +16,9 @@ class Environment:
 
     name: str
     api_base: str  # SDK base_url for /v2/upload + /v2/transcript
-    sync_base: str  # Sync STT API base (one-shot POST /transcribe, used by `assembly dictate`)
+    dictation_base: str  # Dictation API base (POST /v1/transcribe/live, used by `assembly dictate`)
     streaming_host: str  # StreamingClientOptions.api_host (SDK builds wss://host/v3/ws)
-    streaming_tts_host: str  # streaming TTS host; empty when TTS isn't available (prod)
+    streaming_tts_host: str  # streaming TTS host; empty when an env has no TTS
     agents_host: str  # Voice Agent host; the agent client builds wss://host/v1/ws
     llm_gateway_base: str  # OpenAI base_url for the LLM Gateway (…/v1)
     ams_base: str  # Accounts Management Service
@@ -38,9 +38,9 @@ ENVIRONMENTS: dict[str, Environment] = {
     "production": Environment(
         name="production",
         api_base="https://api.assemblyai.com",
-        sync_base="https://sync.assemblyai.com",
+        dictation_base="https://dictation.assemblyai.com",
         streaming_host="streaming.assemblyai.com",
-        streaming_tts_host="",
+        streaming_tts_host="tts.us.assemblyai.com",
         agents_host="agents.assemblyai.com",
         llm_gateway_base="https://llm-gateway.assemblyai.com/v1",
         ams_base="https://ams.internal.assemblyai-labs.com",
@@ -51,7 +51,7 @@ ENVIRONMENTS: dict[str, Environment] = {
     "sandbox000": Environment(
         name="sandbox000",
         api_base="https://api.sandbox000.assemblyai-labs.com",
-        sync_base="https://sync.sandbox000.assemblyai-labs.com",
+        dictation_base="https://dictation.sandbox000.assemblyai-labs.com",
         streaming_host="streaming.sandbox000.assemblyai-labs.com",
         streaming_tts_host="streaming-tts.sandbox000.assemblyai-labs.com",
         agents_host="agents.sandbox000.assemblyai-labs.com",

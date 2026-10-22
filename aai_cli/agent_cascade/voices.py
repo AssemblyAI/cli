@@ -3,8 +3,8 @@
 The cascade's audio comes from streaming TTS, so its voices are the TTS catalog
 (`aai_cli.tts.voices`) — not the Voice Agent voices `assembly agent` uses. This
 module is the thin presentation layer over that catalog: the membership list
-that catches a typo'd ``--voice``, the completion callback, and the grouped
-``--list-voices`` rendering.
+that catches a typo'd ``--voice`` and the completion callback. (``--list-voices``
+itself is the service's live listing — see ``app.tts_voices``.)
 """
 
 from __future__ import annotations
@@ -12,30 +12,12 @@ from __future__ import annotations
 from aai_cli.core import choices
 from aai_cli.tts import voices as tts_voices
 
-DEFAULT_VOICE = "jane"
+DEFAULT_VOICE = tts_voices.DEFAULT_VOICE
 
-# The selectable voice ids, sorted for a stable --list-voices / completion order.
-VOICE_NAMES: list[str] = sorted(tts_voices.VOICE_LANGUAGES)
-
-# ISO 639-1 code -> the heading --list-voices groups that language's voices under.
-_LANGUAGE_LABELS: dict[str, str] = {
-    "en": "English",
-    "fr": "French",
-    "it": "Italian",
-    "de": "German",
-    "es": "Spanish",
-    "pt": "Portuguese",
-}
+# The selectable voice names, sorted for a stable completion order.
+VOICE_NAMES: list[str] = sorted(tts_voices.VOICES)
 
 
 def complete_voice(incomplete: str) -> list[str]:
-    """Shell-completion callback for ``--voice``: catalog ids matching the prefix."""
+    """Shell-completion callback for ``--voice``: catalog names matching the prefix."""
     return choices.complete_prefix(VOICE_NAMES, incomplete)
-
-
-def format_voice_list() -> str:
-    """Human-readable voice ids for ``--list-voices``, grouped by language."""
-    return choices.render_grouped(
-        (label, [name for name in VOICE_NAMES if tts_voices.VOICE_LANGUAGES[name] == code])
-        for code, label in _LANGUAGE_LABELS.items()
-    )

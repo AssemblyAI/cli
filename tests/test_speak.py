@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from aai_cli.core import config
 from aai_cli.main import app
 from aai_cli.tts import session
+from tests._tts_session_helpers import use_no_tts_production
 
 # `speak` is sandbox-only and runs under `--sandbox`, which the root callback gates
 # on an AssemblyAI login — run the whole module as an employee.
@@ -52,19 +53,18 @@ def fake_synthesize(monkeypatch: pytest.MonkeyPatch):
             pcm=b"\x01\x02\x03\x04", sample_rate=24000, audio_duration_seconds=0.123456
         )
 
-    monkeypatch.setattr(session, "synthesize", _fake)
+    monkeypatch.setattr(session, "synthesize_chunked", _fake)
     return calls
 
 
-def test_production_env_is_rejected_with_sandbox_hint():
-    result = runner.invoke(app, ["speak", "Hello"])  # default = production
+def test_env_without_tts_host_is_rejected(monkeypatch):
+    use_no_tts_production(monkeypatch)
+    result = runner.invoke(app, ["speak", "Hello"])
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
-    # The suggestion spells out the exact corrected invocation: --sandbox is a root
-    # flag, so it must go before the command, not after it.
-    assert "Re-run as: assembly --sandbox speak" in result.output
-    # Rich wraps the suggestion at 80 columns, so compare whitespace-normalized.
-    assert "before the command" in " ".join(result.output.split())
+    # Rich wraps the error at 80 columns, so compare whitespace-normalized.
+    output = " ".join(result.output.split())
+    assert "assembly speak needs streaming TTS" in output
+    assert "to run assembly speak in production" in output
 
 
 def test_plays_audio_by_default(monkeypatch):
@@ -83,7 +83,7 @@ def test_plays_audio_by_default(monkeypatch):
             pcm=b"\x01\x02\x03\x04", sample_rate=24000, audio_duration_seconds=0.1
         )
 
-    monkeypatch.setattr(session, "synthesize", _fake)
+    monkeypatch.setattr(session, "synthesize_chunked", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "Hello there"])
     assert result.exit_code == 0
     # The frame reached the speaker (chunk + the server's reported rate), proving the
@@ -105,7 +105,7 @@ def test_single_voice_server_warning_is_surfaced(monkeypatch):
         on_warning("slow synthesis")
         return session.SpeakResult(pcm=b"", sample_rate=24000, audio_duration_seconds=0.0)
 
-    monkeypatch.setattr(session, "synthesize", _fake)
+    monkeypatch.setattr(session, "synthesize_chunked", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--json"])
     assert result.exit_code == 0
     warning = next(json.loads(line) for line in result.stderr.splitlines() if line.startswith("{"))
@@ -147,10 +147,9 @@ def test_url_reads_web_page_aloud(monkeypatch, fake_synthesize):
     assert fake_synthesize["cfg"].text == "The article body."
 
 
-def test_long_text_is_synthesized_one_chunk_per_connection(monkeypatch):
-    # _speak_single feeds PocketTTS one chunk at a time (one synthesize/connection each),
-    # never the whole document in a single Generate — the fix for the long --url/PDF case.
-    monkeypatch.setattr("aai_cli.tts.text.chunk_text", lambda _t: ["First.", "Second.", "Third."])
+def test_long_text_goes_through_the_chunked_session(monkeypatch):
+    # _speak_single hands the whole text to synthesize_chunked, which splits it into
+    # bounded requests on one session (see test_tts_session) — the long --url/PDF case.
     monkeypatch.setattr("aai_cli.commands.speak._exec.audio.PcmPlayer", lambda **_: _FakePlayer())
     spoken: list[str] = []
 
@@ -158,11 +157,10 @@ def test_long_text_is_synthesized_one_chunk_per_connection(monkeypatch):
         spoken.append(cfg.text)
         return session.SpeakResult(pcm=b"\x01\x02", sample_rate=24000, audio_duration_seconds=0.0)
 
-    monkeypatch.setattr(session, "synthesize", _fake)
+    monkeypatch.setattr(session, "synthesize_chunked", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "First. Second. Third."])
     assert result.exit_code == 0
-    # One synthesize call per chunk, each carrying just that chunk's text.
-    assert spoken == ["First.", "Second.", "Third."]
+    assert spoken == ["First. Second. Third."]
 
 
 def test_url_and_text_argument_are_mutually_exclusive(monkeypatch):
@@ -223,18 +221,21 @@ def test_voice_and_language_flow_into_config(monkeypatch, fake_synthesize):
     cfg = fake_synthesize["cfg"]
     assert cfg.voice == "jane"
     assert cfg.language == "English"
-    assert cfg.query_params() == {"voice": "jane", "language": "English"}
+    assert cfg.query_params() == {
+        "voice_id": "aai-jane",
+        "language": "english",
+        "encoding": "pcm_s16le",
+    }
 
 
-def test_default_voice_follows_the_language(monkeypatch, fake_synthesize):
-    # Each voice speaks one language: with no --voice, a non-English --language
-    # switches to that language's native voice instead of English "jane".
+def test_default_voice_is_jane_in_every_language(monkeypatch, fake_synthesize):
+    # Every built-in voice speaks every language: --language only sets the language.
     monkeypatch.setattr("aai_cli.commands.speak._exec.audio.play_pcm", lambda *a, **k: None)
-    result = runner.invoke(app, ["--sandbox", "speak", "Ciao", "--language", "Italian"])
+    result = runner.invoke(app, ["--sandbox", "speak", "Ciao", "--language", "it"])
     assert result.exit_code == 0
     cfg = fake_synthesize["cfg"]
-    assert cfg.voice == "giovanni"
-    assert cfg.language == "Italian"
+    assert cfg.voice == "jane"
+    assert cfg.query_params()["language"] == "italian"
 
 
 def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize):
@@ -243,7 +244,7 @@ def test_explicit_voice_beats_the_language_default(monkeypatch, fake_synthesize)
         app, ["--sandbox", "speak", "Bonjour", "--voice", "jane", "--language", "French"]
     )
     assert result.exit_code == 0
-    # A chosen voice always wins; the language only drives the default.
+    # A chosen voice is sent as given, whatever the language.
     assert fake_synthesize["cfg"].voice == "jane"
 
 
@@ -257,7 +258,7 @@ def test_json_mode_emits_metadata_object_on_stdout(monkeypatch):
     def _fake(api_key, cfg, *, connect=None, on_warning=None, on_audio=None):
         return session.SpeakResult(pcm=pcm, sample_rate=24000, audio_duration_seconds=0.12345833)
 
-    monkeypatch.setattr(session, "synthesize", _fake)
+    monkeypatch.setattr(session, "synthesize_chunked", _fake)
     result = runner.invoke(app, ["--sandbox", "speak", "Hi", "--voice", "jane", "--json"])
     assert result.exit_code == 0
     # The behavioral split: --json yields a parseable object, not human prose.
@@ -307,13 +308,12 @@ def test_labeled_stdin_uses_dialogue_path_with_default_rotation(fake_dialogue):
     ]
 
 
-def test_dialogue_rotation_follows_the_language(fake_dialogue):
-    # French has exactly one native voice, so every speaker switches to it —
-    # the language selects the voice in dialogue mode too.
+def test_dialogue_rotation_is_the_same_in_every_language(fake_dialogue):
+    # Every built-in voice speaks French, so speakers still rotate through distinct voices.
     text = "Speaker A: Bonjour.\nSpeaker B: Salut."
     result = runner.invoke(app, ["--sandbox", "speak", "--language", "French"], input=text)
     assert result.exit_code == 0
-    assert fake_dialogue["segments"] == [("estelle", "Bonjour."), ("estelle", "Salut.")]
+    assert fake_dialogue["segments"] == [("jane", "Bonjour."), ("michael", "Salut.")]
     assert fake_dialogue["language"] == "French"
 
 

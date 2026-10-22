@@ -82,8 +82,6 @@ def synthesize(text):
             kind = frame.get("type")
             if kind == "Audio":
                 pcm += base64.b64decode(frame.get("audio", ""))
-                if frame.get("is_final"):
-                    break
             elif kind in ("FlushDone", "Error"):
                 break
         ws.send(json.dumps({"type": "Terminate"}))

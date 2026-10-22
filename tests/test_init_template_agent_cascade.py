@@ -32,7 +32,7 @@ def test_settings_imports_without_key_or_tts_host(monkeypatch):
     settings = _load("api.settings", monkeypatch)
     assert settings.API_KEY == ""
     assert settings.MODEL == "claude-haiku-4-5-20251001"
-    assert settings.VOICE == "jane"
+    assert settings.VOICE_ID == "aai-jane"
     assert settings.INPUT_SAMPLE_RATE == 16000
     assert settings.OUTPUT_SAMPLE_RATE == 24000
 
@@ -52,17 +52,17 @@ def test_settings_reads_env(monkeypatch):
     assert settings.LLM_GATEWAY_URL == "https://llm.example/v1"
 
 
-def test_settings_sandbox_defaults(monkeypatch):
-    # With the host env vars unset, the module falls back to the sandbox defaults
-    # (TTS is sandbox-only, so the whole cascade defaults there). Asserting the exact
-    # default strings keeps the mutation gate honest on settings.py's literals.
+def test_settings_production_defaults(monkeypatch):
+    # With the host env vars unset, the module falls back to the production hosts.
+    # Asserting the exact default strings keeps the mutation gate honest on
+    # settings.py's literals.
     monkeypatch.delenv("ASSEMBLYAI_STREAMING_HOST", raising=False)
     monkeypatch.delenv("ASSEMBLYAI_TTS_HOST", raising=False)
     monkeypatch.delenv("ASSEMBLYAI_LLM_GATEWAY_URL", raising=False)
     settings = _load("api.settings", monkeypatch)
-    assert settings.STREAMING_HOST == "streaming.sandbox000.assemblyai-labs.com"
-    assert settings.TTS_HOST == "streaming-tts.sandbox000.assemblyai-labs.com"
-    assert settings.LLM_GATEWAY_URL == "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
+    assert settings.STREAMING_HOST == "streaming.assemblyai.com"
+    assert settings.TTS_HOST == "tts.us.assemblyai.com"
+    assert settings.LLM_GATEWAY_URL == "https://llm-gateway.assemblyai.com/v1"
     assert settings.SYSTEM_PROMPT == (
         "You are a friendly, concise voice assistant. Keep replies short and conversational. "
         "Your reply is read aloud by a text-to-speech engine, so write plain spoken prose — "
@@ -86,7 +86,10 @@ def test_unavailable_reason_missing_tts_host(monkeypatch: pytest.MonkeyPatch) ->
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = ""
     reason = cascade.unavailable_reason(settings)
-    assert "sandbox" in reason and "assembly --sandbox init agent-cascade" in reason
+    assert reason == (
+        "ASSEMBLYAI_TTS_HOST is empty — set it to your streaming-TTS host "
+        "(tts.us.assemblyai.com in production)."
+    )
 
 
 def test_unavailable_reason_ok(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,12 +117,10 @@ def test_tts_url_carries_voice_and_rate(monkeypatch: pytest.MonkeyPatch) -> None
     cascade = _cascade(monkeypatch)
     settings = reimport("api.settings")
     settings.TTS_HOST = "tts.example"
-    settings.VOICE = "jane"
+    settings.VOICE_ID = "aai-jane"
     settings.OUTPUT_SAMPLE_RATE = 24000
     url = cascade.tts_url(settings)
-    assert url.startswith("wss://tts.example/v1/ws/?")
-    assert "voice=jane" in url
-    assert "sample_rate=24000" in url
+    assert url == "wss://tts.example/v1/ws?voice_id=aai-jane&sample_rate=24000&encoding=pcm_s16le"
 
 
 def test_is_final_user_turn(monkeypatch: pytest.MonkeyPatch) -> None:

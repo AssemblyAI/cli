@@ -21,30 +21,30 @@ SPEC = command_registry.CommandModuleSpec(
 
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
-    # --sandbox is a root flag, so it must come before the subcommand in every example.
     epilog=examples_epilog(
         [
-            ("Speak text aloud (sandbox only)", 'assembly --sandbox speak "Hello there, friend."'),
+            ("Speak text aloud", 'assembly speak "Hello there, friend."'),
             (
-                "Pick a language (its native voice is selected automatically)",
-                'assembly --sandbox speak "Bonjour" --language French',
+                "Speak another language (every built-in voice speaks it)",
+                'assembly speak "Bonjour" --language French',
             ),
             (
                 "Speak a diarized transcript, one voice per speaker",
-                "assembly transcribe meeting.mp3 --speaker-labels | assembly --sandbox speak",
+                "assembly transcribe meeting.mp3 --speaker-labels | assembly speak",
             ),
             (
                 "Override a speaker's voice",
-                "… | assembly --sandbox speak --voice A=vera --voice B=paul",
+                "… | assembly speak --voice A=vera --voice B=paul",
             ),
             (
                 "Read a web page aloud (boilerplate stripped)",
-                "assembly --sandbox speak --url https://example.com/post",
+                "assembly speak --url https://example.com/post",
             ),
             (
                 "Save to a WAV instead of playing",
-                'assembly --sandbox speak "Hello" --out /tmp/hello.wav',
+                'assembly speak "Hello" --out /tmp/hello.wav',
             ),
+            ("See the available voices", "assembly speak --list-voices"),
         ]
     ),
 )
@@ -60,14 +60,14 @@ def speak(
     voice: list[str] = typer.Option(
         [],
         "--voice",
-        help="Voice id (e.g. jane, michael, mary, paul, eve, george), or SPEAKER=VOICE "
+        help="Voice (e.g. jane, michael, mary; see --list-voices), or SPEAKER=VOICE "
         "for diarized input (repeatable, e.g. --voice A=jane)",
     ),
     language: str = typer.Option(
         DEFAULT_LANGUAGE,
         "--language",
-        help="Language of the text. The default voice follows it "
-        "(e.g. --language Italian speaks with giovanni).",
+        help="Language of the text: English, Spanish, German, French, Italian, or "
+        "Portuguese (a name or ISO code). Every built-in voice speaks all six.",
     ),
     sample_rate: int | None = typer.Option(
         None,
@@ -78,17 +78,18 @@ def speak(
     out: Path | None = typer.Option(
         None, "--out", help="Write a WAV file instead of playing through the speakers"
     ),
+    # Handled eagerly in the option's own callback (it exits), so the body never reads it.
+    _list_voices: bool = options.list_voices_option("speak"),
     json_out: bool = options.json_option("Emit JSON metadata about the synthesized audio"),
 ) -> None:
-    r"""\[sandbox] Synthesize speech from text with AssemblyAI streaming TTS
+    r"""Synthesize speech from text with AssemblyAI streaming TTS
 
     Reads text from the argument, piped stdin, or a web page or PDF with --url
     (its main content is extracted and the boilerplate stripped). Plays the
     audio through your speakers by default, or writes a WAV with --out.
     Speaker-labeled input (from 'assembly transcribe --speaker-labels') is
     detected automatically: the labels are stripped and each speaker gets a
-    different voice. This feature only exists in the sandbox today — run it
-    as 'assembly --sandbox speak' (--sandbox goes before the subcommand).
+    different voice.
     """
 
     opts = speak_exec.SpeakOptions(

@@ -100,6 +100,9 @@ def _section_timestamp(value: str, sign: str | None) -> float:
             f'Invalid --download-sections time "{value}".',
             suggestion='Use the form "*start-end", e.g. "*0:00-5:00".',
         )
+    # Newer yt-dlp returns an int for whole seconds ("5:00" -> 300); keep the float
+    # contract so ranges (and the --show-code rendering of them) don't vary by version.
+    seconds = float(seconds)
     return -seconds if sign else seconds
 
 

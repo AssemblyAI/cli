@@ -17,10 +17,8 @@ from aai_cli.core.errors import UsageError, mutually_exclusive
 from aai_cli.tts import audio, dialogue, session, voices
 from aai_cli.ui import output
 
-# The streaming-TTS reference client defaults to English, so the CLI does the
-# same. The default voice follows the language (voices.default_voice): each
-# voice speaks one language, so e.g. --language Italian switches to giovanni
-# unless --voice overrides it.
+# The streaming-TTS service defaults to English, so the CLI does the same. Every
+# built-in voice speaks every language, so --language never changes the voice.
 DEFAULT_LANGUAGE = "English"
 
 
@@ -188,9 +186,7 @@ def _speak_dialogue(
             "set a voice per speaker with --voice A=NAME.",
             json_mode=json_mode,
         )
-    resolved, speakers = dialogue.assign_voices(
-        segments, voices.rotation_for(opts.language), overrides
-    )
+    resolved, speakers = dialogue.assign_voices(segments, voices.DEFAULT_ROTATION, overrides)
     with output.status("Synthesizing speech…", json_mode=json_mode, quiet=quiet):
         result = session.synthesize_dialogue(
             api_key,
@@ -233,7 +229,7 @@ def run_speak(opts: SpeakOptions, state: AppState, *, json_mode: bool) -> None:
             _speak_single(
                 api_key,
                 spoken,
-                bare_voice or voices.default_voice(opts.language),
+                bare_voice or voices.DEFAULT_VOICE,
                 opts,
                 json_mode=json_mode,
                 quiet=state.quiet,

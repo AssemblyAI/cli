@@ -14,11 +14,10 @@ from aai_cli.agent_cascade.config import (
     DEFAULT_SYSTEM_PROMPT,
 )
 from aai_cli.agent_cascade.voices import DEFAULT_VOICE
-from aai_cli.app.context import AppState, run_command, run_with_options
+from aai_cli.app.context import run_with_options
 from aai_cli.commands.agent_cascade import _exec as agent_cascade_exec
 from aai_cli.core import choices, llm
 from aai_cli.streaming.turn_presets import TurnDetectionPreset
-from aai_cli.ui import output
 from aai_cli.ui.help_text import examples_epilog
 
 # Option panels that group the per-leg knobs in `--help` instead of one flat wall.
@@ -36,11 +35,10 @@ SPEC = command_registry.CommandModuleSpec(
 )
 
 
-def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
-    """--list-voices body, routed through run_command so --json yields a machine-readable
-    array instead of the human list; needs no auth."""
-    payload = [{"name": name} for name in voices.VOICE_NAMES]
-    output.emit(payload, lambda _voices: voices.format_voice_list(), json_mode=json_mode)
+def _as_tuple[T](values: list[T] | None) -> tuple[T, ...]:
+    """A repeatable option's values as the frozen tuple the options dataclass carries
+    (Typer hands back None, not an empty list, when the flag is never passed)."""
+    return tuple(values or ())
 
 
 @app.command(
@@ -48,27 +46,27 @@ def _emit_voice_list(_state: AppState, json_mode: bool) -> None:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Start a live voice conversation", "assembly --sandbox live"),
+            ("Start a live voice conversation", "assembly live"),
             (
                 "Pick a voice and opening line",
-                'assembly --sandbox live --voice michael --greeting "Hi there"',
+                'assembly live --voice michael --greeting "Hi there"',
             ),
             (
                 "Give the agent a persona",
-                'assembly --sandbox live --system-prompt "You are a terse pirate."',
+                'assembly live --system-prompt "You are a terse pirate."',
             ),
             (
                 "Add your own MCP servers (none load by default)",
-                "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
+                "assembly live --mcp-config ~/.config/mcp/servers.json",
             ),
             (
                 "Run a conversation without filesystem access",
-                "assembly --sandbox live --no-files",
+                "assembly live --no-files",
             ),
-            ("See available voices", "assembly --sandbox live --list-voices"),
+            ("See available voices", "assembly live --list-voices"),
             (
                 "Print equivalent Python instead of running",
-                "assembly --sandbox live --show-code",
+                "assembly live --show-code",
             ),
         ]
     ),
@@ -184,7 +182,8 @@ def live(
         rich_help_panel=_PANEL_TOOLS,
     ),
     device: int | None = typer.Option(None, "--device", help="Microphone device index"),
-    list_voices: bool = typer.Option(False, "--list-voices", help="Print known voices and exit"),
+    # Handled eagerly in the option's own callback (it exits), so the body never reads it.
+    _list_voices: bool = options.list_voices_option("live"),
     json_out: bool = options.json_option("Emit newline-delimited JSON events"),
     output_field: choices.TextOrJson | None = typer.Option(
         None,
@@ -198,15 +197,13 @@ def live(
         help="Print the equivalent Python SDK code and exit (does not start a session)",
     ),
 ) -> None:
-    """\\[sandbox] Talk live to a tool-using voice agent
+    """Talk live to a tool-using voice agent
 
     A real-time spoken conversation, wired client-side from three primitives —
     Streaming STT, a deepagents brain on the LLM Gateway, and streaming TTS. Unlike
     'assembly agent' (the Voice Agent API), the brain here is an agent that can use
     tools mid-conversation — web search, URL fetch, and the AssemblyAI docs — so it
-    answers like a live multimodal assistant. Because it uses streaming TTS it only
-    runs in the sandbox: run it as 'assembly --sandbox live' (--sandbox goes before
-    the subcommand).
+    answers like a live multimodal assistant.
 
     Use headphones: the mic stays open while the agent speaks, so on speakers it
     would hear itself and loop. Pass an audio file/URL (or --sample) to speak a
@@ -224,10 +221,6 @@ def live(
     the session.
     """
 
-    if list_voices:
-        run_command(ctx, _emit_voice_list, json=json_out)
-        return
-
     opts = agent_cascade_exec.AgentCascadeOptions(
         source=source,
         sample=sample,
@@ -241,15 +234,15 @@ def live(
         speech_model=speech_model,
         format_turns=format_turns,
         turn_detection=turn_detection,
-        stt_config=tuple(stt_config or ()),
+        stt_config=_as_tuple(stt_config),
         stt_config_file=stt_config_file,
         max_tokens=max_tokens,
-        llm_config=tuple(llm_config or ()),
+        llm_config=_as_tuple(llm_config),
         language=language,
-        tts_config=tuple(tts_config or ()),
-        mcp_config=tuple(mcp_config or ()),
+        tts_config=_as_tuple(tts_config),
+        mcp_config=_as_tuple(mcp_config),
         files=files,
-        auto_write=tuple(auto_write or ()),
+        auto_write=_as_tuple(auto_write),
         show_code=show_code,
     )
     run_with_options(ctx, agent_cascade_exec.run_agent_cascade, opts, json=json_out)

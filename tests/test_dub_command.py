@@ -14,6 +14,7 @@ from aai_cli.commands.dub import _exec as dub_exec
 from aai_cli.core import llm
 from aai_cli.main import app
 from tests._clip_helpers import plain
+from tests._tts_session_helpers import use_no_tts_production
 
 runner = CliRunner()
 
@@ -37,14 +38,13 @@ def test_lang_is_required():
     assert "--lang" in plain(result.output)
 
 
-def test_production_env_is_rejected_with_sandbox_hint():
-    result = runner.invoke(app, ["dub", "talk.mp4", "--lang", "de"])  # default = production
+def test_env_without_tts_host_is_rejected(monkeypatch):
+    use_no_tts_production(monkeypatch)
+    result = runner.invoke(app, ["dub", "talk.mp4", "--lang", "de"])
     assert result.exit_code == 2
-    output = plain(result.output)
-    assert "only available in the sandbox" in output
-    # The suggestion spells out the exact corrected invocation: --sandbox is a root
-    # flag, so it must go before the command, not after it.
-    assert "Re-run as: assembly --sandbox dub" in output
+    output = " ".join(plain(result.output).split())
+    assert "assembly dub needs streaming TTS" in output
+    assert "to run assembly dub in production" in output
 
 
 def test_defaults_map_to_options(captured_run):

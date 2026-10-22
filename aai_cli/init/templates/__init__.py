@@ -27,7 +27,7 @@ DESCRIPTIONS: dict[str, str] = {
     "audio-transcription": "Transcribe audio & video files, URLs, and YouTube — speaker labels and audio intelligence",
     "live-captions": "Live real-time captions from your microphone over the Streaming API",
     "voice-agent": "Full-duplex voice agent (speech in, LLM reply, speech out) via the Voice Agent API",
-    "agent-cascade": "Cascaded voice agent you orchestrate: Streaming STT, the LLM Gateway, and sandbox TTS",
+    "agent-cascade": "Cascaded voice agent you orchestrate: Streaming STT, the LLM Gateway, and streaming TTS",
 }
 
 

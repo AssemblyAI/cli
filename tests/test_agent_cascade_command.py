@@ -19,12 +19,14 @@ from aai_cli.agent_cascade import _io
 from aai_cli.agent_cascade.config import CascadeConfig
 from aai_cli.agent_cascade.engine import CascadeDeps
 from aai_cli.app.context import AppState
+from aai_cli.commands import agent_cascade as cascade_command
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.commands.agent_cascade._exec import AgentCascadeOptions, run_agent_cascade
 from aai_cli.core import config, config_builder
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.main import app
 from aai_cli.streaming import turn_presets
+from tests._tts_session_helpers import use_no_tts_production
 
 runner = CliRunner()
 
@@ -33,7 +35,7 @@ _DEFAULTS = AgentCascadeOptions(
     source=None,
     sample=False,
     voice="jane",
-    model="kimi-k2.5",
+    model="claude-haiku-4-5-20251001",
     system_prompt="be nice",
     system_prompt_file=None,
     greeting="hello",
@@ -59,24 +61,15 @@ def _opts(**overrides) -> AgentCascadeOptions:
     return dataclasses.replace(_DEFAULTS, **overrides)
 
 
-# --- help / list-voices ------------------------------------------------------
-
-
-def test_list_voices_human_lists_catalog():
-    result = runner.invoke(app, ["live", "--list-voices"])
-    assert result.exit_code == 0
-    assert "jane" in result.output
-    assert "English:" in result.output
-
-
-def test_list_voices_json_emits_array():
-    result = runner.invoke(app, ["live", "--list-voices", "--json"])
-    assert result.exit_code == 0
-    assert result.output.lstrip().startswith("[")
-    assert '"jane"' in result.output
+def test_as_tuple_freezes_repeatable_values():
+    # Typer hands back None for a never-passed repeatable flag: that's an empty tuple,
+    # while given values are carried over in order.
+    assert cascade_command._as_tuple(None) == ()
+    assert cascade_command._as_tuple(["a=1", "b=2"]) == ("a=1", "b=2")
 
 
 # --- validation guards -------------------------------------------------------
+# (--list-voices is the shared streaming-TTS flag, covered in test_list_voices.py.)
 
 
 def test_options_are_frozen():
@@ -100,11 +93,11 @@ def test_missing_system_prompt_file_is_rejected_by_typer():
     assert "sandbox" not in result.output.lower()
 
 
-def test_production_env_is_rejected_with_sandbox_hint():
-    # Default env is production, which has no streaming-TTS host.
+def test_env_without_tts_host_is_rejected(monkeypatch):
+    use_no_tts_production(monkeypatch)
     result = runner.invoke(app, ["live", "--voice", "jane"])
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
+    assert "needs streaming TTS" in result.output
 
 
 def test_device_with_file_source_is_rejected(monkeypatch):
@@ -388,7 +381,12 @@ def test_parse_tts_config_rejects_malformed_pair():
 
 @pytest.mark.parametrize(
     ("key", "hint"),
-    [("voice", "--voice"), ("language", "--language"), ("sample_rate", "fixed")],
+    [
+        ("voice", "--voice"),
+        ("voice_id", "--voice"),
+        ("language", "--language"),
+        ("sample_rate", "fixed"),
+    ],
 )
 def test_parse_tts_config_rejects_reserved_keys(key, hint):
     with pytest.raises(UsageError, match=hint):

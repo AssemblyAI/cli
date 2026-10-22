@@ -1,9 +1,9 @@
 """Text chunking for streaming TTS, built on LangChain's text splitters.
 
-PocketTTS (the streaming-TTS model behind ``assembly speak``) is fed incrementally —
-a whole document in a single ``Generate`` frame stalls the server. ``chunk_text`` breaks
-the input into sentence-aligned chunks small enough to synthesize one connection at a
-time (see ``tts.session.synthesize_chunked``). The splitting is delegated to LangChain's
+Streaming TTS takes text in bounded requests — a single ``Generate`` frame holds at
+most 2000 characters, and a whole document sent as one burst closes the session.
+``chunk_text`` breaks the input into sentence-aligned chunks, each sent as its own
+request on one session (see ``tts.session.synthesize_chunked``). The splitting is delegated to LangChain's
 ``RecursiveCharacterTextSplitter`` (https://docs.langchain.com/oss/python/integrations/splitters)
 rather than a hand-rolled sentence scanner: it recurses through the separator list below,
 preferring sentence boundaries and only falling back to words/characters when a single
@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Conservative upper bound on the characters in a single Generate frame. PocketTTS is a
-# streaming model with a bounded context; everywhere else in the codebase it is fed one
-# sentence at a time. Sentences are packed up to this budget to keep the connection count
-# down on a long page while keeping each frame comfortably small.
+# Conservative upper bound on the characters in a single Generate frame — well under the
+# service's 2000-character limit. Sentences are packed up to this budget to keep the
+# request count down on a long page while keeping each request comfortably small.
 _MAX_CHUNK_CHARS = 500  # pragma: no mutate -- a +-1 char budget is immaterial
 
 # Separators in descending priority: a sentence terminator followed by a space is the

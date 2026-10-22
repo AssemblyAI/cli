@@ -24,6 +24,7 @@ from aai_cli.commands.speak import _exec as speak_exec
 from aai_cli.core import choices, config, llm
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.options import DEFAULT_BATCH_CONCURRENCY
+from tests._tts_session_helpers import use_no_tts_production
 
 # The CLI's flag defaults, as data. Tests override per-case with dataclasses.replace.
 TRANSCRIBE_DEFAULTS = transcribe_exec.TranscribeOptions(
@@ -210,12 +211,12 @@ def test_run_agent_broken_pipe_exits_zero(monkeypatch):
     assert exc.value.exit_code == 0
 
 
-def test_run_speak_requires_sandbox():
-    # The active environment defaults to production, which has no streaming-TTS host.
+def test_run_speak_requires_a_tts_host(monkeypatch):
+    use_no_tts_production(monkeypatch)
     with pytest.raises(CLIError) as exc:
         speak_exec.run_speak(SPEAK_DEFAULTS, AppState(), json_mode=False)
     assert exc.value.exit_code == 2
-    assert "--sandbox" in (exc.value.suggestion or "")
+    assert "Drop --env" in (exc.value.suggestion or "")
 
 
 def test_run_llm_follow_rejects_output_field():

@@ -2,8 +2,7 @@
 
 The browser opens one WebSocket to this backend, which runs the cascade itself —
 Streaming STT -> LLM Gateway -> streaming TTS — so your API key never reaches the
-client. Streaming TTS is sandbox-only, so scaffold with `assembly --sandbox init
-agent-cascade` and use a sandbox key.
+client.
 
   WS /ws  <- {"type":"input.audio","audio":<b64 pcm>} ; -> transcripts + reply.audio
 """

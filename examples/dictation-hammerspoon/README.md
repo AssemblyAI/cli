@@ -62,7 +62,7 @@ Edit the config block at the top of `dictation.lua`:
 | Setting | What it does |
 | --- | --- |
 | `M.hotkey` | The push-to-talk chord (default `⌃⌥D`). Hammerspoon can't bind a bare `fn` key, so use a modifier+letter. |
-| `M.dictateArgs` | Extra `assembly dictate` flags, e.g. `{ "--language", "es" }` to dictate in Spanish, or repeated `--word-boost` to bias tricky terms. |
+| `M.dictateArgs` | Extra `assembly dictate` flags, e.g. `{ "--language", "es" }` to dictate in Spanish, repeated `--keyterm` to bias tricky terms, or `--verbatim` for the unedited transcript. |
 | `M.insertMode` | `"paste"` (clipboard + ⌘V, fast, restores your clipboard) or `"type"` (simulated keystrokes, works everywhere). |
 | `M.sounds` | Play the mic-open / done chimes for audible feedback. |
 
@@ -71,7 +71,7 @@ Edit the config block at the top of `dictation.lua`:
 - **PATH**: Hammerspoon launches with a minimal `PATH`, so the script resolves
   `assembly` through a login shell (`command -v assembly`). If you installed the
   CLI somewhere unusual, hard-code the path in `resolveAssembly()`.
-- **Limits**: each utterance is capped at 120 s (the Sync STT API limit); pass
+- **Limits**: each utterance is capped at 120 s (the Dictation API limit); pass
   `--max-seconds` to stop sooner.
 - **Toggle instead of hold**: prefer tap-to-start / tap-to-stop? Bind only the
   pressed callback to a function that calls `startDictation()` when idle and

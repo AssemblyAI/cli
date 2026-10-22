@@ -49,7 +49,7 @@ def test_connect_tts_passes_max_size_none(monkeypatch: pytest.MonkeyPatch) -> No
     settings = reimport("api.settings")
     settings.API_KEY = "sk-test"
     settings.TTS_HOST = "tts.example"
-    settings.VOICE = "jane"
+    settings.VOICE_ID = "aai-jane"
     settings.OUTPUT_SAMPLE_RATE = 24000
     captured = untyped_bag()
 
@@ -220,7 +220,7 @@ def test_synthesize_audio_frame_missing_payload_defaults_empty(
     cascade = _cascade(monkeypatch)
     browser = FakeBrowser()
     # An Audio frame with no `audio` key must yield reply.audio with data == "" (the default).
-    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}])
+    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio"}, {"type": "FlushDone"}])
     asyncio.run(cascade._synthesize(browser, tts, "hi"))
     assert {"type": "reply.audio", "data": ""} in browser.sent
 

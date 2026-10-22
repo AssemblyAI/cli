@@ -30,6 +30,7 @@ from aai_cli.streaming import turn_presets
 from aai_cli.streaming.sources import FileSource
 from aai_cli.streaming.validate import resolve_output_modes
 from aai_cli.tts import session as tts_session
+from aai_cli.tts import voices as tts_voices
 from aai_cli.ui import output
 
 if TYPE_CHECKING:
@@ -39,8 +40,10 @@ if TYPE_CHECKING:
 # message steering the user to the right place instead of silently fighting the cascade.
 _RESERVED_TTS_KEYS: dict[str, str] = {
     "voice": "Set the voice with --voice, not --tts-config.",
+    "voice_id": "Set the voice with --voice, not --tts-config.",
     "language": "Set the language with --language, not --tts-config.",
     "sample_rate": "TTS sample rate is fixed to match the live speaker and can't be overridden.",
+    "encoding": "TTS encoding is fixed to the 16-bit PCM the live speaker plays.",
 }
 
 
@@ -48,9 +51,9 @@ _RESERVED_TTS_KEYS: dict[str, str] = {
 class AgentCascadeOptions:
     """Every `assembly agent-cascade` conversation flag as plain data.
 
-    ``--list-voices`` is excluded: it dispatches to its own auth-free body in the
-    command module. ``--json`` is excluded: run_command resolves it into the
-    ``json_mode`` argument.
+    ``--list-voices`` is excluded: it is an eager flag that lists the service's
+    voices and exits in its own callback (``app.tts_voices``). ``--json`` is
+    excluded: run_command resolves it into the ``json_mode`` argument.
     """
 
     source: str | None
@@ -334,7 +337,8 @@ def _launch_tui(api_key: str, opts: AgentCascadeOptions, config: CascadeConfig) 
 def run_agent_cascade(opts: AgentCascadeOptions, state: AppState, *, json_mode: bool) -> None:
     """Execute one `assembly agent-cascade` cascade from already-parsed flags."""
     text_mode, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
-    validate_voice(opts.voice, voices.VOICE_NAMES, command="live")
+    # A copied voice_id (aai-jane, as --list-voices prints them) names the same catalog voice.
+    validate_voice(tts_voices.voice_name(opts.voice), voices.VOICE_NAMES, command="live")
     # Streaming TTS has no production host, so the whole cascade is sandbox-only.
     tts_session.require_available("live")
     system_prompt_text = _resolve_system_prompt(opts.system_prompt, opts.system_prompt_file)

@@ -1,8 +1,9 @@
 """Run logic for `assembly dictate`: the options/run split (see AGENTS.md).
 
-Headless dictation over the Sync STT API: recording starts immediately and runs
+Headless dictation over the Dictation API: recording starts immediately and runs
 until SIGTERM is delivered (or the duration cap), then the utterance is POSTed to
-the Sync API, the transcript is printed, and dictate exits 0. There is no terminal
+the Dictation API, the send-ready text (its cleanup rewrite, or the verbatim
+transcript with --verbatim) is printed, and dictate exits 0. There is no terminal
 interaction — a controller like Hammerspoon launches `assembly dictate` as a
 background task and sends SIGTERM (``task:terminate()`` / ``kill -TERM``) to mean
 "I'm done dictating", so the transcript flows straight to the next command in a
@@ -20,15 +21,15 @@ from dataclasses import dataclass
 import typer
 
 from aai_cli.app.context import AppState
-from aai_cli.core import choices, errors, sync_stt
+from aai_cli.core import choices, dictation, errors
 from aai_cli.core.config_builder import split_csv
 from aai_cli.core.microphone import MicrophoneSource
 from aai_cli.core.signals import stop_on_terminate
 from aai_cli.streaming.validate import resolve_output_modes
 from aai_cli.ui import output
 
-# Capture is resampled to one rate the Sync API accepts; 16 kHz mono PCM16 keeps
-# a 120 s utterance well under the 40 MB upload cap.
+# Capture is resampled to one rate, sent as raw 16 kHz mono PCM16 (the live endpoint
+# takes WAV or raw PCM; a 120 s utterance is ~3.8 MB, far under the 256 MB cap).
 TARGET_RATE = 16000
 _BYTES_PER_SECOND = TARGET_RATE * 2  # PCM16 mono
 
@@ -40,7 +41,7 @@ class DictateOptions:
 
     language: str | None
     prompt: str | None
-    word_boost: list[str] | None
+    keyterms: list[str] | None
     device: int | None
     # Deprecated no-op: recording one utterance and exiting is now the default,
     # so --once is kept only so existing scripts don't break (it warns + does
@@ -49,6 +50,13 @@ class DictateOptions:
     max_seconds: float
     # -o/--output: text (the default bare-transcript shape) or json (== --json).
     output_field: choices.TextOrJson | None = None
+    # The rewrite: a custom instruction (replaces the default cleanup), its tier,
+    # and whether to print the verbatim transcript instead of the rewrite.
+    instruction: str | None = None
+    rewrite_mode: choices.RewriteMode | None = None
+    verbatim: bool = False
+    # Deprecated --word-boost terms (a hidden alias of --keyterm that warns).
+    word_boost: list[str] | None = None
 
 
 def _note(message: str, *, json_mode: bool, quiet: bool) -> None:
@@ -59,13 +67,18 @@ def _note(message: str, *, json_mode: bool, quiet: bool) -> None:
     output.error_console.print(f"[aai.muted]{message}[/aai.muted]")
 
 
-def _languages(language: str | None) -> str | list[str] | None:
-    """Fold --language into the config shape: one ISO code as a string, a
-    comma-separated list (code-switching audio) as a list, blank as unset."""
-    codes = split_csv(language)
-    if not codes:
-        return None
-    return codes[0] if len(codes) == 1 else codes
+def _config(opts: DictateOptions) -> dictation.DictationConfig:
+    """The Dictation config from the flags: --language as ``language_codes`` (one
+    code, or a comma-separated list for code-switching audio), --keyterm (plus the
+    deprecated --word-boost) as ``keyterms_prompt``, and the rewrite knobs."""
+    keyterms = [*(opts.keyterms or []), *(opts.word_boost or [])]
+    return dictation.DictationConfig(
+        language_codes=split_csv(opts.language) or None,
+        stt_prompt=opts.prompt,
+        keyterms=keyterms or None,
+        llm_instruction=opts.instruction,
+        rewrite_mode=opts.rewrite_mode,
+    )
 
 
 def _record(
@@ -96,8 +109,9 @@ def _record(
     return bytes(pcm)
 
 
-def _emit(result: sync_stt.SyncTranscript, *, json_mode: bool) -> None:
-    """One utterance to stdout: the bare transcript text, or one NDJSON object."""
+def _emit(result: dictation.DictationResult, *, verbatim: bool, json_mode: bool) -> None:
+    """One utterance to stdout: the send-ready text (or the verbatim transcript), or
+    one NDJSON object carrying both."""
     if json_mode:
         # "type" first: every multi-line NDJSON stream the CLI emits discriminates
         # its lines the same way (stream/agent already do; see docs/cli-reference.md).
@@ -105,13 +119,25 @@ def _emit(result: sync_stt.SyncTranscript, *, json_mode: bool) -> None:
             {
                 "type": "utterance",
                 "text": result.text,
+                "llm_response": result.llm_response,
+                "llm_error": result.llm_error,
                 "confidence": result.confidence,
                 "audio_duration_ms": result.audio_duration_ms,
                 "session_id": result.session_id,
             }
         )
-    else:
+        return
+    if verbatim:
         output.emit_text(result.text)
+        return
+    if result.llm_error is not None:
+        # The rewrite is best-effort and never fails the call: say why the verbatim
+        # transcript is printed instead of quietly handing it on.
+        output.emit_warning(
+            f"The cleanup rewrite failed ({result.llm_error}); printing the verbatim transcript.",
+            json_mode=json_mode,
+        )
+    output.emit_text(result.final_text)
 
 
 def _transcribe_utterance(
@@ -122,27 +148,19 @@ def _transcribe_utterance(
     *,
     json_mode: bool,
 ) -> None:
-    """Send one recorded utterance to the Sync API and print the transcript.
+    """Send one recorded utterance to the Dictation API and print the result.
 
-    A recording below the API's 80 ms floor (an instant SIGTERM) is skipped with a
-    warning rather than bounced off the server as a 400.
+    An empty recording (an instant SIGTERM) is skipped with a warning rather than
+    bounced off the server, which refuses an empty audio part with a 400.
     """
-    if len(pcm) < sync_stt.MIN_AUDIO_MS * _BYTES_PER_SECOND // 1000:
-        output.emit_warning(
-            f"Recording was shorter than {sync_stt.MIN_AUDIO_MS} ms; nothing to transcribe.",
-            json_mode=json_mode,
-        )
+    if not pcm:
+        output.emit_warning("Nothing was recorded; nothing to transcribe.", json_mode=json_mode)
         return
     with output.status("Transcribing…", json_mode=json_mode, quiet=state.quiet):
-        result = sync_stt.transcribe_pcm(
-            api_key,
-            pcm,
-            sample_rate=TARGET_RATE,
-            language_code=_languages(opts.language),
-            prompt=opts.prompt,
-            word_boost=opts.word_boost,
+        result = dictation.transcribe_live(
+            api_key, pcm, sample_rate=TARGET_RATE, config=_config(opts)
         )
-    _emit(result, json_mode=json_mode)
+    _emit(result, verbatim=opts.verbatim, json_mode=json_mode)
 
 
 def _capture_and_transcribe(
@@ -176,13 +194,9 @@ def run_dictate(opts: DictateOptions, state: AppState, *, json_mode: bool) -> No
     _, json_mode = resolve_output_modes(opts.output_field, json_mode=json_mode)
     # Resolve credentials before recording: don't capture audio we can't transcribe.
     api_key = state.resolve_api_key()
-    if opts.prompt and opts.language:
-        # The server ignores language_code whenever a custom prompt is set;
-        # never drop a requested flag silently (mirrors the speak warnings).
-        output.emit_warning(
-            "--language is ignored when --prompt is set; state the language inside the prompt.",
-            json_mode=json_mode,
-        )
+    if opts.word_boost and not state.quiet:
+        # Deprecation trap, not removal: the Dictation API calls these keyterms.
+        output.emit_warning("--word-boost is deprecated; use --keyterm.", json_mode=json_mode)
     if opts.once and not state.quiet:
         # Deprecation trap, not removal: --once still parses so old scripts don't
         # break, but recording one utterance and exiting is now the default, so the

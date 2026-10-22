@@ -8,13 +8,24 @@ driving the same fake socket and frame builders.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
+
+import pytest
 
 from aai_cli.core import environments
 
 
 def use_env(name: str) -> None:
     environments.set_active(environments.get(name))
+
+
+def use_no_tts_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Production with its TTS host cleared — the environment shape
+    ``session.require_available`` refuses (no real environment lacks one today)."""
+    env = dataclasses.replace(environments.get("production"), streaming_tts_host="")
+    monkeypatch.setitem(environments.ENVIRONMENTS, "production", env)
+    environments.set_active(env)
 
 
 class FakeWS:
@@ -28,6 +39,10 @@ class FakeWS:
 
     def recv(self, timeout: float | None = None) -> str:
         self.recv_timeouts.append(timeout)
+        if not self._incoming and self.sent and self.sent[-1].get("type") == "Terminate":
+            # Like the real server: Terminate is answered with the session summary, so
+            # a script needn't spell out the Termination every clean session ends with.
+            return termination_frame()
         return self._incoming.pop(0)
 
     def send(self, data: str) -> None:
@@ -37,25 +52,16 @@ class FakeWS:
         self.closed = True
 
 
-def audio_frame(pcm: bytes, *, final: bool) -> str:
-    # An Audio frame with an explicit is_final flag — the defensive end-of-stream path
-    # (the live server instead omits is_final and ends with FlushDone, see audio_chunk).
-    # The sample rate is reported once, up front, in the Begin frame's configuration.
-    return json.dumps(
-        {
-            "type": "Audio",
-            "audio": base64.b64encode(pcm).decode("ascii"),
-            "is_final": final,
-        }
-    )
-
-
 def audio_chunk(pcm: bytes) -> str:
-    # The real server's Audio frames carry the PCM payload and a flush_id, but NO
-    # is_final flag — completion is signalled by a separate FlushDone frame.
+    # The server's Audio frames carry the PCM payload and a flush_id; completion is
+    # signalled by a separate FlushDone frame.
     return json.dumps(
         {"type": "Audio", "audio": base64.b64encode(pcm).decode("ascii"), "flush_id": 0}
     )
+
+
+def termination_frame() -> str:
+    return json.dumps({"type": "Termination", "session_duration_seconds": 1})
 
 
 def flush_done_frame() -> str:

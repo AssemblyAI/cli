@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import dataclasses
+
+import pytest
+
 from aai_cli.agent_cascade import voices
+from aai_cli.app.context import AppState
+from aai_cli.commands.agent_cascade._exec import run_agent_cascade
+from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.tts import voices as tts_voices
+from tests._tts_session_helpers import use_no_tts_production
+from tests.test_agent_cascade_command import _DEFAULTS
 
 
 def test_voice_names_are_the_tts_catalog_sorted():
-    assert sorted(tts_voices.VOICE_LANGUAGES) == voices.VOICE_NAMES
+    assert sorted(tts_voices.VOICES) == voices.VOICE_NAMES
 
 
 def test_default_voice_is_in_catalog():
@@ -20,12 +29,15 @@ def test_complete_voice_filters_by_prefix():
     assert all(name.startswith("ja") for name in completions)
 
 
-def test_format_voice_list_groups_by_language():
-    listing = voices.format_voice_list()
-    blocks = {block.split(":", 1)[0]: block for block in listing.split("\n\n")}
-    # Each voice is filed strictly under the language it actually speaks: the English
-    # block lists jane but not the Italian-only giovanni, and vice versa.
-    assert "jane" in blocks["English"]
-    assert "giovanni" not in blocks["English"]
-    assert "giovanni" in blocks["Italian"]
-    assert "jane" not in blocks["Italian"]
+def test_voice_id_form_validates_as_its_catalog_name(monkeypatch):
+    # A voice_id copied from --list-voices (aai-jane) is the catalog voice jane, so it
+    # passes validation and the run proceeds to the next guard (the TTS-host check).
+    use_no_tts_production(monkeypatch)
+    with pytest.raises(CLIError, match="needs streaming TTS"):
+        run_agent_cascade(
+            dataclasses.replace(_DEFAULTS, voice="aai-jane"), AppState(), json_mode=False
+        )
+    with pytest.raises(UsageError, match="Unknown voice"):
+        run_agent_cascade(
+            dataclasses.replace(_DEFAULTS, voice="aai-nope"), AppState(), json_mode=False
+        )

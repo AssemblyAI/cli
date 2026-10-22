@@ -48,15 +48,14 @@
   │ dictate      Signal-driven dictation: record the mic, get the transcript     │
   │              back                                                            │
   │ agent        Hold a live two-way voice conversation with the Voice Agent API │
-  │ live         [sandbox] Talk live to a tool-using voice agent                 │
+  │ live         Talk live to a tool-using voice agent                           │
   │ control      Drive your Mac hands-free: speak an instruction, an agent acts  │
   │              on the UI                                                       │
-  │ speak        [sandbox] Synthesize speech from text with AssemblyAI streaming │
-  │              TTS                                                             │
+  │ speak        Synthesize speech from text with AssemblyAI streaming TTS       │
   │ llm          Send a prompt to AssemblyAI's LLM Gateway and print the reply   │
   │ clip         Cut clips from media by speaker, text match, LLM pick, or time  │
   │              range                                                           │
-  │ dub          [sandbox] Dub a video or audio file into another language       │
+  │ dub          Dub a video or audio file into another language                 │
   │ caption      Burn always-visible captions into a video                       │
   │ eval         Transcribe one or more datasets and score WER against their     │
   │              reference texts                                                 │

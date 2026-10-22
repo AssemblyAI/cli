@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 from aai_cli.commands.agent_cascade import _exec
 from aai_cli.core import config
 from aai_cli.main import app
+from tests._tts_session_helpers import use_no_tts_production
 
 # The cascade is sandbox-only and its happy paths run under `--sandbox`, which the
 # root callback restricts to AssemblyAI logins — run the module as an employee.
@@ -40,7 +41,7 @@ def test_show_code_prints_sandbox_script_without_running(monkeypatch):
     assert "streaming.sandbox000" in result.stdout
     assert "streaming-tts.sandbox000" in result.stdout
     assert "llm-gateway" in result.stdout
-    assert "voice=jane" in result.stdout  # the chosen voice rides the TTS URL
+    assert "voice_id=aai-jane" in result.stdout  # the chosen voice rides the TTS URL as its id
     assert "Hi there" in result.stdout  # the greeting is injected
     compile(result.stdout, "<show-code>", "exec")  # the script is runnable Python
 
@@ -107,8 +108,19 @@ def test_show_code_mic_emits_no_warning(monkeypatch):
     assert "uses the microphone" not in result.stderr  # mic script matches the run, nothing to warn
 
 
-def test_show_code_in_production_is_rejected_with_sandbox_hint():
-    # --show-code still honors the sandbox-only guard, so the generated URLs are valid.
+def test_show_code_in_production_targets_the_production_tts_host():
+    # Production has streaming TTS now, so the generated script dials its host.
+    result = runner.invoke(app, ["live", "--show-code"])
+    assert result.exit_code == 0, result.output
+    assert (
+        "wss://tts.us.assemblyai.com/v1/ws?voice_id=aai-jane&sample_rate=24000&encoding=pcm_s16le"
+        in result.output
+    )
+
+
+def test_show_code_without_a_tts_host_is_rejected(monkeypatch):
+    # --show-code still honors the TTS-host guard, so the generated URLs are valid.
+    use_no_tts_production(monkeypatch)
     result = runner.invoke(app, ["live", "--show-code"])
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
+    assert "needs streaming TTS" in result.output
