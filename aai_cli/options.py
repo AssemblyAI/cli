@@ -105,9 +105,9 @@ def list_voices_option(command: str) -> bool:
 
     One factory so the three can't drift. The flag does its work in its own option
     callback and exits, so it needs none of the command's other input (``assembly
-    --sandbox dub --list-voices`` runs without the otherwise-required ``--lang``);
+    dub --list-voices`` runs without the otherwise-required ``--lang``);
     it is *eager* so that, like ``--help``, it wins even when an option given
-    earlier on the line is invalid. ``command`` names the command in the sandbox hint.
+    earlier on the line is invalid. ``command`` names the command in the no-TTS hint.
     """
 
     def _callback(ctx: typer.Context, *, value: bool) -> bool:

@@ -30,7 +30,10 @@ def test_synthesize_streams_audio_frames(monkeypatch):
         [
             {"type": "Begin", "configuration": {"sample_rate": 24000}},
             {"type": "Audio", "audio": "AAA="},
-            {"type": "Audio", "audio": "BBB=", "is_final": True},
+            {"type": "Audio", "audio": "BBB="},
+            {"type": "FlushDone"},
+            # Past FlushDone the request is complete: nothing more may be forwarded.
+            {"type": "Audio", "audio": "CCC="},
         ]
     )
     asyncio.run(cascade._synthesize(browser, tts, "hi"))
@@ -56,13 +59,13 @@ def test_synthesize_raises_on_error_frame(monkeypatch):
 def test_synthesize_raises_when_no_begin(monkeypatch):
     cascade = _cascade(monkeypatch)
     browser = FakeBrowser()
-    tts = FakeWS([{"type": "Audio", "audio": "AAA=", "is_final": True}])
+    tts = FakeWS([{"type": "Audio", "audio": "AAA="}, {"type": "FlushDone"}])
     with pytest.raises(RuntimeError, match="did not begin"):
         asyncio.run(cascade._synthesize(browser, tts, "hi"))
 
 
 def test_synthesize_handles_close_without_final_frame(monkeypatch):
-    # The TTS socket closes after some audio but before an is_final frame: the loop
+    # The TTS socket closes after some audio but before its FlushDone: the loop
     # must end cleanly (forward what arrived, then Terminate) instead of raising.
     cascade = _cascade(monkeypatch)
     browser = FakeBrowser()
@@ -77,7 +80,11 @@ def test_speak_emits_done_on_success(monkeypatch):
     cascade, deps = _deps(
         monkeypatch,
         stt=FakeWS(),
-        tts_frames=[{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}],
+        tts_frames=[
+            {"type": "Begin", "configuration": {}},
+            {"type": "Audio"},
+            {"type": "FlushDone"},
+        ],
         llm_text=[],
     )
     browser = FakeBrowser()
@@ -148,7 +155,8 @@ def test_generate_reply_speaks_llm_text(monkeypatch):
         stt=FakeWS(),
         tts_frames=[
             {"type": "Begin", "configuration": {}},
-            {"type": "Audio", "audio": "AAA=", "is_final": True},
+            {"type": "Audio", "audio": "AAA="},
+            {"type": "FlushDone"},
         ],
         llm_text=["Hello", " world."],
     )
@@ -168,7 +176,8 @@ def test_generate_reply_streams_each_sentence(monkeypatch):
         stt=FakeWS(),
         tts_frames=[
             {"type": "Begin", "configuration": {}},
-            {"type": "Audio", "audio": "AAA=", "is_final": True},
+            {"type": "Audio", "audio": "AAA="},
+            {"type": "FlushDone"},
         ],
         llm_text=["Hello there. ", "How are you?"],
     )
@@ -229,7 +238,9 @@ def test_generate_reply_records_spoken_partial_on_cancel(monkeypatch):
         await asyncio.Event().wait()  # then block until the barge-in cancels us
 
     async def connect_tts():
-        return FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}])
+        return FakeWS(
+            [{"type": "Begin", "configuration": {}}, {"type": "Audio"}, {"type": "FlushDone"}]
+        )
 
     deps = cascade.Deps(
         connect_stt=_async_return(FakeWS()),

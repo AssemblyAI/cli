@@ -1,11 +1,11 @@
-"""The live streaming-TTS voice listing: ``GET /v1/voices`` on the TTS host.
+"""The streaming-TTS voice listing behind ``--list-voices`` on `speak`, `dub`, and `live`.
 
-Backs ``--list-voices`` on `speak`, `dub`, and `live`. The service is the source of
-truth for which voices exist (library voices come and go without a CLI release),
-so the listing is fetched, not read from the static ``voices`` catalog — which
-only drives the language-driven defaults and shell completion. Like
-``core/sync_stt.py``, every failure is normalized into the CLIError hierarchy and
-the module stays Rich-free.
+Two sources, per the TTS docs (/docs/tts/voices): the built-in voices (the static
+``voices`` catalog — they speak every language) and the account's own voices, which
+the service lists at ``GET /v1/voices`` on the TTS host (its default scope; cloned
+voices come and go without a CLI release, so they're fetched). Each record's ``slug``
+is the ``voice_id`` to pass as ``--voice``. Like ``core/dictation.py``, every failure
+is normalized into the CLIError hierarchy and the module stays Rich-free.
 """
 
 from __future__ import annotations
@@ -14,11 +14,15 @@ import httpx2 as httpx
 
 from aai_cli.core import environments, jsonshape
 from aai_cli.core.errors import APIError, auth_failure
+from aai_cli.tts import voices
 
 _TIMEOUT = 15.0
 _HTTP_ERROR_MIN_STATUS = 400
-# The per-voice fields worth a column in the human listing, when the service sends them.
+# The largest page the listing serves; pages are followed via next_cursor.
+_PAGE_LIMIT = 100
+# The per-voice fields worth a column in the human listing, when the record has them.
 _DETAIL_KEYS = ("name", "language", "description")
+_BUILTIN_DESCRIPTION = "built-in, speaks every language"
 
 
 def voices_url() -> str:
@@ -34,45 +38,68 @@ def _raise_for_error(resp: httpx.Response) -> None:
         raise APIError(f"Could not list TTS voices ({resp.status_code}): {detail}")
 
 
-def _parse(resp: httpx.Response) -> list[dict[str, object]]:
-    """The voice objects out of the response: either a bare JSON array or an object
-    wrapping it under ``voices``. Other shapes are a malformed response."""
+def _parse(resp: httpx.Response) -> tuple[list[dict[str, object]], str | None]:
+    """One page: its voice objects (under ``voices``) and the cursor of the next page,
+    or None on the last one. Other shapes are a malformed response."""
     try:
         body: object = resp.json()
     except ValueError as exc:
         raise APIError("The TTS service returned a voice list that is not valid JSON.") from exc
     wrapper = jsonshape.as_mapping(body)
-    listing = jsonshape.as_object_list(wrapper.get("voices") if wrapper is not None else body)
-    if listing is None:
+    listing = jsonshape.as_object_list(wrapper.get("voices")) if wrapper is not None else None
+    if wrapper is None or listing is None:
         raise APIError("The TTS service returned a voice list in an unexpected shape.")
-    return listing
+    cursor = wrapper.get("next_cursor")
+    has_more = wrapper.get("has_more") is True
+    return listing, cursor if has_more and isinstance(cursor, str) else None
+
+
+def builtin_voices() -> list[dict[str, object]]:
+    """The built-in voices in the listing's record shape."""
+    return [
+        {"slug": voices.voice_id(name), "name": name.title(), "description": _BUILTIN_DESCRIPTION}
+        for name in voices.VOICES
+    ]
 
 
 def fetch_voices(api_key: str) -> list[dict[str, object]]:
-    """The service's voices, each a JSON object carrying at least its ``voice_id``."""
-    # Streaming TTS authenticates with the raw API key (no Bearer prefix), like its socket.
+    """The account's own voices (every page), each a JSON object with its ``slug``."""
+    listing: list[dict[str, object]] = []
+    params: dict[str, str | int] = {"limit": _PAGE_LIMIT}
+    # Streaming TTS takes the raw API key in Authorization, like its socket.
     try:
         with httpx.Client(timeout=_TIMEOUT) as client:
-            resp = client.get(voices_url(), headers={"authorization": api_key})
+            while True:
+                resp = client.get(voices_url(), params=params, headers={"authorization": api_key})
+                _raise_for_error(resp)
+                page, cursor = _parse(resp)
+                listing.extend(page)
+                if cursor is None:
+                    return listing
+                params = {"limit": _PAGE_LIMIT, "cursor": cursor}
     except httpx.HTTPError as exc:
         raise APIError(
             f"Could not reach the TTS service: {exc}",
             suggestion="Check your network connection and try again.",
         ) from exc
-    _raise_for_error(resp)
-    return _parse(resp)
+
+
+def list_voices(api_key: str) -> list[dict[str, object]]:
+    """Every voice ``--voice`` accepts: the built-in voices, then the account's own."""
+    return builtin_voices() + fetch_voices(api_key)
 
 
 def format_voice_list(listing: list[dict[str, object]]) -> str:
-    """One line per voice: the ``voice_id`` (what ``--voice`` accepts), then any
-    name/language/description the service sent, so the output stays useful if
+    """One line per voice: the ``slug`` (what ``--voice`` accepts), then any
+    name/language/description the record carries, so the output stays useful if
     the record shape grows."""
     if not listing:
         return "No voices available."
-    ids = [str(voice.get("voice_id", "?")) for voice in listing]
-    width = max(len(voice_id) for voice_id in ids)
+    slugs = [str(voice.get("slug", "?")) for voice in listing]
+    width = max(len(slug) for slug in slugs)
     lines: list[str] = []
-    for voice_id, voice in zip(ids, listing, strict=True):
+    # slugs is derived from listing, so the lengths always match: strict is unobservable.
+    for slug, voice in zip(slugs, listing, strict=True):  # pragma: no mutate
         details = " · ".join(str(voice[key]) for key in _DETAIL_KEYS if voice.get(key))
-        lines.append(f"{voice_id:<{width}}  {details}".rstrip())
+        lines.append(f"{slug:<{width}}  {details}".rstrip())
     return "\n".join(lines)

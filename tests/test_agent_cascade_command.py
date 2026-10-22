@@ -26,6 +26,7 @@ from aai_cli.core import config, config_builder
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.main import app
 from aai_cli.streaming import turn_presets
+from tests._tts_session_helpers import use_no_tts_production
 
 runner = CliRunner()
 
@@ -34,7 +35,7 @@ _DEFAULTS = AgentCascadeOptions(
     source=None,
     sample=False,
     voice="jane",
-    model="kimi-k2.5",
+    model="claude-haiku-4-5-20251001",
     system_prompt="be nice",
     system_prompt_file=None,
     greeting="hello",
@@ -92,11 +93,11 @@ def test_missing_system_prompt_file_is_rejected_by_typer():
     assert "sandbox" not in result.output.lower()
 
 
-def test_production_env_is_rejected_with_sandbox_hint():
-    # Default env is production, which has no streaming-TTS host.
+def test_env_without_tts_host_is_rejected(monkeypatch):
+    use_no_tts_production(monkeypatch)
     result = runner.invoke(app, ["live", "--voice", "jane"])
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
+    assert "needs streaming TTS" in result.output
 
 
 def test_device_with_file_source_is_rejected(monkeypatch):

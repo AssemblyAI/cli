@@ -15,8 +15,10 @@ from aai_cli.core import llm
 
 # `assembly live` defaults to a fast, low-latency gateway model (override with --model) —
 # a literal rather than llm.DEFAULT_MODEL so the live agent's default is independent of the
-# one-shot `assembly llm` default. Latency matters most for a spoken back-and-forth.
-DEFAULT_MODEL = "kimi-k2.5"
+# one-shot `assembly llm` default (they coincide today). Latency matters most for a spoken
+# back-and-forth: Haiku 4.5 is among the fastest production models to first token with
+# tools bound, and it must be one the production gateway serves.
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = llm.DEFAULT_MAX_TOKENS
 # The realtime model the cascade transcribes with (same as the agent-cascade template).
 DEFAULT_SPEECH_MODEL = "universal-3-5-pro"

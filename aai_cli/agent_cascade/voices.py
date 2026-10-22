@@ -12,10 +12,10 @@ from __future__ import annotations
 from aai_cli.core import choices
 from aai_cli.tts import voices as tts_voices
 
-DEFAULT_VOICE = "jane"
+DEFAULT_VOICE = tts_voices.DEFAULT_VOICE
 
 # The selectable voice names, sorted for a stable completion order.
-VOICE_NAMES: list[str] = sorted(tts_voices.VOICE_LANGUAGES)
+VOICE_NAMES: list[str] = sorted(tts_voices.VOICES)
 
 
 def complete_voice(incomplete: str) -> list[str]:

@@ -4,6 +4,7 @@ behavior lives in test_dictate_exec.py."""
 from typer.testing import CliRunner
 
 from aai_cli.commands.dictate import _exec as dictate_exec
+from aai_cli.core import choices
 from aai_cli.main import app
 
 runner = CliRunner()
@@ -27,7 +28,7 @@ def test_defaults_map_to_options(monkeypatch):
     assert seen["opts"] == dictate_exec.DictateOptions(
         language=None,
         prompt=None,
-        word_boost=None,
+        keyterms=None,
         device=None,
         once=False,
         max_seconds=120.0,
@@ -45,10 +46,17 @@ def test_every_flag_maps_to_its_option_field(monkeypatch):
             "es",
             "--prompt",
             "Verbatim.",
-            "--word-boost",
+            "--keyterm",
             "AssemblyAI",
-            "--word-boost",
+            "--keyterm",
             "LeMUR",
+            "--word-boost",
+            "Legacy",
+            "--instruction",
+            "Bullets",
+            "--rewrite-mode",
+            "smart",
+            "--verbatim",
             "--device",
             "2",
             "--once",
@@ -61,12 +69,21 @@ def test_every_flag_maps_to_its_option_field(monkeypatch):
     assert seen["opts"] == dictate_exec.DictateOptions(
         language="es",
         prompt="Verbatim.",
-        word_boost=["AssemblyAI", "LeMUR"],
+        keyterms=["AssemblyAI", "LeMUR"],
         device=2,
         once=True,
         max_seconds=30.0,
+        instruction="Bullets",
+        rewrite_mode=choices.RewriteMode.smart,
+        verbatim=True,
+        word_boost=["Legacy"],
     )
     assert seen["json_mode"] is True
+
+
+def test_rewrite_mode_rejects_an_unknown_tier():
+    result = runner.invoke(app, ["dictate", "--rewrite-mode", "turbo"])
+    assert result.exit_code == 2
 
 
 def test_max_seconds_is_capped_at_the_api_limit():

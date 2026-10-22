@@ -220,7 +220,7 @@ def test_synthesize_audio_frame_missing_payload_defaults_empty(
     cascade = _cascade(monkeypatch)
     browser = FakeBrowser()
     # An Audio frame with no `audio` key must yield reply.audio with data == "" (the default).
-    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio", "is_final": True}])
+    tts = FakeWS([{"type": "Begin", "configuration": {}}, {"type": "Audio"}, {"type": "FlushDone"}])
     asyncio.run(cascade._synthesize(browser, tts, "hi"))
     assert {"type": "reply.audio", "data": ""} in browser.sent
 

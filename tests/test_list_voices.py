@@ -12,18 +12,17 @@ from typer.testing import CliRunner
 from aai_cli.core import config
 from aai_cli.main import app
 from aai_cli.tts import voice_list
+from tests._tts_session_helpers import use_no_tts_production
 
-# Sandbox-only commands run under --sandbox, which the root callback gates on an
-# AssemblyAI login — run the whole module as an employee.
+# Most cases run under --sandbox, which the root callback gates on an AssemblyAI
+# login — run the whole module as an employee.
 pytestmark = pytest.mark.usefixtures("internal_profile")
 
 runner = CliRunner()
 
 COMMANDS = ["speak", "dub", "live"]
-VOICES = [
-    {"voice_id": "aai-jane", "name": "Jane", "language": "en", "tier": "preset"},
-    {"voice_id": "aai-giovanni", "language": "it"},
-]
+# The account's own voices, as GET /v1/voices returns them (abridged).
+VOICES = [{"slug": "alex-6f2f2e", "name": "Alex", "language": "english", "visibility": "private"}]
 
 
 @pytest.fixture
@@ -46,26 +45,34 @@ def test_lists_the_service_voices(command, fake_fetch):
     result = runner.invoke(app, ["--sandbox", command, "--list-voices"])
     assert result.exit_code == 0, result.output
     assert fake_fetch["api_key"] == "test-key"
-    assert "aai-jane      Jane · en" in result.output
-    assert "aai-giovanni  it" in result.output
+    # The built-in voices first, then the account's own; slugs padded to the widest.
+    assert "aai-jane     Jane · built-in, speaks every language" in result.output
+    assert "alex-6f2f2e  Alex · english" in result.output
 
 
 @pytest.mark.parametrize("command", COMMANDS)
 def test_json_emits_the_raw_listing(command, fake_fetch):
-    # --json is honored even though it parses after the eager flag: the raw server
-    # records are dumped untouched (unknown fields like "tier" survive).
+    # --json is honored even though it parses after the eager flag: the server's
+    # records are dumped untouched (unknown fields like "visibility" survive).
     result = runner.invoke(app, ["--sandbox", command, "--list-voices", "--json"])
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == VOICES
-    assert "Jane · en" not in result.output
+    assert json.loads(result.stdout) == voice_list.builtin_voices() + VOICES
+    assert "Alex · english" not in result.output
 
 
 @pytest.mark.parametrize("command", COMMANDS)
-def test_production_env_is_rejected_with_the_command_named(command, fake_fetch):
+def test_lists_in_production(command, fake_fetch):
     result = runner.invoke(app, [command, "--list-voices"])  # default = production
+    assert result.exit_code == 0, result.output
+    assert "alex-6f2f2e  Alex · english" in result.output
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_env_without_tts_host_is_rejected_with_the_command_named(command, fake_fetch, monkeypatch):
+    use_no_tts_production(monkeypatch)
+    result = runner.invoke(app, [command, "--list-voices"])
     assert result.exit_code == 2
-    assert "only available in the sandbox" in result.output
-    assert f"Re-run as: assembly --sandbox {command}" in result.output
+    assert f"assembly {command} needs streaming TTS" in " ".join(result.output.split())
     assert "api_key" not in fake_fetch  # refused before any request
 
 

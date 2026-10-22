@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from aai_cli.code_gen import agent_cascade_body
 from aai_cli.core import environments
-from aai_cli.tts import voices
+from aai_cli.tts import session
 
 if TYPE_CHECKING:
     from aai_cli.agent_cascade.config import CascadeConfig
@@ -72,11 +72,10 @@ def _stt_url(speech_model: str, *, format_turns: bool) -> str:
 
 
 def _tts_url(voice: str, language: str | None) -> str:
-    """The streaming-TTS socket URL for the configured voice (sandbox-only host)."""
-    params: dict[str, str] = {"voice_id": voices.voice_id(voice), "sample_rate": "24000"}
-    if language is not None:
-        params["language"] = language
-    return f"wss://{environments.active().streaming_tts_host}/v1/ws/?{urlencode(params)}"
+    """The streaming-TTS socket URL for the configured voice — the CLI's own URL
+    builder, so the generated script can't drift from what `speak` sends."""
+    config = session.SpeakConfig(text="", voice=voice, language=language, sample_rate=24000)
+    return session.ws_url(config.query_params())
 
 
 def _cue(*, format_turns: bool) -> tuple[str, str]:

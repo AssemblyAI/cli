@@ -1,27 +1,62 @@
-"""The streaming-TTS voice catalog: every voice speaks exactly one language.
+"""The streaming-TTS voice catalog: the service's built-in voices and languages.
 
-When no ``--voice`` is chosen, `assembly speak` and `assembly dub` pick the
-voice from the requested language: a non-English language switches to that
-language's native voice(s) — most ship exactly one, so the language alone
-selects the voice — while English keeps the curated multi-speaker rotation.
+The built-in voices (documented at /docs/tts/voices) all speak every supported
+language — the session's ``language`` connect parameter picks the language,
+not the voice — so the default voice and the multi-speaker rotation are the
+same whatever the language.
 
-On the wire a voice is addressed by its ``voice_id`` (``aai-<name>`` for the
-preset and library voices; the bare ``voice=<name>`` parameter is retired), so
-``voice_id`` maps a catalog name to the id the socket URL carries. The live
-listing (`--list-voices`) comes from the service's ``GET /v1/voices`` instead —
-see ``voice_list``; this static catalog only drives defaults and completion.
+On the wire a built-in voice is addressed by its library slug (``aai-<name>``)
+as ``voice_id``; the bare ``voice=<name>`` parameter is retired. Every other
+value — a voice's UUID or one of the account's own (e.g. cloned) voice slugs —
+is sent as given. ``--list-voices`` adds the account's own voices from the
+service's ``GET /v1/voices`` — see ``voice_list``.
 """
 
 from __future__ import annotations
 
-# The id prefix the service puts on its own (preset + library) voices.
+# The slug prefix of the service's own library voices.
 VOICE_ID_PREFIX = "aai-"
+
+# The built-in voices; each speaks every language in LANGUAGES.
+VOICES: tuple[str, ...] = (
+    "alba",
+    "anna",
+    "charles",
+    "eve",
+    "george",
+    "jane",
+    "jean",
+    "mary",
+    "michael",
+    "paul",
+    "vera",
+)
+
+# The languages the service speaks, keyed by ISO 639-1 code. The `language` connect
+# parameter takes the lowercase English name, not the code.
+LANGUAGES: dict[str, str] = {
+    "de": "german",
+    "en": "english",
+    "es": "spanish",
+    "fr": "french",
+    "it": "italian",
+    "pt": "portuguese",
+}
+
+_NAME_TO_CODE = {name: code for code, name in LANGUAGES.items()}
+
+# The voice used when none is chosen (the service's own default, too).
+DEFAULT_VOICE = "jane"
+
+# A curated subset that keeps multi-speaker output varied; any language.
+DEFAULT_ROTATION = ("jane", "michael", "mary", "paul", "eve", "george")
 
 
 def voice_id(voice: str) -> str:
-    """The ``voice_id`` for a voice: ``jane`` -> ``aai-jane``. A value already
-    carrying the prefix (as ``--list-voices`` prints them) passes through."""
-    return voice if voice.startswith(VOICE_ID_PREFIX) else f"{VOICE_ID_PREFIX}{voice}"
+    """The ``voice_id`` for a voice: a built-in name gets its library slug
+    (``jane`` -> ``aai-jane``); anything else (``aai-jane``, a UUID, or one of
+    the account's own voice slugs) is already a ``voice_id`` and passes through."""
+    return f"{VOICE_ID_PREFIX}{voice}" if voice in VOICES else voice
 
 
 def voice_name(voice: str) -> str:
@@ -30,83 +65,21 @@ def voice_name(voice: str) -> str:
     return voice.removeprefix(VOICE_ID_PREFIX)
 
 
-# Voice id -> ISO 639-1 code of the (single) language the voice speaks.
-VOICE_LANGUAGES: dict[str, str] = {
-    "alba": "en",
-    "anna": "en",
-    "azelma": "en",
-    "bill_boerst": "en",
-    "caro_davy": "en",
-    "charles": "en",
-    "cosette": "en",
-    "eponine": "en",
-    "estelle": "fr",
-    "eve": "en",
-    "fantine": "en",
-    "george": "en",
-    "giovanni": "it",
-    "jane": "en",
-    "javert": "en",
-    "jean": "en",
-    "juergen": "de",
-    "lola": "es",
-    "marius": "en",
-    "mary": "en",
-    "michael": "en",
-    "paul": "en",
-    "peter_yearsley": "en",
-    "rafael": "pt",
-    "stuart_bell": "en",
-    "vera": "en",
-}
-
-# The language names the TTS `language` param uses, keyed by ISO code. Only
-# languages with at least one catalog voice belong here (rotation_for relies
-# on that invariant to never resolve to an empty rotation). Deliberately
-# narrower than dub_exec.LANGUAGE_NAMES, which also lists voiceless languages
-# the translator supports.
-_LANGUAGE_NAMES: dict[str, str] = {
-    "de": "German",
-    "en": "English",
-    "es": "Spanish",
-    "fr": "French",
-    "it": "Italian",
-    "pt": "Portuguese",
-}
-
-_NAME_TO_CODE = {name.casefold(): code for code, name in _LANGUAGE_NAMES.items()}
-
-# English has many voices; this curated subset keeps multi-speaker output
-# varied with the confirmed-working voices. Non-English languages rotate
-# through their own (usually single) native voices instead.
-ENGLISH_ROTATION = ("jane", "michael", "mary", "paul", "eve", "george")
-
-
 def language_code(language: str | None) -> str | None:
-    """Normalize a language value (ISO code or name, any case) to its code,
-    or None when it has no catalog voices — the TTS service and the dub
-    translator accept more languages than the catalog covers."""
+    """Normalize a language value (ISO code or name, any case) to its code, or
+    None when the service doesn't speak it."""
     if language is None:
         return None
     cleaned = language.strip().casefold()
-    if cleaned in _LANGUAGE_NAMES:
+    if cleaned in LANGUAGES:
         return cleaned
     return _NAME_TO_CODE.get(cleaned)
 
 
-def rotation_for(language: str | None) -> tuple[str, ...]:
-    """The default voice rotation for a language.
-
-    English — and any language without catalog voices — keeps the curated
-    English rotation; a language with native voices rotates through those, so
-    a single-voice language always switches to its one voice.
-    """
+def language_param(language: str) -> str:
+    """The ``language`` connect parameter for a language value: the lowercase
+    English name (``de`` / ``German`` -> ``german``). A language the service
+    doesn't speak passes through lowercased, so the server's own 3006 error —
+    which lists the supported set — reaches the user."""
     code = language_code(language)
-    if code is None or code == "en":
-        return ENGLISH_ROTATION
-    return tuple(voice for voice, spoken in VOICE_LANGUAGES.items() if spoken == code)
-
-
-def default_voice(language: str | None) -> str:
-    """The voice used when none is chosen: the language's first rotation voice."""
-    return rotation_for(language)[0]
+    return LANGUAGES[code] if code is not None else language.strip().casefold()

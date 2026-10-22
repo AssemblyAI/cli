@@ -28,7 +28,7 @@ M.hotkey = { mods = { "ctrl", "alt" }, key = "d" }
 
 -- Extra arguments passed to every `assembly dictate` run, e.g.:
 --   { "--language", "es" }                       -- dictate in Spanish
---   { "--word-boost", "AssemblyAI", "--word-boost", "LeMUR" }  -- bias terms
+--   { "--keyterm", "AssemblyAI", "--keyterm", "LeMUR" }  -- bias terms
 M.dictateArgs = {}
 
 -- How to insert the transcript:

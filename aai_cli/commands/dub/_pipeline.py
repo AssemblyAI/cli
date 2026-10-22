@@ -240,17 +240,15 @@ def assign_voices(
     utterances: list[Utterance],
     translations: list[str],
     plan: VoicePlan,
-    language: str,
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
     """Resolve each translated utterance to ``(voice, text)`` plus the speaker→voice map.
 
     A bare ``--voice`` dubs every speaker with that one voice; ``SPEAKER=VOICE``
-    mappings pin individual speakers; everyone else takes the target language's
-    rotation in first-appearance order (the same rules as `assembly speak`) —
-    each voice speaks one language, so a non-English dub switches to that
-    language's native voice(s).
+    mappings pin individual speakers; everyone else takes the default rotation
+    in first-appearance order (the same rules as `assembly speak`) — every
+    built-in voice speaks the target language, so the rotation never changes.
     """
-    rotation = (plan.bare,) if plan.bare is not None else voices.rotation_for(language)
+    rotation = (plan.bare,) if plan.bare is not None else voices.DEFAULT_ROTATION
     segments = [
         dialogue.Segment(utterance.speaker, translated)
         # strict=True is an invariant guard only: translate returns exactly one

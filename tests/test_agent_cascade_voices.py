@@ -11,11 +11,12 @@ from aai_cli.app.context import AppState
 from aai_cli.commands.agent_cascade._exec import run_agent_cascade
 from aai_cli.core.errors import CLIError, UsageError
 from aai_cli.tts import voices as tts_voices
+from tests._tts_session_helpers import use_no_tts_production
 from tests.test_agent_cascade_command import _DEFAULTS
 
 
 def test_voice_names_are_the_tts_catalog_sorted():
-    assert sorted(tts_voices.VOICE_LANGUAGES) == voices.VOICE_NAMES
+    assert sorted(tts_voices.VOICES) == voices.VOICE_NAMES
 
 
 def test_default_voice_is_in_catalog():
@@ -28,10 +29,11 @@ def test_complete_voice_filters_by_prefix():
     assert all(name.startswith("ja") for name in completions)
 
 
-def test_voice_id_form_validates_as_its_catalog_name():
+def test_voice_id_form_validates_as_its_catalog_name(monkeypatch):
     # A voice_id copied from --list-voices (aai-jane) is the catalog voice jane, so it
-    # passes validation and the run proceeds to the next guard (the sandbox check).
-    with pytest.raises(CLIError, match="sandbox"):
+    # passes validation and the run proceeds to the next guard (the TTS-host check).
+    use_no_tts_production(monkeypatch)
+    with pytest.raises(CLIError, match="needs streaming TTS"):
         run_agent_cascade(
             dataclasses.replace(_DEFAULTS, voice="aai-jane"), AppState(), json_mode=False
         )

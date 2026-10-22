@@ -21,41 +21,40 @@ SPEC = command_registry.CommandModuleSpec(
 
 @app.command(
     rich_help_panel=help_panels.TRANSCRIPTION,
-    # --sandbox is a root flag, so it must come before the subcommand in every example.
     epilog=examples_epilog(
         [
-            ("Dub a talk into German (sandbox only)", "assembly --sandbox dub talk.mp4 --lang de"),
-            ("Use a language name instead of a code", "assembly --sandbox dub talk.mp4 -l Spanish"),
+            ("Dub a talk into German", "assembly dub talk.mp4 --lang de"),
+            ("Use a language name instead of a code", "assembly dub talk.mp4 -l Spanish"),
             (
                 "Dub the full video from YouTube",
-                'assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video',
+                'assembly dub "https://youtube.com/watch?v=ID" -l de --video',
             ),
             (
                 "Dub only the first 15 minutes of a YouTube video",
-                'assembly --sandbox dub "https://youtube.com/watch?v=ID" -l de --video '
+                'assembly dub "https://youtube.com/watch?v=ID" -l de --video '
                 '--download-sections "*0:00-15:00"',
             ),
             (
                 "Dub every speaker with one voice",
-                "assembly --sandbox dub talk.mp4 -l fr --voice paul",
+                "assembly dub talk.mp4 -l fr --voice paul",
             ),
             (
                 "Pin a voice per diarized speaker",
-                "assembly --sandbox dub panel.mp4 -l de --voice A=jane --voice B=paul",
+                "assembly dub panel.mp4 -l de --voice A=jane --voice B=paul",
             ),
             (
                 "Reuse a finished transcript instead of re-transcribing",
-                "assembly --sandbox dub talk.mp4 -l de -t TRANSCRIPT_ID",
+                "assembly dub talk.mp4 -l de -t TRANSCRIPT_ID",
             ),
             (
                 "Choose the output file",
-                "assembly --sandbox dub talk.mp4 -l de --out talk-german.mp4",
+                "assembly dub talk.mp4 -l de --out talk-german.mp4",
             ),
             (
                 "Dub a whole folder into German",
-                'find talks -name "*.mp4" | assembly --sandbox dub --from-stdin -l de',
+                'find talks -name "*.mp4" | assembly dub --from-stdin -l de',
             ),
-            ("See the available voices", "assembly --sandbox dub --list-voices"),
+            ("See the available voices", "assembly dub --list-voices"),
         ]
     ),
 )
@@ -97,7 +96,7 @@ def dub(
         "--voice",
         help="Voice for every speaker (e.g. jane, michael, paul; see --list-voices), or "
         "SPEAKER=VOICE to pin a diarized speaker (repeatable, e.g. --voice A=jane). "
-        "Default: the target language's native voice(s).",
+        "Default: speakers rotate through the built-in voices, which speak every language.",
     ),
     model: str = typer.Option(
         llm.DEFAULT_MODEL,
@@ -132,7 +131,7 @@ def dub(
     _list_voices: bool = options.list_voices_option("dub"),
     json_out: bool = options.json_option("Emit JSON describing the dubbed file"),
 ) -> None:
-    r"""\[sandbox] Dub a video or audio file into another language
+    r"""Dub a video or audio file into another language
 
     The whole platform in one command: the media is transcribed with diarized
     utterance timestamps, each utterance is translated by an LLM Gateway model,
@@ -140,9 +139,7 @@ def dub(
     speaker), and ffmpeg lays the new audio over the original — video copied
     untouched. A YouTube/media-page URL is downloaded first (audio only, or
     the full video with --video; --download-sections fetches and dubs only a
-    time slice of it). Streaming TTS only exists in the sandbox
-    today — run it as 'assembly --sandbox dub' (--sandbox goes before the
-    subcommand). Requires ffmpeg.
+    time slice of it). Requires ffmpeg.
 
     Batch mode: pipe one path/URL per line with --from-stdin to dub many sources
     concurrently (--concurrency). Each writes its own <name>.dub.<lang><ext>; a

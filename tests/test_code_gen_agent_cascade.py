@@ -45,7 +45,7 @@ def test_render_parses_and_wires_all_three_legs():
     sandbox = environments.get("sandbox000")
     # STT, LLM Gateway, and TTS hosts all come from the active (sandbox) environment.
     assert f"wss://{sandbox.streaming_host}/v3/ws" in code
-    assert f"wss://{sandbox.streaming_tts_host}/v1/ws/" in code
+    assert f"wss://{sandbox.streaming_tts_host}/v1/ws?" in code
     assert sandbox.llm_gateway_base in code
     assert 'os.environ["ASSEMBLYAI_API_KEY"]' in code
 
@@ -88,7 +88,7 @@ def test_render_no_format_turns_fires_on_bare_end_of_turn():
 
 def test_render_includes_language_only_when_set():
     assert "language=" not in _render(language=None)
-    assert "language=de" in _render(language="de")
+    assert "language=german" in _render(language="de")
 
 
 def test_render_uses_single_full_duplex_stream():

@@ -237,13 +237,13 @@ def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(m
     # would make the positive checks fail *and* the negative ones pass vacuously. This
     # is the same normalization the help-snapshot suite uses. See tests/AGENTS.md.
     external = normalize(runner.invoke(app, ["--help"]).output)
-    # Both the flags and the [sandbox]-tagged commands are gone for an external account.
+    # The sandbox flags are gone for an external account.
     assert "--sandbox" not in external
     assert "--env" not in external
-    assert "[sandbox]" not in external
-    # The [sandbox]-only `live` command's summary is hidden too (a token unique to it,
-    # since the bare word "live" also appears in other commands' descriptions).
-    assert "tool-using" not in external
+    # The streaming-TTS commands run in production now, so they're no longer
+    # [sandbox]-tagged: `live` stays visible (a token unique to its summary, since the
+    # bare word "live" also appears in other commands' descriptions).
+    assert "tool-using" in external
     # …but the filter is surgical: non-sandbox flags and commands stay visible (this
     # also kills the mutant that would treat every option/command as sandbox).
     assert "--profile" in external
@@ -256,5 +256,4 @@ def test_help_hides_the_sandbox_surface_from_external_accounts_and_restores_it(m
     internal = normalize(runner.invoke(app, ["--help"]).output)
     assert "--sandbox" in internal
     assert "--env" in internal
-    assert "[sandbox]" in internal
     assert "tool-using" in internal

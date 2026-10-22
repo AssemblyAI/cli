@@ -106,9 +106,7 @@ def _active_env_vars() -> dict[str, str]:
         # The environment's authoritative Voice Agent host (not derived from the
         # streaming host, which only coincides by naming convention today).
         "ASSEMBLYAI_AGENTS_HOST": env.agents_host,
-        # Streaming-TTS host for the cascade (agent-cascade) template. Empty in
-        # production, where streaming TTS has no host; that template then refuses to
-        # run and points at --sandbox.
+        # Streaming-TTS host for the cascade (agent-cascade) template.
         "ASSEMBLYAI_TTS_HOST": env.streaming_tts_host,
     }
 

@@ -99,13 +99,13 @@ def test_run_dub_pipeline_end_to_end(
         assert "dubbing" in system["content"]
         assert "German" in system["content"]
 
-    # Synthesis: the translated text in the target language, every speaker on
-    # German's one native voice (the language selects the voice).
+    # Synthesis: the translated text in the target language, speakers rotating through
+    # the built-in voices (each speaks German; the language param picks the language).
     assert [(cfg.voice, cfg.text) for cfg in fake_synthesize] == [
-        ("juergen", "DE:Hello."),
-        ("juergen", "DE:World."),
+        ("jane", "DE:Hello."),
+        ("michael", "DE:World."),
     ]
-    assert all(cfg.language == "German" for cfg in fake_synthesize)
+    assert all(cfg.query_params()["language"] == "german" for cfg in fake_synthesize)
 
     # The dubbed track: silence to 1.0 s, segment 1, silence to 3.0 s, segment 2,
     # then a tail pad out to the source's 5 s duration (rate 100 -> 200 bytes/s).
@@ -144,7 +144,7 @@ def test_run_dub_pipeline_end_to_end(
         "language": "German",
         "transcript_id": "tr_dub",
         "utterances": 2,
-        "speakers": {"A": "juergen", "B": "juergen"},
+        "speakers": {"A": "jane", "B": "michael"},
         "sample_rate": SAMPLE_RATE,
         "audio_duration_seconds": 5.0,
     }
@@ -164,7 +164,7 @@ def test_run_dub_human_summary(
     assert "dub.de.mp4" in out
     assert "dubbed to German" in out
     assert "2 utterances" in out
-    assert "A=juergen, B=juergen" in out
+    assert "A=jane, B=michael" in out
 
 
 def test_human_summary_escapes_user_controlled_markup(
@@ -224,8 +224,8 @@ def test_voice_overrides_pin_speakers_without_consuming_rotation(
 ):
     opts = dataclasses.replace(DEFAULTS, media=str(media), voice=["A=mary"])
     _run(opts, json_mode=True)
-    # A is pinned; B still takes German's native voice from the rotation.
-    assert [cfg.voice for cfg in fake_synthesize] == ["mary", "juergen"]
+    # A is pinned; B still takes the rotation's first voice (A's pin consumed nothing).
+    assert [cfg.voice for cfg in fake_synthesize] == ["mary", "jane"]
     # Every mapping applied -> no "Ignoring" warning fires.
     assert "Ignoring" not in capsys.readouterr().err
 

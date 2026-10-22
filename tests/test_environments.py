@@ -17,9 +17,12 @@ def test_production_uses_production_ams_endpoint():
     assert env.ams_base == "https://ams.internal.assemblyai-labs.com"
 
 
-def test_sync_base_per_environment():
-    assert environments.get("production").sync_base == "https://sync.assemblyai.com"
-    assert environments.get("sandbox000").sync_base == "https://sync.sandbox000.assemblyai-labs.com"
+def test_dictation_base_per_environment():
+    assert environments.get("production").dictation_base == "https://dictation.assemblyai.com"
+    assert (
+        environments.get("sandbox000").dictation_base
+        == "https://dictation.sandbox000.assemblyai-labs.com"
+    )
 
 
 def test_get_unknown_raises_cli_error():
@@ -69,6 +72,5 @@ def test_sandbox_has_streaming_tts_host():
     )
 
 
-def test_production_has_no_streaming_tts_host():
-    # Empty host is the "TTS not available here" signal the speak command checks.
-    assert environments.get("production").streaming_tts_host == ""
+def test_production_streaming_tts_host():
+    assert environments.get("production").streaming_tts_host == "tts.us.assemblyai.com"

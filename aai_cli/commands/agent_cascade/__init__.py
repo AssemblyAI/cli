@@ -46,27 +46,27 @@ def _as_tuple[T](values: list[T] | None) -> tuple[T, ...]:
     rich_help_panel=help_panels.TRANSCRIPTION,
     epilog=examples_epilog(
         [
-            ("Start a live voice conversation", "assembly --sandbox live"),
+            ("Start a live voice conversation", "assembly live"),
             (
                 "Pick a voice and opening line",
-                'assembly --sandbox live --voice michael --greeting "Hi there"',
+                'assembly live --voice michael --greeting "Hi there"',
             ),
             (
                 "Give the agent a persona",
-                'assembly --sandbox live --system-prompt "You are a terse pirate."',
+                'assembly live --system-prompt "You are a terse pirate."',
             ),
             (
                 "Add your own MCP servers (none load by default)",
-                "assembly --sandbox live --mcp-config ~/.config/mcp/servers.json",
+                "assembly live --mcp-config ~/.config/mcp/servers.json",
             ),
             (
                 "Run a conversation without filesystem access",
-                "assembly --sandbox live --no-files",
+                "assembly live --no-files",
             ),
-            ("See available voices", "assembly --sandbox live --list-voices"),
+            ("See available voices", "assembly live --list-voices"),
             (
                 "Print equivalent Python instead of running",
-                "assembly --sandbox live --show-code",
+                "assembly live --show-code",
             ),
         ]
     ),
@@ -197,15 +197,13 @@ def live(
         help="Print the equivalent Python SDK code and exit (does not start a session)",
     ),
 ) -> None:
-    """\\[sandbox] Talk live to a tool-using voice agent
+    """Talk live to a tool-using voice agent
 
     A real-time spoken conversation, wired client-side from three primitives —
     Streaming STT, a deepagents brain on the LLM Gateway, and streaming TTS. Unlike
     'assembly agent' (the Voice Agent API), the brain here is an agent that can use
     tools mid-conversation — web search, URL fetch, and the AssemblyAI docs — so it
-    answers like a live multimodal assistant. Because it uses streaming TTS it only
-    runs in the sandbox: run it as 'assembly --sandbox live' (--sandbox goes before
-    the subcommand).
+    answers like a live multimodal assistant.
 
     Use headphones: the mic stays open while the agent speaks, so on speakers it
     would hear itself and loop. Pass an audio file/URL (or --sample) to speak a

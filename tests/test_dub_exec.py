@@ -28,6 +28,7 @@ from tests._dub_helpers import (
     utterance,
     write_media,
 )
+from tests._tts_session_helpers import use_no_tts_production
 
 
 @pytest.fixture
@@ -195,14 +196,18 @@ def test_run_dub_rejects_blank_language_first():
         dub_exec.run_dub(opts, AppState(), json_mode=False)
 
 
-def test_run_dub_requires_sandbox():
-    # The active environment defaults to production, which has no streaming-TTS host.
+def test_run_dub_requires_a_tts_host(monkeypatch):
+    use_no_tts_production(monkeypatch)
     with pytest.raises(CLIError) as exc:
         dub_exec.run_dub(DEFAULTS, AppState(), json_mode=False)
     assert exc.value.error_type == "unsupported_environment"
     assert exc.value.exit_code == 2
-    assert "only available in the sandbox" in exc.value.message
-    assert "Re-run as: assembly --sandbox dub" in (exc.value.suggestion or "")
+    assert exc.value.message == (
+        "assembly dub needs streaming TTS, which the production environment lacks."
+    )
+    assert exc.value.suggestion == (
+        "Drop --env (and unset AAI_ENV) to run assembly dub in production."
+    )
 
 
 def test_run_dub_rejects_missing_file(sandbox, tmp_path):

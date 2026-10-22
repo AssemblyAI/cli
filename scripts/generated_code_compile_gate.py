@@ -117,10 +117,8 @@ def main() -> int:
             ),
         ),
         (
-            # Sandbox-only: streaming TTS has no prod host, so --sandbox makes the URLs valid.
             "live-basic",
             (
-                "--sandbox",
                 "live",
                 "--voice",
                 "jane",

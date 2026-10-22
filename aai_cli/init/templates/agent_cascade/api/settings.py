@@ -8,17 +8,12 @@ load_dotenv()
 
 API_KEY: str = os.environ.get("ASSEMBLYAI_API_KEY", "")
 
-# Hosts. `assembly init` pins these to the active environment. Streaming TTS only
-# exists in the sandbox, so this whole cascade is sandbox-only (see README); the
-# defaults point at the sandbox so a bare clone works with a sandbox key.
-STREAMING_HOST: str = os.environ.get(
-    "ASSEMBLYAI_STREAMING_HOST", "streaming.sandbox000.assemblyai-labs.com"
-)
-TTS_HOST: str = os.environ.get(
-    "ASSEMBLYAI_TTS_HOST", "streaming-tts.sandbox000.assemblyai-labs.com"
-)
+# Hosts. `assembly init` pins these to the active environment; the defaults are
+# production, so a bare clone works with a production key.
+STREAMING_HOST: str = os.environ.get("ASSEMBLYAI_STREAMING_HOST", "streaming.assemblyai.com")
+TTS_HOST: str = os.environ.get("ASSEMBLYAI_TTS_HOST", "tts.us.assemblyai.com")
 LLM_GATEWAY_URL: str = os.environ.get(
-    "ASSEMBLYAI_LLM_GATEWAY_URL", "https://llm-gateway.sandbox000.assemblyai-labs.com/v1"
+    "ASSEMBLYAI_LLM_GATEWAY_URL", "https://llm-gateway.assemblyai.com/v1"
 )
 
 # The cascade's knobs — edit these to change behavior.

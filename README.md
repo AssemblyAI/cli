@@ -46,13 +46,13 @@ That's it. Run `assembly onboard` for a guided tour, or see [Installation](#-ins
 | :--- | :--- |
 | `assembly transcribe` | Transcribe files, URLs, YouTube/podcast pages, podcast RSS feeds, directories, globs, or bucket storage (`s3://`, `gs://`, `az://`) — with speaker labels, PII redaction, summarization, SRT/VTT captions, and resumable batch runs |
 | `assembly stream` | Real-time transcription from your microphone, a file, or a URL — on macOS it can capture system audio too |
-| `assembly dictate` | Signal-driven dictation: records immediately, send SIGTERM for instant text — scriptable from hotkey tools like Hammerspoon (Sync STT API, up to 120 s per utterance) |
+| `assembly dictate` | Signal-driven dictation: records immediately, send SIGTERM for instant text — scriptable from hotkey tools like Hammerspoon; prints send-ready cleaned-up text (Dictation API, up to 120 s per utterance) |
 | `assembly agent` | Full-duplex spoken conversation with a voice agent, right in your terminal |
-| `assembly live` | Talk live to a tool-using voice agent, wired client-side from Streaming STT + a deepagents brain on the LLM Gateway + streaming TTS — it can web-search, fetch URLs, and read the docs mid-conversation, like the `agent-cascade` starter (sandbox-only) |
-| `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket (sandbox-only) |
+| `assembly live` | Talk live to a tool-using voice agent, wired client-side from Streaming STT + a deepagents brain on the LLM Gateway + streaming TTS — it can web-search, fetch URLs, and read the docs mid-conversation, like the `agent-cascade` starter |
+| `assembly speak` | Synthesize text to speech over the streaming-TTS WebSocket |
 | `assembly llm` | Prompt the LLM Gateway over a transcript, files, stdin, or a live stream |
 | `assembly clip` | Cut audio/video with ffmpeg by diarized speaker, text match, LLM pick, or time range (`--video` keeps the picture for URL sources) — clip boundaries snap into nearby silence |
-| `assembly dub` | Re-voice an audio/video file or URL in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap (sandbox-only) |
+| `assembly dub` | Re-voice an audio/video file or URL in another language: transcription, LLM translation, per-speaker TTS, ffmpeg track-swap |
 | `assembly caption` | Burn always-visible captions into a video: transcribe (or reuse a transcript), fetch SRT, ffmpeg burns it in — audio untouched |
 | `assembly eval` | Benchmark WER against Hugging Face datasets (built-in aliases: `librispeech`, `tedlium`, …) or local manifests |
 | `assembly webhooks listen` | Open a public dev URL that prints webhook deliveries and can forward them to your local app |
@@ -68,23 +68,20 @@ Add `--show-code` to `transcribe` / `stream` / `agent` / `live` to print the equ
 
 A few one-liners that show what `assembly` can do. The everyday basics live under [Getting started](#-getting-started) below.
 
-> [!NOTE]
-> `speak` and `dub` are sandbox-only today — that's why the examples below pass `--sandbox`.
-
 **Recreate a scene with synthetic voices** — transcribe and diarize a YouTube clip, then pipe it straight into TTS with a different voice per speaker:
 
 ```sh
 assembly transcribe "https://www.youtube.com/watch?v=awmCtXzFsJo" --speaker-labels \
-  | assembly --sandbox speak --voice A=jane --voice B=mary --out scene.wav
+  | assembly speak --voice A=jane --voice B=mary --out scene.wav
 ```
 
 `speak` auto-detects `Speaker A:` labels, merges each speaker's turns, and rotates voices.
-`assembly --sandbox speak --list-voices` prints the voices the TTS service offers.
+`assembly speak --list-voices` prints the voices the TTS service offers.
 
 **Dub a video into another language** — the whole platform in one command: transcription with utterance timestamps, per-utterance LLM translation, TTS for each line (one voice per speaker), and ffmpeg laying the new track over the original video. A great demo is the first YouTube video ever, "Me at the zoo" — it's 19 seconds long, a single clear English speaker, and instantly recognizable, so the dub finishes fast and the before/after is obvious:
 
 ```sh
-assembly --sandbox dub "https://www.youtube.com/watch?v=jNQXAC9IVRw" -l de --video
+assembly dub "https://www.youtube.com/watch?v=jNQXAC9IVRw" -l de --video
 ```
 
 The video stream is copied untouched; each dubbed line lands at its original start time.
@@ -93,7 +90,7 @@ The video stream is copied untouched; each dubbed line lands at its original sta
 
 ```sh
 assembly transcribe "https://podcasts.apple.com/us/podcast/id1516093381" --speaker-labels \
-  | assembly --sandbox speak --out episode.wav
+  | assembly speak --out episode.wav
 ```
 
 **Cut the highlight reel from a speech** — `clip` downloads the video (`--video`; omit it for audio-only clips), transcribes it, has an LLM pick the windows, and cuts each one into its own file with ffmpeg (here: Steve Jobs' Stanford commencement address):

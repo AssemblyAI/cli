@@ -253,7 +253,7 @@ def _dub_build(
     translations = pipeline.translate(
         api_key, utterances, language, opts, json_mode=json_mode, quiet=state.quiet
     )
-    resolved, speakers = pipeline.assign_voices(utterances, translations, voice_plan, language)
+    resolved, speakers = pipeline.assign_voices(utterances, translations, voice_plan)
     pipeline.warn_ignored_voice_pins(voice_plan.overrides, speakers, json_mode=json_mode)
     pcm_segments, sample_rate = pipeline.synthesize(
         api_key, resolved, language, json_mode=json_mode, quiet=state.quiet

@@ -43,6 +43,7 @@ _RESERVED_TTS_KEYS: dict[str, str] = {
     "voice_id": "Set the voice with --voice, not --tts-config.",
     "language": "Set the language with --language, not --tts-config.",
     "sample_rate": "TTS sample rate is fixed to match the live speaker and can't be overridden.",
+    "encoding": "TTS encoding is fixed to the 16-bit PCM the live speaker plays.",
 }
 
 

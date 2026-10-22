@@ -50,6 +50,13 @@ class TextOrJson(enum.StrEnum):
     json = "json"
 
 
+class RewriteMode(enum.StrEnum):
+    """The Dictation API's rewrite tiers (`dictate --rewrite-mode`)."""
+
+    fast = "fast"
+    smart = "smart"
+
+
 class Scope(enum.StrEnum):
     """Coding-agent config scope for `assembly setup` (passed through to `claude mcp add`)."""
 

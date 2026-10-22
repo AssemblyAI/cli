@@ -2,7 +2,7 @@
 
 The session is driven by constructing DictateOptions and injecting the three
 boundaries — stop_on_terminate (a scripted SIGTERM latch), MicrophoneSource
-(canned PCM), and sync_stt.transcribe_pcm (recorded calls) — so no test needs a
+(canned PCM), and dictation.transcribe_live (recorded calls) — so no test needs a
 real signal, microphone, or network.
 """
 
@@ -17,23 +17,30 @@ import typer
 
 from aai_cli.app.context import AppState
 from aai_cli.commands.dictate import _exec as dictate_exec
-from aai_cli.core import choices, config, sync_stt
+from aai_cli.core import choices, config, dictation
 from aai_cli.core.errors import NotAuthenticated, UsageError
 
 DICTATE_DEFAULTS = dictate_exec.DictateOptions(
     language=None,
     prompt=None,
-    word_boost=None,
+    keyterms=None,
     device=None,
     once=False,
     max_seconds=120.0,
 )
 
-# One ~100 ms chunk of 16 kHz PCM16 — comfortably above the 80 ms upload floor.
+# One ~100 ms chunk of 16 kHz PCM16.
 CHUNK = b"\x01\x00" * 1600
 
-RESULT = sync_stt.SyncTranscript(
-    text="hello world", confidence=0.9, audio_duration_ms=1500, session_id="sess-1"
+# The verbatim transcript differs from the cleanup rewrite, so a test can tell which
+# one was printed: the human default is the rewrite ("hello world").
+RESULT = dictation.DictationResult(
+    text="um, hello world",
+    llm_response="hello world",
+    llm_error=None,
+    confidence=0.9,
+    audio_duration_ms=1500,
+    session_id="sess-1",
 )
 
 
@@ -84,14 +91,21 @@ def seams(monkeypatch):
 
     monkeypatch.setattr(dictate_exec, "MicrophoneSource", fake_mic)
 
-    def fake_transcribe(api_key, pcm, *, sample_rate, channels=1, **kwargs):
-        harness["calls"].append(
-            {"api_key": api_key, "pcm": pcm, "sample_rate": sample_rate, "channels": channels}
-            | kwargs
-        )
-        return RESULT
+    harness["result"] = RESULT
 
-    monkeypatch.setattr(dictate_exec.sync_stt, "transcribe_pcm", fake_transcribe)
+    def fake_transcribe(api_key, pcm, *, sample_rate, channels=1, config=None):
+        harness["calls"].append(
+            {
+                "api_key": api_key,
+                "pcm": pcm,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "config": config,
+            }
+        )
+        return harness["result"]
+
+    monkeypatch.setattr(dictate_exec.dictation, "transcribe_live", fake_transcribe)
     return harness
 
 
@@ -117,9 +131,7 @@ def test_records_then_prints_bare_transcript(seams, capsys):
             "pcm": CHUNK + CHUNK,
             "sample_rate": 16000,
             "channels": 1,
-            "language_code": None,
-            "prompt": None,
-            "word_boost": None,
+            "config": dictation.DictationConfig(),
         }
     ]
     captured = capsys.readouterr()
@@ -139,7 +151,9 @@ def test_json_mode_emits_one_ndjson_object_per_utterance(seams, capsys):
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {
         "type": "utterance",
-        "text": "hello world",
+        "text": "um, hello world",
+        "llm_response": "hello world",
+        "llm_error": None,
         "confidence": 0.9,
         "audio_duration_ms": 1500,
         "session_id": "sess-1",
@@ -153,7 +167,7 @@ def test_output_json_folds_into_ndjson_without_the_json_flag(seams, capsys):
     # which is False here) — proving the -o/--output resolution runs.
     seams["stop"] = FakeStop([True])
     _run(dataclasses.replace(DICTATE_DEFAULTS, output_field=choices.TextOrJson.json))
-    assert json.loads(capsys.readouterr().out)["text"] == "hello world"
+    assert json.loads(capsys.readouterr().out)["text"] == "um, hello world"
 
 
 def test_output_text_emits_bare_transcript(seams, capsys):
@@ -256,54 +270,85 @@ def test_recording_closes_the_mic_generator(seams):
     assert closed == [True]  # the device-releasing cleanup ran at stop, not at GC
 
 
-@pytest.mark.parametrize("size", [200, 2558])  # 2558: just under the exact 2560-byte floor
-def test_too_short_recording_is_skipped_with_a_warning(seams, capsys, size):
+def test_empty_recording_is_skipped_with_a_warning(seams, capsys):
+    # An instant SIGTERM captures nothing; the server refuses an empty audio part.
     seams["stop"] = FakeStop([True])
-    seams["chunks"] = [b"\x01" * size]  # below 80 ms of 16 kHz PCM16 (2560 bytes)
+    seams["chunks"] = [b""]
     _run()
     assert seams["calls"] == []
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "shorter than 80 ms" in captured.err
+    assert "Nothing was recorded" in captured.err
 
 
-def test_recording_at_the_80ms_floor_is_transcribed(seams):
+def test_a_very_short_recording_is_still_transcribed(seams):
+    # The live endpoint has no minimum duration, so even one sample goes up.
     seams["stop"] = FakeStop([True])
-    seams["chunks"] = [b"\x01" * 2560]  # exactly 80 ms: allowed, not skipped
+    seams["chunks"] = [b"\x01\x00"]
     _run()
     assert len(seams["calls"]) == 1
 
 
-def test_language_and_boost_flags_are_forwarded(seams):
+def test_flags_map_onto_the_dictation_config(seams):
     seams["stop"] = FakeStop([True])
-    _run(dataclasses.replace(DICTATE_DEFAULTS, language="es", word_boost=["AssemblyAI"]))
-    assert seams["calls"][0]["language_code"] == "es"
-    assert seams["calls"][0]["word_boost"] == ["AssemblyAI"]
-
-
-def test_comma_separated_languages_become_a_list(seams):
-    seams["stop"] = FakeStop([True])
-    _run(dataclasses.replace(DICTATE_DEFAULTS, language="en, es"))
-    assert seams["calls"][0]["language_code"] == ["en", "es"]
+    _run(
+        dataclasses.replace(
+            DICTATE_DEFAULTS,
+            language="en, es",
+            prompt="A doctor dictating a visit note.",
+            keyterms=["AssemblyAI"],
+            instruction="Format as a bulleted list",
+            rewrite_mode=choices.RewriteMode.smart,
+        )
+    )
+    assert seams["calls"][0]["config"] == dictation.DictationConfig(
+        language_codes=["en", "es"],
+        stt_prompt="A doctor dictating a visit note.",
+        keyterms=["AssemblyAI"],
+        llm_instruction="Format as a bulleted list",
+        rewrite_mode="smart",
+    )
 
 
 def test_blank_language_reads_as_unset(seams):
     seams["stop"] = FakeStop([True])
     _run(dataclasses.replace(DICTATE_DEFAULTS, language=" , "))
-    assert seams["calls"][0]["language_code"] is None
+    assert seams["calls"][0]["config"].language_codes is None
 
 
-def test_prompt_with_language_warns_that_language_is_ignored(seams, capsys):
+def test_deprecated_word_boost_joins_the_keyterms_and_warns(seams, capsys):
     seams["stop"] = FakeStop([True])
-    _run(dataclasses.replace(DICTATE_DEFAULTS, prompt="Verbatim.", language="es"))
-    assert "--language is ignored when --prompt is set" in capsys.readouterr().err
+    _run(dataclasses.replace(DICTATE_DEFAULTS, keyterms=["A"], word_boost=["B"]))
+    assert seams["calls"][0]["config"].keyterms == ["A", "B"]
+    assert "--word-boost is deprecated; use --keyterm." in capsys.readouterr().err
 
 
-def test_prompt_alone_is_forwarded_without_warning(seams, capsys):
+def test_word_boost_warning_is_silenced_by_quiet(seams, capsys):
     seams["stop"] = FakeStop([True])
-    _run(dataclasses.replace(DICTATE_DEFAULTS, prompt="Verbatim."))
-    assert seams["calls"][0]["prompt"] == "Verbatim."
-    assert "ignored" not in capsys.readouterr().err
+    _run(dataclasses.replace(DICTATE_DEFAULTS, word_boost=["B"]), AppState(quiet=True))
+    assert "deprecated" not in capsys.readouterr().err
+
+
+def test_verbatim_prints_the_unedited_transcript(seams, capsys):
+    seams["stop"] = FakeStop([True])
+    _run(dataclasses.replace(DICTATE_DEFAULTS, verbatim=True))
+    assert capsys.readouterr().out.strip() == "um, hello world"
+
+
+def test_failed_rewrite_falls_back_to_the_transcript_with_a_warning(seams, capsys):
+    seams["stop"] = FakeStop([True])
+    seams["result"] = dataclasses.replace(RESULT, llm_response=None, llm_error="timeout")
+    _run()
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "um, hello world"
+    assert "The cleanup rewrite failed (timeout)" in captured.err
+
+
+def test_verbatim_skips_the_rewrite_failure_warning(seams, capsys):
+    seams["stop"] = FakeStop([True])
+    seams["result"] = dataclasses.replace(RESULT, llm_response=None, llm_error="error")
+    _run(dataclasses.replace(DICTATE_DEFAULTS, verbatim=True))
+    assert "rewrite failed" not in capsys.readouterr().err
 
 
 def test_transcription_runs_under_the_status_spinner(seams, monkeypatch):

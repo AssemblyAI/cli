@@ -55,15 +55,15 @@ class _Browser(Protocol):
 def unavailable_reason(settings: _Settings) -> str | None:
     """Why the cascade can't run, or None when it can.
 
-    Streaming TTS has no production host, so an empty TTS host means the user must
-    re-scaffold against the sandbox.
+    An empty TTS host means the deployment's environment cleared it: the cascade
+    can't speak without one.
     """
     if not settings.API_KEY:
         return "ASSEMBLYAI_API_KEY is not set — configure it in your deployment's environment."
     if not settings.TTS_HOST:
         return (
-            "Streaming TTS has no production host, so this cascade is sandbox-only. "
-            "Re-scaffold against the sandbox: assembly --sandbox init agent-cascade."
+            "ASSEMBLYAI_TTS_HOST is empty — set it to your streaming-TTS host "
+            "(tts.us.assemblyai.com in production)."
         )
     return None
 
@@ -83,8 +83,14 @@ def stt_url(settings: _Settings) -> str:
 
 def tts_url(settings: _Settings) -> str:
     """The streaming-TTS WebSocket URL for the configured voice and sample rate."""
-    params = urlencode({"voice_id": settings.VOICE_ID, "sample_rate": settings.OUTPUT_SAMPLE_RATE})
-    return f"wss://{settings.TTS_HOST}/v1/ws/?{params}"
+    params = urlencode(
+        {
+            "voice_id": settings.VOICE_ID,
+            "sample_rate": settings.OUTPUT_SAMPLE_RATE,
+            "encoding": "pcm_s16le",
+        }
+    )
+    return f"wss://{settings.TTS_HOST}/v1/ws?{params}"
 
 
 def is_final_user_turn(msg: dict[str, object]) -> bool:
@@ -225,15 +231,16 @@ async def _synthesize(browser: _Browser, tts: ClientConnection, text: str) -> No
         raise RuntimeError(f"TTS did not begin (got {begin.get('type')!r}).")
     await tts.send(json.dumps({"type": "Generate", "text": text}))
     await tts.send(json.dumps({"type": "Flush"}))
-    # Iterate the socket (like _pump_stt) so a close before the final Audio frame ends
-    # the loop cleanly instead of raising ConnectionClosed out of the reply.
+    # Iterate the socket (like _pump_stt) so an early close ends the loop cleanly instead
+    # of raising ConnectionClosed out of the reply. FlushDone marks the request's last
+    # Audio frame delivered; the socket itself stays open until Terminate.
     async for raw in tts:
         frame = json.loads(raw)
         kind = frame.get("type")
         if kind == "Audio":
             await browser.send({"type": "reply.audio", "data": frame.get("audio", "")})
-            if frame.get("is_final"):
-                break
+        elif kind == "FlushDone":
+            break
         elif kind == "Error":
             raise RuntimeError(frame.get("error") or "TTS error")
     with contextlib.suppress(Exception):
