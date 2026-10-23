@@ -160,3 +160,12 @@ heavily-reworked commands with long bodies; small commands keep the inline
 - **`init/`** — scaffolds a self-contained FastAPI + HTML starter (`audio-transcription`/`live-captions`/`voice-agent` templates), optionally installs deps and opens the browser; writes the key to a git-ignored `.env`.
 - **`core/telemetry.py`** — anonymous, opt-out usage telemetry (Supabase-CLI model): `context.run_command` wraps each command body in `telemetry.track(ctx.command_path)`, which dispatches one allow-listed event (command path, outcome/exit code, duration, version/OS, and on failure the error message capped at 500 chars — never args or account data) to the Datadog logs intake via a **detached flusher subprocess** (the hidden `assembly telemetry flush`), so commands never wait on telemetry. `SHIPPED_CLIENT_TOKEN` is a committed write-only Datadog *client* token (`pub…`, embeddable by design — never an API key; `AAI_TELEMETRY_CLIENT_TOKEN` overrides). The test suite blanks it via an autouse conftest fixture so no test ever spawns a real flusher. Opt-out: `AAI_TELEMETRY_DISABLED=1` / `DO_NOT_TRACK=1` / `assembly telemetry disable` (persisted as `telemetry_enabled` in config.toml, alongside the random `device_id`). Send-side failures are swallowed (`OSError`/`CLIError`) — telemetry must never break a command.
 - **`commands/setup.py`** + **`app/setup_exec.py`** — `assembly setup install/status/remove` wires a coding agent up to AssemblyAI by installing three artifacts: the `assemblyai-docs` docs MCP (via `claude mcp add`), the AssemblyAI skill (via `npx skills add`), and the bundled `aai-cli` skill (copied out of the wheel, no network). Missing `claude`/`npx` is reported and skipped, not an error. The step implementations live in `aai_cli/app/setup_exec.py` and the presence probes (docs MCP registered, skills on disk) in `aai_cli/app/coding_agent.py`, so `assembly doctor` (via `app/doctor_checks.py`) and the onboarding wizard share them without command modules importing each other.
+
+### Long keyring values
+
+Windows limits each generic credential to 2560 UTF-16 bytes. `keyring_store`
+keeps small values in the existing entry and stores large values as base64 chunks
+in a separate keyring service. A versioned manifest is published only after all
+chunks are written; replacement and deletion clean up the old generation.
+Missing or corrupt chunks read as no stored secret. Keep the same wrapper for
+rollback so restoring a large session also respects the credential limit.
