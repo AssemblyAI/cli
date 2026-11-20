@@ -91,6 +91,9 @@ class StreamSession:
     # -inf so the very first finalized turn always produces an immediate summary.
     _summarized_len: int = 0
     _last_summary_at: float = float("-inf")
+    # Turn count of the answer last shown/kept. Refreshes run unlocked and can finish
+    # out of order, so an answer covering no more turns than this one is stale.
+    _published_len: int = 0
     # First CLIError raised by an --llm refresh. The chain runs on the SDK reader
     # thread, where raising would dump a thread traceback instead of reaching
     # run_command, so the error is recorded (and warned once) there and re-raised
@@ -177,7 +180,7 @@ class StreamSession:
             return
         with self._callback_lock:
             turns = len(self.transcript)
-            if turns <= self._summarized_len:
+            if turns <= self._refreshed_through(final=final):
                 return  # nothing new since the last refresh
             now = self.clock()
             throttled = self.llm_interval > 0 and now - self._last_summary_at < self.llm_interval
@@ -204,9 +207,31 @@ class StreamSession:
                 f"[aai.muted]--llm refresh failed: {exc.message}[/aai.muted]"
             )
             return
-        # Hold the latest answer so --save-dir can write it as the .md note at the end.
-        self._last_answer = answer
-        follow(answer, turns)
+        self._publish(follow, answer, turns)
+
+    def _refreshed_through(self, *, final: bool) -> int:
+        """The turn count a refresh must exceed to be worth running.
+
+        Mid-stream, a claimed refresh already covers its turns even while it is still in
+        flight. The closing flush compares against the last *published* answer instead: a
+        reader thread still inside the chain when Ctrl-C ends the run may never land.
+        """
+        return self._published_len if final else self._summarized_len
+
+    def _publish(self, follow: FollowRenderer, answer: str, turns: int) -> None:
+        """Show and keep ``answer`` unless a refresh over as many turns already landed.
+
+        Two --system-audio sources (or a request outlasting --llm-interval) can finish
+        refreshes out of order; checking and publishing under the lock keeps the panel,
+        the NDJSON stream, and the --save-dir note from regressing to an older answer.
+        """
+        with self._callback_lock:
+            if turns <= self._published_len:
+                return
+            self._published_len = turns
+            # Held so --save-dir can write the latest answer as the .md note at the end.
+            self._last_answer = answer
+            follow(answer, turns)
 
     def _audio_target(self, source_label: str | None) -> Path | None:
         """The WAV path this source tees to, if any.
