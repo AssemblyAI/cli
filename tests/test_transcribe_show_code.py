@@ -4,6 +4,13 @@ Split from test_transcribe.py (output rendering, LLM transforms, sources);
 flag-to-config mapping and flag validation live in test_transcribe_flags.py.
 """
 
+import io
+import runpy
+import wave
+from pathlib import Path
+
+import assemblyai as aai
+import pytest
 from typer.testing import CliRunner
 
 from aai_cli.main import app
@@ -42,6 +49,50 @@ def test_transcribe_show_code_includes_download_sections(monkeypatch):
     assert result.exit_code == 0
     assert "download_range_func([], [(0.0, 300.0)], False)" in result.output
     assert '"force_keyframes_at_cuts": True,' in result.output
+
+
+def test_transcribe_show_code_reads_binary_stdin(tmp_path, monkeypatch, mocker, capsys):
+    contents = io.BytesIO()
+    with wave.open(contents, "wb") as wav:
+        wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        wav.writeframes(b"\x00\xff" * 160)
+    audio = contents.getvalue()
+
+    def transcribe(source, *, config):
+        assert Path(source).read_bytes() == audio
+        assert config.raw.speech_models == ["universal-3-5-pro"]
+        return mocker.Mock(status=aai.TranscriptStatus.completed, text="Fixture transcript.")
+
+    sdk = mocker.patch.object(aai.Transcriber, "transcribe", side_effect=transcribe)
+    result = runner.invoke(app, ["transcribe", "-", "--show-code", "-o", "text"])
+    assert result.exit_code == 0
+    sdk.assert_not_called()
+
+    script = tmp_path / "transcribe.py"
+    script.write_text(result.stdout, encoding="utf-8")
+    monkeypatch.setattr(aai.settings, "api_key", None)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "test-key")
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(audio)))
+    runpy.run_path(str(script))
+
+    assert capsys.readouterr().out == "Fixture transcript.\n"
+    sdk.assert_called_once()
+    assert not Path(sdk.call_args.args[0]).exists()
+
+
+def test_transcribe_show_code_rejects_empty_binary_stdin(tmp_path, monkeypatch, mocker):
+    sdk = mocker.patch.object(aai.Transcriber, "transcribe")
+    result = runner.invoke(app, ["transcribe", "-", "--show-code", "-o", "text"])
+    assert result.exit_code == 0
+
+    script = tmp_path / "transcribe.py"
+    script.write_text(result.stdout, encoding="utf-8")
+    monkeypatch.setattr(aai.settings, "api_key", None)
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "test-key")
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO()))
+    with pytest.raises(ValueError, match="No audio received on stdin"):
+        runpy.run_path(str(script))
+    sdk.assert_not_called()
 
 
 def test_transcribe_show_code_without_source_uses_placeholder(monkeypatch):
