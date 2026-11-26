@@ -57,6 +57,7 @@ def render(
             llm_gateway,
             output,
             needs_download=needs_download,
+            needs_stdin=source == "-",
             needs_re=needs_re,
             has_sections=ranges_expr is not None,
         )
@@ -98,14 +99,16 @@ def _header_block(
     output: str | None,
     *,
     needs_download: bool,
+    needs_stdin: bool,
     needs_re: bool,
     has_sections: bool,
 ) -> list[str]:
     """Imports plus the api-key (and non-default environment) settings lines."""
     stdlib_imports = ["import os"]
-    if needs_download:
-        # The download path fetches audio to a temp dir before uploading.
+    if needs_download or needs_stdin:
         stdlib_imports.append("import tempfile")
+    if needs_stdin:
+        stdlib_imports.extend(["import sys", "from pathlib import Path"])
     if needs_re:
         # Chapter-regex sections compile to re.compile(...) in the generated script.
         stdlib_imports.append("import re")
@@ -161,7 +164,18 @@ def _transcribe_block(
         kwargs = "\n".join(serialize.config_kwarg_lines(merged, indent=4))
         parts += ["", f"config = aai.TranscriptionConfig(\n{kwargs}\n)"]
         config_arg = ", config=config"
-    if needs_download:
+    if source == "-":
+        parts += [
+            "",
+            "_audio_bytes = sys.stdin.buffer.read()",
+            "if not _audio_bytes:",
+            '    raise ValueError("No audio received on stdin.")',
+            "with tempfile.TemporaryDirectory() as _tmp:",
+            '    _audio = Path(_tmp) / "audio"',
+            "    _audio.write_bytes(_audio_bytes)",
+            f"    transcript = transcriber.transcribe(str(_audio){config_arg})",
+        ]
+    elif needs_download:
         # AssemblyAI can't read a YouTube/podcast page URL itself, so download the
         # audio with yt-dlp into a temp dir and upload the local file — what the CLI does.
         parts += [
