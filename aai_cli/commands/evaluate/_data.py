@@ -177,7 +177,7 @@ def _row_reference(cells: dict[str, object], text_col: str, item_id: str) -> str
 
 def _manifest_rows(path: Path) -> list[dict[str, object]]:
     if path.suffix == ".csv":
-        with path.open(newline="", encoding="utf-8") as handle:
+        with path.open(newline="", encoding="utf-8-sig") as handle:
             return [dict(row) for row in csv.DictReader(handle)]
     rows: list[dict[str, object]] = []
     for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
