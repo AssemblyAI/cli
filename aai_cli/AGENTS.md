@@ -4,6 +4,11 @@ Scoped guidance for the package source. Repo-wide invariants (gate, commit
 hooks, conventions) live in the root `AGENTS.md`; test-suite guidance lives in
 `tests/AGENTS.md`.
 
+Caption subtitle filenames cross two ffmpeg parsers: escape the subtitle option
+value first, then the filtergraph value. Passing `-vf` as one argv item avoids a
+shell layer but does not avoid either ffmpeg layer. Real rendering regressions
+live in `tests/test_caption_ffmpeg.py`; keep font-size styling intact.
+
 ## Architecture
 
 A Typer CLI. `aai_cli/main.py` builds the `app` and registers every command

@@ -16,10 +16,9 @@ captions are burned into it.
 from __future__ import annotations
 
 import dataclasses
-import os
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import assemblyai as aai
 from rich.markup import escape
@@ -54,20 +53,18 @@ def default_out_path(media: Path) -> Path:
     return media.parent / f"{media.stem}.captioned{media.suffix}"
 
 
-# ffmpeg's filtergraph syntax gives these characters meaning (option/filter/chain
-# separators, stream labels, quoting), so a path embedded in `-vf subtitles=…`
-# must escape them or a TMPDIR containing one would corrupt the filter spec.
-_FILTER_ESCAPES = str.maketrans({ch: f"\\{ch}" for ch in "\\':,;[]"})
+# The filename is parsed twice: first by the filtergraph, then by the subtitles
+# option parser. Escape from the inside out so the graph preserves option escapes.
+_OPTION_ESCAPES = str.maketrans({ch: f"\\{ch}" for ch in "\\':"})
+_FILTER_ESCAPES = str.maketrans({ch: f"\\{ch}" for ch in "\\',;[]"})
 
 
-def subtitles_filter(srt: Path, font_size: int | None) -> str:
+def subtitles_filter(srt: PurePath, font_size: int | None) -> str:
     """The ``-vf`` filtergraph burning ``srt`` into the video."""
-    # ffmpeg's filtergraph parser takes forward slashes on every platform; a Windows
-    # backslash path would otherwise need each separator escaped (and the drive colon
-    # mishandled). Normalize to "/" first, then escape the remaining metacharacters
-    # (notably the drive ":") — e.g. C:\a\b.srt -> C\:/a/b.srt. No-op on POSIX.
-    posix = str(srt).replace(os.sep, "/")
-    spec = f"subtitles={posix.translate(_FILTER_ESCAPES)}"
+    # as_posix normalizes Windows separators without rewriting literal POSIX
+    # backslashes. There is no shell-escaping layer: -vf is passed as one argv item.
+    filename = srt.as_posix().translate(_OPTION_ESCAPES).translate(_FILTER_ESCAPES)
+    spec = f"subtitles={filename}"
     if font_size is not None:
         spec += f":force_style=FontSize={font_size}"
     return spec
