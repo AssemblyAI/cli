@@ -63,9 +63,10 @@ def record_ffmpeg(monkeypatch, *, returncode: int = 0, stderr: str = ""):
     def run(args: list[str]) -> subprocess.CompletedProcess[str]:
         recorded["args"] = args
         escaped = args[8].removeprefix("subtitles=").split(":force_style")[0]
-        # subtitles_filter escapes filtergraph metacharacters (and the Windows drive
-        # colon) with a leading backslash; reverse that to recover the real on-disk path.
-        srt_path = re.sub(r"\\(.)", r"\1", escaped)
+        # This boundary fake only recovers the file for pipeline assertions. Real
+        # parser acceptance and rendered pixels are checked in test_caption_ffmpeg.
+        option_value = re.sub(r"\\(.)", r"\1", escaped)
+        srt_path = re.sub(r"\\(.)", r"\1", option_value)
         recorded["srt"] = Path(srt_path).read_text(encoding="utf-8")
         return subprocess.CompletedProcess(
             args=args, returncode=returncode, stdout="", stderr=stderr
@@ -136,10 +137,10 @@ def test_subtitles_filter_appends_font_size():
 
 
 def test_subtitles_filter_escapes_filtergraph_metacharacters():
-    # ffmpeg's filtergraph syntax gives these characters meaning; an unescaped
-    # one in a TMPDIR-derived path would corrupt the filter spec.
+    # Colon must survive the graph parser; apostrophe is special at both levels.
+    # Comma, semicolon and brackets need only graph-level escaping.
     spec = caption_exec.subtitles_filter(Path("/tmp/a'b:c,d;e[f]g.srt"), None)
-    assert spec == "subtitles=/tmp/a\\'b\\:c\\,d\\;e\\[f\\]g.srt"
+    assert spec == r"subtitles=/tmp/a\\\'b\\:c\,d\;e\[f\]g.srt"
 
 
 # --- validation order (cheap local checks before any credential or network) ----
